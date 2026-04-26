@@ -1,4 +1,4 @@
-import type { Message, TextChannel } from "discord.js";
+import type { Message, SendableChannels } from "discord.js";
 
 export class ProgressReporter {
   private statusMessage: Message | null = null;
@@ -6,7 +6,7 @@ export class ProgressReporter {
   private pendingText = "";
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
 
-  async update(text: string, channel: TextChannel): Promise<void> {
+  async update(text: string, channel: SendableChannels): Promise<void> {
     this.pendingText = text.slice(0, 2000);
     const now = Date.now();
     if (now - this.lastUpdate < 500) {
@@ -18,7 +18,7 @@ export class ProgressReporter {
     await this.flush(channel);
   }
 
-  private async flush(channel: TextChannel): Promise<void> {
+  private async flush(channel: SendableChannels): Promise<void> {
     if (this.flushTimer) {
       clearTimeout(this.flushTimer);
       this.flushTimer = null;
@@ -32,12 +32,11 @@ export class ProgressReporter {
         this.statusMessage = await channel.send(this.pendingText);
       }
     } catch {
-      // message may have been deleted
       this.statusMessage = null;
     }
   }
 
-  async complete(channel: TextChannel): Promise<void> {
+  async complete(_channel: SendableChannels): Promise<void> {
     if (this.flushTimer) clearTimeout(this.flushTimer);
     try {
       if (this.statusMessage) await this.statusMessage.delete();

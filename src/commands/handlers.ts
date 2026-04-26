@@ -1,6 +1,6 @@
 import {
   ChatInputCommandInteraction,
-  TextChannel,
+  ChannelType,
 } from "discord.js";
 import { v4 as uuid } from "uuid";
 import { resolve } from "path";
@@ -61,11 +61,16 @@ export async function handleTask(interaction: ChatInputCommandInteraction): Prom
   await interaction.editReply(`✅ 任务已创建，请查看线程 <#${thread.id}>`);
   await thread.send({ embeds: [taskStartEmbed(taskId, description, cwd)] });
 
+  if (!thread.isTextBased() || thread.type !== ChannelType.PublicThread) {
+    await interaction.editReply("❌ 线程创建异常");
+    return;
+  }
+
   executeTask({
     taskId,
     prompt: description,
     cwd,
-    channel: thread as unknown as TextChannel,
+    channel: thread,
   }).catch((err) => {
     console.error(`[MiniClaw] Task ${taskId} error:`, err);
   });
@@ -168,11 +173,16 @@ export async function handleResume(interaction: ChatInputCommandInteraction): Pr
     embeds: [taskStartEmbed(newTaskId, `[恢复] ${followup}`, cwd)],
   });
 
+  if (!thread.isTextBased() || thread.type !== ChannelType.PublicThread) {
+    await interaction.editReply("❌ 线程创建异常");
+    return;
+  }
+
   executeTask({
     taskId: newTaskId,
     prompt: followup,
     cwd,
-    channel: thread as unknown as TextChannel,
+    channel: thread,
     resumeSessionId: match.session_id,
   }).catch((err) => {
     console.error(`[MiniClaw] Resume task ${newTaskId} error:`, err);

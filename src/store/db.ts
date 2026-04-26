@@ -5,6 +5,10 @@ import { config } from "../config.js";
 
 let db: Database.Database;
 
+const ALLOWED_UPDATE_FIELDS = new Set([
+  "session_id", "status", "result_summary", "cost_usd", "duration_ms", "completed_at",
+]);
+
 export function initDb(): void {
   mkdirSync(dirname(config.dbPath), { recursive: true });
   db = new Database(config.dbPath);
@@ -69,10 +73,12 @@ export function updateTask(
     Pick<TaskRow, "session_id" | "status" | "result_summary" | "cost_usd" | "duration_ms" | "completed_at">
   >
 ): void {
-  const sets = Object.keys(updates)
-    .map((k) => `${k} = @${k}`)
-    .join(", ");
-  db.prepare(`UPDATE tasks SET ${sets} WHERE id = @id`).run({ id, ...updates });
+  const safeKeys = Object.keys(updates).filter((k) => ALLOWED_UPDATE_FIELDS.has(k));
+  if (!safeKeys.length) return;
+  const sets = safeKeys.map((k) => `${k} = @${k}`).join(", ");
+  const params: Record<string, unknown> = { id };
+  for (const k of safeKeys) params[k] = (updates as Record<string, unknown>)[k];
+  db.prepare(`UPDATE tasks SET ${sets} WHERE id = @id`).run(params);
 }
 
 export function getTask(id: string): TaskRow | undefined {

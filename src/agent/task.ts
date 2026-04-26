@@ -1,5 +1,5 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import type { TextChannel } from "discord.js";
+import type { SendableChannels } from "discord.js";
 import { config } from "../config.js";
 import { updateTask } from "../store/db.js";
 import { ProgressReporter } from "../discord/progress.js";
@@ -33,7 +33,7 @@ export async function executeTask(params: {
   taskId: string;
   prompt: string;
   cwd: string;
-  channel: TextChannel;
+  channel: SendableChannels;
   resumeSessionId?: string;
 }): Promise<TaskResult> {
   const abortController = new AbortController();
@@ -62,7 +62,17 @@ export async function executeTask(params: {
     let lastResult: TaskResult | null = null;
 
     for await (const msg of q) {
-      if (abortController.signal.aborted) break;
+      if (abortController.signal.aborted) {
+        lastResult = {
+          success: false,
+          sessionId,
+          costUsd: 0,
+          durationMs: 0,
+          turns: 0,
+          result: "任务已被用户取消",
+        };
+        break;
+      }
 
       switch (msg.type) {
         case "system": {

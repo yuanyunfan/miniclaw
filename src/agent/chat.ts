@@ -35,7 +35,10 @@ export async function chat(
     if (msg.type === "assistant" && callbacks) {
       for (const block of msg.message.content) {
         if (block.type === "tool_use") {
-          const input = block.input as Record<string, unknown>;
+          const raw = block.input;
+          const input = raw && typeof raw === "object" && !Array.isArray(raw)
+            ? raw as Record<string, unknown>
+            : {};
           const line = formatToolLine(block.name, input);
           if (line) callbacks.onToolUse(line);
         } else if (block.type === "text" && block.text.trim()) {

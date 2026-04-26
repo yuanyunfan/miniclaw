@@ -15,15 +15,30 @@ if (proxyUrl) {
   const OrigWS = ws.WebSocket ?? ws;
 
   class ProxiedWebSocket extends OrigWS {
-    constructor(address: string | URL, p2?: unknown, p3?: unknown) {
-      if (p2 && typeof p2 === "object" && !Array.isArray(p2)) {
-        super(address, { ...(p2 as object), agent });
-      } else if (p3 && typeof p3 === "object") {
-        super(address, p2 as string | string[], { ...(p3 as object), agent });
-      } else if (p2 !== undefined) {
-        super(address, p2 as string | string[], { agent });
+    constructor(...args: unknown[]) {
+      const [address, ...rest] = args;
+      let protocols: unknown;
+      let options: Record<string, unknown> = {};
+
+      if (rest.length === 0) {
+        // (address)
+      } else if (rest.length === 1 && typeof rest[0] === "object" && !Array.isArray(rest[0])) {
+        // (address, options)
+        options = (rest[0] ?? {}) as Record<string, unknown>;
+      } else if (rest.length === 1) {
+        // (address, protocols)
+        protocols = rest[0];
       } else {
-        super(address, { agent });
+        // (address, protocols, options)
+        protocols = rest[0];
+        options = ((rest[1] ?? {}) as Record<string, unknown>);
+      }
+
+      const merged = { ...options, agent };
+      if (protocols !== undefined) {
+        super(address as string | URL, protocols as string | string[], merged);
+      } else {
+        super(address as string | URL, merged);
       }
     }
   }

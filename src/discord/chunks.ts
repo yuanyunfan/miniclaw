@@ -26,10 +26,8 @@ export function chunkMessage(text: string): string[] {
     if (fenceCount % 2 !== 0) {
       const lastFenceIdx = slice.lastIndexOf("```");
       const afterFence = slice.slice(lastFenceIdx + 3).split("\n")[0] ?? "";
-      if (lastFenceIdx === slice.lastIndexOf("```")) {
-        slice += "\n```";
-        openFence = "```" + afterFence.trim();
-      }
+      slice += "\n```";
+      openFence = "```" + afterFence.trim();
     } else {
       openFence = "";
     }

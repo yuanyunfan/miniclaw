@@ -21,7 +21,7 @@ export function createBot(): Client {
     partials: [Partials.Message],
   });
 
-  const processed = new Set<string>();
+  const processed = new Map<string, number>();
 
   client.on(Events.MessageCreate, async (message: Message) => {
     if (message.author.bot) return;
@@ -31,11 +31,13 @@ export function createBot(): Client {
     const isMentioned = message.mentions.has(client.user!);
     if (!isAutoChannel && !isMentioned) return;
 
+    const now = Date.now();
     if (processed.has(message.id)) return;
-    processed.add(message.id);
-    if (processed.size > 1000) {
-      const first = processed.values().next().value!;
-      processed.delete(first);
+    processed.set(message.id, now);
+    if (processed.size > 500) {
+      for (const [k, ts] of processed) {
+        if (now - ts > 300_000) processed.delete(k);
+      }
     }
 
     const content = message.content
