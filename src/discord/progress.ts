@@ -10,9 +10,8 @@ export class ProgressReporter {
     this.pendingText = text.slice(0, 2000);
     const now = Date.now();
     if (now - this.lastUpdate < 500) {
-      if (!this.flushTimer) {
-        this.flushTimer = setTimeout(() => this.flush(channel), 500);
-      }
+      if (this.flushTimer) clearTimeout(this.flushTimer);
+      this.flushTimer = setTimeout(() => this.flush(channel), 500);
       return;
     }
     await this.flush(channel);

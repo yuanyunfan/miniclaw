@@ -51,10 +51,10 @@ export function createBot(): Client {
 
     await message.react("👀").catch(() => {});
 
-    const typingInterval = "sendTyping" in message.channel
-      ? setInterval(() => { (message.channel as any).sendTyping().catch(() => {}); }, 8000)
+    const typingInterval = message.channel.isSendable()
+      ? setInterval(() => { message.channel.isSendable() && message.channel.sendTyping().catch(() => {}); }, 8000)
       : null;
-    if ("sendTyping" in message.channel) {
+    if (message.channel.isSendable()) {
       await message.channel.sendTyping();
     }
 
@@ -71,7 +71,7 @@ export function createBot(): Client {
           if (stepMsg) {
             await stepMsg.edit(text);
           } else {
-            stepMsg = await (message.channel as any).send(text);
+            stepMsg = message.channel.isSendable() ? await message.channel.send(text) : null;
           }
         } catch { stepMsg = null; }
         lastStepUpdate = Date.now();

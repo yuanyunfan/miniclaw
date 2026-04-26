@@ -40,6 +40,11 @@ export async function executeTask(params: {
   activeTasks.set(params.taskId, abortController);
   const progress = new ProgressReporter();
 
+  const resumeId = params.resumeSessionId;
+  if (resumeId !== undefined && (typeof resumeId !== "string" || !resumeId.trim())) {
+    throw new Error(`Invalid resumeSessionId: ${resumeId}`);
+  }
+
   try {
     const q = query({
       prompt: params.prompt,
@@ -54,7 +59,7 @@ export async function executeTask(params: {
         maxTurns: config.defaultMaxTurns,
         maxBudgetUsd: config.defaultBudgetUsd,
         abortController,
-        ...(params.resumeSessionId ? { resume: params.resumeSessionId } : {}),
+        ...(resumeId ? { resume: resumeId } : {}),
       },
     });
 

@@ -3,6 +3,8 @@ import { initDb } from "./store/db.js";
 import { registerCommands } from "./commands/register.js";
 import { createBot } from "./bot.js";
 
+let bot: ReturnType<typeof createBot> | null = null;
+
 async function main(): Promise<void> {
   console.log("[MiniClaw] Starting...");
 
@@ -11,23 +13,21 @@ async function main(): Promise<void> {
 
   await registerCommands();
 
-  const bot = createBot();
+  bot = createBot();
   await bot.login(config.discord.token);
 
-  process.on("SIGINT", () => {
+  const shutdown = () => {
     console.log("\n[MiniClaw] Shutting down...");
-    bot.destroy();
+    bot?.destroy();
     process.exit(0);
-  });
+  };
 
-  process.on("SIGTERM", () => {
-    console.log("\n[MiniClaw] Shutting down...");
-    bot.destroy();
-    process.exit(0);
-  });
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
 }
 
 main().catch((err) => {
   console.error("[MiniClaw] Fatal error:", err);
+  bot?.destroy();
   process.exit(1);
 });

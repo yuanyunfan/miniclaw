@@ -81,16 +81,27 @@ export function updateTask(
   db.prepare(`UPDATE tasks SET ${sets} WHERE id = @id`).run(params);
 }
 
+function assertTaskRows(rows: unknown[]): TaskRow[] {
+  for (const r of rows) {
+    if (!r || typeof r !== "object" || !("id" in r) || !("status" in r)) {
+      throw new Error("Unexpected task row shape from database");
+    }
+  }
+  return rows as TaskRow[];
+}
+
 export function getTask(id: string): TaskRow | undefined {
-  return db.prepare("SELECT * FROM tasks WHERE id = ?").get(id) as TaskRow | undefined;
+  const row = db.prepare("SELECT * FROM tasks WHERE id = ?").get(id);
+  if (!row) return undefined;
+  return assertTaskRows([row])[0];
 }
 
 export function getActiveTasks(): TaskRow[] {
-  return db.prepare("SELECT * FROM tasks WHERE status = 'running' ORDER BY created_at DESC").all() as TaskRow[];
+  return assertTaskRows(db.prepare("SELECT * FROM tasks WHERE status = 'running' ORDER BY created_at DESC").all());
 }
 
 export function getRecentTasks(limit = 10): TaskRow[] {
-  return db.prepare("SELECT * FROM tasks ORDER BY created_at DESC LIMIT ?").all(limit) as TaskRow[];
+  return assertTaskRows(db.prepare("SELECT * FROM tasks ORDER BY created_at DESC LIMIT ?").all(limit));
 }
 
 export function addChatMessage(channelId: string, userId: string, role: string, content: string): void {
