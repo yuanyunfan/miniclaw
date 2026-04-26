@@ -21,10 +21,18 @@ export function createBot(): Client {
     partials: [Partials.Message],
   });
 
+  const processed = new Set<string>();
+
   client.on(Events.MessageCreate, async (message: Message) => {
     if (message.author.bot) return;
     if (message.author.id !== config.allowedUserId) return;
     if (!message.mentions.has(client.user!)) return;
+    if (processed.has(message.id)) return;
+    processed.add(message.id);
+    if (processed.size > 1000) {
+      const first = processed.values().next().value!;
+      processed.delete(first);
+    }
 
     const content = message.content
       .replace(new RegExp(`<@!?${client.user!.id}>`, "g"), "")

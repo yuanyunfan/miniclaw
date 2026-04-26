@@ -1,4 +1,4 @@
-import "dotenv/config";
+import "./proxy.js";
 import { resolve } from "path";
 import { homedir } from "os";
 
