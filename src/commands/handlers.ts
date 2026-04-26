@@ -1,6 +1,7 @@
 import {
   ChatInputCommandInteraction,
   ChannelType,
+  EmbedBuilder,
 } from "discord.js";
 import { v4 as uuid } from "uuid";
 import { resolve } from "path";
@@ -9,6 +10,7 @@ import { config } from "../config.js";
 import { createTask, getActiveTasks, getRecentTasks, getTask, updateTask } from "../store/db.js";
 import { executeTask, getActiveTaskCount, cancelTask } from "../agent/task.js";
 import { taskStartEmbed, statusEmbed, taskErrorEmbed } from "../discord/formatter.js";
+import { addMemory, deleteMemory, getAllMemories, getMemoriesByType } from "../store/memory.js";
 
 function resolveHome(p: string): string {
   return p.startsWith("~") ? resolve(homedir(), p.slice(2)) : resolve(p);
@@ -187,4 +189,77 @@ export async function handleResume(interaction: ChatInputCommandInteraction): Pr
   }).catch((err) => {
     console.error(`[MiniClaw] Resume task ${newTaskId} error:`, err);
   });
+}
+
+const TYPE_LABELS: Record<string, string> = {
+  user: "👤 用户信息",
+  feedback: "💬 反馈偏好",
+  project: "📁 项目信息",
+  reference: "🔗 参考资料",
+};
+
+export async function handleRemember(interaction: ChatInputCommandInteraction): Promise<void> {
+  if (!isAllowed(interaction.user.id)) {
+    await interaction.reply({ content: "⛔ 无权限", ephemeral: true });
+    return;
+  }
+
+  const content = interaction.options.getString("content", true);
+  const type = interaction.options.getString("type") ?? "user";
+  const name = interaction.options.getString("name") ?? content.slice(0, 30).replace(/\n/g, " ");
+
+  const row = addMemory(type, name, content);
+  await interaction.reply(`✅ 已记住: **${row.name}** (ID: ${row.id}, 类型: ${TYPE_LABELS[row.type] ?? row.type})`);
+}
+
+export async function handleForget(interaction: ChatInputCommandInteraction): Promise<void> {
+  if (!isAllowed(interaction.user.id)) {
+    await interaction.reply({ content: "⛔ 无权限", ephemeral: true });
+    return;
+  }
+
+  const id = interaction.options.getInteger("id", true);
+  const deleted = deleteMemory(id);
+
+  if (deleted) {
+    await interaction.reply(`🗑️ 已删除记忆 #${id}`);
+  } else {
+    await interaction.reply({ content: `❌ 找不到记忆 #${id}`, ephemeral: true });
+  }
+}
+
+export async function handleMemories(interaction: ChatInputCommandInteraction): Promise<void> {
+  if (!isAllowed(interaction.user.id)) {
+    await interaction.reply({ content: "⛔ 无权限", ephemeral: true });
+    return;
+  }
+
+  const type = interaction.options.getString("type");
+  const memories = type ? getMemoriesByType(type) : getAllMemories();
+
+  if (!memories.length) {
+    await interaction.reply({ content: "📭 暂无记忆", ephemeral: true });
+    return;
+  }
+
+  const grouped = new Map<string, typeof memories>();
+  for (const m of memories) {
+    const list = grouped.get(m.type) ?? [];
+    list.push(m);
+    grouped.set(m.type, list);
+  }
+
+  const embed = new EmbedBuilder()
+    .setTitle("🧠 记忆列表")
+    .setColor(0x3498db)
+    .setTimestamp();
+
+  for (const [t, rows] of grouped) {
+    const label = TYPE_LABELS[t] ?? t;
+    const lines = rows.map((r) => `**#${r.id}** ${r.name}\n${r.content.slice(0, 80)}${r.content.length > 80 ? "..." : ""}`);
+    const value = lines.join("\n\n").slice(0, 1024);
+    embed.addFields({ name: label, value: value || "(空)" });
+  }
+
+  await interaction.reply({ embeds: [embed], ephemeral: true });
 }

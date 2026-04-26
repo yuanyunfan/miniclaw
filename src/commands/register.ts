@@ -32,6 +32,51 @@ const commands = [
     .addStringOption((opt) =>
       opt.setName("followup").setDescription("后续指令").setRequired(true)
     ),
+
+  new SlashCommandBuilder()
+    .setName("remember")
+    .setDescription("让 bot 记住一条信息")
+    .addStringOption((opt) =>
+      opt.setName("content").setDescription("要记住的内容").setRequired(true)
+    )
+    .addStringOption((opt) =>
+      opt
+        .setName("type")
+        .setDescription("记忆类型")
+        .setRequired(false)
+        .addChoices(
+          { name: "用户信息", value: "user" },
+          { name: "反馈偏好", value: "feedback" },
+          { name: "项目信息", value: "project" },
+          { name: "参考资料", value: "reference" },
+        )
+    )
+    .addStringOption((opt) =>
+      opt.setName("name").setDescription("记忆名称（可选，默认自动生成）").setRequired(false)
+    ),
+
+  new SlashCommandBuilder()
+    .setName("forget")
+    .setDescription("删除一条记忆")
+    .addIntegerOption((opt) =>
+      opt.setName("id").setDescription("记忆 ID").setRequired(true)
+    ),
+
+  new SlashCommandBuilder()
+    .setName("memories")
+    .setDescription("查看所有记忆")
+    .addStringOption((opt) =>
+      opt
+        .setName("type")
+        .setDescription("按类型筛选")
+        .setRequired(false)
+        .addChoices(
+          { name: "用户信息", value: "user" },
+          { name: "反馈偏好", value: "feedback" },
+          { name: "项目信息", value: "project" },
+          { name: "参考资料", value: "reference" },
+        )
+    ),
 ];
 
 export async function registerCommands(): Promise<void> {

@@ -1,6 +1,8 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { config } from "../config.js";
 import { addChatMessage, getChatHistory } from "../store/db.js";
+import { buildMemoryPrompt } from "../memory/inject.js";
+import { extractMemories } from "../memory/extract.js";
 
 export interface ChatCallbacks {
   onToolUse: (display: string) => void;
@@ -17,6 +19,11 @@ export async function chat(
 
   const history = getChatHistory(channelId, 30).reverse();
   const historyBlock = buildHistoryPrompt(history.slice(0, -1));
+  const memoryBlock = buildMemoryPrompt();
+
+  const identityLine = "你是 MiniClaw，一个简洁高效的 AI 助手，通过 Discord 与用户沟通。回复时始终以 MiniClaw 的身份自居，不要说自己是 Claude 或 Claude Code。用中文回复用户。";
+  const appendParts = [identityLine, memoryBlock].filter(Boolean);
+
   const fullPrompt = historyBlock ? `${historyBlock}\n\n${prompt}` : prompt;
 
   let result = "";
@@ -27,6 +34,11 @@ export async function chat(
       model: config.model,
       cwd: config.defaultCwd,
       permissionMode: "acceptEdits",
+      systemPrompt: {
+        type: "preset",
+        preset: "claude_code",
+        append: appendParts.join("\n\n"),
+      },
       allowedTools: [
         "Read", "Bash", "Glob", "WebSearch", "WebFetch", "Agent",
       ],
@@ -61,6 +73,11 @@ export async function chat(
   if (!result) result = "[无结果]";
 
   addChatMessage(channelId, userId, "assistant", result);
+
+  extractMemories(prompt, result).catch((err) => {
+    console.error("[MiniClaw] Background memory extraction error:", err);
+  });
+
   return result;
 }
 

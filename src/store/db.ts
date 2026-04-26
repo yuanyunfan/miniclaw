@@ -5,6 +5,10 @@ import { config } from "../config.js";
 
 let db: Database.Database;
 
+export function getDb(): Database.Database {
+  return db;
+}
+
 const ALLOWED_UPDATE_FIELDS = new Set([
   "session_id", "status", "result_summary", "cost_usd", "duration_ms", "completed_at",
 ]);
@@ -27,6 +31,14 @@ export function initDb(): void {
       duration_ms INTEGER,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       completed_at TEXT
+    );
+    CREATE TABLE IF NOT EXISTS memories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL DEFAULT 'user',
+      name TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE TABLE IF NOT EXISTS chat_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
