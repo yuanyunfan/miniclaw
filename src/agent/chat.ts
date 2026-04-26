@@ -1,6 +1,6 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { config } from "../config.js";
-import { addChatMessage } from "../store/db.js";
+import { addChatMessage, getChatHistory } from "../store/db.js";
 
 export interface ChatCallbacks {
   onToolUse: (display: string) => void;
@@ -15,10 +15,14 @@ export async function chat(
 ): Promise<string> {
   addChatMessage(channelId, userId, "user", prompt);
 
+  const history = getChatHistory(channelId, 30).reverse();
+  const historyBlock = buildHistoryPrompt(history.slice(0, -1));
+  const fullPrompt = historyBlock ? `${historyBlock}\n\n${prompt}` : prompt;
+
   let result = "";
 
   const q = query({
-    prompt,
+    prompt: fullPrompt,
     options: {
       model: config.model,
       cwd: config.defaultCwd,
@@ -101,4 +105,13 @@ function shortenPath(p: string): string {
 function truncate(s: string, max: number): string {
   const clean = s.replace(/\n/g, " ").trim();
   return clean.length > max ? clean.slice(0, max) + "…" : clean;
+}
+
+const HISTORY_LIMIT = 15;
+
+function buildHistoryPrompt(rows: Array<{ role: string; content: string }>): string {
+  if (!rows.length) return "";
+  const recent = rows.slice(-HISTORY_LIMIT * 2);
+  const lines = recent.map((r) => `${r.role}: ${r.content}`);
+  return `<conversation_history>\n${lines.join("\n")}\n</conversation_history>`;
 }
