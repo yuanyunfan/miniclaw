@@ -7,7 +7,7 @@ import {
   type Message,
 } from "discord.js";
 import { config } from "./config.js";
-import { chat } from "./agent/chat.js";
+import { chat, type ChatCallbacks } from "./agent/chat.js";
 import { chunkMessage } from "./discord/chunks.js";
 import { handleTask, handleStatus, handleCancel, handleResume } from "./commands/handlers.js";
 
@@ -26,7 +26,11 @@ export function createBot(): Client {
   client.on(Events.MessageCreate, async (message: Message) => {
     if (message.author.bot) return;
     if (message.author.id !== config.allowedUserId) return;
-    if (!message.mentions.has(client.user!)) return;
+
+    const isAutoChannel = config.autoReplyChannelIds.includes(message.channel.id);
+    const isMentioned = message.mentions.has(client.user!);
+    if (!isAutoChannel && !isMentioned) return;
+
     if (processed.has(message.id)) return;
     processed.add(message.id);
     if (processed.size > 1000) {
@@ -43,18 +47,61 @@ export function createBot(): Client {
       return;
     }
 
+    await message.react("👀").catch(() => {});
+
+    const typingInterval = "sendTyping" in message.channel
+      ? setInterval(() => { (message.channel as any).sendTyping().catch(() => {}); }, 8000)
+      : null;
     if ("sendTyping" in message.channel) {
       await message.channel.sendTyping();
     }
 
     try {
-      const reply = await chat(message.channel.id, message.author.id, content);
+      let stepMsg: Message | null = null;
+      let steps: string[] = [];
+      let lastStepUpdate = 0;
+      let lastLine = "";
+
+      const flushSteps = async () => {
+        if (!steps.length) return;
+        const text = steps.join("\n").slice(-1800);
+        try {
+          if (stepMsg) {
+            await stepMsg.edit(text);
+          } else {
+            stepMsg = await (message.channel as any).send(text);
+          }
+        } catch { stepMsg = null; }
+        lastStepUpdate = Date.now();
+      };
+
+      const callbacks: ChatCallbacks = {
+        onToolUse: (display) => {
+          if (display === lastLine) return;
+          lastLine = display;
+          steps.push(display);
+          if (Date.now() - lastStepUpdate > 600) {
+            flushSteps();
+          }
+        },
+        onText: (_text) => {},
+      };
+
+      const reply = await chat(message.channel.id, message.author.id, content, callbacks);
+      if (typingInterval) clearInterval(typingInterval);
+      await flushSteps();
+
       const chunks = chunkMessage(reply);
       for (const chunk of chunks) {
         await message.reply(chunk);
       }
+      await message.reactions.cache.get("👀")?.users.remove(client.user!.id).catch(() => {});
+      await message.react("✅").catch(() => {});
     } catch (err) {
+      if (typingInterval) clearInterval(typingInterval);
       console.error("[MiniClaw] Chat error:", err);
+      await message.reactions.cache.get("👀")?.users.remove(client.user!.id).catch(() => {});
+      await message.react("❌").catch(() => {});
       await message.reply("❌ 回复出错，请稍后再试");
     }
   });

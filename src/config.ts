@@ -25,5 +25,6 @@ export const config = {
   defaultBudgetUsd: Number(env("MINICLAW_DEFAULT_BUDGET_USD", "1.0")),
   defaultMaxTurns: Number(env("MINICLAW_DEFAULT_MAX_TURNS", "30")),
   model: env("MINICLAW_MODEL", "claude-sonnet-4-6"),
+  autoReplyChannelIds: env("MINICLAW_AUTO_REPLY_CHANNELS", "").split(",").filter(Boolean),
   dbPath: resolveHome(env("MINICLAW_DB_PATH", "~/.miniclaw/data.db")),
 } as const;
