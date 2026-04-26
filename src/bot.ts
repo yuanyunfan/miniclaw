@@ -9,7 +9,9 @@ import {
 import { config } from "./config.js";
 import { chat, type ChatCallbacks } from "./agent/chat.js";
 import { chunkMessage } from "./discord/chunks.js";
-import { handleTask, handleStatus, handleCancel, handleResume } from "./commands/handlers.js";
+import { handleTask, handleStatus, handleCancel, handleResume, handleRemember, handleForget, handleMemories } from "./commands/handlers.js";
+import { parseExplicitMemory } from "./memory/parse.js";
+import { addMemory } from "./store/memory.js";
 
 export function createBot(): Client {
   const client = new Client({
@@ -46,6 +48,13 @@ export function createBot(): Client {
 
     if (!content) {
       await message.reply("你好！有什么需要帮忙的？");
+      return;
+    }
+
+    const explicitMemory = parseExplicitMemory(content);
+    if (explicitMemory) {
+      const row = addMemory(explicitMemory.type, explicitMemory.name, explicitMemory.content);
+      await message.reply(`✅ 已记住: **${row.name}** (ID: ${row.id})`);
       return;
     }
 
@@ -125,6 +134,15 @@ export function createBot(): Client {
           break;
         case "resume":
           await handleResume(cmd);
+          break;
+        case "remember":
+          await handleRemember(cmd);
+          break;
+        case "forget":
+          await handleForget(cmd);
+          break;
+        case "memories":
+          await handleMemories(cmd);
           break;
         default:
           await cmd.reply({ content: "未知命令", ephemeral: true });

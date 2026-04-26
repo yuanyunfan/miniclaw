@@ -5,6 +5,7 @@ import { updateTask } from "../store/db.js";
 import { ProgressReporter } from "../discord/progress.js";
 import { taskCompleteEmbed, taskErrorEmbed } from "../discord/formatter.js";
 import { chunkMessage } from "../discord/chunks.js";
+import { buildMemoryPrompt } from "../memory/inject.js";
 
 export interface TaskResult {
   success: boolean;
@@ -46,12 +47,21 @@ export async function executeTask(params: {
   }
 
   try {
+    const memoryBlock = buildMemoryPrompt();
+    const identityLine = "你是 MiniClaw，一个简洁高效的 AI 助手，通过 Discord 与用户沟通。回复时始终以 MiniClaw 的身份自居，不要说自己是 Claude 或 Claude Code。";
+    const appendParts = [identityLine, memoryBlock].filter(Boolean);
+
     const q = query({
       prompt: params.prompt,
       options: {
         model: config.model,
         cwd: params.cwd,
         permissionMode: "acceptEdits",
+        systemPrompt: {
+          type: "preset",
+          preset: "claude_code",
+          append: appendParts.join("\n\n"),
+        },
         allowedTools: [
           "Read", "Write", "Edit", "Bash", "Glob",
           "WebSearch", "WebFetch", "Agent",
