@@ -6,6 +6,7 @@ import { ProgressReporter } from "../discord/progress.js";
 import { taskCompleteEmbed, taskErrorEmbed } from "../discord/formatter.js";
 import { chunkMessage } from "../discord/chunks.js";
 import { buildMemoryPrompt } from "../memory/inject.js";
+import { loadSubagents, listSubagentNames } from "./subagents.js";
 
 export interface TaskResult {
   success: boolean;
@@ -49,7 +50,29 @@ export async function executeTask(params: {
   try {
     const memoryBlock = buildMemoryPrompt();
     const identityLine = "你是 MiniClaw，一个简洁高效的 AI 助手，通过 Discord 与用户沟通。回复时始终以 MiniClaw 的身份自居，不要说自己是 Claude 或 Claude Code。";
-    const appendParts = [identityLine, memoryBlock].filter(Boolean);
+
+    const subagents = loadSubagents();
+    const subagentNames = listSubagentNames();
+    const supervisorBlock = subagentNames.length
+      ? [
+          "## 你的角色：Supervisor",
+          `你可以通过 Agent 工具分派任务给以下角色化 subagent：${subagentNames.join(" / ")}。`,
+          "",
+          "**推荐工作流（复杂任务）**：",
+          "1. **Researcher** 调研现状、收集 file:line 证据",
+          "2. **Planner** 基于调研结果输出步骤化实现计划",
+          "3. **Generator** 按计划执行写代码",
+          "4. **Evaluator** 独立验收（必跑 `pnpm build`），给出通过/不通过结论",
+          "",
+          "**规则**：",
+          "- 简单任务（单文件 typo、查询）可跳过部分阶段，但**任何代码改动后必须让 Evaluator 验收**",
+          "- 调用 subagent 时在 prompt 里**完整传递上下文**（subagent 看不到你的对话历史）",
+          "- 如 Evaluator 返回不通过，让 Generator 修复后再次验收，最多迭代 2 轮",
+          "- 你自己负责整合各 subagent 输出后回复用户，不要把 subagent 的原文整段抛给用户",
+        ].join("\n")
+      : "";
+
+    const appendParts = [identityLine, supervisorBlock, memoryBlock].filter(Boolean);
 
     const q = query({
       prompt: params.prompt,
@@ -66,6 +89,7 @@ export async function executeTask(params: {
           "Read", "Write", "Edit", "Bash", "Glob",
           "WebSearch", "WebFetch", "Agent",
         ],
+        agents: subagents,
         maxTurns: config.defaultMaxTurns,
         maxBudgetUsd: config.defaultBudgetUsd,
         abortController,
@@ -100,6 +124,8 @@ export async function executeTask(params: {
 
         case "assistant": {
           const blocks = msg.message.content;
+          const parentId = (msg as { parent_tool_use_id?: string }).parent_tool_use_id;
+          const subagentPrefix = parentId ? "↳ [subagent] " : "";
           const textParts: string[] = [];
           const toolParts: string[] = [];
 
@@ -107,7 +133,14 @@ export async function executeTask(params: {
             if (block.type === "text") {
               textParts.push(block.text);
             } else if (block.type === "tool_use") {
-              toolParts.push(`🔧 ${block.name}`);
+              if (block.name === "Agent" || block.name === "Task") {
+                const input = (block.input ?? {}) as { subagent_type?: string; prompt?: string };
+                const role = input.subagent_type ?? "general-purpose";
+                const preview = (input.prompt ?? "").slice(0, 80).replace(/\s+/g, " ");
+                toolParts.push(`🤖 调用 [${role}]${preview ? `: ${preview}` : ""}`);
+              } else {
+                toolParts.push(`🔧 ${block.name}`);
+              }
             }
           }
 
@@ -115,9 +148,8 @@ export async function executeTask(params: {
           if (toolParts.length) statusLines.push(toolParts.join(" | "));
           if (textParts.length) {
             const combined = textParts.join("\n");
-            statusLines.push(
-              combined.length > 500 ? "..." + combined.slice(-500) : combined
-            );
+            const truncated = combined.length > 500 ? "..." + combined.slice(-500) : combined;
+            statusLines.push(subagentPrefix + truncated);
           }
 
           if (statusLines.length) {
