@@ -96,24 +96,6 @@ export function createBot(): Client {
 
     await message.react("👀").catch(() => {});
 
-    // [TEMP TEST HOOK] !task <prompt> 走 executeTask
-    if (content.startsWith("!task ")) {
-      const taskPrompt = content.slice(6).trim();
-      const taskId = uuid();
-      const cwd = config.defaultCwd;
-      if (message.channel.isSendable()) {
-        createTask({ id: taskId, discord_thread_id: message.channel.id, discord_user_id: message.author.id, prompt: taskPrompt, cwd });
-        await message.channel.send(`🚀 启动 !task \`${taskId.slice(0,8)}\` (cwd: ${cwd})`);
-        executeTask({ taskId, prompt: taskPrompt, cwd, channel: message.channel })
-          .catch((e) => {
-            if (message.channel.isSendable()) {
-              void message.channel.send(`❌ task error: ${e?.message ?? e}`);
-            }
-          });
-      }
-      return;
-    }
-
     const typingInterval = message.channel.isSendable()
       ? setInterval(() => { message.channel.isSendable() && message.channel.sendTyping().catch(() => {}); }, 8000)
       : null;

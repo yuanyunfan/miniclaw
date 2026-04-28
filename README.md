@@ -4,6 +4,8 @@
 
 个人单用户，本地 Mac 常驻运行，~1000 行核心代码。
 
+> 📖 **想直观了解架构？** 看 [`docs/architecture.md`](docs/architecture.md) — 系统架构图 + @mention 时序图 + /task Supervisor 时序图，10 分钟看懂全局。
+
 ## 功能
 
 | 触发方式 | 引擎 | 能力 |
