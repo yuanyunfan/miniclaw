@@ -3,6 +3,7 @@ import { existsSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Client, SendableChannels } from "discord.js";
+import { AttachmentBuilder } from "discord.js";
 import type { CronJobScript } from "./types.js";
 
 const SCRIPTS_DIR_DEFAULT = join(homedir(), ".miniclaw/scripts");
@@ -18,6 +19,55 @@ function isExecutable(path: string): boolean {
   } catch {
     return false;
   }
+}
+
+// 解析 stdout 找出可发送的附件文件路径：
+// 1) JSON 行含 "png_path" / "image_path" / "media_path" 字段
+// 2) 行首 `MEDIA:<absolute path>` 语法（兼容 hermes）
+function extractAttachments(stdout: string): { paths: string[]; remaining: string } {
+  const paths: string[] = [];
+  const lines = stdout.split("\n");
+  const remainingLines: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // MEDIA: 语法
+    const mediaMatch = trimmed.match(/^MEDIA:(.+)$/);
+    if (mediaMatch) {
+      const path = mediaMatch[1].trim();
+      if (existsSync(path) && statSync(path).size > 0) paths.push(path);
+      continue;
+    }
+
+    // JSON 行，找 png_path / image_path / media_path
+    if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+      try {
+        const obj = JSON.parse(trimmed) as Record<string, unknown>;
+        if (obj.skipped === true) {
+          // 显示器休眠等：保留原样
+          remainingLines.push(line);
+          continue;
+        }
+        if (obj.error) {
+          remainingLines.push(line);
+          continue;
+        }
+        const candidate = (obj.png_path ?? obj.image_path ?? obj.media_path) as string | undefined;
+        if (typeof candidate === "string" && existsSync(candidate) && statSync(candidate).size > 0) {
+          paths.push(candidate);
+          // JSON 行不再在文字 body 中显示
+          continue;
+        }
+      } catch {
+        // 解析失败 → 当作普通行
+      }
+    }
+
+    remainingLines.push(line);
+  }
+
+  return { paths, remaining: remainingLines.join("\n").trim() };
 }
 
 export async function runScript(job: CronJobScript, client: Client): Promise<void> {
@@ -42,8 +92,6 @@ export async function runScript(job: CronJobScript, client: Client): Promise<voi
   };
   const args = job.args ?? [];
   const timeoutMs = (job.timeout_sec ?? 300) * 1000;
-
-  await postToChannel(client, job.channel, `⏰ cron \`${job.name}\` → script \`${job.script}\``);
 
   const startedAt = Date.now();
   const child = spawn(scriptPath, args, {
@@ -79,27 +127,51 @@ export async function runScript(job: CronJobScript, client: Client): Promise<voi
   const success = exitCode === 0 && !killed;
   const status = killed ? `🛑 timeout(${job.timeout_sec}s)` : success ? `✅ exit=0` : `❌ exit=${exitCode}`;
 
-  if (!job.capture_output && success) {
+  // 解析附件（PNG / image / media）
+  const { paths: attachmentPaths, remaining } = success ? extractAttachments(stdout) : { paths: [], remaining: stdout };
+
+  if (!job.capture_output && success && attachmentPaths.length === 0) {
     await postToChannel(client, job.channel, `cron \`${job.name}\` ${status} (${durationS}s)`);
     return;
   }
 
-  // capture_output=true 或失败 → post output
-  const output = (stdout + (stderr ? `\n--- stderr ---\n${stderr}` : "")).trim();
-  const truncated = output.length > 1700 ? output.slice(0, 1700) + "\n... (truncated)" : output;
-  const body = output
+  const ch = await fetchChannel(client, job.channel);
+  if (!ch) return;
+
+  const files = attachmentPaths.map((p) => new AttachmentBuilder(p));
+
+  // 仅图（无文字残余）→ 单独发图，不带啰嗦的状态行
+  if (success && files.length > 0 && !remaining && !stderr) {
+    await ch.send({ files });
+    return;
+  }
+
+  // 有文字 / 失败 → 拼 status + body + 附件
+  const errPart = stderr ? `\n--- stderr ---\n${stderr.trim()}` : "";
+  const fullText = (remaining + errPart).trim();
+  const truncated = fullText.length > 1700 ? fullText.slice(0, 1700) + "\n... (truncated)" : fullText;
+  const body = fullText
     ? `cron \`${job.name}\` ${status} (${durationS}s)\n\`\`\`\n${truncated}\n\`\`\``
-    : `cron \`${job.name}\` ${status} (${durationS}s) — 无输出`;
-  await postToChannel(client, job.channel, body);
+    : `cron \`${job.name}\` ${status} (${durationS}s)${files.length ? "" : " — 无输出"}`;
+
+  await ch.send(files.length ? { content: body.slice(0, 2000), files } : { content: body.slice(0, 2000) });
+}
+
+async function fetchChannel(client: Client, channelId: string): Promise<SendableChannels | null> {
+  try {
+    const ch = await client.channels.fetch(channelId);
+    if (ch && "isSendable" in ch && ch.isSendable()) return ch as SendableChannels;
+  } catch (err) {
+    console.error(`[cron] fetch channel ${channelId} failed:`, err);
+  }
+  return null;
 }
 
 async function postToChannel(client: Client, channelId: string, body: string): Promise<void> {
-  try {
-    const ch = await client.channels.fetch(channelId);
-    if (ch && "isSendable" in ch && ch.isSendable()) {
-      await (ch as SendableChannels).send(body.slice(0, 2000));
+  const ch = await fetchChannel(client, channelId);
+  if (ch) {
+    try { await ch.send(body.slice(0, 2000)); } catch (err) {
+      console.error(`[cron] post failed for ${channelId}:`, err);
     }
-  } catch (err) {
-    console.error(`[cron] post failed for ${channelId}:`, err);
   }
 }
