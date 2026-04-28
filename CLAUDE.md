@@ -157,3 +157,9 @@ scheduler 在 miniclaw 启动时随 ClientReady 一起 start，SIGTERM 时 stop�
 - 根因：SQLite 的 type/name/timestamps 字段实际只用了 type 一个（4 段分组渲染），用户却失去了"vim 编辑/git diff/跨工具复用"
 - 修复：迁到 markdown 单文件，`§` 分隔条目，每条带 `<!-- name="xxx" id=hex -->` 元数据；SQLite 表保留作冷备
 - 教训：如果**结构化字段没产生实际查询/筛选价值**，就别为了"看起来灵活"付出存储复杂度
+
+**[2026-04-28] cron script 里 `${VAR:-~/path}` 的 `~` 没被展开**：
+- 根因：bash 的 tilde expansion **只在 word 起始位置生效**，`${VAR:-...}` 的 default 值里 `~` 是字面量
+- 现象：`MINICLAW_DB_PATH=~/.miniclaw/data.db` 的 env 传到子进程后，`[ -f "$DB" ]` fail（路径含字面 `~`）
+- 修复：bash 脚本里手动展开 `DB="${DB/#\~/$HOME}"`；shell 脚本应避免依赖外层 env 的 tilde
+- 教训：spawn 子进程 + 字符串 path 总要假设 `~` 是字面量；要么提前 resolve 后再传，要么子进程显式 expand
