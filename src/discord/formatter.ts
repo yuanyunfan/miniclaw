@@ -23,17 +23,22 @@ export function taskCompleteEmbed(params: {
   costUsd: number;
   turns: number;
   sessionId: string;
+  tokensSummary?: string;
 }): EmbedBuilder {
   const duration = (params.durationMs / 1000).toFixed(1);
+  const fields = [
+    { name: "耗时", value: `${duration}s`, inline: true },
+    { name: "费用", value: `$${params.costUsd.toFixed(4)}`, inline: true },
+    { name: "轮次", value: String(params.turns), inline: true },
+    { name: "Session", value: params.sessionId.slice(0, 8), inline: true },
+  ];
+  if (params.tokensSummary) {
+    fields.push({ name: "Tokens", value: params.tokensSummary, inline: false });
+  }
   return new EmbedBuilder()
     .setTitle("✅ 任务完成")
     .setDescription(ellipsis(params.result, 4096))
-    .addFields(
-      { name: "耗时", value: `${duration}s`, inline: true },
-      { name: "费用", value: `$${params.costUsd.toFixed(4)}`, inline: true },
-      { name: "轮次", value: String(params.turns), inline: true },
-      { name: "Session", value: params.sessionId.slice(0, 8), inline: true }
-    )
+    .addFields(...fields)
     .setTimestamp()
     .setColor(0x2ecc71);
 }
@@ -47,15 +52,45 @@ export function taskErrorEmbed(taskId: string, error: string): EmbedBuilder {
     .setColor(0xe74c3c);
 }
 
-export function statusEmbed(
-  tasks: Array<{ id: string; prompt: string; status: string; created_at: string }>
-): EmbedBuilder {
-  const lines = tasks.map(
-    (t) => `**${t.id.slice(0, 8)}** [${t.status}] ${t.prompt.slice(0, 60)}`
-  );
-  return new EmbedBuilder()
-    .setTitle("📋 任务列表")
-    .setDescription(ellipsis(lines.join("\n"), 4096) || "无任务")
-    .setTimestamp()
-    .setColor(0x9b59b6);
+interface StatusTask {
+  id: string;
+  prompt: string;
+  status: string;
+  discord_thread_id?: string | null;
+}
+
+function fmtTaskLine(t: StatusTask, withResume = false): string {
+  const id = t.id.slice(0, 8);
+  const promptSnippet = t.prompt.replace(/\s+/g, " ").slice(0, 60);
+  const threadLink = t.discord_thread_id ? ` <#${t.discord_thread_id}>` : "";
+  const resumeHint = withResume ? `\n  ↳ \`/resume task_id:${id} followup:"继续"\`` : "";
+  return `**${id}**${threadLink} ${promptSnippet}${resumeHint}`;
+}
+
+export function statusOverviewEmbed(params: {
+  active: StatusTask[];
+  interrupted: StatusTask[];
+  recent: StatusTask[];
+}): EmbedBuilder {
+  const embed = new EmbedBuilder()
+    .setTitle("📋 任务总览")
+    .setColor(0x9b59b6)
+    .setTimestamp();
+
+  const activeText = params.active.length
+    ? params.active.map((t) => fmtTaskLine(t)).join("\n")
+    : "(无活跃任务)";
+  embed.addFields({ name: `🟢 活跃 (${params.active.length})`, value: ellipsis(activeText, 1024) });
+
+  const interruptedText = params.interrupted.length
+    ? params.interrupted.map((t) => fmtTaskLine(t, true)).join("\n")
+    : "(无中断任务)";
+  embed.addFields({ name: `⚠️ 中断待恢复 (${params.interrupted.length})`, value: ellipsis(interruptedText, 1024) });
+
+  const recentText = params.recent.length
+    ? params.recent.map((t) => `**${t.id.slice(0, 8)}** [${t.status}] ${t.prompt.replace(/\s+/g, " ").slice(0, 60)}`).join("\n")
+    : "(无最近任务)";
+  embed.addFields({ name: `📜 最近完成 (${params.recent.length})`, value: ellipsis(recentText, 1024) });
+
+  return embed;
 }

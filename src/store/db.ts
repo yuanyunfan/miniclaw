@@ -9,8 +9,18 @@ export function getDb(): Database.Database {
   return db;
 }
 
+export const TASK_STATUSES = [
+  "queued",
+  "running",
+  "interrupted",
+  "completed",
+  "failed",
+  "cancelled",
+] as const;
+export type TaskStatus = typeof TASK_STATUSES[number];
+
 const ALLOWED_UPDATE_FIELDS = new Set([
-  "session_id", "status", "result_summary", "cost_usd", "duration_ms", "completed_at",
+  "session_id", "status", "result_summary", "cost_usd", "duration_ms", "completed_at", "progress_message_id",
 ]);
 
 export function initDb(): void {
@@ -30,8 +40,10 @@ export function initDb(): void {
       cost_usd REAL,
       duration_ms INTEGER,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      completed_at TEXT
+      completed_at TEXT,
+      progress_message_id TEXT
     );
+    CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
     CREATE TABLE IF NOT EXISTS memories (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       type TEXT NOT NULL DEFAULT 'user',
@@ -49,6 +61,13 @@ export function initDb(): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
+
+  // Idempotent migration for existing DBs that predate progress_message_id.
+  try {
+    db.exec(`ALTER TABLE tasks ADD COLUMN progress_message_id TEXT`);
+  } catch {
+    // column already exists — ignore
+  }
 }
 
 export interface TaskRow {
@@ -64,6 +83,7 @@ export interface TaskRow {
   duration_ms: number | null;
   created_at: string;
   completed_at: string | null;
+  progress_message_id: string | null;
 }
 
 export function createTask(task: {
@@ -82,7 +102,7 @@ export function createTask(task: {
 export function updateTask(
   id: string,
   updates: Partial<
-    Pick<TaskRow, "session_id" | "status" | "result_summary" | "cost_usd" | "duration_ms" | "completed_at">
+    Pick<TaskRow, "session_id" | "status" | "result_summary" | "cost_usd" | "duration_ms" | "completed_at" | "progress_message_id">
   >
 ): void {
   const safeKeys = Object.keys(updates).filter((k) => ALLOWED_UPDATE_FIELDS.has(k));
@@ -108,8 +128,31 @@ export function getTask(id: string): TaskRow | undefined {
   return assertTaskRows([row])[0];
 }
 
+export function getTaskByThreadId(threadId: string): TaskRow | undefined {
+  const row = db.prepare(
+    `SELECT * FROM tasks
+     WHERE discord_thread_id = ? AND session_id IS NOT NULL
+     ORDER BY created_at DESC LIMIT 1`
+  ).get(threadId);
+  if (!row) return undefined;
+  return assertTaskRows([row])[0];
+}
+
 export function getActiveTasks(): TaskRow[] {
   return assertTaskRows(db.prepare("SELECT * FROM tasks WHERE status = 'running' ORDER BY created_at DESC").all());
+}
+
+export function getInterruptedTasks(limit = 5): TaskRow[] {
+  return assertTaskRows(
+    db.prepare("SELECT * FROM tasks WHERE status = 'interrupted' ORDER BY completed_at DESC LIMIT ?").all(limit)
+  );
+}
+
+export function markTaskInterrupted(id: string): void {
+  db.prepare(
+    `UPDATE tasks SET status = 'interrupted', completed_at = datetime('now')
+     WHERE id = ? AND status = 'running'`
+  ).run(id);
 }
 
 export function getRecentTasks(limit = 10): TaskRow[] {

@@ -7,9 +7,9 @@ import { v4 as uuid } from "uuid";
 import { resolve } from "path";
 import { homedir } from "os";
 import { config } from "../config.js";
-import { createTask, getActiveTasks, getRecentTasks, getTask, updateTask } from "../store/db.js";
-import { executeTask, getActiveTaskCount, cancelTask } from "../agent/task.js";
-import { taskStartEmbed, statusEmbed, taskErrorEmbed } from "../discord/formatter.js";
+import { createTask, getActiveTasks, getInterruptedTasks, getRecentTasks, getTask, updateTask } from "../store/db.js";
+import { executeTask, getActiveTaskCount, cancelTask, listActiveTaskIds } from "../agent/task.js";
+import { taskStartEmbed, statusOverviewEmbed, taskErrorEmbed } from "../discord/formatter.js";
 import { addMemory, deleteMemory, getAllMemories, getMemoriesByType } from "../store/memory.js";
 
 function resolveHome(p: string): string {
@@ -84,12 +84,17 @@ export async function handleStatus(interaction: ChatInputCommandInteraction): Pr
     return;
   }
 
-  const active = getActiveTasks();
-  const recent = getRecentTasks(5);
-  const tasks = active.length > 0 ? active : recent;
+  const activeIds = new Set(listActiveTaskIds());
+  const dbActive = getActiveTasks();
+  // In-flight: rows with status='running' AND a live in-process AbortController.
+  const active = dbActive.filter((t) => activeIds.has(t.id));
+  const interrupted = getInterruptedTasks(5);
+  const recent = getRecentTasks(20)
+    .filter((t) => ["completed", "failed", "cancelled"].includes(t.status))
+    .slice(0, 5);
 
   await interaction.reply({
-    embeds: [statusEmbed(tasks)],
+    embeds: [statusOverviewEmbed({ active, interrupted, recent })],
     ephemeral: true,
   });
 }

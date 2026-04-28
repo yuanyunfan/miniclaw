@@ -10,6 +10,10 @@ import { config } from "./config.js";
 import { chat, type ChatCallbacks } from "./agent/chat.js";
 import { chunkMessage } from "./discord/chunks.js";
 import { handleTask, handleStatus, handleCancel, handleResume, handleRemember, handleForget, handleMemories } from "./commands/handlers.js";
+import { executeTask } from "./agent/task.js";
+import { recoverInterruptedTasks } from "./agent/recovery.js";
+import { createTask, getTaskByThreadId } from "./store/db.js";
+import { v4 as uuid } from "uuid";
 import { parseExplicitMemory } from "./memory/parse.js";
 import { addMemory } from "./store/memory.js";
 
@@ -28,6 +32,38 @@ export function createBot(): Client {
   client.on(Events.MessageCreate, async (message: Message) => {
     if (message.author.bot) return;
     if (message.author.id !== config.allowedUserId) return;
+
+    // Thread continuation: 如果消息发在 /task 创建过的 thread 里，自动按 resume 续话
+    const continuableTask = getTaskByThreadId(message.channel.id);
+    if (continuableTask && continuableTask.session_id) {
+      if (processed.has(message.id)) return;
+      processed.set(message.id, Date.now());
+      const followupContent = message.content.trim();
+      if (!followupContent) return;
+      await message.react("🔄").catch(() => {});
+      const newTaskId = uuid();
+      if (message.channel.isSendable()) {
+        createTask({
+          id: newTaskId,
+          discord_thread_id: message.channel.id,
+          discord_user_id: message.author.id,
+          prompt: followupContent,
+          cwd: continuableTask.cwd ?? config.defaultCwd,
+        });
+        executeTask({
+          taskId: newTaskId,
+          prompt: followupContent,
+          cwd: continuableTask.cwd ?? config.defaultCwd,
+          channel: message.channel,
+          resumeSessionId: continuableTask.session_id,
+        }).catch((e) => {
+          if (message.channel.isSendable()) {
+            void message.channel.send(`❌ resume error: ${e?.message ?? e}`);
+          }
+        });
+      }
+      return;
+    }
 
     const isAutoChannel = config.autoReplyChannelIds.includes(message.channel.id);
     const isMentioned = message.mentions.has(client.user!);
@@ -59,6 +95,24 @@ export function createBot(): Client {
     }
 
     await message.react("👀").catch(() => {});
+
+    // [TEMP TEST HOOK] !task <prompt> 走 executeTask
+    if (content.startsWith("!task ")) {
+      const taskPrompt = content.slice(6).trim();
+      const taskId = uuid();
+      const cwd = config.defaultCwd;
+      if (message.channel.isSendable()) {
+        createTask({ id: taskId, discord_thread_id: message.channel.id, discord_user_id: message.author.id, prompt: taskPrompt, cwd });
+        await message.channel.send(`🚀 启动 !task \`${taskId.slice(0,8)}\` (cwd: ${cwd})`);
+        executeTask({ taskId, prompt: taskPrompt, cwd, channel: message.channel })
+          .catch((e) => {
+            if (message.channel.isSendable()) {
+              void message.channel.send(`❌ task error: ${e?.message ?? e}`);
+            }
+          });
+      }
+      return;
+    }
 
     const typingInterval = message.channel.isSendable()
       ? setInterval(() => { message.channel.isSendable() && message.channel.sendTyping().catch(() => {}); }, 8000)
@@ -150,16 +204,21 @@ export function createBot(): Client {
     } catch (err) {
       console.error("[MiniClaw] Command error:", err);
       const reply = { content: "❌ 命令执行出错", ephemeral: true };
-      if (cmd.deferred || cmd.replied) {
-        await cmd.editReply(reply.content);
-      } else {
-        await cmd.reply(reply);
+      try {
+        if (cmd.deferred || cmd.replied) {
+          await cmd.editReply(reply.content);
+        } else {
+          await cmd.reply(reply);
+        }
+      } catch (replyErr) {
+        console.error("[MiniClaw] Failed to send error reply:", replyErr);
       }
     }
   });
 
   client.once(Events.ClientReady, (c) => {
     console.log(`[MiniClaw] Logged in as ${c.user.tag}`);
+    void recoverInterruptedTasks(c);
   });
 
   return client;
