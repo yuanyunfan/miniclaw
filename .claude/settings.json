@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f CLAUDE.md ]; then echo '📋 === miniclaw CLAUDE.md (前 50 行) ==='; head -50 CLAUDE.md; fi; echo ''; if [ -f CHANGELOG.md ]; then echo '📜 === Unreleased 段 ==='; awk '/^## \\[Unreleased\\]/{f=1; next} f && /^## /{exit} f' CHANGELOG.md | head -20; fi; echo ''; echo '🌳 === 最近 5 commit ==='; git log --oneline -5 2>/dev/null || true"
+          }
+        ]
+      }
+    ]
+  }
+}

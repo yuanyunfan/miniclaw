@@ -12,7 +12,7 @@ export interface AgentDefinition {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const AGENTS_DIR = resolve(__dirname, "../../agents");
 
-type FrontmatterValue = string | string[];
+export type FrontmatterValue = string | string[];
 
 function stripQuotes(value: string): string {
   if (
@@ -30,7 +30,7 @@ function parseFlowArray(raw: string): string[] {
   return inner.split(",").map((s) => stripQuotes(s.trim())).filter(Boolean);
 }
 
-function parseFrontmatter(raw: string): { meta: Record<string, FrontmatterValue>; body: string } {
+export function parseFrontmatter(raw: string): { meta: Record<string, FrontmatterValue>; body: string } {
   const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
   if (!match) {
     throw new Error("Subagent markdown 缺少 YAML frontmatter (--- ... ---)");

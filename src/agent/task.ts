@@ -83,6 +83,8 @@ function formatUsage(usage: unknown): string | undefined {
   return parts.length ? parts.join(" · ") : undefined;
 }
 
+export const __testables = { fmtTokens, formatUsage };
+
 const activeTasks = new Map<string, AbortController>();
 
 export function getActiveTaskCount(): number {

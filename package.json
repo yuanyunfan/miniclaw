@@ -1,6 +1,6 @@
 {
   "name": "miniclaw",
-  "version": "0.1.0",
+  "version": "0.4.0",
   "description": "极简 AI 助手 — Discord → Claude Code Agent SDK",
   "type": "module",
   "engines": {
@@ -10,7 +10,11 @@
     "dev": "tsx --watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "register": "tsx src/commands/register.ts"
+    "register": "tsx src/commands/register.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:cov": "vitest run --coverage",
+    "init": "bash init.sh"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.119",
@@ -29,8 +33,10 @@
     "@types/node": "^22.15.3",
     "@types/uuid": "^10.0.0",
     "@types/ws": "^8.18.1",
+    "@vitest/coverage-v8": "^3.0.0",
     "tsx": "^4.19.4",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitest": "^3.0.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
