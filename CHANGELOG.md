@@ -7,6 +7,13 @@
 ## [Unreleased]
 
 ### Added
+- **Cron 状态持久化**（`~/.miniclaw/cron/state.json`）
+  - 每次 dispatch 后自动写入 `last_run_at` / `last_status` / `last_error` / `last_duration_ms` / `completed` 累计计数
+  - 重启不丢历史；`pnpm cron:list` 显示 `[✓ ran 35× · last ok 04-28 09:00 12.3s]`
+  - 8 个新增测试覆盖 state（read/write/atomic/累加/损坏文件容错/error 截断）
+- **第一个 cron job：`github-trending`** —— 9:00 抓 GitHub Trending 生成中文简报到 #常规（照搬 hermes 同款 prompt）
+
+### Added (前次)
 - **Cron 定时任务支持**（`~/.miniclaw/cron/*.yaml`）
   - 4 种 type：`task`（跑 /task 流程）/ `script`（执行 ~/.miniclaw/scripts/）/ `skill`（调用用户级 subagent）/ `message`（模板化 Discord 消息）
   - 调度引擎：`node-cron` 进程内，SIGTERM 时优雅关闭

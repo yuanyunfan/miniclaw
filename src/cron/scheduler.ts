@@ -4,23 +4,27 @@ import { loadCronJobs } from "./loader.js";
 import { runTask, runSkill } from "./runner-task.js";
 import { runMessage } from "./runner-message.js";
 import { runScript } from "./runner-script.js";
+import { recordRun, getAllJobStates, type JobState } from "./state.js";
 import type { CronJob } from "./types.js";
 
 const tasks = new Map<string, ScheduledTask>();
-const lastRun = new Map<string, { at: string; ok: boolean; error?: string }>();
 
 async function dispatch(job: CronJob, client: Client): Promise<void> {
-  const startedAt = new Date().toISOString();
+  const startedAt = Date.now();
+  let ok = true;
+  let errorMsg: string | undefined;
   try {
     if (job.type === "task")    await runTask(job, client);
     else if (job.type === "script") await runScript(job, client);
     else if (job.type === "skill")  await runSkill(job, client);
     else if (job.type === "message") await runMessage(job, client);
-    lastRun.set(job.name, { at: startedAt, ok: true });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[cron] ${job.name} failed:`, msg);
-    lastRun.set(job.name, { at: startedAt, ok: false, error: msg });
+    ok = false;
+    errorMsg = err instanceof Error ? err.message : String(err);
+    console.error(`[cron] ${job.name} failed:`, errorMsg);
+  } finally {
+    const durationMs = Date.now() - startedAt;
+    recordRun(job.name, ok, durationMs, errorMsg);
   }
 }
 
@@ -60,8 +64,9 @@ export function stopScheduler(): void {
   tasks.clear();
 }
 
-export function listScheduled(): Array<{ name: string; lastRun?: { at: string; ok: boolean; error?: string } }> {
-  return Array.from(tasks.keys()).map((name) => ({ name, lastRun: lastRun.get(name) }));
+export function listScheduled(): Array<{ name: string; state?: JobState }> {
+  const states = getAllJobStates();
+  return Array.from(tasks.keys()).map((name) => ({ name, state: states[name] }));
 }
 
 // 暴露给 CLI: 立刻试跑一个 job 不影响调度
