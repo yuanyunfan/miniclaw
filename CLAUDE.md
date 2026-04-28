@@ -124,3 +124,8 @@ pnpm test:cov   # 带覆盖率报告
 - 根因：Read 工具默认 limit，subagent 看了前 N 行就推断"文件只有 N 行"
 - 修复：`agents/researcher.md` + `agents/generator.md` 加规则——位置敏感操作必须先 `wc -l` 确认真实长度
 - 教训：subagent prompt 要把"模型容易踩的隐含假设"显式禁掉，光靠"模型聪明"靠不住
+
+**[2026-04-28] memories 从 SQLite 迁到 markdown（`~/.miniclaw/memories/MEMORY.md`）**：
+- 根因：SQLite 的 type/name/timestamps 字段实际只用了 type 一个（4 段分组渲染），用户却失去了"vim 编辑/git diff/跨工具复用"
+- 修复：迁到 markdown 单文件，`§` 分隔条目，每条带 `<!-- name="xxx" id=hex -->` 元数据；SQLite 表保留作冷备
+- 教训：如果**结构化字段没产生实际查询/筛选价值**，就别为了"看起来灵活"付出存储复杂度

@@ -58,8 +58,8 @@ const commands = [
   new SlashCommandBuilder()
     .setName("forget")
     .setDescription("删除一条记忆")
-    .addIntegerOption((opt) =>
-      opt.setName("id").setDescription("记忆 ID").setRequired(true)
+    .addStringOption((opt) =>
+      opt.setName("id").setDescription("记忆 ID（4 字符 hex，例如 7f3a）").setRequired(true)
     ),
 
   new SlashCommandBuilder()

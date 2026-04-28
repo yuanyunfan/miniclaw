@@ -223,13 +223,13 @@ export async function handleForget(interaction: ChatInputCommandInteraction): Pr
     return;
   }
 
-  const id = interaction.options.getInteger("id", true);
+  const id = interaction.options.getString("id", true);
   const deleted = deleteMemory(id);
 
   if (deleted) {
-    await interaction.reply(`🗑️ 已删除记忆 #${id}`);
+    await interaction.reply(`🗑️ 已删除记忆 \`${id}\``);
   } else {
-    await interaction.reply({ content: `❌ 找不到记忆 #${id}`, ephemeral: true });
+    await interaction.reply({ content: `❌ 找不到记忆 \`${id}\``, ephemeral: true });
   }
 }
 

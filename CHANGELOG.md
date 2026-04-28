@@ -6,8 +6,18 @@
 
 ## [Unreleased]
 
+### Changed
+- **memories 存储从 SQLite 迁移到 markdown**（`~/.miniclaw/memories/MEMORY.md`）
+  - 用户可直接 `vim` 编辑、`git diff` 跟踪、跨工具复用
+  - 4 个固定 section：user / project / feedback / reference（emoji 标题）
+  - 每条用 `§` 分隔，末尾 `<!-- id=xxxx -->` 注释含 4 字符 hex ID
+  - SQLite `memories` 表保留作冷备但不再读写
+  - `/forget` 命令的 id 参数从 INTEGER 改 STRING（需重跑 `pnpm register`）
+- `src/store/memory.ts` 改成 re-export from `memory-md.ts`，旧 import 路径不变
+- 新增 `scripts/migrate-memories.ts`：SQLite → MEMORY.md 一次性迁移（带 `--dry-run` / `--backup`）
+
 ### Added
-- 单元测试基础设施（vitest）+ 38 个核心测试覆盖 7 个模块
+- 单元测试基础设施（vitest）+ 48 个测试覆盖 8 个核心模块（含 memory-md 10 用例）
 - `init.sh` 一键环境初始化（Node/pnpm 检查 + 依赖 + hooks + 类型检查 + 测试）
 - `scripts/git-hooks/pre-commit` + `scripts/install-hooks.sh` —— commit 前强制 tsc
 - `.claude/settings.json` 项目级 SessionStart hook（自动注入 CLAUDE.md + 最近 commit）
