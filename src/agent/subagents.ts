@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -85,33 +85,47 @@ export function loadSubagents(): Record<string, AgentDefinition> {
   if (cache) return cache;
   const result: Record<string, AgentDefinition> = {};
 
-  let files: string[];
-  try {
-    files = readdirSync(AGENTS_DIR).filter((f) => f.endsWith(".md"));
-  } catch (err) {
-    console.warn(`[subagents] 无法读取 ${AGENTS_DIR}:`, err);
-    cache = result;
-    return result;
+  // 加载顺序：repo agents/ → user ~/.miniclaw/skills/（同名 user 覆盖 repo）
+  const dirs: Array<{ path: string; source: string }> = [
+    { path: AGENTS_DIR, source: "repo" },
+  ];
+  const userSkillsDir = process.env.MINICLAW_SKILLS_DIR
+    ?? `${process.env.HOME ?? ""}/.miniclaw/skills`;
+  if (userSkillsDir && existsSync(userSkillsDir)) {
+    dirs.push({ path: userSkillsDir, source: "user" });
   }
 
-  for (const file of files) {
-    const path = join(AGENTS_DIR, file);
-    const raw = readFileSync(path, "utf8");
-    const { meta, body } = parseFrontmatter(raw);
-    const description = asString(meta.description);
-    if (!description) {
-      console.warn(`[subagents] 跳过 ${file}: frontmatter 缺少 description`);
+  for (const { path: dir, source } of dirs) {
+    let files: string[];
+    try {
+      files = readdirSync(dir).filter((f) => f.endsWith(".md"));
+    } catch (err) {
+      if (source === "repo") console.warn(`[subagents] 无法读取 ${dir}:`, err);
       continue;
     }
-    const name = file.replace(/\.md$/, "");
-    const model = asString(meta.model);
-    const tools = asStringArray(meta.tools);
-    result[name] = {
-      description,
-      prompt: body,
-      ...(model ? { model } : {}),
-      ...(tools ? { tools } : {}),
-    };
+
+    for (const file of files) {
+      const path = join(dir, file);
+      const raw = readFileSync(path, "utf8");
+      const { meta, body } = parseFrontmatter(raw);
+      const description = asString(meta.description);
+      if (!description) {
+        console.warn(`[subagents] 跳过 ${file} (${source}): frontmatter 缺少 description`);
+        continue;
+      }
+      const name = file.replace(/\.md$/, "");
+      if (result[name] && source === "user") {
+        console.warn(`[subagents] user skill '${name}' 覆盖 repo subagent`);
+      }
+      const model = asString(meta.model);
+      const tools = asStringArray(meta.tools);
+      result[name] = {
+        description,
+        prompt: body,
+        ...(model ? { model } : {}),
+        ...(tools ? { tools } : {}),
+      };
+    }
   }
 
   cache = result;

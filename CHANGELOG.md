@@ -6,6 +6,18 @@
 
 ## [Unreleased]
 
+### Added
+- **Cron 定时任务支持**（`~/.miniclaw/cron/*.yaml`）
+  - 4 种 type：`task`（跑 /task 流程）/ `script`（执行 ~/.miniclaw/scripts/）/ `skill`（调用用户级 subagent）/ `message`（模板化 Discord 消息）
+  - 调度引擎：`node-cron` 进程内，SIGTERM 时优雅关闭
+  - 模板变量：`{{date}}` `{{weekday}}` `{{time}}` `{{cron.name}}` + 自定义 args
+  - script 安全：仅 `~/.miniclaw/scripts/` 下可执行文件、禁路径分隔符、timeout 默认 5 min/上限 30 min
+  - CLI：`pnpm cron:list`（列状态）`pnpm cron:test <name>`（立刻试跑不影响调度）
+  - 16 个新增测试覆盖 loader（YAML 解析 / schema 校验 / 错误隔离）+ template
+- **用户级 skills 加载**（`~/.miniclaw/skills/*.md`）
+  - `loadSubagents()` 现在合并扫 repo `agents/` + user `~/.miniclaw/skills/`
+  - 同名 user skill 覆盖 repo subagent（带 console.warn 提示）
+
 ### Changed
 - **memories 存储从 SQLite 迁移到 markdown**（`~/.miniclaw/memories/MEMORY.md`）
   - 用户可直接 `vim` 编辑、`git diff` 跟踪、跨工具复用

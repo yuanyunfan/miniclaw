@@ -75,6 +75,34 @@ pnpm test:cov   # 带覆盖率报告
 
 `executeTask()` 是 I/O heavy（调 Anthropic SDK），不在单测覆盖。端到端走 Discord 真实测。
 
+## 用户级扩展（`~/.miniclaw/`）
+
+| 目录 | 用途 |
+|---|---|
+| `memories/MEMORY.md` | 长期记忆（4 个 section + `§` 分隔，可直接 vim 编辑） |
+| `cron/*.yaml` | 定时任务（type=task / script / skill / message） |
+| `skills/*.md` | 用户级 subagent（同名覆盖 repo `agents/`） |
+| `scripts/*` | 可执行脚本（仅由 cron `type=script` 调用） |
+| `data.db` | SQLite（tasks + chat_history） |
+
+cron job 示例（YAML）：
+```yaml
+name: morning-brief
+schedule: "0 9 * * *"        # crontab 5 字段
+timezone: Asia/Shanghai
+enabled: true
+type: task                   # task | script | skill | message
+channel: "1497872461272846379"
+prompt: 扫描 ~/Code 项目仓库的 git status
+budget_usd: 0.5
+```
+
+CLI：
+- `pnpm cron:list` — 列出所有 job + 状态
+- `pnpm cron:test <name>` — 立刻试跑某 job（不影响调度）
+
+scheduler 在 miniclaw 启动时随 ClientReady 一起 start，SIGTERM 时 stop。
+
 ## Session Workflow (MANDATORY)
 
 > 每次 Claude Code session 处理 miniclaw 代码时**必须**遵守。
