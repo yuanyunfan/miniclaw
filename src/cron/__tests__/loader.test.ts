@@ -20,7 +20,8 @@ function write(file: string, body: string): void {
   writeFileSync(join(tmp, file), body);
 }
 
-const VALID_CHANNEL = "1497872461272846379";
+// 测试用 channel ID 占位符（19 位数字符合 Discord snowflake 校验，但不指向任何真实频道）
+const VALID_CHANNEL = "1000000000000000000";
 
 describe("loadCronJobs", () => {
   it("空目录 → 空 jobs + 写入 .example.yaml", () => {

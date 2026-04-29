@@ -5,7 +5,8 @@ from pathlib import Path
 
 HERMES_JOBS = Path.home() / ".hermes/cron/jobs.json"
 OUT_DIR = Path.home() / ".miniclaw/cron"
-DEFAULT_CHANNEL = "1497872461272846379"  # MiniClaw Hub #常规
+# 占位频道 ID — 迁移后用 scripts/update-cron-channels.py 批量替换
+DEFAULT_CHANNEL = os.environ.get("MINICLAW_DEFAULT_CHANNEL_PLACEHOLDER", "REPLACE_WITH_DISCORD_CHANNEL_ID")
 
 def slugify(name: str) -> str:
     # 中文 → 拼音不做，直接保留 ASCII 字符 + 把空格/中文换成 -

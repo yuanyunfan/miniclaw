@@ -92,7 +92,7 @@ schedule: "0 9 * * *"        # crontab 5 字段
 timezone: Asia/Shanghai
 enabled: true
 type: task                   # task | script | skill | message
-channel: "1497872461272846379"
+channel: "<your-discord-channel-id>"
 prompt: 扫描 ~/Code 项目仓库的 git status
 budget_usd: 0.5
 ```

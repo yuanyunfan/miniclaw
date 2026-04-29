@@ -125,7 +125,7 @@ Supervisor 调用你时会在 prompt 中提供：
 > 非目标：不抽 router.ts、不改 chat.ts、不加缓存
 > 验收命令：`pnpm build`；手动 Discord 测试若干
 >
-> cwd: /Users/yuan/ProjectRepo/miniclaw
+> cwd: /path/to/miniclaw   (示例)
 
 **你的输出**：
 ```

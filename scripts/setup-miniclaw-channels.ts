@@ -9,7 +9,7 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
-const GUILD_ID = "1497872460232654940"; // MiniClaw Hub
+const GUILD_ID = process.env.MINICLAW_GUILD_ID ?? config.discord.guildId;
 
 const STRUCTURE = [
   {

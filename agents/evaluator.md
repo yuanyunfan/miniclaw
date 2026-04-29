@@ -162,7 +162,7 @@ escalate_reason: ""
 >
 > 改动文件：src/agent/intent.ts (+34), src/bot.ts (+12), src/config.ts (+4)
 >
-> cwd: /Users/yuan/ProjectRepo/miniclaw
+> cwd: /path/to/miniclaw   (示例)
 > baseline: main
 
 **你的输出**：

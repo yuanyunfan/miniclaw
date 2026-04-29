@@ -9,7 +9,7 @@
 
 ```mermaid
 flowchart LR
-    User([用户 yyf])
+    User([用户])
 
     subgraph Discord["Discord 平台"]
         DC["#chat 频道"]
