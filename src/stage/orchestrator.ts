@@ -114,9 +114,9 @@ export class Orchestrator extends EventEmitter {
     this.persistMessage(msg);
     this.paused = false;
 
-    // 入队：若用户 @ 了在场 agent，加入队列；否则什么也不做（user 静默观察）
+    // 入队：若用户 @ 了在场 agent，加入队列（去重）；否则什么也不做（user 静默观察）
     for (const id of mentions) {
-      if (this.scene.participants.has(id)) this.queue.push(id);
+      if (this.scene.participants.has(id)) this.enqueue(id);
       else this.emit("notice", "warn", `@${id} 未在场，先 /summon ${id}`);
     }
     this.tick();
@@ -153,8 +153,15 @@ export class Orchestrator extends EventEmitter {
   /** 主动塞一个发言者到队首（auto 模式下 stage-manager 用） */
   enqueueNext(id: string): void {
     if (!this.scene.participants.has(id)) return;
+    if (this.queue.includes(id)) return;
     this.queue.unshift(id);
     this.tick();
+  }
+
+  /** 入队尾，去重（同一 id 已在队列内则跳过） */
+  private enqueue(id: string): void {
+    if (this.queue.includes(id)) return;
+    this.queue.push(id);
   }
 
   // ===== 内部调度 =====
@@ -249,10 +256,10 @@ export class Orchestrator extends EventEmitter {
         total_turns: this.scene.totalTurns,
       });
 
-      // 入队后续 mention（仅在场的）
+      // 入队后续 mention（仅在场的，去重）
       for (const next of validMentions) {
         if (this.scene.participants.has(next) && next !== persona.id) {
-          this.queue.push(next);
+          this.enqueue(next);
         } else if (!this.scene.participants.has(next)) {
           this.emit("notice", "warn", `${persona.id} @${next} 但未在场，已忽略`);
         }
@@ -307,10 +314,10 @@ export class Orchestrator extends EventEmitter {
         }
         const alt = others[0];
         this.emit("notice", "warn", `🎬 stage-manager 想让 ${decision.next} 继续，被强制切到 ${alt}`);
-        this.queue.push(alt);
+        this.enqueue(alt);
       } else {
         this.emit("notice", "info", `🎬 stage-manager → @${decision.next}（${decision.reason}）`);
-        this.queue.push(decision.next);
+        this.enqueue(decision.next);
       }
     } catch (err) {
       this.emit("notice", "error", `stage-manager 失败: ${err instanceof Error ? err.message : String(err)}`);
