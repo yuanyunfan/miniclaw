@@ -104,7 +104,8 @@ export async function runTask(job: CronJobTask, client: Client): Promise<void> {
 
   createTask({
     id: taskId,
-    discord_thread_id: channel.id,
+    // cron 触发的 task 不属于任何 Discord thread，置空避免被 thread-continuation 误命中
+    discord_thread_id: "",
     discord_user_id: "cron",
     prompt,
     cwd,
@@ -129,7 +130,7 @@ export async function runSkill(job: CronJobSkill, client: Client): Promise<void>
 
   createTask({
     id: taskId,
-    discord_thread_id: channel.id,
+    discord_thread_id: "",
     discord_user_id: "cron",
     prompt,
     cwd,

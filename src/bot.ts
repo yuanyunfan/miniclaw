@@ -33,9 +33,11 @@ export function createBot(): Client {
     if (message.author.bot) return;
     if (message.author.id !== config.allowedUserId) return;
 
-    // Thread continuation: 如果消息发在 /task 创建过的 thread 里，自动按 resume 续话
-    const continuableTask = getTaskByThreadId(message.channel.id);
-    if (continuableTask && continuableTask.session_id) {
+    // Thread continuation: 仅当消息发在 /task 创建过的真正 Discord thread 里才自动 resume
+    // （防 cron 在普通 channel 跑过留下 discord_thread_id 记录被误命中）
+    const isInThread = "isThread" in message.channel && message.channel.isThread();
+    const continuableTask = isInThread ? getTaskByThreadId(message.channel.id) : undefined;
+    if (continuableTask && continuableTask.session_id && continuableTask.discord_user_id !== "cron") {
       if (processed.has(message.id)) return;
       processed.set(message.id, Date.now());
       const followupContent = message.content.trim();
