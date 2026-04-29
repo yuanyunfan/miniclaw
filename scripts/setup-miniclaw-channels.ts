@@ -1,9 +1,13 @@
 #!/usr/bin/env tsx
 // 程序化在 MiniClaw Hub 创建 hermes 同款频道结构
 // 用法: pnpm tsx scripts/setup-miniclaw-channels.ts
+//
+// channel ID 映射写入 ~/.miniclaw/channel-map.json（用户级配置，不进 git repo）
 import { Client, GatewayIntentBits, ChannelType, type Guild } from "discord.js";
 import { config } from "../src/config.js";
-import { writeFileSync } from "node:fs";
+import { writeFileSync, mkdirSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 
 const GUILD_ID = "1497872460232654940"; // MiniClaw Hub
 
@@ -80,7 +84,8 @@ client.once("ready", async (c) => {
     }
   }
 
-  const out = "/Users/yuan/ProjectRepo/miniclaw/scripts/.channel-map.json";
+  const out = process.env.MINICLAW_CHANNEL_MAP ?? join(homedir(), ".miniclaw/channel-map.json");
+  mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, JSON.stringify(channelMap, null, 2));
   console.log(`\n✅ 完成。channel 映射已写入: ${out}`);
   console.log(JSON.stringify(channelMap, null, 2));

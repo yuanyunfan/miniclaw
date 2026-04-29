@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""根据 .channel-map.json 批量改 ~/.miniclaw/cron/*.yaml 的 channel: 字段 + enabled: true"""
-import json, re
+"""根据 ~/.miniclaw/channel-map.json 批量改 ~/.miniclaw/cron/*.yaml 的 channel: 字段 + enabled: true"""
+import json, os, re
 from pathlib import Path
 
-ROOT = Path(__file__).parent.parent
-MAP_FILE = ROOT / "scripts/.channel-map.json"
+MAP_FILE = Path(os.environ.get("MINICLAW_CHANNEL_MAP", str(Path.home() / ".miniclaw/channel-map.json")))
 CRON_DIR = Path.home() / ".miniclaw/cron"
 
 # cron job slug → channel slug 映射（决定每个 job 发到哪个频道）
