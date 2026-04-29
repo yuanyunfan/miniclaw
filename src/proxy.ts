@@ -1,6 +1,8 @@
 import "dotenv/config";
 import { createRequire } from "node:module";
+import { createLogger } from "./lib/log.js";
 
+const log = createLogger("proxy");
 const require = createRequire(import.meta.url);
 const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.MINICLAW_PROXY;
 
@@ -45,5 +47,5 @@ if (proxyUrl) {
 
   ws.WebSocket = ProxiedWebSocket;
 
-  console.log(`[MiniClaw] Proxy: ${proxyUrl}`);
+  log.info(`Proxy: ${proxyUrl}`);
 }

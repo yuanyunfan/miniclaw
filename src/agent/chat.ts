@@ -1,8 +1,12 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import type { ContentBlockParam } from "@anthropic-ai/sdk/resources/messages.js";
 import { config } from "../config.js";
 import { addChatMessage, getChatHistory } from "../store/db.js";
 import { buildMemoryPrompt } from "../memory/inject.js";
 import { extractMemories } from "../memory/extract.js";
+import { createLogger } from "../lib/log.js";
+
+const log = createLogger("chat");
 
 export interface ChatCallbacks {
   onToolUse: (display: string) => void;
@@ -13,8 +17,10 @@ export async function chat(
   channelId: string,
   userId: string,
   prompt: string,
+  attachmentBlocks?: ContentBlockParam[],
   callbacks?: ChatCallbacks,
 ): Promise<string> {
+  // chat_history 只存文字摘要，不存 base64/URL（避免表膨胀 + 续话不重传附件是设计取舍）
   addChatMessage(channelId, userId, "user", prompt);
 
   const history = getChatHistory(channelId, 30).reverse();
@@ -28,8 +34,29 @@ export async function chat(
 
   let result = "";
 
+  const hasAttachments = !!(attachmentBlocks && attachmentBlocks.length);
+  const promptParam: string | AsyncIterable<{
+    type: "user";
+    message: { role: "user"; content: ContentBlockParam[] };
+    parent_tool_use_id: null;
+  }> = hasAttachments
+    ? (async function* () {
+        yield {
+          type: "user" as const,
+          parent_tool_use_id: null,
+          message: {
+            role: "user" as const,
+            content: [
+              ...attachmentBlocks!,
+              { type: "text" as const, text: fullPrompt },
+            ],
+          },
+        };
+      })()
+    : fullPrompt;
+
   const q = query({
-    prompt: fullPrompt,
+    prompt: promptParam,
     options: {
       model: config.model,
       cwd: config.defaultCwd,
@@ -75,7 +102,7 @@ export async function chat(
   addChatMessage(channelId, userId, "assistant", result);
 
   extractMemories(prompt, result).catch((err) => {
-    console.error("[MiniClaw] Background memory extraction error:", err);
+    log.error("Background memory extraction error:", err);
   });
 
   return result;

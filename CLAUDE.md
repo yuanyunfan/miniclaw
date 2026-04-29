@@ -45,6 +45,7 @@ Discord Bot (discord.js v14) → Orchestrator → Claude Code Agent SDK / Anthro
 - src/commands/register.ts — Slash command 注册
 - src/commands/handlers.ts — 命令处理逻辑
 - src/discord/chunks.ts — 消息分片（2000 字符限制）
+- src/discord/attachments.ts — Discord 附件 → Anthropic ContentBlockParam（图片/PDF 用 URL，文本内联，二进制落盘）
 - src/discord/formatter.ts — Embed 格式化
 - src/discord/progress.ts — 进度更新推送
 - src/store/db.ts — SQLite 存储
@@ -101,6 +102,38 @@ CLI：
 - `pnpm cron:test <name>` — 立刻试跑某 job（不影响调度）
 
 scheduler 在 miniclaw 启动时随 ClientReady 一起 start，SIGTERM 时 stop。
+
+## 日志
+
+统一走 `src/lib/log.ts`，**禁止在源码里直接用 `console.*`**（除了 logger 自己内部）。
+
+```ts
+import { createLogger } from "./lib/log.js";  // 路径相对调整
+const log = createLogger("模块名");           // tag 显示在 [...] 里
+
+log.info("普通信息");
+log.warn("可恢复的异常");
+log.error("失败 + 上下文:", err);
+log.debug("调试信息");                         // 默认不输出
+```
+
+输出格式：`2026-04-29T07:40:51.795Z [INFO ] [模块名] 内容`
+
+| 配置 | 含义 | 默认 |
+|---|---|---|
+| `MINICLAW_LOG_LEVEL` | `debug` / `info` / `warn` / `error` | `info` |
+| `MINICLAW_LOG_DIR`（pm2 模式） | 日志目录 | `~/.miniclaw/logs/` |
+
+**输出去向**：
+- `pnpm dev` → 直接 stdout/stderr，不落盘
+- `pm2 start ecosystem.config.cjs` → `~/.miniclaw/logs/miniclaw-{out,error}.log`（由 ecosystem.config.cjs 重定向）
+- 长期常驻必须装 `pm2 install pm2-logrotate` + `pm2 set pm2-logrotate:max_size 10M` + `retain 7` 否则会撑爆
+
+**写日志的纪律**：
+- 模块名用短小写串：`bot` / `chat` / `task` / `cron` / `cron-state` / `mcp` / `subagents` / `handlers` / `recovery` / `register` / `config` / `proxy` / `memory-extract` / `main`
+- task / cron 等长链路必须有"开始"和"结束"对称日志（含耗时 / cost / turns），单边日志失去回溯价值
+- error 一定带 err 对象（`log.error("xxx failed:", err)`），别只打 message string
+- info 是正常运行可见的高频路径；warn 是"非崩溃但需要注意"；debug 留给手动排错时打开
 
 ## Session Workflow (MANDATORY)
 
@@ -176,3 +209,10 @@ scheduler 在 miniclaw 启动时随 ClientReady 一起 start，SIGTERM 时 stop�
 - 现象：用户问"现在 docs 是不是过时？"——是的。架构图里还在画 `!task` 临时 hook、subagents 工具集描述太简、缺整个 cron 子图
 - 修复：bot-routing.md / architecture.md 重写；CLAUDE.md Session Workflow 加规则 7（哪些文件改动 → 必须同步哪个 docs）
 - 教训：**自动化做不到的事，靠 prompt + checklist 兜底**。Claude Code 不会主动跑去改 docs，必须在 CLAUDE.md 里明确写"改 X 文件 → 必更 Y 文档"
+
+**[2026-04-29] @mention 上传 PDF 被丢，LLM 反问"哪个文档"**：
+- 根因：`bot.ts` MessageCreate 只读 `message.content`，`message.attachments` 完全未使用；`chat()`/`executeTask()` prompt 入参是 `string`，没法塞 image/document content blocks
+- 现象：用户上传 5MB PDF + "整理这个文档"，bot 反复反问"指的是哪个文档"——不是幻觉，LLM 真没收到 PDF
+- 修复：新增 `src/discord/attachments.ts`（图片/PDF 下载 → base64 image/document block，文本内联，二进制落盘），chat/task prompt 切到 `AsyncIterable<SDKUserMessage>` 模式，`/task` 加 `file1/file2/file3` 三个 attachment slot
+- 教训：**SDK 的 prompt: string 是最简陷阱**。Anthropic API 早就支持多模态 content blocks，但用 string 形式调 SDK 会让人忘记这件事；只要触发渠道（Discord/Slack 等）支持文件，就要把 prompt 改成 content blocks 模式
+- 副产物教训：**raven → Copilot proxy 不支持 URL 源**（"URL sources are not supported"），即便 Anthropic 原生 API 支持。多模态附件**必须** base64 编码后传，不能图省事用 Discord CDN URL 直传

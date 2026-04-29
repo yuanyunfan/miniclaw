@@ -16,6 +16,10 @@ import { createTask, getTaskByThreadId } from "./store/db.js";
 import { v4 as uuid } from "uuid";
 import { parseExplicitMemory } from "./memory/parse.js";
 import { addMemory } from "./store/memory.js";
+import { processAttachments } from "./discord/attachments.js";
+import { createLogger } from "./lib/log.js";
+
+const log = createLogger("bot");
 
 export function createBot(): Client {
   const client = new Client({
@@ -41,23 +45,39 @@ export function createBot(): Client {
       if (processed.has(message.id)) return;
       processed.set(message.id, Date.now());
       const followupContent = message.content.trim();
-      if (!followupContent) return;
-      await message.react("🔄").catch(() => {});
+      const followupAtts = Array.from(message.attachments.values());
+      if (!followupContent && !followupAtts.length) return;
+
       const newTaskId = uuid();
+      let followupBlocks: Awaited<ReturnType<typeof processAttachments>>["blocks"] = [];
+      if (followupAtts.length) {
+        const r = await processAttachments(followupAtts, {
+          cwd: continuableTask.cwd ?? config.defaultCwd,
+          scope: newTaskId,
+        });
+        followupBlocks = r.blocks;
+        for (const n of r.notices) {
+          if (message.channel.isSendable()) await message.channel.send(n).catch(() => {});
+        }
+      }
+      const effectivePrompt = followupContent || "请处理这些附件";
+
+      await message.react("🔄").catch(() => {});
       if (message.channel.isSendable()) {
         createTask({
           id: newTaskId,
           discord_thread_id: message.channel.id,
           discord_user_id: message.author.id,
-          prompt: followupContent,
+          prompt: effectivePrompt,
           cwd: continuableTask.cwd ?? config.defaultCwd,
         });
         executeTask({
           taskId: newTaskId,
-          prompt: followupContent,
+          prompt: effectivePrompt,
           cwd: continuableTask.cwd ?? config.defaultCwd,
           channel: message.channel,
           resumeSessionId: continuableTask.session_id,
+          attachmentBlocks: followupBlocks,
         }).catch((e) => {
           if (message.channel.isSendable()) {
             void message.channel.send(`❌ resume error: ${e?.message ?? e}`);
@@ -84,10 +104,21 @@ export function createBot(): Client {
       .replace(new RegExp(`<@!?${client.user!.id}>`, "g"), "")
       .trim();
 
-    if (!content) {
+    const atts = Array.from(message.attachments.values());
+    let attachmentBlocks: Awaited<ReturnType<typeof processAttachments>>["blocks"] = [];
+    if (atts.length) {
+      const r = await processAttachments(atts, { scope: message.id });
+      attachmentBlocks = r.blocks;
+      for (const n of r.notices) {
+        if (message.channel.isSendable()) await message.channel.send(n).catch(() => {});
+      }
+    }
+
+    if (!content && !attachmentBlocks.length) {
       await message.reply("你好！有什么需要帮忙的？");
       return;
     }
+    const effectivePrompt = content || "请分析这些附件";
 
     const explicitMemory = parseExplicitMemory(content);
     if (explicitMemory) {
@@ -136,7 +167,7 @@ export function createBot(): Client {
         onText: (_text) => {},
       };
 
-      const reply = await chat(message.channel.id, message.author.id, content, callbacks);
+      const reply = await chat(message.channel.id, message.author.id, effectivePrompt, attachmentBlocks, callbacks);
       if (typingInterval) clearInterval(typingInterval);
       await flushSteps();
 
@@ -148,7 +179,7 @@ export function createBot(): Client {
       await message.react("✅").catch(() => {});
     } catch (err) {
       if (typingInterval) clearInterval(typingInterval);
-      console.error("[MiniClaw] Chat error:", err);
+      log.error("Chat error:", err);
       await message.reactions.cache.get("👀")?.users.remove(client.user!.id).catch(() => {});
       await message.react("❌").catch(() => {});
       await message.reply("❌ 回复出错，请稍后再试");
@@ -186,7 +217,7 @@ export function createBot(): Client {
           await cmd.reply({ content: "未知命令", ephemeral: true });
       }
     } catch (err) {
-      console.error("[MiniClaw] Command error:", err);
+      log.error("Command error:", err);
       const reply = { content: "❌ 命令执行出错", ephemeral: true };
       try {
         if (cmd.deferred || cmd.replied) {
@@ -195,13 +226,13 @@ export function createBot(): Client {
           await cmd.reply(reply);
         }
       } catch (replyErr) {
-        console.error("[MiniClaw] Failed to send error reply:", replyErr);
+        log.error("Failed to send error reply:", replyErr);
       }
     }
   });
 
   client.once(Events.ClientReady, (c) => {
-    console.log(`[MiniClaw] Logged in as ${c.user.tag}`);
+    log.info(`Logged in as ${c.user.tag}`);
     void recoverInterruptedTasks(c);
   });
 

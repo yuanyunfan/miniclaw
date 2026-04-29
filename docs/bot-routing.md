@@ -17,34 +17,34 @@ flowchart TD
 
     ME --> F1{author 是 bot?}
     F1 -->|是| X1[丢弃]
-    F1 -->|否| F2{user_id<br/>== allowedUserId?}
+    F1 -->|否| F2{"user_id<br/>== allowedUserId?"}
     F2 -->|否| X2[静默丢弃]
-    F2 -->|是| P1{Path 1?<br/>消息在真正的<br/>Discord thread 内<br/>且对应 task 存在<br/>且非 cron 触发}
+    F2 -->|是| P1{"Path 1?<br/>消息在真正的<br/>Discord thread 内<br/>且对应 task 存在<br/>且非 cron 触发"}
 
     P1 -->|是| RES[加 🔄 reaction<br/>resume 上次 session<br/>executeTask 续话]
-    P1 -->|否| F3{Path 2?<br/>channel ∈ auto_reply_list<br/>OR 被 @mention?}
+    P1 -->|否| F3{"Path 2?<br/>channel ∈ auto_reply_list<br/>OR 被 @mention?"}
     F3 -->|否| X3[忽略]
-    F3 -->|是| F4{message_id<br/>已处理过?}
+    F3 -->|是| F4{"message_id<br/>已处理过?"}
     F4 -->|是| X4[去重丢弃]
     F4 -->|否| ROUTE[进入 Path 2 内部分流]
 
-    ROUTE --> R0{content 为空?<br/>(仅 @ 没正文)}
+    ROUTE --> R0{"content 为空?<br/>仅 @ 没正文"}
     R0 -->|是| GREET[reply 你好]
-    R0 -->|否| R1{记忆指令?<br/>'记住:' 'remember' '/memory'}
+    R0 -->|否| R1{"记忆指令?<br/>记住: / remember / /memory"}
     R1 -->|是| MEM[addMemory + reply ✅]
     R1 -->|否| CHAT[chat 主流程<br/>👀 → typing → SDK → ✅]
 
     IC --> IS{isChatInputCommand?}
     IS -->|否| X5[忽略]
-    IS -->|是| SW{commandName<br/>switch}
-    SW --> T[/task → handleTask/]
-    SW --> S[/status → handleStatus/]
-    SW --> C[/cancel → handleCancel/]
-    SW --> RS[/resume → handleResume/]
-    SW --> RM[/remember → handleRemember/]
-    SW --> FG[/forget → handleForget/]
-    SW --> MM[/memories → handleMemories/]
-    SW --> UN[未知 → 回复'未知命令']
+    IS -->|是| SW{"commandName<br/>switch"}
+    SW --> T["/task → handleTask"]
+    SW --> S["/status → handleStatus"]
+    SW --> C["/cancel → handleCancel"]
+    SW --> RS["/resume → handleResume"]
+    SW --> RM["/remember → handleRemember"]
+    SW --> FG["/forget → handleForget"]
+    SW --> MM["/memories → handleMemories"]
+    SW --> UN["未知 → 回复未知命令"]
 
     CR --> RECOV[recoverInterruptedTasks]
     CR --> SCHED[startScheduler<br/>注册 ~/.miniclaw/cron/*.yaml]
@@ -115,9 +115,12 @@ if (!isAutoChannel && !isMentioned) return;
 
 | 优先级 | 行 | 判断 | 走向 |
 |--------|----|------|------|
-| **高** | `:85-88` | content 为空（仅 @ 没正文） | `reply("你好！...")` → return |
-| **中** | `:90-95` | `parseExplicitMemory` 命中"记住:" / "remember" / "/memory" | `addMemory` + reply ✅ → return |
-| **低** | `:97+` | 其他所有内容 | chat 主流程 |
+| **预处理** | `:104-112` | `message.attachments` 非空 | `processAttachments()` → `attachmentBlocks: ContentBlockParam[]`，notices 直发频道 |
+| **高** | `:114-117` | content 为空 **且** attachmentBlocks 为空 | `reply("你好！...")` → return |
+| **中** | `:120-124` | `parseExplicitMemory` 命中"记住:" / "remember" / "/memory" | `addMemory` + reply ✅ → return |
+| **低** | `:127+` | 其他所有内容（含纯附件 → 默认 prompt"请分析这些附件"） | chat 主流程，附件以 content blocks 透传 |
+
+附件处理细节见 `docs/architecture.md`「附件流」段：图片/PDF 下载后 base64 编码塞 image/document block（raven 转 Copilot **不支持 URL 源**），文本内联，二进制落盘到 cwd 让 Claude 用 Bash/Read 读。
 
 ### chat 主流程（视觉反馈完整链）
 

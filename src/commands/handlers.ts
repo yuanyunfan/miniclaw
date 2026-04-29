@@ -2,6 +2,7 @@ import {
   ChatInputCommandInteraction,
   ChannelType,
   EmbedBuilder,
+  type Attachment,
 } from "discord.js";
 import { v4 as uuid } from "uuid";
 import { resolve } from "path";
@@ -11,6 +12,10 @@ import { createTask, getActiveTasks, getInterruptedTasks, getRecentTasks, getTas
 import { executeTask, getActiveTaskCount, cancelTask, listActiveTaskIds } from "../agent/task.js";
 import { taskStartEmbed, statusOverviewEmbed, taskErrorEmbed } from "../discord/formatter.js";
 import { addMemory, deleteMemory, getAllMemories, getMemoriesByType } from "../store/memory.js";
+import { processAttachments } from "../discord/attachments.js";
+import { createLogger } from "../lib/log.js";
+
+const log = createLogger("handlers");
 
 function resolveHome(p: string): string {
   return p.startsWith("~") ? resolve(homedir(), p.slice(2)) : resolve(p);
@@ -39,7 +44,21 @@ export async function handleTask(interaction: ChatInputCommandInteraction): Prom
   const cwd = resolveHome(cwdRaw);
   const taskId = uuid();
 
+  const slotAtts: Attachment[] = [];
+  for (const slot of ["file1", "file2", "file3"]) {
+    const a = interaction.options.getAttachment(slot);
+    if (a) slotAtts.push(a);
+  }
+
   await interaction.deferReply();
+
+  let attachmentBlocks: Awaited<ReturnType<typeof processAttachments>>["blocks"] = [];
+  let attachmentNotices: string[] = [];
+  if (slotAtts.length) {
+    const r = await processAttachments(slotAtts, { cwd, scope: taskId });
+    attachmentBlocks = r.blocks;
+    attachmentNotices = r.notices;
+  }
 
   const parentChannel = interaction.channel;
   if (!parentChannel || !("threads" in parentChannel)) {
@@ -62,6 +81,9 @@ export async function handleTask(interaction: ChatInputCommandInteraction): Prom
 
   await interaction.editReply(`✅ 任务已创建，请查看线程 <#${thread.id}>`);
   await thread.send({ embeds: [taskStartEmbed(taskId, description, cwd)] });
+  for (const n of attachmentNotices) {
+    await thread.send(n).catch(() => {});
+  }
 
   if (!thread.isTextBased() || thread.type !== ChannelType.PublicThread) {
     await interaction.editReply("❌ 线程创建异常");
@@ -73,8 +95,9 @@ export async function handleTask(interaction: ChatInputCommandInteraction): Prom
     prompt: description,
     cwd,
     channel: thread,
+    attachmentBlocks,
   }).catch((err) => {
-    console.error(`[MiniClaw] Task ${taskId} error:`, err);
+    log.error(`Task ${taskId} error:`, err);
   });
 }
 
@@ -192,7 +215,7 @@ export async function handleResume(interaction: ChatInputCommandInteraction): Pr
     channel: thread,
     resumeSessionId: match.session_id,
   }).catch((err) => {
-    console.error(`[MiniClaw] Resume task ${newTaskId} error:`, err);
+    log.error(`Resume task ${newTaskId} error:`, err);
   });
 }
 

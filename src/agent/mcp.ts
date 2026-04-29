@@ -2,6 +2,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
+import { createLogger } from "../lib/log.js";
+
+const log = createLogger("mcp");
 
 export type McpServers = Record<string, McpServerConfig>;
 
@@ -21,7 +24,7 @@ export function loadMcpServers(): McpServers {
     .filter(Boolean);
 
   if (!existsSync(configPath)) {
-    console.warn(`[mcp] 配置文件不存在: ${configPath}，跳过 MCP 接入`);
+    log.warn(`配置文件不存在: ${configPath}，跳过 MCP 接入`);
     cache = {};
     return cache;
   }
@@ -30,7 +33,7 @@ export function loadMcpServers(): McpServers {
   try {
     raw = readFileSync(configPath, "utf8");
   } catch (err) {
-    console.warn(`[mcp] 无法读取 ${configPath}:`, err);
+    log.warn(`无法读取 ${configPath}:`, err);
     cache = {};
     return cache;
   }
@@ -39,7 +42,7 @@ export function loadMcpServers(): McpServers {
   try {
     parsed = JSON.parse(raw);
   } catch (err) {
-    console.warn(`[mcp] 解析 ${configPath} JSON 失败:`, err);
+    log.warn(`解析 ${configPath} JSON 失败:`, err);
     cache = {};
     return cache;
   }
@@ -48,10 +51,10 @@ export function loadMcpServers(): McpServers {
   const filtered: McpServers = {};
   for (const name of allowlist) {
     if (all[name]) filtered[name] = all[name];
-    else console.warn(`[mcp] allowlist 中的 ${name} 在 ${configPath} 未找到`);
+    else log.warn(`allowlist 中的 ${name} 在 ${configPath} 未找到`);
   }
 
-  console.log(`[mcp] 加载 ${Object.keys(filtered).length} 个 MCP server: ${Object.keys(filtered).join(", ") || "(无)"}`);
+  log.info(`加载 ${Object.keys(filtered).length} 个 MCP server: ${Object.keys(filtered).join(", ") || "(无)"}`);
   cache = filtered;
   return cache;
 }

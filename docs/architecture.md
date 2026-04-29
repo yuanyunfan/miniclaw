@@ -132,19 +132,24 @@ sequenceDiagram
 
     Note over B: 闸 1+2: 非 bot + allowedUserId<br/>Path 1: 不是 thread → 跳过<br/>Path 2 入口: auto_reply 或 @mention
 
+    opt 消息带附件
+        B->>B: processAttachments(message.attachments)<br/>图片/PDF → 下载 base64 block（raven/Copilot 不支持 URL 源），文本 → 内联 text block，二进制 → 落盘到 tmpdir
+    end
+
     B->>B: parseExplicitMemory(content)
     alt 是显式记忆指令 ("记住:...")
         B->>MD: addMemory() → 重写 MEMORY.md
         B->>DR: reply("✅ 已记住")
     else 普通对话
         B->>DR: react(👀) + sendTyping()
-        B->>CH: chat(channelId, userId, content, callbacks)
+        B->>CH: chat(channelId, userId, content, attachmentBlocks, callbacks)
 
         CH->>DB: getRecentHistory(channelId)<br/>取最近 N 条
         CH->>MD: getAllMemories()<br/>读 MEMORY.md
         CH->>CH: buildMemoryPrompt() + buildHistoryBlock()
 
-        CH->>Q: query({ prompt, model,<br/>systemPrompt:claude_code,<br/>allowedTools:[Read,Bash,WebSearch...] })
+        CH->>Q: query(...)
+        Note over CH,Q: prompt: AsyncIterable SDKUserMessage<br/>content blocks = 附件 + text<br/>systemPrompt: claude_code<br/>allowedTools: Read / Bash / WebSearch ...
 
         Q->>R: POST /v1/messages
         R->>API: 转发 Anthropic 端点
@@ -189,12 +194,15 @@ sequenceDiagram
     participant R as raven → Copilot
     participant DB as SQLite tasks 表
 
-    U->>D: /task prompt:"加 /metrics 命令" cwd:~/Code
+    U->>D: /task 命令 (prompt + cwd + 可选附件 file1/file2/file3)
     D-->>H: InteractionCreate
 
     H->>D: 创建 thread + defer
+    opt 命令带 file1/file2/file3
+        H->>H: processAttachments 处理附件<br/>大文件落 cwd/.miniclaw-attachments/{taskId}/
+    end
     H->>DB: insertTask(status='running')
-    H->>T: executeTask({ taskId, prompt, cwd, channel, outputMode:'embed' })
+    H->>T: executeTask 携带 taskId / prompt / cwd / channel / 可选 attachmentBlocks / outputMode=embed
 
     T->>SA: loadSubagents()
     SA->>SA: 读 agents/*.md (repo)<br/>+ ~/.miniclaw/skills/*.md (user)
@@ -202,44 +210,46 @@ sequenceDiagram
 
     T->>T: buildMemoryPrompt() + supervisorBlock<br/>(角色边界 + verdict 路由 + Contract 触发)
 
-    T->>Q: query({<br/>  systemPrompt: claude_code + supervisorBlock,<br/>  agents: {researcher,planner,generator,evaluator},<br/>  allowedTools:[Read,Write,Edit,Bash,...,Agent,mcp__exa,mcp__context7],<br/>  canUseTool: 拦 Skill(triad/triad-resume),<br/>  abortController, resume?<br/>})
+    T->>Q: query(...)
+    Note over T,Q: prompt: 有附件→AsyncIterable / 否则→string<br/>systemPrompt: claude_code + supervisorBlock<br/>agents: researcher / planner / generator / evaluator<br/>allowedTools: Read / Write / Edit / Bash / Agent / mcp__exa / mcp__context7<br/>canUseTool: 拦 Skill triad / triad-resume<br/>abortController + 可选 resume
 
     Note over Q: Supervisor 决定流程：<br/>简单任务可跳过部分阶段；<br/>>3 文件复杂任务先 Contract
 
-    Q->>Q: tool_use Agent(researcher, prompt:"调研...")
-    Q->>R: 嵌套 query (Researcher fresh context)
+    Q->>Q: tool_use Agent researcher  调研代码
+    Q->>R: 嵌套 query Researcher fresh context
     R-->>Q: file:line 证据
 
-    Q->>Q: tool_use Agent(planner, prompt:"步骤化计划")
+    Q->>Q: tool_use Agent planner  步骤化计划
     R-->>Q: 计划 + 验收命令
 
-    Q->>Q: tool_use Agent(generator, prompt:"实施 / Contract 模式")
+    Q->>Q: tool_use Agent generator  实施 / Contract 模式
     R-->>Q: 改动文件
 
-    Q->>Q: tool_use Agent(evaluator, prompt:"独立验收")
-    R-->>Q: ## Machine-Readable Verdict<br/>verdict: PASS/CONDITIONAL_PASS/FAIL<br/>fix_list: [...]<br/>escalate: false
+    Q->>Q: tool_use Agent evaluator  独立验收
+    R-->>Q: 输出 Machine-Readable Verdict YAML
+    Note over Q: verdict = PASS / CONDITIONAL_PASS / FAIL<br/>fix_list 数组 + escalate 布尔
 
     alt verdict == FAIL
-        Note over Q: 自动重 spawn Generator (Fix 模式)<br/>+ 再 spawn Evaluator<br/>最多 2 轮
+        Note over Q: 自动重 spawn Generator Fix 模式<br/>+ 再 spawn Evaluator<br/>最多 2 轮
     end
 
     loop 主 agent 每个 turn
-        Q-->>T: msg.type='assistant'
+        Q-->>T: msg.type=assistant
         alt parent_tool_use_id 存在
-            T->>T: 标记 "↳ [subagent]"
+            T->>T: 标记 ↳ subagent
         end
-        T->>T: toolCallLog.push() + ProgressReporter.update()
+        T->>T: toolCallLog.push + ProgressReporter.update
     end
 
-    Q-->>T: msg.type='result' (cost, turns, duration, usage)
+    Q-->>T: msg.type=result  含 cost / turns / duration / usage
 
-    T->>DB: updateTask({status, result_summary, cost_usd, ...})
+    T->>DB: updateTask  status / result_summary / cost_usd ...
 
-    alt outputMode='embed' (/task 默认)
-        T->>D: send(taskCompleteEmbed) 含 Tokens 字段
-        T->>D: send(📋 执行轨迹 N 步)
-    else outputMode='raw' (cron 触发)
-        T->>D: 直接 chunkMessage(result) 发文本
+    alt outputMode=embed  /task 默认
+        T->>D: send taskCompleteEmbed  含 Tokens 字段
+        T->>D: send 📋 执行轨迹 N 步
+    else outputMode=raw  cron 触发
+        T->>D: 直接 chunkMessage 发文本
     end
 ```
 
@@ -334,6 +344,51 @@ flowchart LR
 ```
 
 **严格分离原则**：repo 内是**通用代码**（任何人 fork 都能用），`~/.miniclaw/` 是**你的个人配置**（不进 git）。
+
+---
+
+## 6. 附件流（多模态）
+
+源文件：`src/discord/attachments.ts`。`bot.ts` MessageCreate 和 `handlers.ts` `/task` 都在调它。
+
+```
+Discord Attachment
+       │
+       ▼
+classify by mime + ext
+       │
+   ┌───┼─────┬──────┬─────┬──────────┐
+   ▼   ▼     ▼      ▼     ▼          ▼
+ image pdf  text  audio  binary    超限
+   │   │     │      │     │          │
+   │   │     │      │     │       notice
+   │   │     │      │     │      ⚠️ skip
+   │   │     │      │     │
+   │   │     │      │     └─→ 下载落盘<br>
+   │   │     │      │         <cwd>/.miniclaw-attachments/{scope}/<name><br>
+   │   │     │      │         + text block "📎 已保存到 ..."
+   │   │     │      │
+   │   │     │      └─→ notice "⚠️ 暂不支持转写"
+   │   │     │           （Phase 2 接入 Whisper）
+   │   │     │
+   │   │     └─→ fetch → utf8 → text block
+   │   │         "<file name=...>...</file>"  (≤1MB)
+   │   │
+   │   └─→ 下载 → base64 → document block<br>
+   │       { source: { type:'base64', media_type:'application/pdf', data } }
+   │
+   └─→ 下载 → base64 → image block<br>
+       { source: { type:'base64', media_type:'image/png|jpeg|...', data } }
+       （注：raven 转 Copilot 不支持 URL 源，必须 base64）
+```
+
+**SDK 入参形态**：有附件 → `prompt: AsyncIterable<SDKUserMessage>`，message.content = `[...attachmentBlocks, {type:"text", text: prompt}]`；无附件 → `prompt: string`（保持轻量）。
+
+**清理**：task 路径附件落到 `<cwd>/.miniclaw-attachments/<taskId>/`，executeTask `finally` 块 `rmSync` 整目录。chat 路径走 `os.tmpdir()`，靠 OS 周期清理。
+
+**配置**：`MINICLAW_MAX_ATTACHMENT_MB`（默认 32）、`MINICLAW_MAX_ATTACHMENTS`（默认 10）。
+
+**chat_history 取舍**：附件不写入 chat_history（只写文字 prompt），续话需要重新上传——避免 base64 反复进 context。
 
 ---
 

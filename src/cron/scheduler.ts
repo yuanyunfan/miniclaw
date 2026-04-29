@@ -6,6 +6,9 @@ import { runMessage } from "./runner-message.js";
 import { runScript } from "./runner-script.js";
 import { recordRun, getAllJobStates, type JobState } from "./state.js";
 import type { CronJob } from "./types.js";
+import { createLogger } from "../lib/log.js";
+
+const log = createLogger("cron");
 
 const tasks = new Map<string, ScheduledTask>();
 
@@ -21,7 +24,7 @@ async function dispatch(job: CronJob, client: Client): Promise<void> {
   } catch (err) {
     ok = false;
     errorMsg = err instanceof Error ? err.message : String(err);
-    console.error(`[cron] ${job.name} failed:`, errorMsg);
+    log.error(`${job.name} failed:`, errorMsg);
   } finally {
     const durationMs = Date.now() - startedAt;
     recordRun(job.name, ok, durationMs, errorMsg);
@@ -32,12 +35,12 @@ export function startScheduler(client: Client): { scheduled: number; errors: Arr
   stopScheduler(); // 防重复 startup
   const { jobs, errors } = loadCronJobs();
 
-  for (const e of errors) console.warn(`[cron] load error: ${e.file}: ${e.error}`);
+  for (const e of errors) log.warn(`load error: ${e.file}: ${e.error}`);
 
   let scheduled = 0;
   for (const job of jobs) {
     if (!job.enabled) {
-      console.log(`[cron] ${job.name} ⏸ disabled (skipped)`);
+      log.info(`${job.name} ⏸ disabled (skipped)`);
       continue;
     }
     try {
@@ -48,12 +51,12 @@ export function startScheduler(client: Client): { scheduled: number; errors: Arr
       );
       tasks.set(job.name, t);
       scheduled++;
-      console.log(`[cron] ✓ ${job.name} (${job.type}) "${job.schedule}"${job.timezone ? ` tz=${job.timezone}` : ""}`);
+      log.info(`✓ ${job.name} (${job.type}) "${job.schedule}"${job.timezone ? ` tz=${job.timezone}` : ""}`);
     } catch (err) {
-      console.error(`[cron] failed to schedule ${job.name}:`, err);
+      log.error(`failed to schedule ${job.name}:`, err);
     }
   }
-  console.log(`[cron] scheduler started: ${scheduled} job(s) active, ${errors.length} load error(s)`);
+  log.info(`scheduler started: ${scheduled} job(s) active, ${errors.length} load error(s)`);
   return { scheduled, errors };
 }
 

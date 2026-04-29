@@ -5,6 +5,9 @@ import { join } from "node:path";
 import type { Client, SendableChannels } from "discord.js";
 import { AttachmentBuilder } from "discord.js";
 import type { CronJobScript } from "./types.js";
+import { createLogger } from "../lib/log.js";
+
+const log = createLogger("cron");
 
 const SCRIPTS_DIR_DEFAULT = join(homedir(), ".miniclaw/scripts");
 
@@ -74,12 +77,12 @@ export async function runScript(job: CronJobScript, client: Client): Promise<voi
   const scriptsDir = getScriptsDir();
   const scriptPath = join(scriptsDir, job.script);
   if (!existsSync(scriptPath)) {
-    console.warn(`[cron] ${job.name}: script not found ${scriptPath}`);
+    log.warn(`${job.name}: script not found ${scriptPath}`);
     await postToChannel(client, job.channel, `⏰ cron \`${job.name}\` ❌ script 不存在: \`${job.script}\``);
     return;
   }
   if (!isExecutable(scriptPath)) {
-    console.warn(`[cron] ${job.name}: script not executable, run: chmod +x ${scriptPath}`);
+    log.warn(`${job.name}: script not executable, run: chmod +x ${scriptPath}`);
     await postToChannel(client, job.channel, `⏰ cron \`${job.name}\` ❌ script 不可执行: \`chmod +x ${scriptPath}\``);
     return;
   }
@@ -162,7 +165,7 @@ async function fetchChannel(client: Client, channelId: string): Promise<Sendable
     const ch = await client.channels.fetch(channelId);
     if (ch && "isSendable" in ch && ch.isSendable()) return ch as SendableChannels;
   } catch (err) {
-    console.error(`[cron] fetch channel ${channelId} failed:`, err);
+    log.error(`fetch channel ${channelId} failed:`, err);
   }
   return null;
 }
@@ -171,7 +174,7 @@ async function postToChannel(client: Client, channelId: string, body: string): P
   const ch = await fetchChannel(client, channelId);
   if (ch) {
     try { await ch.send(body.slice(0, 2000)); } catch (err) {
-      console.error(`[cron] post failed for ${channelId}:`, err);
+      log.error(`post failed for ${channelId}:`, err);
     }
   }
 }

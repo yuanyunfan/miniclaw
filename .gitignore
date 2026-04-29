@@ -9,3 +9,4 @@ coverage/
 .playwright-mcp/
 scripts/e2e-test.ts
 scripts/.channel-map.json
+.miniclaw-attachments/

@@ -1,6 +1,9 @@
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createLogger } from "../lib/log.js";
+
+const log = createLogger("subagents");
 
 export interface AgentDefinition {
   description: string;
@@ -100,7 +103,7 @@ export function loadSubagents(): Record<string, AgentDefinition> {
     try {
       files = readdirSync(dir).filter((f) => f.endsWith(".md"));
     } catch (err) {
-      if (source === "repo") console.warn(`[subagents] 无法读取 ${dir}:`, err);
+      if (source === "repo") log.warn(`无法读取 ${dir}:`, err);
       continue;
     }
 
@@ -110,12 +113,12 @@ export function loadSubagents(): Record<string, AgentDefinition> {
       const { meta, body } = parseFrontmatter(raw);
       const description = asString(meta.description);
       if (!description) {
-        console.warn(`[subagents] 跳过 ${file} (${source}): frontmatter 缺少 description`);
+        log.warn(`跳过 ${file} (${source}): frontmatter 缺少 description`);
         continue;
       }
       const name = file.replace(/\.md$/, "");
       if (result[name] && source === "user") {
-        console.warn(`[subagents] user skill '${name}' 覆盖 repo subagent`);
+        log.warn(`user skill '${name}' 覆盖 repo subagent`);
       }
       const model = asString(meta.model);
       const tools = asStringArray(meta.tools);

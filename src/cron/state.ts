@@ -3,6 +3,9 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { createLogger } from "../lib/log.js";
+
+const log = createLogger("cron-state");
 
 export interface JobState {
   last_run_at: string;
@@ -45,7 +48,7 @@ export function loadState(): StateFile {
       cache = parsed;
     }
   } catch (err) {
-    console.warn(`[cron-state] 解析 ${path} 失败，使用空状态:`, err);
+    log.warn(`解析 ${path} 失败，使用空状态:`, err);
     cache = emptyState();
   }
   return cache;

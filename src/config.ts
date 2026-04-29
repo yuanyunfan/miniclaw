@@ -1,6 +1,9 @@
 import "./proxy.js";
 import { resolve } from "path";
 import { homedir } from "os";
+import { createLogger } from "./lib/log.js";
+
+const log = createLogger("config");
 
 function resolveHome(p: string): string {
   return p.startsWith("~") ? resolve(homedir(), p.slice(2)) : resolve(p);
@@ -35,8 +38,10 @@ export const config = {
   model: env("MINICLAW_MODEL", "claude-sonnet-4-6"),
   autoReplyChannelIds: (() => {
     const ids = env("MINICLAW_AUTO_REPLY_CHANNELS", "").split(",").filter(Boolean);
-    if (!ids.length) console.warn("[MiniClaw] MINICLAW_AUTO_REPLY_CHANNELS 未配置，所有频道需 @mention 触发");
+    if (!ids.length) log.warn("MINICLAW_AUTO_REPLY_CHANNELS 未配置，所有频道需 @mention 触发");
     return ids;
   })(),
   dbPath: resolveHome(env("MINICLAW_DB_PATH", "~/.miniclaw/data.db")),
+  maxAttachmentMb: Number(env("MINICLAW_MAX_ATTACHMENT_MB", "32")),
+  maxAttachments: Number(env("MINICLAW_MAX_ATTACHMENTS", "10")),
 } as const;

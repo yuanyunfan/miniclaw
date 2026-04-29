@@ -1,5 +1,8 @@
 import { REST, Routes, SlashCommandBuilder } from "discord.js";
 import { config } from "../config.js";
+import { createLogger } from "../lib/log.js";
+
+const log = createLogger("register");
 
 const commands = [
   new SlashCommandBuilder()
@@ -10,6 +13,15 @@ const commands = [
     )
     .addStringOption((opt) =>
       opt.setName("cwd").setDescription("工作目录（默认 ~/Code）").setRequired(false)
+    )
+    .addAttachmentOption((opt) =>
+      opt.setName("file1").setDescription("附件 1（可选）").setRequired(false)
+    )
+    .addAttachmentOption((opt) =>
+      opt.setName("file2").setDescription("附件 2（可选）").setRequired(false)
+    )
+    .addAttachmentOption((opt) =>
+      opt.setName("file3").setDescription("附件 3（可选）").setRequired(false)
     ),
 
   new SlashCommandBuilder()
@@ -86,9 +98,9 @@ export async function registerCommands(): Promise<void> {
     Routes.applicationGuildCommands(config.discord.clientId, config.discord.guildId),
     { body }
   );
-  console.log(`[MiniClaw] Registered ${body.length} slash commands`);
+  log.info(`Registered ${body.length} slash commands`);
 }
 
 if (process.argv[1]?.endsWith("register.ts") || process.argv[1]?.endsWith("register.js")) {
-  registerCommands().catch(console.error);
+  registerCommands().catch((err) => log.error("Register failed:", err));
 }

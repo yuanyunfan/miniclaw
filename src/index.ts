@@ -3,18 +3,20 @@ import { initDb } from "./store/db.js";
 import { registerCommands } from "./commands/register.js";
 import { createBot } from "./bot.js";
 import { startScheduler, stopScheduler } from "./cron/scheduler.js";
+import { createLogger } from "./lib/log.js";
 import { Events } from "discord.js";
 
+const log = createLogger("main");
 let bot: ReturnType<typeof createBot> | null = null;
 
 async function main(): Promise<void> {
-  console.log("[MiniClaw] Starting...");
+  log.info("Starting...");
   const budget = config.defaultBudgetUsd === undefined ? "unlimited" : `$${config.defaultBudgetUsd}`;
   const turns = config.defaultMaxTurns === undefined ? "unlimited" : String(config.defaultMaxTurns);
-  console.log(`[MiniClaw] config: model=${config.model} budget=${budget} maxTurns=${turns} maxConcurrent=${config.maxConcurrentTasks}`);
+  log.info(`config: model=${config.model} budget=${budget} maxTurns=${turns} maxConcurrent=${config.maxConcurrentTasks}`);
 
   initDb();
-  console.log("[MiniClaw] Database initialized");
+  log.info("Database initialized");
 
   await registerCommands();
 
@@ -25,7 +27,7 @@ async function main(): Promise<void> {
   await bot.login(config.discord.token);
 
   const shutdown = () => {
-    console.log("\n[MiniClaw] Shutting down...");
+    log.info("Shutting down...");
     stopScheduler();
     bot?.destroy();
     process.exit(0);
@@ -36,7 +38,7 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  console.error("[MiniClaw] Fatal error:", err);
+  log.error("Fatal error:", err);
   bot?.destroy();
   process.exit(1);
 });

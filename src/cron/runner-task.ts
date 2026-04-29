@@ -8,6 +8,9 @@ import { executeTask, getActiveTaskCount } from "../agent/task.js";
 import type { CronJobTask, CronJobSkill } from "./types.js";
 import { renderTemplate } from "./template.js";
 import { resolve, join } from "node:path";
+import { createLogger } from "../lib/log.js";
+
+const log = createLogger("cron");
 import { homedir } from "node:os";
 
 function resolveHome(p: string): string {
@@ -73,7 +76,7 @@ async function fetchSendableChannel(client: Client, channelId: string): Promise<
 
 export async function runTask(job: CronJobTask, client: Client): Promise<void> {
   if (getActiveTaskCount() >= config.maxConcurrentTasks) {
-    console.warn(`[cron] ${job.name} skipped: hit MINICLAW_MAX_CONCURRENT_TASKS=${config.maxConcurrentTasks}`);
+    log.warn(`${job.name} skipped: hit MINICLAW_MAX_CONCURRENT_TASKS=${config.maxConcurrentTasks}`);
     return;
   }
   const channel = await fetchSendableChannel(client, job.channel);
@@ -115,7 +118,7 @@ export async function runTask(job: CronJobTask, client: Client): Promise<void> {
 
 export async function runSkill(job: CronJobSkill, client: Client): Promise<void> {
   if (getActiveTaskCount() >= config.maxConcurrentTasks) {
-    console.warn(`[cron] ${job.name} skipped: hit concurrent limit`);
+    log.warn(`${job.name} skipped: hit concurrent limit`);
     return;
   }
   const channel = await fetchSendableChannel(client, job.channel);

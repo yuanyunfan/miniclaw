@@ -1,6 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { config } from "../config.js";
 import { addMemory, getAllMemories } from "../store/memory.js";
+import { createLogger } from "../lib/log.js";
+
+const log = createLogger("memory-extract");
 
 const EXTRACT_SYSTEM = `你是一个记忆提取助手。分析用户和助手的对话，提取值得长期记住的信息。
 
@@ -63,6 +66,6 @@ export async function extractMemories(
       }
     }
   } catch (err) {
-    console.error("[MiniClaw] Memory extraction failed:", err);
+    log.error("Memory extraction failed:", err);
   }
 }

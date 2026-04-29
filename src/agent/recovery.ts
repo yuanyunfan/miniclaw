@@ -1,6 +1,9 @@
 import type { Client } from "discord.js";
 import { EmbedBuilder } from "discord.js";
 import { getActiveTasks, markTaskInterrupted, type TaskRow } from "../store/db.js";
+import { createLogger } from "../lib/log.js";
+
+const log = createLogger("recovery");
 
 const RECENT_RECOVERY_SKIP_MS = 60_000;
 
@@ -24,7 +27,7 @@ export async function recoverInterruptedTasks(client: Client): Promise<void> {
   const stale = getActiveTasks();
   if (!stale.length) return;
 
-  console.log(`[MiniClaw] Recovering ${stale.length} interrupted task(s)...`);
+  log.info(`Recovering ${stale.length} interrupted task(s)...`);
 
   for (const task of stale) {
     try {
@@ -61,7 +64,7 @@ export async function recoverInterruptedTasks(client: Client): Promise<void> {
 
       await channel.send({ embeds: [buildRecoveryEmbed(task)] });
     } catch (err) {
-      console.error(`[MiniClaw] Failed to recover task ${task.id}:`, err);
+      log.error(`Failed to recover task ${task.id}:`, err);
     }
   }
 }

@@ -1,5 +1,8 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { SendableChannels } from "discord.js";
+import type { ContentBlockParam } from "@anthropic-ai/sdk/resources/messages.js";
+import { rmSync } from "node:fs";
+import { join } from "node:path";
 import { config } from "../config.js";
 import { updateTask } from "../store/db.js";
 import { ProgressReporter } from "../discord/progress.js";
@@ -8,6 +11,9 @@ import { chunkMessage } from "../discord/chunks.js";
 import { buildMemoryPrompt } from "../memory/inject.js";
 import { loadSubagents, listSubagentNames } from "./subagents.js";
 import { loadMcpServers } from "./mcp.js";
+import { createLogger } from "../lib/log.js";
+
+const log = createLogger("task");
 
 const PROGRESS_TAIL_LINES = 25;
 
@@ -109,6 +115,7 @@ export async function executeTask(params: {
   cwd: string;
   channel: SendableChannels;
   resumeSessionId?: string;
+  attachmentBlocks?: ContentBlockParam[];
   /**
    * "embed"（默认）：发 ✅ 任务完成 embed + 执行轨迹（/task 用）
    * "raw"：直接发 LLM 输出文本，无任何元数据装饰（cron / 程序化触发用）
@@ -118,6 +125,9 @@ export async function executeTask(params: {
   const abortController = new AbortController();
   activeTasks.set(params.taskId, abortController);
   const progress = new ProgressReporter(params.taskId);
+  const startedAt = Date.now();
+  const shortId = params.taskId.slice(0, 8);
+  log.info(`▶ ${shortId} start cwd=${params.cwd}${params.resumeSessionId ? ` resume=${params.resumeSessionId.slice(0, 8)}` : ""} prompt="${params.prompt.slice(0, 80).replace(/\s+/g, " ")}"`);
 
   const resumeId = params.resumeSessionId;
   if (resumeId !== undefined && (typeof resumeId !== "string" || !resumeId.trim())) {
@@ -170,8 +180,25 @@ export async function executeTask(params: {
 
     const appendParts = [identityLine, supervisorBlock, memoryBlock].filter(Boolean);
 
+    const hasAttachments = !!(params.attachmentBlocks && params.attachmentBlocks.length);
+    const promptParam = hasAttachments
+      ? (async function* () {
+          yield {
+            type: "user" as const,
+            parent_tool_use_id: null,
+            message: {
+              role: "user" as const,
+              content: [
+                ...params.attachmentBlocks!,
+                { type: "text" as const, text: params.prompt },
+              ],
+            },
+          };
+        })()
+      : params.prompt;
+
     const q = query({
-      prompt: params.prompt,
+      prompt: promptParam,
       options: {
         model: config.model,
         cwd: params.cwd,
@@ -321,6 +348,14 @@ export async function executeTask(params: {
       completed_at: new Date().toISOString(),
     });
 
+    const wallMs = Date.now() - startedAt;
+    log.info(
+      `${lastResult.success ? "✓" : "✗"} ${shortId} ${lastResult.success ? "done" : "failed"} ` +
+      `turns=${lastResult.turns} cost=$${lastResult.costUsd.toFixed(4)} ` +
+      `sdk=${lastResult.durationMs}ms wall=${wallMs}ms tools=${toolStep}` +
+      (lastResult.tokensSummary ? ` ${lastResult.tokensSummary}` : "")
+    );
+
     const outputMode = params.outputMode ?? "embed";
 
     if (outputMode === "raw") {
@@ -385,6 +420,7 @@ export async function executeTask(params: {
     return lastResult;
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
+    log.error(`✗ ${shortId} threw after ${Date.now() - startedAt}ms: ${errMsg}`);
     await progress.complete(params.channel, { keepAsError: true });
 
     updateTask(params.taskId, {
@@ -405,5 +441,11 @@ export async function executeTask(params: {
     };
   } finally {
     activeTasks.delete(params.taskId);
+    // 清理 task 路径下落盘的附件
+    try {
+      rmSync(join(params.cwd, ".miniclaw-attachments", params.taskId), { recursive: true, force: true });
+    } catch {
+      // 目录可能从未创建（任务无附件），忽略
+    }
   }
 }
