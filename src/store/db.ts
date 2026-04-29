@@ -60,6 +60,27 @@ export function initDb(): void {
       content TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS scenes (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      started_at TEXT NOT NULL,
+      ended_at TEXT,
+      mode TEXT NOT NULL,
+      total_cost_usd REAL DEFAULT 0,
+      total_turns INTEGER DEFAULT 0,
+      transcript_path TEXT
+    );
+    CREATE TABLE IF NOT EXISTS scene_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      scene_id TEXT NOT NULL,
+      ts TEXT NOT NULL,
+      speaker TEXT NOT NULL,
+      content TEXT,
+      tool_calls_json TEXT,
+      cost_usd REAL,
+      FOREIGN KEY (scene_id) REFERENCES scenes(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_scene_msgs_scene ON scene_messages(scene_id);
   `);
 
   // Idempotent migration for existing DBs that predate progress_message_id.
@@ -175,4 +196,99 @@ export function getChatHistory(
        WHERE discord_channel_id = ? ORDER BY id DESC LIMIT ?`
     )
     .all(channelId, limit) as Array<{ role: string; content: string }>;
+}
+
+// ===== Stage 子系统：scenes / scene_messages =====
+
+export interface SceneRow {
+  id: string;
+  name: string | null;
+  started_at: string;
+  ended_at: string | null;
+  mode: string;
+  total_cost_usd: number | null;
+  total_turns: number | null;
+  transcript_path: string | null;
+}
+
+export interface SceneMessageRow {
+  id: number;
+  scene_id: string;
+  ts: string;
+  speaker: string;
+  content: string | null;
+  tool_calls_json: string | null;
+  cost_usd: number | null;
+}
+
+export function createScene(scene: {
+  id: string;
+  name?: string;
+  mode: string;
+  transcript_path?: string;
+}): void {
+  db.prepare(
+    `INSERT INTO scenes (id, name, started_at, mode, transcript_path)
+     VALUES (@id, @name, datetime('now'), @mode, @transcript_path)`
+  ).run({
+    id: scene.id,
+    name: scene.name ?? null,
+    mode: scene.mode,
+    transcript_path: scene.transcript_path ?? null,
+  });
+}
+
+export function updateSceneTotals(
+  id: string,
+  updates: { total_cost_usd?: number; total_turns?: number; ended_at?: string | null; name?: string | null }
+): void {
+  const fields: string[] = [];
+  const params: Record<string, unknown> = { id };
+  for (const k of ["total_cost_usd", "total_turns", "ended_at", "name"] as const) {
+    if (k in updates) {
+      fields.push(`${k} = @${k}`);
+      params[k] = updates[k] ?? null;
+    }
+  }
+  if (!fields.length) return;
+  db.prepare(`UPDATE scenes SET ${fields.join(", ")} WHERE id = @id`).run(params);
+}
+
+export function getScene(id: string): SceneRow | undefined {
+  return db.prepare("SELECT * FROM scenes WHERE id = ?").get(id) as SceneRow | undefined;
+}
+
+export function getSceneByName(name: string): SceneRow | undefined {
+  return db.prepare("SELECT * FROM scenes WHERE name = ? ORDER BY started_at DESC LIMIT 1").get(name) as SceneRow | undefined;
+}
+
+export function listRecentScenes(limit = 20): SceneRow[] {
+  return db.prepare("SELECT * FROM scenes ORDER BY started_at DESC LIMIT ?").all(limit) as SceneRow[];
+}
+
+export function appendSceneMessage(msg: {
+  scene_id: string;
+  ts: string;
+  speaker: string;
+  content?: string;
+  tool_calls_json?: string;
+  cost_usd?: number;
+}): void {
+  db.prepare(
+    `INSERT INTO scene_messages (scene_id, ts, speaker, content, tool_calls_json, cost_usd)
+     VALUES (@scene_id, @ts, @speaker, @content, @tool_calls_json, @cost_usd)`
+  ).run({
+    scene_id: msg.scene_id,
+    ts: msg.ts,
+    speaker: msg.speaker,
+    content: msg.content ?? null,
+    tool_calls_json: msg.tool_calls_json ?? null,
+    cost_usd: msg.cost_usd ?? null,
+  });
+}
+
+export function getSceneMessages(sceneId: string): SceneMessageRow[] {
+  return db
+    .prepare("SELECT * FROM scene_messages WHERE scene_id = ? ORDER BY id ASC")
+    .all(sceneId) as SceneMessageRow[];
 }
