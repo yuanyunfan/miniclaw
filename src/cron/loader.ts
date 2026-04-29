@@ -82,8 +82,6 @@ function validateJob(raw: unknown, file: string): CronJob {
       type: "task",
       prompt: r.prompt.trim(),
       cwd: typeof r.cwd === "string" ? r.cwd : undefined,
-      budget_usd: typeof r.budget_usd === "number" ? r.budget_usd : undefined,
-      max_turns: typeof r.max_turns === "number" ? r.max_turns : undefined,
       ...(preScript ? {
         pre_script: preScript,
         pre_script_args: Array.isArray(r.pre_script_args) ? r.pre_script_args.map(String) : undefined,
@@ -119,8 +117,6 @@ function validateJob(raw: unknown, file: string): CronJob {
     type: "skill",
     skill: r.skill.trim(),
     cwd: typeof r.cwd === "string" ? r.cwd : undefined,
-    budget_usd: typeof r.budget_usd === "number" ? r.budget_usd : undefined,
-    max_turns: typeof r.max_turns === "number" ? r.max_turns : undefined,
     skill_args: isPlainObject(r.skill_args)
       ? Object.fromEntries(Object.entries(r.skill_args).map(([k, v]) => [k, String(v)]))
       : undefined,

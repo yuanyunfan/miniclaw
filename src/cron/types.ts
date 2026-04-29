@@ -13,8 +13,6 @@ export interface CronJobTask extends CronJobBase {
   type: "task";
   prompt: string;
   cwd?: string;
-  budget_usd?: number;
-  max_turns?: number;
   /**
    * 可选：在调用 LLM 之前先跑这个脚本（在 ~/.miniclaw/scripts/ 下），
    * stdout 会被拼到 prompt 顶部作为"采集到的数据"，让 LLM 基于真实数据做分析。
@@ -42,8 +40,6 @@ export interface CronJobSkill extends CronJobBase {
   type: "skill";
   skill: string;             // ~/.miniclaw/skills/<skill>.md 的文件名（不含扩展名）
   cwd?: string;
-  budget_usd?: number;
-  max_turns?: number;
   skill_args?: Record<string, string>;
 }
 

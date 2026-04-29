@@ -39,8 +39,6 @@ enabled: true
 type: task
 channel: "${VALID_CHANNEL}"
 prompt: "扫描 ~/Code 项目"
-budget_usd: 0.5
-max_turns: 10
 `);
     const r = loadCronJobs();
     expect(r.errors).toEqual([]);
@@ -50,7 +48,6 @@ max_turns: 10
     expect(j.name).toBe("daily-brief");
     if (j.type === "task") {
       expect(j.prompt).toBe("扫描 ~/Code 项目");
-      expect(j.budget_usd).toBe(0.5);
     }
   });
 

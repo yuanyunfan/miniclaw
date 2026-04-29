@@ -94,7 +94,6 @@ enabled: true
 type: task                   # task | script | skill | message
 channel: "<your-discord-channel-id>"
 prompt: 扫描 ~/Code 项目仓库的 git status
-budget_usd: 0.5
 ```
 
 CLI：
