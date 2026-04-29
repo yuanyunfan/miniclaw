@@ -12,6 +12,14 @@ function env(key: string, fallback?: string): string {
   return v;
 }
 
+// 把 env 字符串解析为 number。空字符串 / "0" / "unlimited" 都视为"无限制"返回 undefined
+function envNumberOrUnlimited(key: string, fallback: string): number | undefined {
+  const raw = (process.env[key] ?? fallback).trim().toLowerCase();
+  if (raw === "" || raw === "0" || raw === "unlimited" || raw === "none") return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
 export const config = {
   discord: {
     token: env("DISCORD_TOKEN"),
@@ -22,8 +30,8 @@ export const config = {
   allowedUserId: env("MINICLAW_ALLOWED_USER_ID"),
   defaultCwd: resolveHome(env("MINICLAW_DEFAULT_CWD", "~/Code")),
   maxConcurrentTasks: Number(env("MINICLAW_MAX_CONCURRENT_TASKS", "3")),
-  defaultBudgetUsd: Number(env("MINICLAW_DEFAULT_BUDGET_USD", "1.0")),
-  defaultMaxTurns: Number(env("MINICLAW_DEFAULT_MAX_TURNS", "30")),
+  defaultBudgetUsd: envNumberOrUnlimited("MINICLAW_DEFAULT_BUDGET_USD", "1.0"),
+  defaultMaxTurns: envNumberOrUnlimited("MINICLAW_DEFAULT_MAX_TURNS", "30"),
   model: env("MINICLAW_MODEL", "claude-sonnet-4-6"),
   autoReplyChannelIds: (() => {
     const ids = env("MINICLAW_AUTO_REPLY_CHANNELS", "").split(",").filter(Boolean);

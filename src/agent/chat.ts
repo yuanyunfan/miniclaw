@@ -42,8 +42,8 @@ export async function chat(
       allowedTools: [
         "Read", "Bash", "Glob", "WebSearch", "WebFetch", "Agent",
       ],
-      maxTurns: config.defaultMaxTurns,
-      maxBudgetUsd: config.defaultBudgetUsd,
+      ...(config.defaultMaxTurns !== undefined ? { maxTurns: config.defaultMaxTurns } : {}),
+      ...(config.defaultBudgetUsd !== undefined ? { maxBudgetUsd: config.defaultBudgetUsd } : {}),
     },
   });
 

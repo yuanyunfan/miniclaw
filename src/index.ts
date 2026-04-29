@@ -9,7 +9,9 @@ let bot: ReturnType<typeof createBot> | null = null;
 
 async function main(): Promise<void> {
   console.log("[MiniClaw] Starting...");
-  console.log(`[MiniClaw] config: model=${config.model} budget=$${config.defaultBudgetUsd} maxTurns=${config.defaultMaxTurns} maxConcurrent=${config.maxConcurrentTasks}`);
+  const budget = config.defaultBudgetUsd === undefined ? "unlimited" : `$${config.defaultBudgetUsd}`;
+  const turns = config.defaultMaxTurns === undefined ? "unlimited" : String(config.defaultMaxTurns);
+  console.log(`[MiniClaw] config: model=${config.model} budget=${budget} maxTurns=${turns} maxConcurrent=${config.maxConcurrentTasks}`);
 
   initDb();
   console.log("[MiniClaw] Database initialized");

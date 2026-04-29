@@ -202,8 +202,8 @@ export async function executeTask(params: {
           }
           return { behavior: "allow" as const, updatedInput: input };
         },
-        maxTurns: config.defaultMaxTurns,
-        maxBudgetUsd: config.defaultBudgetUsd,
+        ...(config.defaultMaxTurns !== undefined ? { maxTurns: config.defaultMaxTurns } : {}),
+        ...(config.defaultBudgetUsd !== undefined ? { maxBudgetUsd: config.defaultBudgetUsd } : {}),
         abortController,
         ...(resumeId ? { resume: resumeId } : {}),
       },
