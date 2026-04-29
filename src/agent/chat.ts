@@ -20,6 +20,10 @@ export async function chat(
   attachmentBlocks?: ContentBlockParam[],
   callbacks?: ChatCallbacks,
 ): Promise<string> {
+  const startedAt = Date.now();
+  const chShort = channelId.slice(-6);
+  const hasAttach = !!(attachmentBlocks && attachmentBlocks.length);
+  log.info(`▶ chat ch=${chShort} attach=${hasAttach ? attachmentBlocks!.length : 0} prompt="${prompt.slice(0, 60).replace(/\s+/g, " ")}"`);
   // chat_history 只存文字摘要，不存 base64/URL（避免表膨胀 + 续话不重传附件是设计取舍）
   addChatMessage(channelId, userId, "user", prompt);
 
@@ -33,6 +37,9 @@ export async function chat(
   const fullPrompt = historyBlock ? `${historyBlock}\n\n${prompt}` : prompt;
 
   let result = "";
+  let toolCount = 0;
+  let costUsd = 0;
+  let turns = 0;
 
   const hasAttachments = !!(attachmentBlocks && attachmentBlocks.length);
   const promptParam: string | AsyncIterable<{
@@ -78,6 +85,7 @@ export async function chat(
     if (msg.type === "assistant" && callbacks) {
       for (const block of msg.message.content) {
         if (block.type === "tool_use") {
+          toolCount++;
           const raw = block.input;
           const input = raw && typeof raw === "object" && !Array.isArray(raw)
             ? raw as Record<string, unknown>
@@ -94,10 +102,17 @@ export async function chat(
       result = msg.subtype === "success"
         ? msg.result
         : ("errors" in msg ? msg.errors.join("\n") : "执行出错");
+      costUsd = msg.subtype === "success" ? msg.total_cost_usd : 0;
+      turns = msg.num_turns;
     }
   }
 
   if (!result) result = "[无结果]";
+
+  log.info(
+    `✓ chat ch=${chShort} ${Date.now() - startedAt}ms turns=${turns} ` +
+    `cost=$${costUsd.toFixed(4)} tools=${toolCount} reply.len=${result.length}`
+  );
 
   addChatMessage(channelId, userId, "assistant", result);
 
