@@ -14,6 +14,7 @@ import { initDb } from "../store/db.js";
 import { loadPersonas } from "./personas.js";
 import { Orchestrator } from "./orchestrator.js";
 import { applyCommand, parseCommand, helpText } from "./commands.js";
+import { saveScene, loadScene } from "./scene-store.js";
 
 async function main() {
   initDb();
@@ -68,8 +69,17 @@ async function main() {
       console.log(`❌ ${result.text}`);
     } else if (result.kind === "ok" && result.text) {
       console.log(result.text);
-    } else if (result.kind === "save" || result.kind === "load") {
-      console.log(`[${result.kind}] not implemented in Phase 3 (Phase 4 task)`);
+    } else if (result.kind === "save") {
+      try {
+        const r = saveScene(orch, result.name);
+        console.log(`💾 saved as '${r.name}' → ${r.path}`);
+      } catch (err) {
+        console.log(`❌ save failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    } else if (result.kind === "load") {
+      const r = loadScene(orch, result.name);
+      if (r.ok) console.log(`📂 loaded '${result.name}' (${r.messageCount} msgs, ${orch.scene.participants.size} participants)`);
+      else console.log(`❌ load failed: ${r.reason}`);
     }
     setImmediate(prompt);
   }

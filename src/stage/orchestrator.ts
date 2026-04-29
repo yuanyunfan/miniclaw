@@ -10,6 +10,7 @@ import { EventEmitter } from "node:events";
 import { v4 as uuid } from "uuid";
 import { chatOnce } from "./agent.js";
 import { parseMentions } from "./personas.js";
+import { pickNextSpeaker } from "./stage-manager.js";
 import { createScene as dbCreateScene, appendSceneMessage, updateSceneTotals } from "../store/db.js";
 import { createLogger } from "../lib/log.js";
 import type {
@@ -160,6 +161,18 @@ export class Orchestrator extends EventEmitter {
 
   private async tick(): Promise<void> {
     if (this.running || this.paused) return;
+
+    // auto 模式：队列空时调 stage-manager 决策
+    if (!this.queue.length && this.scene.mode === "auto") {
+      const lastSpeaker = this.scene.messages.length
+        ? this.scene.messages[this.scene.messages.length - 1].speaker
+        : null;
+      // 只有最后是 agent（不是 user）时才自动续；user 刚说完就轮到 agent，但已经走 userSay 入队
+      if (lastSpeaker && lastSpeaker !== "user") {
+        await this.runStageManager();
+      }
+    }
+
     if (!this.queue.length) return;
 
     // Anti-loop: 同 speaker 连续 N 次（不含 user 插入）→ 暂停
@@ -258,6 +271,50 @@ export class Orchestrator extends EventEmitter {
   private setStatus(id: string, status: AgentStatus): void {
     this.scene.agentStatus.set(id, status);
     this.emit("status", id, status);
+  }
+
+  /** auto 模式下调 stage-manager LLM 决策下一发言者 */
+  private async runStageManager(): Promise<void> {
+    if (!this.scene.participants.size) return;
+    const participants = [...this.scene.participants]
+      .map((id) => this.scene.registry.get(id))
+      .filter((p): p is Persona => !!p);
+
+    try {
+      const decision = await pickNextSpeaker(participants, this.scene.messages);
+      this.scene.totalCostUsd += decision.costUsd;
+      updateSceneTotals(this.scene.id, { total_cost_usd: this.scene.totalCostUsd });
+
+      if (decision.next === "end") {
+        this.emit("notice", "info", `🎬 stage-manager 宣布场景结束（${decision.reason}）`);
+        this.scene.endedAt = Date.now();
+        return;
+      }
+      if (decision.next === "user") {
+        this.pauseScene(`stage-manager 把发言权交给用户：${decision.reason}`);
+        return;
+      }
+      // 同 speaker 连续 2 turn 防护
+      const lastSpeaker = this.scene.messages.length
+        ? this.scene.messages[this.scene.messages.length - 1].speaker
+        : null;
+      if (lastSpeaker === decision.next) {
+        // 强制找另一个在场 agent
+        const others = [...this.scene.participants].filter((id) => id !== decision.next);
+        if (!others.length) {
+          this.pauseScene(`auto 卡住：只有 ${decision.next} 在场，等用户介入`);
+          return;
+        }
+        const alt = others[0];
+        this.emit("notice", "warn", `🎬 stage-manager 想让 ${decision.next} 继续，被强制切到 ${alt}`);
+        this.queue.push(alt);
+      } else {
+        this.emit("notice", "info", `🎬 stage-manager → @${decision.next}（${decision.reason}）`);
+        this.queue.push(decision.next);
+      }
+    } catch (err) {
+      this.emit("notice", "error", `stage-manager 失败: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   private pauseScene(reason: string): void {
