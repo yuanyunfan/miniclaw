@@ -120,7 +120,8 @@ sequenceDiagram
     participant D as Discord Gateway
     participant B as bot.ts
     participant CH as agent/chat.ts
-    participant Q as claude-agent-sdk
+    participant A as @anthropic-ai/sdk<br/>messages.stream()
+    participant CT as agent/chat-tools.ts<br/>(read_file/bash/web_fetch)
     participant R as raven :7024
     participant API as Copilot API
     participant MD as ~/.miniclaw/memories/<br/>MEMORY.md
@@ -146,21 +147,22 @@ sequenceDiagram
 
         CH->>DB: getRecentHistory(channelId)<br/>取最近 N 条
         CH->>MD: getAllMemories()<br/>读 MEMORY.md
-        CH->>CH: buildMemoryPrompt() + buildHistoryBlock()
+        CH->>CH: 拼 system = 自定义 IDENTITY + memory + history<br/>(不用 claude_code preset)
 
-        CH->>Q: query(...)
-        Note over CH,Q: prompt: AsyncIterable SDKUserMessage<br/>content blocks = 附件 + text<br/>systemPrompt: claude_code<br/>allowedTools: Read / Bash / WebSearch ...
-
-        Q->>R: POST /v1/messages
-        R->>API: 转发 Anthropic 端点
-        API-->>R: SSE 流
-        R-->>Q: SSE (Anthropic 格式)
-
-        loop 每个 SSE 事件
-            Q-->>CH: msg (assistant / tool_use / text)
-            alt tool_use 出现
-                CH->>CH: callbacks.onToolUse(line)
-                CH->>DR: 编辑"进度消息" (节流 600ms)
+        loop tool loop（最多 10 轮）
+            CH->>A: messages.stream({ model, system, tools:[read_file,bash,web_search,web_fetch], messages, max_tokens:4096 })
+            A->>R: POST /v1/messages (SSE)
+            R->>API: 转发
+            API-->>R: SSE 流
+            R-->>A: SSE
+            A-->>CH: text_delta 事件 → callbacks.onText(token)
+            A-->>CH: finalMessage() 含 stop_reason
+            alt stop_reason === "tool_use"
+                CH->>CT: 执行 tool_use blocks（read_file 走 fs / bash 走 execFile / web_fetch 走 fetch）
+                CT-->>CH: ToolExecResult { content, is_error }
+                CH->>CH: 拼 tool_result blocks 进下一轮 messages
+            else 无更多工具
+                CH->>CH: break loop
             end
         end
 
@@ -175,6 +177,18 @@ sequenceDiagram
         B->>DR: react(✅) + 移除 👀
     end
 ```
+
+**chat vs task 引擎差异**：
+
+| 维度 | chat（@mention） | task（/task） |
+|---|---|---|
+| SDK | `@anthropic-ai/sdk` `messages.stream()` | `@anthropic-ai/claude-agent-sdk` `query()` |
+| system prompt | 自定义短 prompt + memory + history | claude_code preset + memory + supervisorBlock |
+| 工具 | 4 个手写：read_file / bash / web_search / web_fetch | 全套 + Agent + MCP + Edit/Write |
+| 子进程 | 无（同进程 fetch） | SDK 子进程 |
+| TTFT | ~500-800ms | 2-5s |
+| 设计意图 | 闲聊 + 调研 + 信息查询 | 编码 + 多文件改动 + subagent 编排 |
+| 用户被要求"修代码" | 主动告知"请用 /task" | 实际执行 |
 
 ---
 

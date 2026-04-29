@@ -30,6 +30,7 @@ export const config = {
     guildId: env("DISCORD_GUILD_ID"),
   },
   anthropicApiKey: env("ANTHROPIC_API_KEY"),
+  anthropicBaseUrl: process.env.ANTHROPIC_BASE_URL,
   allowedUserId: env("MINICLAW_ALLOWED_USER_ID"),
   defaultCwd: resolveHome(env("MINICLAW_DEFAULT_CWD", "~/Code")),
   maxConcurrentTasks: Number(env("MINICLAW_MAX_CONCURRENT_TASKS", "3")),

@@ -129,8 +129,12 @@ react(👀)              ← 立即反馈
   ↓
 sendTyping() 每 8s     ← Discord "正在输入..." 循环刷新
   ↓
-chat() 调 Anthropic SDK
+chat() 调 @anthropic-ai/sdk messages.stream()  ← 不走 claude-agent-sdk
+  ├─ tool loop（最多 10 轮）：
+  │    finalMessage.stop_reason === "tool_use" → 调 chat-tools.ts 执行
+  │    把 tool_result blocks 拼回 messages 进下一轮
   ├─ onToolUse 回调 → flushSteps() 编辑"步骤消息"（节流 600ms）
+  ├─ onText 回调 → 实时 token 流（暂未在 Discord 上展示，未来可加）
   └─ 返回最终文本
   ↓
 chunkMessage 切 2000 字  ← Discord 单消息上限
@@ -139,6 +143,8 @@ chunkMessage 切 2000 字  ← Discord 单消息上限
   ↓
 移除 👀 + 加 ✅          ← 完成态
 ```
+
+**chat 引擎**：messages.stream + 手写 4 工具循环（read_file / bash / web_search / web_fetch）。**与 task 的 SDK 模式有意区分** —— task 才用 claude-agent-sdk + claude_code preset + 全套工具 + Agent 编排。
 
 异常路径：catch → 移除 👀 + 加 ❌ + reply "回复出错"。
 

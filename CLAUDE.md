@@ -10,7 +10,7 @@
 
 Discord Bot (discord.js v14) → Orchestrator → Claude Code Agent SDK / Anthropic API
 
-- @mention → 轻量对话（Anthropic Messages API 直接回答）
+- @mention → 轻量对话（@anthropic-ai/sdk `messages.stream()` 直接调用 + 4 个手写工具 read_file/bash/web_search/web_fetch + 自写 tool loop；不走 claude-agent-sdk）
 - /task → Supervisor 模式：主 agent 通过 Agent SDK 的 Task tool 分派给角色化 subagent（Researcher / Planner / Generator / Evaluator）
 - /status, /cancel, /resume → 任务管理
 
@@ -38,7 +38,8 @@ Discord Bot (discord.js v14) → Orchestrator → Claude Code Agent SDK / Anthro
 - src/index.ts — 入口
 - src/bot.ts — Discord 事件监听 + 路由
 - src/config.ts — 配置加载
-- src/agent/chat.ts — 轻量对话（@mention）
+- src/agent/chat.ts — 轻量对话（@mention，Anthropic messages.stream + 自写 tool loop）
+- src/agent/chat-tools.ts — 4 个 chat 工具的 schema + executor（read_file / bash / web_search / web_fetch）
 - src/agent/task.ts — 任务执行（/task，Agent SDK，Supervisor）
 - src/agent/subagents.ts — 加载 agents/*.md 注册角色化 subagent
 - agents/*.md — 角色化 subagent 定义（researcher/planner/generator/evaluator），YAML frontmatter + 系统 prompt
@@ -216,3 +217,10 @@ log.debug("调试信息");                         // 默认不输出
 - 修复：新增 `src/discord/attachments.ts`（图片/PDF 下载 → base64 image/document block，文本内联，二进制落盘），chat/task prompt 切到 `AsyncIterable<SDKUserMessage>` 模式，`/task` 加 `file1/file2/file3` 三个 attachment slot
 - 教训：**SDK 的 prompt: string 是最简陷阱**。Anthropic API 早就支持多模态 content blocks，但用 string 形式调 SDK 会让人忘记这件事；只要触发渠道（Discord/Slack 等）支持文件，就要把 prompt 改成 content blocks 模式
 - 副产物教训：**raven → Copilot proxy 不支持 URL 源**（"URL sources are not supported"），即便 Anthropic 原生 API 支持。多模态附件**必须** base64 编码后传，不能图省事用 Discord CDN URL 直传
+
+**[2026-04-29] chat 路径切 Hermes 模式（messages.stream + 手写 tool loop）**：
+- 根因：chat.ts 用 claude-agent-sdk 的 query() + claude_code preset，TTFT 2-5s，每条多耗 3-5K tokens 的编码 agent 指令——对闲聊/问答是负收益；hermes-agent 和 openclaw 都不用 preset，明确佐证 preset 是"只为编码任务而生"
+- 修复：chat.ts 重写为 `@anthropic-ai/sdk` 的 `messages.stream()` 直接调用 + 4 个手写工具（read_file/bash/web_search/web_fetch）+ 自写 tool loop（MAX_ITERATIONS=10）；自定义短 system prompt 替代 claude_code preset；task.ts **完全不动**（Supervisor 模式仍用 SDK + preset）
+- 工具白名单物理隔离：chat 没有 Edit/Write/Agent/MCP，模型若被要求"修代码/重构/调度 subagent"会主动回"请用 /task"；不靠 prompt 提醒
+- 预期收益：TTFT 降到 ~500-800ms（5x），每条省 3-5K tokens；chat 失去 cost 数字（messages.create 不返回 total_cost_usd），改用 token 数审计
+- 教训：**preset 是双刃剑** —— claude_code preset 对 task 是杀手锏，对 chat 是负担。不要把"工具的默认值"当真理，**判断你的真实需求和 preset 的设计意图是否匹配**
