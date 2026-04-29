@@ -71,6 +71,12 @@ function validateJob(raw: unknown, file: string): CronJob {
 
   if (type === "task") {
     if (typeof r.prompt !== "string" || !r.prompt.trim()) throw new Error(`${file}: type=task 需 'prompt'`);
+    const preScript = typeof r.pre_script === "string" ? r.pre_script.trim() : undefined;
+    if (preScript && (preScript.includes("/") || preScript.includes(".."))) {
+      throw new Error(`${file}: 'pre_script' 必须是单一文件名（不含路径分隔符）`);
+    }
+    const preTimeout = typeof r.pre_script_timeout_sec === "number" ? r.pre_script_timeout_sec : 120;
+    if (preTimeout > 600) throw new Error(`${file}: 'pre_script_timeout_sec' 上限 600 (10 分钟)`);
     return {
       ...baseCommon,
       type: "task",
@@ -78,6 +84,11 @@ function validateJob(raw: unknown, file: string): CronJob {
       cwd: typeof r.cwd === "string" ? r.cwd : undefined,
       budget_usd: typeof r.budget_usd === "number" ? r.budget_usd : undefined,
       max_turns: typeof r.max_turns === "number" ? r.max_turns : undefined,
+      ...(preScript ? {
+        pre_script: preScript,
+        pre_script_args: Array.isArray(r.pre_script_args) ? r.pre_script_args.map(String) : undefined,
+        pre_script_timeout_sec: preTimeout,
+      } : {}),
     };
   }
 

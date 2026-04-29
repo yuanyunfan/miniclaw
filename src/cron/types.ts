@@ -15,6 +15,14 @@ export interface CronJobTask extends CronJobBase {
   cwd?: string;
   budget_usd?: number;
   max_turns?: number;
+  /**
+   * 可选：在调用 LLM 之前先跑这个脚本（在 ~/.miniclaw/scripts/ 下），
+   * stdout 会被拼到 prompt 顶部作为"采集到的数据"，让 LLM 基于真实数据做分析。
+   * 替代 hermes 的 script+prompt 组合模式。
+   */
+  pre_script?: string;
+  pre_script_args?: string[];
+  pre_script_timeout_sec?: number;
 }
 
 export interface CronJobScript extends CronJobBase {
