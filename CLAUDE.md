@@ -111,15 +111,23 @@ scheduler 在 miniclaw 启动时随 ClientReady 一起 start，SIGTERM 时 stop�
 1. 读 `git log --oneline -10` 看最近改动
 2. 读 `CHANGELOG.md` 顶部的 [Unreleased] 段了解当前在做什么
 3. 跑 `pnpm test` 验证当前 main 是绿的（红的话先修再动手）
+4. **如果是不熟悉的领域改动**（cron / Supervisor / thread continuation 等），先看 `docs/architecture.md` + `docs/bot-routing.md` 对齐心智模型，避免读源码盲改
 
 **每次代码改动后**：
 4. 跑 `pnpm exec tsc --noEmit` 确保类型通过
 5. 改了被测函数 → 跑相关测试 `pnpm test src/<dir>/`
 6. 加了新函数/新行为 → 补单测（不要让测试覆盖率倒退）
+7. **改了下列任一 → 必须同步更新 `docs/architecture.md` 或 `docs/bot-routing.md`**：
+   - `src/bot.ts` 路由逻辑（事件监听 / 守卫 / Path 分支）→ `bot-routing.md`
+   - `src/agent/{chat,task,subagents,mcp}.ts` 任一架构改动 → `architecture.md` 图 1+2+3
+   - `src/cron/*` 调度引擎或新 type / runner 模式 → `architecture.md` 图 4
+   - `src/store/db.ts` schema → `architecture.md` 末尾 ER 图
+   - `~/.miniclaw/` 新增子目录 / 文件类型 → `architecture.md` 图 1+5
+   不更新 docs 等于"代码漂移"，下次 session 开局看到的图就是错的，会基于错信息做决策
 
 **Session 结束前**：
-7. 显著架构变更或踩坑 → 追加一条到 `## Retrospective`（格式：`[YYYY-MM-DD] 问题简述` → 根因 → 修复 → 教训）
-8. 完成完整 feature → 在 `CHANGELOG.md` 的 [Unreleased] 段加一条
+8. 显著架构变更或踩坑 → 追加一条到 `## Retrospective`（格式：`[YYYY-MM-DD] 问题简述` → 根因 → 修复 → 教训）
+9. 完成完整 feature → 在 `CHANGELOG.md` 的 [Unreleased] 段加一条
 
 ## Git Quality Gates
 
@@ -163,3 +171,9 @@ scheduler 在 miniclaw 启动时随 ClientReady 一起 start，SIGTERM 时 stop�
 - 现象：`MINICLAW_DB_PATH=~/.miniclaw/data.db` 的 env 传到子进程后，`[ -f "$DB" ]` fail（路径含字面 `~`）
 - 修复：bash 脚本里手动展开 `DB="${DB/#\~/$HOME}"`；shell 脚本应避免依赖外层 env 的 tilde
 - 教训：spawn 子进程 + 字符串 path 总要假设 `~` 是字面量；要么提前 resolve 后再传，要么子进程显式 expand
+
+**[2026-04-29] docs/ 跟代码漂移 1 周**：
+- 根因：CLAUDE.md 的 Session Workflow 没列"改架构必同步 docs"，导致 cron 子系统、verdict YAML、thread continuation 守卫等 ~10 处大改全部没进 docs
+- 现象：用户问"现在 docs 是不是过时？"——是的。架构图里还在画 `!task` 临时 hook、subagents 工具集描述太简、缺整个 cron 子图
+- 修复：bot-routing.md / architecture.md 重写；CLAUDE.md Session Workflow 加规则 7（哪些文件改动 → 必须同步哪个 docs）
+- 教训：**自动化做不到的事，靠 prompt + checklist 兜底**。Claude Code 不会主动跑去改 docs，必须在 CLAUDE.md 里明确写"改 X 文件 → 必更 Y 文档"
