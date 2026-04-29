@@ -7,6 +7,17 @@
 ## [Unreleased]
 
 ### Added
+- **Stage 子系统**（`pnpm stage` / `pnpm stage:repl`）—— CLI 多 agent 群聊控制台
+  - Ink TUI 4 pane（Roster / Stream / Detail / CommandBar），实时 spinner / 状态色 / streaming
+  - Persona 角色卡（`personas/*.md` + `~/.miniclaw/personas/*.md`），MVP 自带 CEO / Engineer / Tester
+  - @-driven routing：`@persona` 消息自动入队对应 agent；agent 回复内 `@` 自动接力
+  - 可选 Stage Manager 自动模式（`/auto`）：独立小成本 LLM 决策 next_speaker（user/persona/end）
+  - 三层反失控 cap：连续 same-speaker / total turns / total cost USD（env 可调）
+  - 持久化双轨：`~/.miniclaw/scenes/<name>.md` markdown + DB（`scenes` + `scene_messages` 两表）
+  - 13 个 slash 命令（/summon /dismiss /say /all /abort /auto /manual /save /load /roster /cost /clear /q）
+  - 31 个新单测覆盖 personas/agent/orchestrator/scene-store/stage-manager
+  - 完全复用 chat-tools / memory / log / db / config，路径独立不污染 Discord 子系统
+  - 详见 `docs/stage.md`
 - **Cron 状态持久化**（`~/.miniclaw/cron/state.json`）
   - 每次 dispatch 后自动写入 `last_run_at` / `last_status` / `last_error` / `last_duration_ms` / `completed` 累计计数
   - 重启不丢历史；`pnpm cron:list` 显示 `[✓ ran 35× · last ok 04-28 09:00 12.3s]`

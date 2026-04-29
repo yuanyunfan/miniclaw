@@ -104,6 +104,18 @@ CLI：
 
 scheduler 在 miniclaw 启动时随 ClientReady 一起 start，SIGTERM 时 stop。
 
+## Stage（CLI 多 agent 控制台）
+
+平行于 Discord bot 的另一个子系统：终端里跑多 agent 群聊，按需召唤角色（CEO/Engineer/Tester），自由 @ 分派任务，做观察者看 agent 互相讨论。
+
+- 入口：`pnpm stage`（Ink 4-pane TUI）/ `pnpm stage:repl`（无 TUI 兜底）
+- Persona 定义：`personas/<id>.md`（repo 默认）+ `~/.miniclaw/personas/<id>.md`（user 覆盖）
+- 持久化：`~/.miniclaw/scenes/<name>.md` 双轨 markdown + DB（`scenes` / `scene_messages` 表）
+- 反失控：env `MINICLAW_STAGE_BUDGET_USD`（默认 $2）/ `TURN_CAP`（默认 30）/ `SAME_SPEAKER_CAP`（默认 3）
+- 详细架构 + 命令清单见 `docs/stage.md`
+
+Stage 完全复用 `chat-tools` / `memory` / `log` / `db` / `config`，但路径独立 (`src/stage/`)，不与 `src/agent/` (Discord chat) 耦合。
+
 ## 日志
 
 统一走 `src/lib/log.ts`，**禁止在源码里直接用 `console.*`**（除了 logger 自己内部）。
@@ -150,12 +162,13 @@ log.debug("调试信息");                         // 默认不输出
 4. 跑 `pnpm exec tsc --noEmit` 确保类型通过
 5. 改了被测函数 → 跑相关测试 `pnpm test src/<dir>/`
 6. 加了新函数/新行为 → 补单测（不要让测试覆盖率倒退）
-7. **改了下列任一 → 必须同步更新 `docs/architecture.md` 或 `docs/bot-routing.md`**：
+7. **改了下列任一 → 必须同步更新 `docs/architecture.md` 或 `docs/bot-routing.md` 或 `docs/stage.md`**：
    - `src/bot.ts` 路由逻辑（事件监听 / 守卫 / Path 分支）→ `bot-routing.md`
    - `src/agent/{chat,task,subagents,mcp}.ts` 任一架构改动 → `architecture.md` 图 1+2+3
    - `src/cron/*` 调度引擎或新 type / runner 模式 → `architecture.md` 图 4
    - `src/store/db.ts` schema → `architecture.md` 末尾 ER 图
    - `~/.miniclaw/` 新增子目录 / 文件类型 → `architecture.md` 图 1+5
+   - `src/stage/*` 路由 / orchestrator / persona / 命令 / TUI 改动 → `docs/stage.md`
    不更新 docs 等于"代码漂移"，下次 session 开局看到的图就是错的，会基于错信息做决策
 
 **Session 结束前**：
