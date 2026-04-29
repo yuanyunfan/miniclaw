@@ -92,6 +92,30 @@ pm2 常驻运行：
 pm2 start ecosystem.config.cjs
 ```
 
+### 5. （可选）批量配置 Discord 频道与 Cron 任务
+
+如果你想直接复用我同款的"hermes-style"频道结构（4 分类 + 13 频道，对应 15 个定时简报任务），跑下面 2 个**可选模板**脚本：
+
+```bash
+# 1. 在你的 Discord guild 里创建 4 分类 + 13 频道（需要 bot 有 Manage Channels 权限）
+#    输出 channel ID 映射到 ~/.miniclaw/channel-map.json
+pnpm tsx scripts/setup-miniclaw-channels.ts
+
+# 2. 把 ~/.miniclaw/cron/*.yaml 的 channel: 字段批量替换为新创建的 channel ID + 启用
+python3 scripts/update-cron-channels.py
+```
+
+频道结构：
+
+| 分类 | 频道 |
+|---|---|
+| 🤖 AI | daily-ai-news / daily-ai-frontier / daily-tech-radar / daily-github-trending / daily-app-trending |
+| 👤 PERSONAL | daily-token-dashboard |
+| 💹 STOCK | daily-stock-market |
+| 📰 NEWS | news-domestic / news-international / trending / tldr / monitor-github-repo |
+
+如果你想用**自己的**频道结构（而不是 hermes-style），跳过这两个脚本，直接 `vim ~/.miniclaw/cron/*.yaml` 改各自的 `channel: "<id>"`。
+
 ## 项目结构
 
 ```
