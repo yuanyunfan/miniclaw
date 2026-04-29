@@ -21,6 +21,16 @@ export const App: React.FC<{ orch: Orchestrator; store: Store }> = ({ orch, stor
         <Stream state={state} orch={orch} />
         <Detail state={state} orch={orch} />
       </Box>
+      {/* notice strip：独立一行，不再嵌在 stream 里 */}
+      {state.notices.length > 0 ? (
+        <Box borderStyle="single" borderColor="gray" paddingX={1} flexDirection="column">
+          {state.notices.slice(-3).map((n, i) => (
+            <Text key={`n-${n.ts}-${i}`} color={n.level === "error" ? "red" : n.level === "warn" ? "yellow" : "blue"}>
+              {n.level === "error" ? "❌" : n.level === "warn" ? "⚠️" : "ℹ️"} {n.text}
+            </Text>
+          ))}
+        </Box>
+      ) : null}
       <CommandBar orch={orch} store={store} />
     </Box>
   );
