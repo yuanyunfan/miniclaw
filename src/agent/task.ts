@@ -109,6 +109,11 @@ export async function executeTask(params: {
   cwd: string;
   channel: SendableChannels;
   resumeSessionId?: string;
+  /**
+   * "embed"（默认）：发 ✅ 任务完成 embed + 执行轨迹（/task 用）
+   * "raw"：直接发 LLM 输出文本，无任何元数据装饰（cron / 程序化触发用）
+   */
+  outputMode?: "embed" | "raw";
 }): Promise<TaskResult> {
   const abortController = new AbortController();
   activeTasks.set(params.taskId, abortController);
@@ -316,6 +321,22 @@ export async function executeTask(params: {
       completed_at: new Date().toISOString(),
     });
 
+    const outputMode = params.outputMode ?? "embed";
+
+    if (outputMode === "raw") {
+      // 程序化触发（cron 等）：直接发结果文本，不带任何元数据装饰
+      if (lastResult.success) {
+        const chunks = chunkMessage(lastResult.result);
+        for (const chunk of chunks) {
+          await params.channel.send(chunk);
+        }
+      } else {
+        await params.channel.send(`❌ \`${params.taskId.slice(0, 8)}\` 失败: ${lastResult.result.slice(0, 1900)}`);
+      }
+      return lastResult;
+    }
+
+    // outputMode === "embed"（/task 默认）
     const embed = lastResult.success
       ? taskCompleteEmbed({
           taskId: params.taskId,

@@ -37,8 +37,7 @@ export async function runTask(job: CronJobTask, client: Client): Promise<void> {
     prompt,
     cwd,
   });
-  await channel.send(`⏰ cron \`${job.name}\` → task \`${taskId.slice(0, 8)}\``);
-  await executeTask({ taskId, prompt, cwd, channel });
+  await executeTask({ taskId, prompt, cwd, channel, outputMode: "raw" });
 }
 
 export async function runSkill(job: CronJobSkill, client: Client): Promise<void> {
@@ -63,6 +62,5 @@ export async function runSkill(job: CronJobSkill, client: Client): Promise<void>
     prompt,
     cwd,
   });
-  await channel.send(`⏰ cron \`${job.name}\` → skill \`${job.skill}\``);
-  await executeTask({ taskId, prompt, cwd, channel });
+  await executeTask({ taskId, prompt, cwd, channel, outputMode: "raw" });
 }
