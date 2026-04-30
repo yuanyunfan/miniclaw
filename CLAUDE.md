@@ -162,13 +162,14 @@ log.debug("调试信息");                         // 默认不输出
 4. 跑 `pnpm exec tsc --noEmit` 确保类型通过
 5. 改了被测函数 → 跑相关测试 `pnpm test src/<dir>/`
 6. 加了新函数/新行为 → 补单测（不要让测试覆盖率倒退）
-7. **改了下列任一 → 必须同步更新 `docs/architecture.md` 或 `docs/bot-routing.md` 或 `docs/stage.md`**：
+7. **改了下列任一 → 必须同步更新 `docs/architecture.md` 或 `docs/bot-routing.md` 或 `docs/stage.md` 或 `docs/prompts.md`**：
    - `src/bot.ts` 路由逻辑（事件监听 / 守卫 / Path 分支）→ `bot-routing.md`
    - `src/agent/{chat,task,subagents,mcp}.ts` 任一架构改动 → `architecture.md` 图 1+2+3
    - `src/cron/*` 调度引擎或新 type / runner 模式 → `architecture.md` 图 4
    - `src/store/db.ts` schema → `architecture.md` 末尾 ER 图
    - `~/.miniclaw/` 新增子目录 / 文件类型 → `architecture.md` 图 1+5
    - `src/stage/*` 路由 / orchestrator / persona / 命令 / TUI 改动 → `docs/stage.md`
+   - `prompts/*.md` 任一改动 → 跑 `pnpm test prompt-snapshot`，确认 diff 有意后 `vitest -u` 更新 hash；新增 prompt 文件还要更 `docs/prompts.md` 的清单
    不更新 docs 等于"代码漂移"，下次 session 开局看到的图就是错的，会基于错信息做决策
 
 **Session 结束前**：

@@ -17,6 +17,16 @@
 - **Telemetry**：task 结束日志新增 `subagents=[role1→role2→...]` 字段，便于事后观察 LLM 实际编排路径
 
 ### Added
+- **Prompt 资产管理体系**（`prompts/` + `src/agent/prompts.ts` 加载器）—— 把硬编码在 .ts 里的长 system prompt 全部搬到 markdown 文件
+  - **B 类（中长 system prompt）→ 文件化**：`supervisor.md` / `memory-extractor.md` / `stage-manager.md`
+  - **D 类（cron 模板）→ `templates/cron-*.md` + `{{var}}`**：复用 cron 已有 renderTemplate
+  - **C 类（极短 / 高度动态片段）→ 留代码但抽常量**：`src/agent/identity.ts` 集中 chat/task identity 文案
+  - 加载器特性：mtime cache 热重载 / `MINICLAW_PROMPT_CACHE=strict` 关闭 stat / vars 双向校验（body ⊆ vars && caller ⊆ vars）/ 加载失败 throw 含 hint
+  - 用户级覆盖：`~/.miniclaw/prompts/<name>.md` 优先于 repo `prompts/<name>.md`（含子目录）
+  - 公共 markdown 解析提到 `src/lib/markdown.ts`，subagents/personas/prompts 三方共用
+  - 新增 11 个 sha256 inline snapshot 测试（`prompt-snapshot.test.ts`）锁定字节，防"无意中破坏 prompt 行为"
+  - 新增 8 个 prompts.ts unit test（happy path / 缺文件 / vars 校验 / 热重载）
+  - 详见 `docs/prompts.md`
 - **`agents/code-investigator.md`** —— 带 Bash 的深度调研角色，可 `git clone` + Bash 遍历仓库，补 researcher 工具短板（如调研外部 GitHub 项目）
 
 ### Added
