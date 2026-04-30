@@ -11,6 +11,7 @@ import { chunkMessage } from "../discord/chunks.js";
 import { buildMemoryPrompt } from "../memory/inject.js";
 import { loadSubagents, listSubagentNames } from "./subagents.js";
 import { loadMcpServers } from "./mcp.js";
+import { IDENTITY_LINE_TASK } from "./identity.js";
 import { createLogger } from "../lib/log.js";
 
 const log = createLogger("task");
@@ -88,8 +89,6 @@ function formatUsage(usage: unknown): string | undefined {
   if (u.cache_creation_input_tokens) parts.push(`cache write: ${fmtTokens(u.cache_creation_input_tokens)}`);
   return parts.length ? parts.join(" · ") : undefined;
 }
-
-export const IDENTITY_LINE_TASK = "你是 MiniClaw，一个简洁高效的 AI 助手，通过 Discord 与用户沟通。回复时始终以 MiniClaw 的身份自居，不要说自己是 Claude 或 Claude Code。";
 
 export const __testables = { fmtTokens, formatUsage, buildSupervisorBlock, IDENTITY_LINE_TASK };
 

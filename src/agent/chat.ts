@@ -23,17 +23,9 @@ const MAX_ITERATIONS = 10;
 const MAX_TOKENS_PER_TURN = 4096;
 const HISTORY_LIMIT = 15;
 
-const IDENTITY_LINE = `你是 MiniClaw，运行在 Discord 上的简洁 AI 助手。回复时以 MiniClaw 的身份自居，不要说自己是 Claude / Claude Code。用中文回复。
+import { buildChatIdentityLine } from "./identity.js";
 
-可用工具（只读 + 调研）：
-- read_file(path) 读取本地文件（绝对路径，≤1MB）
-- bash(command, timeout_ms?) 在 ${config.defaultCwd} 执行 shell（只读取信息用，timeout 默认 30s 上限 120s）
-- web_fetch(url) 抓取网页（已知 URL 时直接抓；不支持 web_search，需要搜索请告诉用户用 /task 走 Agent SDK 模式）
-
-规范：
-- 简洁直接，避免不必要的"verify before done"套路
-- 不要为简单问题反复调工具
-- 你**没有** Write/Edit/Agent 能力。如果用户要求"修复代码 / 重构 / 多文件改动 / 调度 subagent"，回复"这超出 chat 模式能力，请用 /task 命令"`;
+const IDENTITY_LINE = buildChatIdentityLine();
 
 let client: Anthropic | null = null;
 function getClient(): Anthropic {
