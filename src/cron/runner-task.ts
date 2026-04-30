@@ -19,6 +19,24 @@ function resolveHome(p: string): string {
 
 const SCRIPTS_DIR = process.env.MINICLAW_SCRIPTS_DIR ?? join(homedir(), ".miniclaw/scripts");
 
+function buildCronPreScriptBlock(scriptName: string, stdout: string): string {
+  const truncated = stdout.slice(0, 8000) + (stdout.length > 8000 ? "\n... (truncated)" : "");
+  return `## 📥 上方 script (\`${scriptName}\`) 采集到的数据 (stdout)\n\n\`\`\`\n${truncated}\n\`\`\`\n\n---\n\n`;
+}
+
+function buildCronTaskPrompt(jobName: string, prependedContext: string, renderedPrompt: string): string {
+  return `[cron:${jobName}]\n\n${prependedContext}${renderedPrompt}`;
+}
+
+function buildCronSkillPrompt(jobName: string, skillName: string, skillArgs?: Record<string, string | number | boolean>): string {
+  const argsStr = skillArgs
+    ? "\n参数:\n" + Object.entries(skillArgs).map(([k, v]) => `- ${k}: ${v}`).join("\n")
+    : "";
+  return `[cron:${jobName}] 请显式调用 ${skillName} skill 完成本次任务${argsStr}`;
+}
+
+export const __testables = { buildCronPreScriptBlock, buildCronTaskPrompt, buildCronSkillPrompt };
+
 async function runPreScript(
   scriptName: string,
   args: string[],
@@ -94,7 +112,7 @@ export async function runTask(job: CronJobTask, client: Client): Promise<void> {
         job.name,
         job.channel,
       );
-      prependedContext = `## 📥 上方 script (\`${job.pre_script}\`) 采集到的数据 (stdout)\n\n\`\`\`\n${stdout.slice(0, 8000)}${stdout.length > 8000 ? "\n... (truncated)" : ""}\n\`\`\`\n\n---\n\n`;
+      prependedContext = buildCronPreScriptBlock(job.pre_script, stdout);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       await channel.send(`⏰ cron \`${job.name}\` ❌ pre_script 失败: ${msg.slice(0, 1500)}`);
@@ -103,7 +121,7 @@ export async function runTask(job: CronJobTask, client: Client): Promise<void> {
   }
 
   const renderedPrompt = renderTemplate(job.prompt, { "cron.name": job.name });
-  const prompt = `[cron:${job.name}]\n\n${prependedContext}${renderedPrompt}`;
+  const prompt = buildCronTaskPrompt(job.name, prependedContext, renderedPrompt);
 
   createTask({
     id: taskId,
@@ -126,10 +144,7 @@ export async function runSkill(job: CronJobSkill, client: Client): Promise<void>
   const cwd = resolveHome(job.cwd ?? config.defaultCwd);
 
   // 把 skill 调用拼成一段明确的 supervisor prompt
-  const argsStr = job.skill_args
-    ? "\n参数:\n" + Object.entries(job.skill_args).map(([k, v]) => `- ${k}: ${v}`).join("\n")
-    : "";
-  const prompt = `[cron:${job.name}] 请显式调用 ${job.skill} skill 完成本次任务${argsStr}`;
+  const prompt = buildCronSkillPrompt(job.name, job.skill, job.skill_args);
 
   createTask({
     id: taskId,

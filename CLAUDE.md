@@ -11,7 +11,7 @@
 Discord Bot (discord.js v14) → Orchestrator → Claude Code Agent SDK / Anthropic API
 
 - @mention → 轻量对话（@anthropic-ai/sdk `messages.stream()` 直接调用 + 4 个手写工具 read_file/bash/web_search/web_fetch + 自写 tool loop；不走 claude-agent-sdk）
-- /task → Supervisor 模式：主 agent 通过 Agent SDK 的 Task tool 分派给角色化 subagent（Researcher / Planner / Generator / Evaluator）
+- /task → Supervisor 模式：主 agent 通过 Agent SDK 的 Task tool 分派给角色化 subagent（researcher / code-investigator / planner / generator / evaluator）。Supervisor prompt 是"能力图谱"不是"流水线"，由 LLM 按任务自由组合
 - /status, /cancel, /resume → 任务管理
 
 ## 运行命令
@@ -42,7 +42,7 @@ Discord Bot (discord.js v14) → Orchestrator → Claude Code Agent SDK / Anthro
 - src/agent/chat-tools.ts — 4 个 chat 工具的 schema + executor（read_file / bash / web_search / web_fetch）
 - src/agent/task.ts — 任务执行（/task，Agent SDK，Supervisor）
 - src/agent/subagents.ts — 加载 agents/*.md 注册角色化 subagent
-- agents/*.md — 角色化 subagent 定义（researcher/planner/generator/evaluator），YAML frontmatter + 系统 prompt
+- agents/*.md — 角色化 subagent 定义（researcher / code-investigator / planner / generator / evaluator），YAML frontmatter + 系统 prompt
 - src/commands/register.ts — Slash command 注册
 - src/commands/handlers.ts — 命令处理逻辑
 - src/discord/chunks.ts — 消息分片（2000 字符限制）
@@ -237,3 +237,8 @@ log.debug("调试信息");                         // 默认不输出
 - 工具白名单物理隔离：chat 没有 Edit/Write/Agent/MCP，模型若被要求"修代码/重构/调度 subagent"会主动回"请用 /task"；不靠 prompt 提醒
 - 预期收益：TTFT 降到 ~500-800ms（5x），每条省 3-5K tokens；chat 失去 cost 数字（messages.create 不返回 total_cost_usd），改用 token 数审计
 - 教训：**preset 是双刃剑** —— claude_code preset 对 task 是杀手锏，对 chat 是负担。不要把"工具的默认值"当真理，**判断你的真实需求和 preset 的设计意图是否匹配**
+
+**[2026-04-30] Supervisor prompt 把"流水线"硬编码成 IF/ELSE，调研类任务质量被锁死**：
+- 根因：task.ts:144-178 的 supervisorBlock 写死"推荐工作流 1.Researcher → 2.Planner → 3.Generator → 4.Evaluator"+ "任何代码改动必须 Evaluator 验收"+ Verdict YAML 强制，4 个 agent.md 又互相假设上下游存在；researcher.md 还硬性 cap 工具调用 ≤15 次 + 输出格式锁死简短 Findings。结果是用户让调研 GitHub 项目（warpdotdev/warp）时，Supervisor 派 researcher，researcher 没 Bash 不能 git clone，3 轮 134s 出二手资料拼的浅层报告
+- 修复：(a) Supervisor prompt 改成"角色能力速查 + 选择原则"，删强制流程；(b) Verdict YAML 改 opt-in；(c) 4 个 agent.md 解上下游硬绑定；(d) researcher 解 15 次上限 + 输出格式可选；(e) 新增 `agents/code-investigator.md` 带 Bash 的深度调研角色；(f) canUseTool 加高风险 Bash 守卫（rm -rf / / sudo / publish / push --force）
+- 教训：**prompt 里写"流程图"是反模式**。LLM 看到 1→2→3 会机械执行；正确做法是描述每个角色的能力和适用场景，把组合权交给 LLM。安全网应放代码层（canUseTool / 工具白名单），不要靠 prompt 自律

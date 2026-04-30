@@ -6,6 +6,19 @@
 
 ## [Unreleased]
 
+### Changed
+- **Supervisor 灵活化重构**（task.ts + agents/*.md）—— 把"四阶段流水线"prompt 改成"能力图谱 + 选择原则"
+  - 删除 Supervisor prompt 中"推荐工作流 1.Researcher → 2.Planner → 3.Generator → 4.Evaluator"硬编码
+  - 删除"任何代码改动必须 Evaluator 验收""复杂度 >3 文件必须 Contract"等强制规则，改为按风险/任务规模自由判断
+  - Verdict YAML 改为 **opt-in**：Supervisor 显式要求时 evaluator 才输出，默认自然语言总结
+  - 4 个角色的 prompt 解除上下游硬绑定（planner 不再要求"必须有 Researcher Findings"、generator 不再"缺 Plan 立即拒绝"、evaluator 描述去掉"无例外"）
+  - researcher 解锁 15 次工具调用硬上限 + 输出格式不再强制简短 Findings 模板
+- **canUseTool 扩展**：拦截高风险 Bash（`rm -rf /` / `sudo` / `npm publish` / `git push --force`）；每个 subagent 角色调用 cap（默认 4 次/角色，env `MINICLAW_SUBAGENT_ROLE_CAP` 可调）防失控循环
+- **Telemetry**：task 结束日志新增 `subagents=[role1→role2→...]` 字段，便于事后观察 LLM 实际编排路径
+
+### Added
+- **`agents/code-investigator.md`** —— 带 Bash 的深度调研角色，可 `git clone` + Bash 遍历仓库，补 researcher 工具短板（如调研外部 GitHub 项目）
+
 ### Added
 - **Stage 子系统**（`pnpm stage` / `pnpm stage:repl`）—— CLI 多 agent 群聊控制台
   - Ink TUI 4 pane（Roster / Stream / Detail / CommandBar），实时 spinner / 状态色 / streaming

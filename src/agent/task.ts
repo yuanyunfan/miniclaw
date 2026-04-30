@@ -89,7 +89,46 @@ function formatUsage(usage: unknown): string | undefined {
   return parts.length ? parts.join(" · ") : undefined;
 }
 
-export const __testables = { fmtTokens, formatUsage };
+export const IDENTITY_LINE_TASK = "你是 MiniClaw，一个简洁高效的 AI 助手，通过 Discord 与用户沟通。回复时始终以 MiniClaw 的身份自居，不要说自己是 Claude 或 Claude Code。";
+
+export const __testables = { fmtTokens, formatUsage, buildSupervisorBlock, IDENTITY_LINE_TASK };
+
+export function buildSupervisorBlock(subagentNames: string[]): string {
+  if (!subagentNames.length) return "";
+  return [
+    "## 你的角色：Supervisor",
+    `你可以通过 Agent 工具分派任务给以下角色化 subagent：${subagentNames.join(" / ")}。`,
+    "**这是能力图谱，不是流水线**——根据任务自由组合，不存在「必须按 1→2→3 顺序」的硬规定。",
+    "",
+    "## 角色能力速查",
+    "- **researcher**：本地代码快速 Grep/Read 调研。无 Bash。适合「这个函数在哪定义」「配置怎么读」等轻量本地问题。",
+    "- **code-investigator**：可 git clone、可 Bash 遍历的深度调研。适合「调研 GitHub 项目」「理解大型代码库」「跑命令查现状」。**只读心智**——不写、不 commit、不 push。",
+    "- **planner**：把模糊需求拆成步骤化实现计划。可写计划但不写代码。适合多文件改动 / 新抽象 / 不确定路径。",
+    "- **generator**：实际写代码、改文件、跑构建。**任何代码改动唯一的执行者**。",
+    "- **evaluator**：独立审视代码改动 + 跑验收命令。不修代码，只判定。",
+    "",
+    "## 选择原则（判断，不是流程）",
+    "- 简单任务（单 typo / 一行修复）：直接 generator 一步搞定，不必 4 角色都跑",
+    "- 调研类任务：根据是否需要执行命令选 researcher（轻量）或 code-investigator（深度，能 git clone）",
+    "- 写代码任务：是否要 evaluator 取决于风险——生产代码改动**强烈建议**走 evaluator；纯本地实验或低风险可跳过",
+    "- 复杂多文件任务：planner 先出计划再 generator 实施；不确定方案时让 generator 先输出 Contract（在 prompt 里写「先输出 Contract 不要实施」）",
+    "",
+    "## 编排纪律",
+    "1. **角色物理隔离**：工具白名单已 SDK 强制（researcher/planner/evaluator 不能写、generator 没有 Agent）。你按「角色定位」派活，不要硬塞越界请求",
+    "2. **fresh context**：subagent **看不到**你的对话历史。把它需要的所有信息（用户原始需求 / 上一角色输出 / 文件路径 / 约束）**显式贴进** prompt",
+    "3. **文件即真相**（中等以上任务推荐）：用 Write 把长输出写到 `.miniclaw-task/<phase>.md`，下一角色 prompt 里只引用路径让其自己 Read，避免 context 膨胀",
+    "",
+    "## Verdict YAML（按需启用，不是默认）",
+    "如果你需要程序化判断 evaluator 结论以决定是否触发修复循环，在调用 evaluator 时**显式**写：",
+    '> "请在末尾输出 `## Machine-Readable Verdict` YAML 块，含 verdict / fix_list / escalate"',
+    "拿到 YAML 后你可按 PASS/CONDITIONAL_PASS/FAIL 路由：FAIL 可以再调一次 generator 进入 Fix 模式（prompt 里贴 fix_list 原文）。**自动迭代建议不超过 2 轮**——超过说明问题超出当前 spec，应升级用户。",
+    "如果不需要程序化路由，让 evaluator 用自然语言总结即可。",
+    "",
+    "## 通用约束",
+    "- **不要把 subagent 原文整段抛给用户** —— 你负责整合 + 总结，subagent 详细输出留在执行轨迹里",
+    "- **禁止调用 `Skill triad` 或 `Skill triad-resume`** —— 这些是 CLI slash command，与 SDK 流程不兼容",
+  ].join("\n");
+}
 
 const activeTasks = new Map<string, AbortController>();
 
@@ -136,47 +175,15 @@ export async function executeTask(params: {
 
   try {
     const memoryBlock = buildMemoryPrompt();
-    const identityLine = "你是 MiniClaw，一个简洁高效的 AI 助手，通过 Discord 与用户沟通。回复时始终以 MiniClaw 的身份自居，不要说自己是 Claude 或 Claude Code。";
+    const identityLine = IDENTITY_LINE_TASK;
+
+    const subagentCalls: string[] = [];
+    const SUBAGENT_PER_ROLE_CAP = parseInt(process.env.MINICLAW_SUBAGENT_ROLE_CAP ?? "4", 10);
 
     const subagents = loadSubagents();
     const subagentNames = listSubagentNames();
     const mcpServers = loadMcpServers();
-    const supervisorBlock = subagentNames.length
-      ? [
-          "## 你的角色：Supervisor",
-          `你可以通过 Agent 工具分派任务给以下角色化 subagent：${subagentNames.join(" / ")}。`,
-          "",
-          "**推荐工作流（复杂任务）**：",
-          "1. **Researcher** 调研现状、收集 file:line 证据",
-          "2. **Planner** 基于调研结果输出步骤化实现计划",
-          "3. **Generator** 按计划执行写代码（复杂任务先 Contract 再实施 —— 见下文）",
-          "4. **Evaluator** 独立验收（必跑构建/测试），输出 `## Machine-Readable Verdict` YAML 块",
-          "",
-          "## 编排纪律（必须遵守）",
-          "1. **角色严格隔离** —— Researcher / Planner 只读不写；Generator 不验收；Evaluator 不修改代码（这些都已用 SDK 工具白名单物理强制，但你别让 subagent 越界）",
-          "2. **每次 Agent 调用都是 fresh context** —— subagent **看不到**你的对话历史。在 prompt 里完整传递它需要的所有信息（前一阶段输出 / 文件路径 / 用户原始需求 / 约束）",
-          "3. **文件即真相**（中等以上任务推荐）—— 你可以用 Write 把 Researcher findings 写到 `.miniclaw-task/research.md`，把 Planner spec 写到 `.miniclaw-task/spec.md`，下一阶段调用只在 prompt 里**引用路径**，subagent 自己 Read，避免 context 膨胀",
-          "",
-          "## Verdict 解析与自动迭代",
-          "Evaluator 末尾会输出 `## Machine-Readable Verdict` YAML 块，含 `verdict` (PASS/CONDITIONAL_PASS/FAIL) + `fix_list` + `escalate`。按以下规则路由：",
-          "",
-          "- `verdict: PASS` → 整合各 subagent 输出，回复用户",
-          "- `verdict: CONDITIONAL_PASS` → 主功能可交付，把 fix_list 中的 warning 项一并报告给用户决定是否修复（不强制迭代）",
-          "- `verdict: FAIL` → **自动修复循环**：调用 Generator 进入 Fix 模式（prompt 里贴 fix_list YAML 原文），修完再调 Evaluator。**最多 2 轮自动迭代**",
-          "- `escalate: true` → **立即停止**，把 escalate_reason + 当前进度报告给用户，不再尝试自动修复",
-          "- 2 轮迭代后仍 FAIL → 升级用户，告知尝试历史 + 最后 review 摘要",
-          "",
-          "## 复杂度判断与 Contract 模式",
-          "- 简单任务（单文件 typo / 查询 / 不超过 30 行改动）：可跳过 Researcher/Planner，直接 Generator → Evaluator",
-          "- 中等任务（2-3 文件 / 明确改动）：Researcher → Planner → Generator → Evaluator 直走",
-          "- 复杂任务（>3 文件 / 新抽象 / 不确定方案）：在调用 Generator 时**首轮要求 Contract 模式**（在 prompt 里写：\"先输出 Contract 不要实施\"）→ 你审 Contract → 第二轮调用 Generator 写实现 → Evaluator",
-          "",
-          "## 通用约束",
-          "- **任何代码改动后必须让 Evaluator 验收** —— 即便简单任务也不例外",
-          "- **不要把 subagent 的原文整段抛给用户** —— 你负责整合 + 总结，subagent 详细输出留在执行轨迹里",
-          "- **禁止调用 `Skill triad` 或 `Skill triad-resume`** —— 这些是 CLI slash command，与 SDK 流程不兼容；用项目自定义的 4 角色 subagent 完成多阶段任务",
-        ].join("\n")
-      : "";
+    const supervisorBlock = buildSupervisorBlock(subagentNames);
 
     const appendParts = [identityLine, supervisorBlock, memoryBlock].filter(Boolean);
 
@@ -224,8 +231,29 @@ export async function executeTask(params: {
           if (toolName === "Skill" && skillName && BLOCKED_SKILLS.has(skillName)) {
             return {
               behavior: "deny" as const,
-              message: `${skillName} 在 miniclaw 中被禁用（它是面向 CLI 交互的 slash command，与 SDK Discord bot 流程不匹配）。请改用 Researcher / Planner / Generator / Evaluator subagent 完成多阶段任务。`,
+              message: `${skillName} 在 miniclaw 中被禁用（它是面向 CLI 交互的 slash command，与 SDK Discord bot 流程不匹配）。请改用项目角色化 subagent 完成多阶段任务。`,
             };
+          }
+          if (toolName === "Agent" || toolName === "Task") {
+            const role = String((input as { subagent_type?: string }).subagent_type ?? "general");
+            const used = subagentCalls.filter((r) => r === role).length;
+            if (used >= SUBAGENT_PER_ROLE_CAP) {
+              return {
+                behavior: "deny" as const,
+                message: `subagent ${role} 已被调用 ${used} 次（cap=${SUBAGENT_PER_ROLE_CAP}）。继续重复调用很可能是失控循环——请整合现有输出回复用户，或换不同角色，必要时升级用户。`,
+              };
+            }
+            subagentCalls.push(role);
+          }
+          if (toolName === "Bash") {
+            const cmd = String((input as { command?: string }).command ?? "");
+            const DESTRUCTIVE = /\b(rm\s+-rf?\s+\/(?!tmp\/|var\/folders\/)|sudo\b|npm\s+publish|pnpm\s+publish|git\s+push\s+--force(?!-with-lease))\b/;
+            if (DESTRUCTIVE.test(cmd)) {
+              return {
+                behavior: "deny" as const,
+                message: `Bash 命令被拒绝：检测到高风险破坏性操作 (${cmd.slice(0, 80)})。如确需执行，请由用户手动操作。`,
+              };
+            }
           }
           return { behavior: "allow" as const, updatedInput: input };
         },
@@ -349,10 +377,14 @@ export async function executeTask(params: {
     });
 
     const wallMs = Date.now() - startedAt;
+    const subagentTrace = subagentCalls.length
+      ? ` subagents=[${subagentCalls.join("→")}]`
+      : "";
     log.info(
       `${lastResult.success ? "✓" : "✗"} ${shortId} ${lastResult.success ? "done" : "failed"} ` +
       `turns=${lastResult.turns} cost=$${lastResult.costUsd.toFixed(4)} ` +
       `sdk=${lastResult.durationMs}ms wall=${wallMs}ms tools=${toolStep}` +
+      subagentTrace +
       (lastResult.tokensSummary ? ` ${lastResult.tokensSummary}` : "")
     );
 

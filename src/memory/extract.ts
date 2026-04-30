@@ -5,6 +5,10 @@ import { createLogger } from "../lib/log.js";
 
 const log = createLogger("memory-extract");
 
+function buildExtractUserPrompt(userMsg: string, assistantReply: string, existingBlock: string): string {
+  return `用户消息: ${userMsg}\n\n助手回复: ${assistantReply.slice(0, 1000)}${existingBlock}\n\n请提取值得长期记住的信息，输出 JSON 数组:`;
+}
+
 const EXTRACT_SYSTEM = `你是一个记忆提取助手。分析用户和助手的对话，提取值得长期记住的信息。
 
 只提取以下类型的信息：
@@ -48,7 +52,7 @@ export async function extractMemories(
       messages: [
         {
           role: "user",
-          content: `用户消息: ${userMsg}\n\n助手回复: ${assistantReply.slice(0, 1000)}${existingBlock}\n\n请提取值得长期记住的信息，输出 JSON 数组:`,
+          content: buildExtractUserPrompt(userMsg, assistantReply, existingBlock),
         },
       ],
     });
@@ -69,3 +73,5 @@ export async function extractMemories(
     log.error("Memory extraction failed:", err);
   }
 }
+
+export const __testables = { EXTRACT_SYSTEM, buildExtractUserPrompt };

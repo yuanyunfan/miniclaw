@@ -194,4 +194,4 @@ function buildHistoryPrompt(rows: Array<{ role: string; content: string }>): str
   return `<conversation_history>\n${lines.join("\n")}\n</conversation_history>`;
 }
 
-export const __testables = { formatToolLine, buildHistoryPrompt };
+export const __testables = { formatToolLine, buildHistoryPrompt, IDENTITY_LINE };
