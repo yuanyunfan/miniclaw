@@ -17,6 +17,7 @@ flowchart LR
     end
 
     subgraph LocalMac["本机 (Mac)"]
+        Term([终端 TTY])
         subgraph MiniClaw["MiniClaw bot 进程 (Node 22)"]
             BOT["bot.ts<br/>事件路由 + thread 续话"]
             CHAT["agent/chat.ts<br/>@mention 轻量对话"]
@@ -27,6 +28,14 @@ flowchart LR
             MCP["agent/mcp.ts<br/>从 ~/.claude.json 复用 MCP"]
         end
 
+        subgraph Stage["Stage 子系统进程 (pnpm stage)"]
+            STG_UI["stage/ui/*<br/>Ink 4-pane TUI"]
+            STG_ORCH["stage/orchestrator.ts<br/>多 agent 队列 + 三层 cap"]
+            STG_AGT["stage/agent.ts<br/>chatOnce 复用 chat-tools"]
+            STG_SM["stage/stage-manager.ts<br/>auto 模式 next_speaker"]
+            STG_PERS["stage/personas.ts<br/>加载 personas/*.md"]
+        end
+
         subgraph UserCfg["~/.miniclaw/ 用户级数据"]
             UC1["cron/*.yaml<br/>15 个定时 job"]
             UC2["cron/state.json<br/>last_run/completed 持久化"]
@@ -34,7 +43,10 @@ flowchart LR
             UC4["skills/*.md<br/>用户级 subagent"]
             UC5["memories/MEMORY.md<br/>长期记忆（hermes 风格）"]
             UC6["channel-map.json<br/>setup 输出"]
-            DB[("data.db<br/>SQLite WAL<br/>tasks · chat_history")]
+            UC7["personas/*.md<br/>Stage 用户级 persona<br/>（覆盖 repo personas/）"]
+            UC8["scenes/*.md<br/>/save 输出的 transcript"]
+            UC9["logs/miniclaw-{out,error}.log<br/>pm2 日志落盘"]
+            DB[("data.db<br/>SQLite WAL<br/>tasks · chat_history · scenes · scene_messages")]
         end
 
         subgraph Raven["raven 反代 (:7024)"]
@@ -82,16 +94,31 @@ flowchart LR
 
     MiniClaw -->|"Discord REST<br/>send / edit message / attach files"| DC
 
+    %% Stage 子系统（独立进程，pnpm stage 启动）
+    User -->|"键盘输入"| Term
+    Term -->|"slash + @mention"| STG_UI
+    STG_UI --> STG_ORCH
+    STG_ORCH -->|"chatOnce"| STG_AGT
+    STG_ORCH -.->|"auto 模式队列空"| STG_SM
+    STG_AGT -->|"messages.stream"| Raven
+    STG_SM -->|"messages.create"| Raven
+    STG_PERS -.->|"读"| PERSREPO["personas/*.md (repo)"]
+    STG_PERS -.->|"读（覆盖）"| UC7
+    STG_ORCH -->|"append"| DB
+    STG_ORCH -->|"/save 写"| UC8
+
     classDef user fill:#fff4e6,stroke:#f59e0b,stroke-width:2px
     classDef discord fill:#5865f2,color:#fff,stroke:#404eed
     classDef miniclaw fill:#e6f4ff,stroke:#1677ff
+    classDef stage fill:#fff7e6,stroke:#fa8c16
     classDef usercfg fill:#f9f0ff,stroke:#722ed1
     classDef raven fill:#fff1f0,stroke:#cf1322
     classDef cloud fill:#f6ffed,stroke:#52c41a
-    class User user
+    class User,Term user
     class DC,SC discord
     class BOT,CHAT,TASK,HANDLERS,SUBA,CRON,MCP miniclaw
-    class UC1,UC2,UC3,UC4,UC5,UC6,DB,AGENTS,MCPCFG usercfg
+    class STG_UI,STG_ORCH,STG_AGT,STG_SM,STG_PERS stage
+    class UC1,UC2,UC3,UC4,UC5,UC6,UC7,UC8,UC9,DB,AGENTS,MCPCFG,PERSREPO usercfg
     class RAVEN raven
     class COPILOT,EXA,CTX7 cloud
 ```
@@ -99,6 +126,7 @@ flowchart LR
 **关键设计点**
 
 - **三入口**：`@mention` 走 `chat.ts`（轻量对话）；`/task` 走 `task.ts`（Supervisor 模式 + subagent 编排）；`cron` 调度自动触发
+- **Stage 是对偶子系统**：`pnpm stage` 启另一进程（Ink TUI），多 agent 群聊编排，与 Discord bot 路径独立但共享 chat-tools / db / config / log（详见 `docs/stage.md`）
 - **代码 vs 用户级数据严格分离**：
   - 代码在 git repo（`agents/*.md` / `src/`）
   - 用户级数据全在 `~/.miniclaw/`（cron / skills / scripts / memories / channel-map）
@@ -194,7 +222,7 @@ sequenceDiagram
 
 ## 3. /task Supervisor + Verdict 自动迭代
 
-> 场景：`/task prompt:"加 /metrics 命令"`，看 4 角色 subagent + verdict YAML 自动循环
+> 场景：`/task prompt:"加 /metrics 命令"`，看 5 角色 subagent 由 Supervisor 按"能力图谱"自由编排（非固定流水线）
 
 ```mermaid
 sequenceDiagram
@@ -220,14 +248,14 @@ sequenceDiagram
 
     T->>SA: loadSubagents()
     SA->>SA: 读 agents/*.md (repo)<br/>+ ~/.miniclaw/skills/*.md (user)
-    SA-->>T: { researcher, planner, generator, evaluator, ...user skills }
+    SA-->>T: { researcher, code-investigator, planner, generator, evaluator, ...user skills }
 
-    T->>T: buildMemoryPrompt() + supervisorBlock<br/>(角色边界 + verdict 路由 + Contract 触发)
+    T->>T: buildMemoryPrompt() + supervisorBlock<br/>(能力图谱 + 选择原则 + 编排纪律)
 
     T->>Q: query(...)
-    Note over T,Q: prompt: 有附件→AsyncIterable / 否则→string<br/>systemPrompt: claude_code + supervisorBlock<br/>agents: researcher / planner / generator / evaluator<br/>allowedTools: Read / Write / Edit / Bash / Agent / mcp__exa / mcp__context7<br/>canUseTool: 拦 Skill triad / triad-resume<br/>abortController + 可选 resume
+    Note over T,Q: prompt: 有附件→AsyncIterable / 否则→string<br/>systemPrompt: claude_code + supervisorBlock<br/>agents: researcher / code-investigator / planner / generator / evaluator<br/>allowedTools: Read / Write / Edit / Bash / Agent / mcp__exa / mcp__context7<br/>canUseTool: 拦 Skill triad/triad-resume + 高风险 Bash<br/>abortController + 可选 resume
 
-    Note over Q: Supervisor 决定流程：<br/>简单任务可跳过部分阶段；<br/>>3 文件复杂任务先 Contract
+    Note over Q: Supervisor 按任务自由组合角色：<br/>简单任务可直接 generator 一步；<br/>调研类按是否需 Bash 选 researcher/code-investigator；<br/>不固定 1→2→3→4 流水线
 
     Q->>Q: tool_use Agent researcher  调研代码
     Q->>R: 嵌套 query Researcher fresh context
@@ -271,18 +299,19 @@ sequenceDiagram
 
 | 角色 | 职责 | 工具集（物理隔离） | 输出契约 |
 |------|------|------|------|
-| **Researcher** | 调研代码、收集 file:line 证据 | Read/Glob/Grep/WebFetch/MCP search | findings markdown |
-| **Planner** | 基于调研出步骤化计划 | Read/Glob/Grep/WebFetch | spec + 验收命令清单 |
-| **Generator** | 按计划写代码（**或先 Contract**） | Read/Write/Edit/Bash/Glob/Grep | 改动报告（不下"完成宣言"） |
-| **Evaluator** | 独立验收 | Read/Grep/Glob/Bash | **`## Machine-Readable Verdict` YAML** |
+| **researcher** | 本地代码轻量调研、Findings + file:line | Read/Glob/Grep/WebFetch/MCP search | findings markdown |
+| **code-investigator** | 深度调研（git clone / Bash 遍历仓库） | Read/Glob/Grep/**Bash**/WebFetch/MCP | 自由格式调研报告 |
+| **planner** | 把模糊需求拆步骤化计划 | Read/Glob/Grep/WebFetch | spec + 验收命令清单 |
+| **generator** | 写代码（Supervisor 显式要求时先 Contract） | Read/Write/Edit/Bash/Glob/Grep | 改动报告（不下"完成宣言"） |
+| **evaluator** | 独立验收 | Read/Grep/Glob/Bash | 自然语言总结 + **可选 Verdict YAML** |
 
 **为什么这样设计**
 
-- **物理工具隔离**：Researcher / Planner 没 Write/Edit 权限，模型即便冲动也写不了文件
+- **物理工具隔离**：researcher / planner / evaluator 没 Write/Edit；generator 没 Agent；code-investigator 有 Bash 但靠 prompt + canUseTool 守住"只读心智"
+- **Supervisor prompt 是能力图谱不是流水线**：4+1 个角色由 LLM 按任务自由组合，不强制 1→2→3→4 顺序；简单任务可直接 generator 一步
 - **Context 隔离**：subagent 看不到主 agent 历史，Supervisor 调用时**必须完整传上下文**
-- **机器可读 verdict**：Evaluator 输出 YAML → Supervisor 程序化解析 → 决定 PASS / 自动 Fix 循环 / escalate
-- **Contract 模式**：复杂任务 (>3 文件) Generator 先输出 Contract → Supervisor 审 → 第二轮真实施
-- **canUseTool gate** 拦 `Skill(triad)` / `Skill(triad-resume)`：防 Supervisor 自动调用 CLI-only slash command
+- **Verdict YAML 是 opt-in**：只在 Supervisor 显式要求时 evaluator 才输出机器可读 YAML 触发自动 Fix 循环；默认自然语言总结
+- **canUseTool gate**：拦 `Skill(triad)` / `Skill(triad-resume)`、拦高风险 Bash（`rm -rf /` / `sudo` / `npm publish` / `git push --force`）
 
 ---
 
@@ -343,7 +372,7 @@ flowchart LR
 
 ```
 ~/.miniclaw/
-├── data.db                  # SQLite: tasks + chat_history（运行时数据）
+├── data.db                  # SQLite: tasks + chat_history + scenes + scene_messages
 ├── memories/
 │   └── MEMORY.md            # 长期记忆（4 section + § 分隔，可 vim 编辑）
 ├── cron/
@@ -354,6 +383,12 @@ flowchart LR
 │   └── ...                  # 可执行权限必需 (chmod +x)
 ├── skills/
 │   └── *.md                 # 用户级 subagent (覆盖 repo agents/)
+├── personas/
+│   └── *.md                 # Stage 用户级 persona (覆盖 repo personas/)
+├── scenes/
+│   └── *.md                 # Stage `/save <name>` 输出的 transcript
+├── logs/
+│   └── miniclaw-{out,error}.log  # pm2 模式日志（配置在 ecosystem.config.cjs）
 └── channel-map.json         # setup-miniclaw-channels.ts 输出
 ```
 
@@ -438,6 +473,26 @@ erDiagram
     memories_LEGACY {
         TEXT NOTE "已迁移到 ~/.miniclaw/memories/MEMORY.md，表保留作冷备不再读写"
     }
+    scenes {
+        TEXT id PK "uuid"
+        TEXT name "可选，/save 命名后存入"
+        TEXT started_at
+        TEXT ended_at
+        TEXT mode "manual/auto"
+        REAL total_cost_usd
+        INTEGER total_turns
+        TEXT transcript_path "~/.miniclaw/scenes/<name>.md"
+    }
+    scene_messages {
+        INTEGER id PK
+        TEXT scene_id FK
+        TEXT ts
+        TEXT speaker "'user' 或 persona id"
+        TEXT content
+        TEXT tool_calls_json "ToolCallRecord[]"
+        REAL cost_usd
+    }
+    scenes ||--o{ scene_messages : "has"
 ```
 
 ---
