@@ -11,6 +11,9 @@ import { buildMemoryPrompt } from "../memory/inject.js";
 import { extractMemories } from "../memory/extract.js";
 import { createLogger } from "../lib/log.js";
 import { CHAT_TOOLS, executeTool } from "./chat-tools.js";
+import type { CodexInputEntry } from "./codex.js";
+import { codexInput, codexThreadOptions, formatCodexItemLine, getCodexClient, withCodexTimeout } from "./codex.js";
+import { formatCodexUsage } from "./usage.js";
 
 const log = createLogger("chat");
 
@@ -30,6 +33,9 @@ const IDENTITY_LINE = buildChatIdentityLine();
 let client: Anthropic | null = null;
 function getClient(): Anthropic {
   if (!client) {
+    if (!config.anthropicApiKey) {
+      throw new Error("ANTHROPIC_API_KEY is required when MINICLAW_AGENT_PROVIDER=claude");
+    }
     client = new Anthropic({
       apiKey: config.anthropicApiKey,
       // 显式传 baseURL：claude-agent-sdk 在 import 时会篡改 process.env.ANTHROPIC_BASE_URL
@@ -46,6 +52,7 @@ export async function chat(
   prompt: string,
   attachmentBlocks?: ContentBlockParam[],
   callbacks?: ChatCallbacks,
+  attachmentCodexInputs?: CodexInputEntry[],
 ): Promise<string> {
   const startedAt = Date.now();
   const chShort = channelId.slice(-6);
@@ -60,6 +67,20 @@ export async function chat(
   const historyBlock = buildHistoryPrompt(history.slice(0, -1));
   const systemParts = [IDENTITY_LINE, memoryBlock, historyBlock].filter(Boolean);
   const system = systemParts.join("\n\n");
+
+  if (config.agentProvider === "codex") {
+    const result = await chatWithCodex(system, prompt, attachmentCodexInputs, callbacks);
+    log.info(
+      `✓ chat/codex ch=${chShort} ${Date.now() - startedAt}ms ` +
+      `tools=${result.toolCount} reply.len=${result.reply.length}` +
+      (result.tokensSummary ? ` ${result.tokensSummary}` : "")
+    );
+    addChatMessage(channelId, userId, "assistant", result.reply);
+    extractMemories(prompt, result.reply).catch((err) => {
+      log.error("Background memory extraction error:", err);
+    });
+    return result.reply;
+  }
 
   // 首轮 user message：附件 + 文字
   const userContent: ContentBlockParam[] = [
@@ -81,7 +102,7 @@ export async function chat(
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     iters++;
     const stream = ant.messages.stream({
-      model: config.model,
+      model: config.claudeModel,
       max_tokens: MAX_TOKENS_PER_TURN,
       system,
       tools: CHAT_TOOLS,
@@ -187,3 +208,63 @@ function buildHistoryPrompt(rows: Array<{ role: string; content: string }>): str
 }
 
 export const __testables = { formatToolLine, buildHistoryPrompt, IDENTITY_LINE };
+
+async function chatWithCodex(
+  system: string,
+  prompt: string,
+  attachmentCodexInputs?: CodexInputEntry[],
+  callbacks?: ChatCallbacks,
+): Promise<{ reply: string; tokensSummary?: string; toolCount: number }> {
+  const codex = getCodexClient();
+  const thread = codex.startThread(codexThreadOptions("chat", config.defaultCwd));
+  const ctrl = new AbortController();
+  const timeoutCtrl = withCodexTimeout(ctrl.signal, config.codex.timeoutMs);
+  const fullPrompt = [
+    system,
+    "你正在处理 Discord 轻量聊天。默认直接回答；只有在需要确认本地文件、运行只读命令或搜索资料时才使用工具。用中文回复。",
+    `<user_message>\n${prompt}\n</user_message>`,
+  ].filter(Boolean).join("\n\n");
+
+  const { events } = await thread.runStreamed(
+    codexInput(fullPrompt, attachmentCodexInputs),
+    { signal: timeoutCtrl.signal },
+  );
+
+  let reply = "";
+  let tokensSummary: string | undefined;
+  let toolCount = 0;
+  let lastToolLine = "";
+
+  for await (const event of events) {
+    switch (event.type) {
+      case "turn.completed":
+        tokensSummary = formatCodexUsage(event.usage);
+        break;
+      case "turn.failed":
+        throw new Error(event.error.message);
+      case "error":
+        throw new Error(event.message);
+      case "item.started":
+      case "item.updated":
+      case "item.completed":
+        if (event.item.type === "agent_message") {
+          reply = event.item.text;
+          callbacks?.onText(reply);
+          break;
+        }
+        {
+          const line = formatCodexItemLine(event.item);
+          if (line && line !== lastToolLine) {
+            toolCount++;
+            lastToolLine = line;
+            callbacks?.onToolUse(line);
+          }
+        }
+        break;
+    }
+  }
+
+  if (!timeoutCtrl.signal.aborted) timeoutCtrl.abort();
+
+  return { reply: reply.trim() || "[无文字回复]", ...(tokensSummary ? { tokensSummary } : {}), toolCount };
+}

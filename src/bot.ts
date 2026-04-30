@@ -18,6 +18,7 @@ import { parseExplicitMemory } from "./memory/parse.js";
 import { addMemory } from "./store/memory.js";
 import { processAttachments } from "./discord/attachments.js";
 import { createLogger } from "./lib/log.js";
+import { assertProviderSession } from "./agent/session.js";
 
 const log = createLogger("bot");
 
@@ -42,6 +43,12 @@ export function createBot(): Client {
     const isInThread = "isThread" in message.channel && message.channel.isThread();
     const continuableTask = isInThread ? getTaskByThreadId(message.channel.id) : undefined;
     if (continuableTask && continuableTask.session_id && continuableTask.discord_user_id !== "cron") {
+      try {
+        assertProviderSession(continuableTask.session_id, config.agentProvider);
+      } catch (err) {
+        await message.reply(`❌ ${err instanceof Error ? err.message : String(err)}`);
+        return;
+      }
       if (processed.has(message.id)) return;
       processed.set(message.id, Date.now());
       const followupContent = message.content.trim();
@@ -50,12 +57,14 @@ export function createBot(): Client {
 
       const newTaskId = uuid();
       let followupBlocks: Awaited<ReturnType<typeof processAttachments>>["blocks"] = [];
+      let followupCodexInputs: Awaited<ReturnType<typeof processAttachments>>["codexInputs"] = [];
       if (followupAtts.length) {
         const r = await processAttachments(followupAtts, {
           cwd: continuableTask.cwd ?? config.defaultCwd,
           scope: newTaskId,
         });
         followupBlocks = r.blocks;
+        followupCodexInputs = r.codexInputs;
         for (const n of r.notices) {
           if (message.channel.isSendable()) await message.channel.send(n).catch(() => {});
         }
@@ -78,6 +87,7 @@ export function createBot(): Client {
           channel: message.channel,
           resumeSessionId: continuableTask.session_id,
           attachmentBlocks: followupBlocks,
+          attachmentCodexInputs: followupCodexInputs,
         }).catch((e) => {
           if (message.channel.isSendable()) {
             void message.channel.send(`❌ resume error: ${e?.message ?? e}`);
@@ -106,9 +116,11 @@ export function createBot(): Client {
 
     const atts = Array.from(message.attachments.values());
     let attachmentBlocks: Awaited<ReturnType<typeof processAttachments>>["blocks"] = [];
+    let attachmentCodexInputs: Awaited<ReturnType<typeof processAttachments>>["codexInputs"] = [];
     if (atts.length) {
       const r = await processAttachments(atts, { scope: message.id });
       attachmentBlocks = r.blocks;
+      attachmentCodexInputs = r.codexInputs;
       for (const n of r.notices) {
         if (message.channel.isSendable()) await message.channel.send(n).catch(() => {});
       }
@@ -167,7 +179,7 @@ export function createBot(): Client {
         onText: (_text) => {},
       };
 
-      const reply = await chat(message.channel.id, message.author.id, effectivePrompt, attachmentBlocks, callbacks);
+      const reply = await chat(message.channel.id, message.author.id, effectivePrompt, attachmentBlocks, callbacks, attachmentCodexInputs);
       if (typingInterval) clearInterval(typingInterval);
       await flushSteps();
 

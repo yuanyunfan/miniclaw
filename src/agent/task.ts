@@ -1,4 +1,3 @@
-import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { SendableChannels } from "discord.js";
 import type { ContentBlockParam } from "@anthropic-ai/sdk/resources/messages.js";
 import { rmSync } from "node:fs";
@@ -14,6 +13,16 @@ import { loadMcpServers } from "./mcp.js";
 import { IDENTITY_LINE_TASK } from "./identity.js";
 import { loadPrompt } from "./prompts.js";
 import { createLogger } from "../lib/log.js";
+import type { CodexInputEntry } from "./codex.js";
+import {
+  codexInput,
+  codexThreadOptions,
+  formatCodexItemLine,
+  getCodexClient,
+  withCodexTimeout,
+} from "./codex.js";
+import { assertProviderSession, formatSessionId } from "./session.js";
+import { fmtTokens, formatAnthropicUsage, formatCodexUsage } from "./usage.js";
 
 const log = createLogger("task");
 
@@ -68,28 +77,7 @@ export interface TaskResult {
   tokensSummary?: string;
 }
 
-function fmtTokens(n?: number): string {
-  if (n === undefined || n === null) return "-";
-  if (n < 1000) return String(n);
-  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}K`;
-  return `${(n / 1_000_000).toFixed(2)}M`;
-}
-
-function formatUsage(usage: unknown): string | undefined {
-  if (!usage || typeof usage !== "object") return undefined;
-  const u = usage as {
-    input_tokens?: number;
-    output_tokens?: number;
-    cache_read_input_tokens?: number;
-    cache_creation_input_tokens?: number;
-  };
-  const parts: string[] = [];
-  if (u.input_tokens !== undefined) parts.push(`in: ${fmtTokens(u.input_tokens)}`);
-  if (u.output_tokens !== undefined) parts.push(`out: ${fmtTokens(u.output_tokens)}`);
-  if (u.cache_read_input_tokens) parts.push(`cache hit: ${fmtTokens(u.cache_read_input_tokens)}`);
-  if (u.cache_creation_input_tokens) parts.push(`cache write: ${fmtTokens(u.cache_creation_input_tokens)}`);
-  return parts.length ? parts.join(" · ") : undefined;
-}
+const formatUsage = formatAnthropicUsage;
 
 export const __testables = { fmtTokens, formatUsage, buildSupervisorBlock, IDENTITY_LINE_TASK };
 
@@ -116,19 +104,225 @@ export function cancelTask(taskId: string): boolean {
   return true;
 }
 
-export async function executeTask(params: {
+interface ExecuteTaskParams {
   taskId: string;
   prompt: string;
   cwd: string;
   channel: SendableChannels;
   resumeSessionId?: string;
   attachmentBlocks?: ContentBlockParam[];
+  attachmentCodexInputs?: CodexInputEntry[];
   /**
    * "embed"（默认）：发 ✅ 任务完成 embed + 执行轨迹（/task 用）
    * "raw"：直接发 LLM 输出文本，无任何元数据装饰（cron / 程序化触发用）
    */
   outputMode?: "embed" | "raw";
-}): Promise<TaskResult> {
+}
+
+function pushCompactedLine(lines: string[], line: string): boolean {
+  const lastIdx = lines.length - 1;
+  if (lastIdx >= 0) {
+    const last = lines[lastIdx];
+    const baseLast = last.replace(/\s+\(×\d+\)$/, "");
+    if (baseLast === line) {
+      const m = last.match(/\(×(\d+)\)$/);
+      const next = m ? parseInt(m[1], 10) + 1 : 2;
+      lines[lastIdx] = `${line} (×${next})`;
+      return false;
+    }
+  }
+  lines.push(line);
+  return true;
+}
+
+async function updateProgressTail(
+  progress: ProgressReporter,
+  channel: SendableChannels,
+  lines: string[],
+): Promise<void> {
+  const tail = lines.slice(-PROGRESS_TAIL_LINES);
+  const omitted = lines.length - tail.length;
+  const header = omitted > 0 ? `*…前 ${omitted} 步省略…*\n` : "";
+  await progress.update((header + tail.join("\n")).slice(0, 1900), channel);
+}
+
+async function executeCodexTask(
+  params: ExecuteTaskParams,
+  progress: ProgressReporter,
+  abortController: AbortController,
+  startedAt: number,
+  shortId: string,
+): Promise<TaskResult> {
+  const memoryBlock = buildMemoryPrompt();
+  const identityLine = IDENTITY_LINE_TASK;
+  const subagentNames = listSubagentNames();
+  const supervisorBlock = buildSupervisorBlock(subagentNames);
+  const resumeRawId = params.resumeSessionId ? assertProviderSession(params.resumeSessionId, "codex") : undefined;
+
+  const prompt = [
+    identityLine,
+    supervisorBlock,
+    memoryBlock,
+    "你正在通过 Codex SDK 执行 MiniClaw 的 coding-agent 任务。请直接完成用户请求；需要修改文件时使用工作区内的工具，最后用中文给出结果和验证证据。",
+    `<user_task>\n${params.prompt}\n</user_task>`,
+  ].filter(Boolean).join("\n\n");
+
+  const codex = getCodexClient();
+  const threadOptions = codexThreadOptions("task", params.cwd);
+  const thread = resumeRawId
+    ? codex.resumeThread(resumeRawId, threadOptions)
+    : codex.startThread(threadOptions);
+
+  let sessionId = resumeRawId ? formatSessionId("codex", resumeRawId) : "";
+  let finalResponse = "";
+  let failedMessage = "";
+  let tokensSummary: string | undefined;
+  const toolCallLog: string[] = [];
+  let toolStep = 0;
+  let turns = 0;
+
+  const timeoutCtrl = withCodexTimeout(abortController.signal, config.codex.timeoutMs);
+  const { events } = await thread.runStreamed(
+    codexInput(prompt, params.attachmentCodexInputs),
+    { signal: timeoutCtrl.signal },
+  );
+
+  for await (const event of events) {
+    if (abortController.signal.aborted || timeoutCtrl.signal.aborted) {
+      failedMessage = abortController.signal.aborted ? "任务已被用户取消" : "Codex 执行超时";
+      break;
+    }
+
+    switch (event.type) {
+      case "thread.started": {
+        sessionId = formatSessionId("codex", event.thread_id);
+        updateTask(params.taskId, { session_id: sessionId });
+        break;
+      }
+      case "turn.started": {
+        turns++;
+        break;
+      }
+      case "turn.completed": {
+        tokensSummary = formatCodexUsage(event.usage);
+        break;
+      }
+      case "turn.failed": {
+        failedMessage = event.error.message;
+        break;
+      }
+      case "error": {
+        failedMessage = event.message;
+        break;
+      }
+      case "item.started":
+      case "item.updated":
+      case "item.completed": {
+        if (event.item.type === "agent_message") {
+          finalResponse = event.item.text;
+          break;
+        }
+        const line = formatCodexItemLine(event.item);
+        if (line && pushCompactedLine(toolCallLog, line)) {
+          toolStep++;
+          await updateProgressTail(progress, params.channel, toolCallLog);
+        }
+        break;
+      }
+    }
+  }
+
+  if (!timeoutCtrl.signal.aborted) timeoutCtrl.abort();
+
+  if (!sessionId && thread.id) {
+    sessionId = formatSessionId("codex", thread.id);
+    updateTask(params.taskId, { session_id: sessionId });
+  }
+
+  const lastResult: TaskResult = {
+    success: !failedMessage,
+    sessionId,
+    costUsd: 0,
+    durationMs: Date.now() - startedAt,
+    turns: turns || 1,
+    result: failedMessage || finalResponse.trim() || "[无文字回复]",
+    ...(tokensSummary ? { tokensSummary } : {}),
+  };
+
+  await progress.complete(params.channel, lastResult.success ? undefined : { keepAsError: true });
+
+  updateTask(params.taskId, {
+    session_id: lastResult.sessionId,
+    status: lastResult.success ? "completed" : "failed",
+    result_summary: lastResult.result.slice(0, 10000),
+    cost_usd: lastResult.costUsd,
+    duration_ms: lastResult.durationMs,
+    completed_at: new Date().toISOString(),
+  });
+
+  log.info(
+    `${lastResult.success ? "✓" : "✗"} ${shortId} codex ${lastResult.success ? "done" : "failed"} ` +
+    `turns=${lastResult.turns} wall=${lastResult.durationMs}ms tools=${toolStep}` +
+    (lastResult.tokensSummary ? ` ${lastResult.tokensSummary}` : "")
+  );
+
+  const outputMode = params.outputMode ?? "embed";
+  if (outputMode === "raw") {
+    if (lastResult.success) {
+      const chunks = chunkMessage(lastResult.result);
+      for (const chunk of chunks) await params.channel.send(chunk);
+    } else {
+      await params.channel.send(`❌ \`${params.taskId.slice(0, 8)}\` 失败: ${lastResult.result.slice(0, 1900)}`);
+    }
+    return lastResult;
+  }
+
+  const embed = lastResult.success
+    ? taskCompleteEmbed({
+        taskId: params.taskId,
+        result: lastResult.result,
+        durationMs: lastResult.durationMs,
+        costUsd: lastResult.costUsd,
+        turns: lastResult.turns,
+        sessionId: lastResult.sessionId,
+        ...(lastResult.tokensSummary ? { tokensSummary: lastResult.tokensSummary } : {}),
+      })
+    : taskErrorEmbed(params.taskId, lastResult.result);
+  await params.channel.send({ embeds: [embed] });
+
+  if (toolCallLog.length) {
+    const header = `📋 **执行轨迹** (${toolCallLog.length} 步)\n\`\`\`\n`;
+    const footer = "\n```";
+    const body = toolCallLog.join("\n");
+    const maxBodyLen = 1900 - header.length - footer.length;
+    if (body.length <= maxBodyLen) {
+      await params.channel.send(header + body + footer);
+    } else {
+      const lines = body.split("\n");
+      let buf = "";
+      let part = 1;
+      for (const line of lines) {
+        if (buf.length + line.length + 1 > maxBodyLen) {
+          await params.channel.send(`📋 **执行轨迹** (part ${part})\n\`\`\`\n${buf}\n\`\`\``);
+          buf = line;
+          part++;
+        } else {
+          buf = buf ? buf + "\n" + line : line;
+        }
+      }
+      if (buf) await params.channel.send(`📋 **执行轨迹** (part ${part})\n\`\`\`\n${buf}\n\`\`\``);
+    }
+  }
+
+  if (lastResult.result.length > 4096) {
+    const chunks = chunkMessage(lastResult.result);
+    for (const chunk of chunks) await params.channel.send(chunk);
+  }
+
+  return lastResult;
+}
+
+export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult> {
   const abortController = new AbortController();
   activeTasks.set(params.taskId, abortController);
   const progress = new ProgressReporter(params.taskId);
@@ -142,6 +336,12 @@ export async function executeTask(params: {
   }
 
   try {
+    if (config.agentProvider === "codex") {
+      return await executeCodexTask(params, progress, abortController, startedAt, shortId);
+    }
+
+    const { query } = await import("@anthropic-ai/claude-agent-sdk");
+    const resumeRawId = resumeId ? assertProviderSession(resumeId, "claude") : undefined;
     const memoryBlock = buildMemoryPrompt();
     const identityLine = IDENTITY_LINE_TASK;
 
@@ -175,7 +375,7 @@ export async function executeTask(params: {
     const q = query({
       prompt: promptParam,
       options: {
-        model: config.model,
+        model: config.claudeModel,
         cwd: params.cwd,
         permissionMode: "acceptEdits",
         systemPrompt: {
@@ -228,7 +428,7 @@ export async function executeTask(params: {
         ...(config.defaultMaxTurns !== undefined ? { maxTurns: config.defaultMaxTurns } : {}),
         ...(config.defaultBudgetUsd !== undefined ? { maxBudgetUsd: config.defaultBudgetUsd } : {}),
         abortController,
-        ...(resumeId ? { resume: resumeId } : {}),
+        ...(resumeRawId ? { resume: resumeRawId } : {}),
       },
     });
 
@@ -253,7 +453,7 @@ export async function executeTask(params: {
       switch (msg.type) {
         case "system": {
           if ("session_id" in msg && msg.session_id) {
-            sessionId = msg.session_id;
+            sessionId = formatSessionId("claude", msg.session_id);
             updateTask(params.taskId, { session_id: sessionId });
           }
           break;
@@ -305,7 +505,7 @@ export async function executeTask(params: {
           const result = msg.subtype === "success"
             ? msg.result
             : ("errors" in msg ? msg.errors.join("\n") : "Unknown error");
-          sessionId = msg.session_id || sessionId;
+          sessionId = msg.session_id ? formatSessionId("claude", msg.session_id) : sessionId;
           const tokensSummary = formatUsage((msg as { usage?: unknown }).usage);
 
           lastResult = {

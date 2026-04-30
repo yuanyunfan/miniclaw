@@ -7,7 +7,7 @@ const log = createLogger("register");
 const commands = [
   new SlashCommandBuilder()
     .setName("task")
-    .setDescription("委派任务给 Claude Code")
+    .setDescription("委派任务给当前 coding agent")
     .addStringOption((opt) =>
       opt.setName("description").setDescription("任务描述").setRequired(true)
     )

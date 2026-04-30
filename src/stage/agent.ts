@@ -17,7 +17,6 @@ import type {
 import { config } from "../config.js";
 import { CHAT_TOOLS, executeTool } from "../agent/chat-tools.js";
 import { createLogger } from "../lib/log.js";
-import { parseMentions } from "./personas.js";
 import type {
   ChatOnceCallbacks,
   ChatOnceResult,
@@ -25,6 +24,7 @@ import type {
   SceneMessage,
   ToolCallRecord,
 } from "./types.js";
+import { codexInput, codexThreadOptions, formatCodexItemLine, getCodexClient, withCodexTimeout } from "../agent/codex.js";
 
 const log = createLogger("agent");
 
@@ -34,6 +34,9 @@ const MAX_TOKENS_PER_TURN = 4096;
 let client: Anthropic | null = null;
 function getClient(): Anthropic {
   if (!client) {
+    if (!config.anthropicApiKey) {
+      throw new Error("ANTHROPIC_API_KEY is required when MINICLAW_AGENT_PROVIDER=claude");
+    }
     client = new Anthropic({
       apiKey: config.anthropicApiKey,
       ...(config.anthropicBaseUrl ? { baseURL: config.anthropicBaseUrl } : {}),
@@ -93,6 +96,10 @@ export async function chatOnce(
   callbacks: ChatOnceCallbacks = {},
   abortSignal?: AbortSignal,
 ): Promise<ChatOnceResult> {
+  if (config.agentProvider === "codex") {
+    return chatOnceCodex(persona, history, callbacks, abortSignal);
+  }
+
   const startedAt = Date.now();
   const messages = buildMessages(persona, history);
   const tools = filterTools(persona);
@@ -120,7 +127,7 @@ export async function chatOnce(
     let finalMsg;
     try {
       const stream = ant.messages.stream({
-        model: persona.model ?? config.model,
+        model: persona.model ?? config.claudeModel,
         max_tokens: MAX_TOKENS_PER_TURN,
         system: persona.systemPrompt,
         tools,
@@ -192,7 +199,7 @@ export async function chatOnce(
   if (!lastAssistantText) lastAssistantText = "(无文字回复)";
 
   // 估算成本（只对照 sonnet-4-6 / opus 价位粗算；精确成本走 sdk 不带，要外算）
-  const costUsd = estimateCost(persona.model ?? config.model, inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens);
+  const costUsd = estimateCost(persona.model ?? config.claudeModel, inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens);
 
   callbacks.onStatus?.(aborted ? "aborted" : "done");
   log.info(
@@ -213,6 +220,114 @@ export async function chatOnce(
     outputTokens,
     cacheReadTokens,
     cacheCreationTokens,
+    aborted,
+  };
+}
+
+async function chatOnceCodex(
+  persona: Persona,
+  history: SceneMessage[],
+  callbacks: ChatOnceCallbacks = {},
+  abortSignal?: AbortSignal,
+): Promise<ChatOnceResult> {
+  const startedAt = Date.now();
+  callbacks.onStatus?.("thinking");
+  log.info(`▶ ${persona.id} codex turn start (history=${history.length})`);
+
+  const transcript = history
+    .map((m) => `[${m.speaker === persona.id ? "你" : m.speaker}] ${m.content}`)
+    .join("\n");
+  const prompt = [
+    `你正在 MiniClaw stage 中扮演 @${persona.id} (${persona.name})。`,
+    persona.systemPrompt,
+    "请只输出你这名角色下一轮要说的话。需要呼叫其他角色时使用 @角色id。用中文回复，不要解释系统规则。",
+    transcript ? `<scene_history>\n${transcript}\n</scene_history>` : "<scene_history>(开始对话)</scene_history>",
+  ].join("\n\n");
+
+  const baseCtrl = new AbortController();
+  if (abortSignal?.aborted) baseCtrl.abort();
+  else abortSignal?.addEventListener("abort", () => baseCtrl.abort(), { once: true });
+  const timeoutCtrl = withCodexTimeout(baseCtrl.signal, config.codex.timeoutMs);
+
+  const codex = getCodexClient();
+  const thread = codex.startThread(codexThreadOptions("stage", config.defaultCwd));
+  const { events } = await thread.runStreamed(codexInput(prompt), { signal: timeoutCtrl.signal });
+
+  let lastAssistantText = "";
+  const toolCalls: ToolCallRecord[] = [];
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let cacheReadTokens = 0;
+  let aborted = false;
+  let failedMessage = "";
+  let iters = 1;
+
+  for await (const event of events) {
+    if (abortSignal?.aborted || timeoutCtrl.signal.aborted) {
+      aborted = true;
+      break;
+    }
+    switch (event.type) {
+      case "turn.completed":
+        inputTokens = event.usage.input_tokens;
+        outputTokens = event.usage.output_tokens;
+        cacheReadTokens = event.usage.cached_input_tokens;
+        break;
+      case "turn.failed":
+        failedMessage = event.error.message;
+        break;
+      case "error":
+        failedMessage = event.message;
+        break;
+      case "item.started":
+      case "item.updated":
+      case "item.completed":
+        if (event.item.type === "agent_message") {
+          lastAssistantText = event.item.text;
+          callbacks.onText?.(lastAssistantText);
+          break;
+        }
+        {
+          const line = formatCodexItemLine(event.item);
+          if (line) {
+            callbacks.onStatus?.("tool-call");
+            const tc: ToolCallRecord = {
+              name: event.item.type,
+              input: line,
+              ...(event.item.type === "error" ? { isError: true } : {}),
+            };
+            toolCalls.push(tc);
+            callbacks.onToolCall?.(tc);
+          }
+        }
+        break;
+    }
+  }
+  if (!timeoutCtrl.signal.aborted) timeoutCtrl.abort();
+
+  if (failedMessage) {
+    log.error(`${persona.id} codex error: ${failedMessage}`);
+    lastAssistantText = `(${persona.name} 暂时无法回复：${failedMessage})`;
+  }
+  if (!lastAssistantText) lastAssistantText = "(无文字回复)";
+
+  callbacks.onStatus?.(aborted ? "aborted" : "done");
+  log.info(
+    `${aborted ? "✗" : "✓"} ${persona.id} codex ${Date.now() - startedAt}ms ` +
+    `tools=${toolCalls.length} tok in=${inputTokens} out=${outputTokens}`
+  );
+
+  const mentions = extractMentionIds(lastAssistantText, persona.id);
+  return {
+    content: lastAssistantText,
+    mentions,
+    toolCalls,
+    costUsd: 0,
+    iters,
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheCreationTokens: 0,
     aborted,
   };
 }

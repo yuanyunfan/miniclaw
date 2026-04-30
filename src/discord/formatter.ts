@@ -1,4 +1,5 @@
 import { EmbedBuilder } from "discord.js";
+import { displaySessionId } from "../agent/session.js";
 
 function ellipsis(text: string, max: number): string {
   return text.length > max ? text.slice(0, max - 3) + "..." : text;
@@ -30,7 +31,7 @@ export function taskCompleteEmbed(params: {
     { name: "耗时", value: `${duration}s`, inline: true },
     { name: "费用", value: `$${params.costUsd.toFixed(4)}`, inline: true },
     { name: "轮次", value: String(params.turns), inline: true },
-    { name: "Session", value: params.sessionId.slice(0, 8), inline: true },
+    { name: "Session", value: displaySessionId(params.sessionId), inline: true },
   ];
   if (params.tokensSummary) {
     fields.push({ name: "Tokens", value: params.tokensSummary, inline: false });

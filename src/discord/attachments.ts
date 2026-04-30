@@ -4,9 +4,11 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join, extname, basename } from "node:path";
 import { tmpdir } from "node:os";
 import { config } from "../config.js";
+import type { CodexInputEntry } from "../agent/codex.js";
 
 export interface AttachmentResult {
   blocks: ContentBlockParam[];
+  codexInputs: CodexInputEntry[];
   textSummary: string;
   notices: string[];
 }
@@ -70,6 +72,7 @@ export async function processAttachments(
   opts: { cwd?: string; scope: string },
 ): Promise<AttachmentResult> {
   const blocks: ContentBlockParam[] = [];
+  const codexInputs: CodexInputEntry[] = [];
   const notices: string[] = [];
   const summaryParts: string[] = [];
   const maxBytes = config.maxAttachmentMb * 1024 * 1024;
@@ -105,6 +108,10 @@ export async function processAttachments(
             type: "image",
             source: { type: "base64", media_type, data: buf.toString("base64") },
           });
+          const dir = ensureDir();
+          const path = join(dir, safeName(name));
+          writeFileSync(path, buf);
+          codexInputs.push({ type: "local_image", path });
           break;
         }
         case "pdf": {
@@ -114,6 +121,13 @@ export async function processAttachments(
             source: { type: "base64", media_type: "application/pdf", data: buf.toString("base64") },
             ...(name ? { title: name } : {}),
           });
+          const dir = ensureDir();
+          const path = join(dir, safeName(name));
+          writeFileSync(path, buf);
+          codexInputs.push({
+            type: "text",
+            text: `📎 PDF 附件 \`${name}\` (${(att.size / 1024).toFixed(1)} KB) 已保存到：${path}\n请用命令行工具读取或分析。`,
+          });
           break;
         }
         case "text": {
@@ -122,17 +136,15 @@ export async function processAttachments(
             const buf = await downloadToBuffer(att.url);
             const path = join(dir, safeName(name));
             writeFileSync(path, buf);
-            blocks.push({
-              type: "text",
-              text: `📎 文件 \`${name}\` (${(att.size / 1024).toFixed(1)} KB) 较大，已保存到：${path}\n请用 Read 工具读取。`,
-            });
+            const text = `📎 文件 \`${name}\` (${(att.size / 1024).toFixed(1)} KB) 较大，已保存到：${path}\n请用 Read/命令行工具读取。`;
+            blocks.push({ type: "text", text });
+            codexInputs.push({ type: "text", text });
           } else {
             const buf = await downloadToBuffer(att.url);
             const text = buf.toString("utf8");
-            blocks.push({
-              type: "text",
-              text: `<file name="${name}" size="${att.size}">\n${text}\n</file>`,
-            });
+            const inline = `<file name="${name}" size="${att.size}">\n${text}\n</file>`;
+            blocks.push({ type: "text", text: inline });
+            codexInputs.push({ type: "text", text: inline });
           }
           break;
         }
@@ -146,10 +158,9 @@ export async function processAttachments(
           const buf = await downloadToBuffer(att.url);
           const path = join(dir, safeName(name));
           writeFileSync(path, buf);
-          blocks.push({
-            type: "text",
-            text: `📎 二进制附件 \`${name}\` (${(att.size / 1024).toFixed(1)} KB) 已保存到：${path}\n请用 Bash/Read 工具查看。`,
-          });
+          const text = `📎 二进制附件 \`${name}\` (${(att.size / 1024).toFixed(1)} KB) 已保存到：${path}\n请用 Bash/Read/命令行工具查看。`;
+          blocks.push({ type: "text", text });
+          codexInputs.push({ type: "text", text });
           break;
         }
       }
@@ -162,7 +173,7 @@ export async function processAttachments(
   // 图片走 Discord CDN URL：作为额外回退，把图片的 URL 也加到 textSummary 里以便排查
   const textSummary = summaryParts.length ? `[附件: ${summaryParts.join(", ")}]` : "";
 
-  return { blocks, textSummary, notices };
+  return { blocks, codexInputs, textSummary, notices };
 }
 
 export const __testables = { classify, imageMediaType, safeName };

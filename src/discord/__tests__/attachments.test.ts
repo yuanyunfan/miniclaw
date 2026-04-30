@@ -68,6 +68,7 @@ describe("processAttachments", () => {
   it("空数组 → 空 blocks", async () => {
     const r = await processAttachments([], { scope: "s1" });
     expect(r.blocks).toEqual([]);
+    expect(r.codexInputs).toEqual([]);
     expect(r.notices).toEqual([]);
   });
 
@@ -83,6 +84,7 @@ describe("processAttachments", () => {
       source: { type: "base64", media_type: "image/png" },
     });
     expect((r.blocks[0] as { source: { data: string } }).source.data).toBe("iVBORw==");
+    expect(r.codexInputs[0]).toMatchObject({ type: "local_image" });
   });
 
   it("PDF → base64 document block", async () => {
@@ -96,6 +98,8 @@ describe("processAttachments", () => {
       source: { type: "base64", media_type: "application/pdf" },
       title: "doc.pdf",
     });
+    expect(r.codexInputs[0]).toMatchObject({ type: "text" });
+    expect((r.codexInputs[0] as { text: string }).text).toContain("doc.pdf");
   });
 
   it("text → 下载 + 内联到 text block", async () => {
@@ -107,12 +111,15 @@ describe("processAttachments", () => {
     expect(r.blocks[0]).toMatchObject({ type: "text" });
     expect((r.blocks[0] as { text: string }).text).toContain("hello");
     expect((r.blocks[0] as { text: string }).text).toContain('name="x.md"');
+    expect(r.codexInputs[0]).toMatchObject({ type: "text" });
+    expect((r.codexInputs[0] as { text: string }).text).toContain("hello");
   });
 
   it("audio → notice，不出 block", async () => {
     const att = makeAtt({ name: "v.m4a", size: 1000, contentType: "audio/m4a" });
     const r = await processAttachments([att], { scope: "s5" });
     expect(r.blocks).toEqual([]);
+    expect(r.codexInputs).toEqual([]);
     expect(r.notices[0]).toMatch(/语音/);
   });
 
@@ -125,6 +132,7 @@ describe("processAttachments", () => {
     expect(r.blocks[0]).toMatchObject({ type: "text" });
     expect((r.blocks[0] as { text: string }).text).toContain("x.zip");
     expect((r.blocks[0] as { text: string }).text).toContain(".miniclaw-attachments/s6/");
+    expect((r.codexInputs[0] as { text: string }).text).toContain("x.zip");
     const path = join(dir, ".miniclaw-attachments", "s6", "x.zip");
     expect(existsSync(path)).toBe(true);
     expect(readFileSync(path)).toEqual(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
@@ -134,6 +142,7 @@ describe("processAttachments", () => {
     const att = makeAtt({ name: "huge.pdf", size: 500 * 1024 * 1024, contentType: "application/pdf" });
     const r = await processAttachments([att], { scope: "s7" });
     expect(r.blocks).toEqual([]);
+    expect(r.codexInputs).toEqual([]);
     expect(r.notices[0]).toMatch(/超过.*MB 上限/);
   });
 
@@ -146,6 +155,7 @@ describe("processAttachments", () => {
     );
     const r = await processAttachments(atts, { scope: "s8" });
     expect(r.blocks.length).toBe(10);
+    expect(r.codexInputs.length).toBe(10);
     expect(r.notices.find((n) => n.includes("10 个"))).toBeDefined();
   });
 });

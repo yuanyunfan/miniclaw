@@ -20,8 +20,9 @@ flowchart LR
         Term([终端 TTY])
         subgraph MiniClaw["MiniClaw bot 进程 (Node 22)"]
             BOT["bot.ts<br/>事件路由 + thread 续话"]
-            CHAT["agent/chat.ts<br/>@mention 轻量对话"]
-            TASK["agent/task.ts<br/>/task Supervisor"]
+            CHAT["agent/chat.ts<br/>@mention provider chat"]
+            TASK["agent/task.ts<br/>/task provider task"]
+            CODEX["agent/codex.ts<br/>Codex SDK 封装"]
             HANDLERS["commands/handlers.ts"]
             SUBA["agent/subagents.ts<br/>加载 agents/*.md +<br/>~/.miniclaw/skills/*.md"]
             CRON["cron/scheduler.ts<br/>node-cron 调度"]
@@ -49,13 +50,14 @@ flowchart LR
             DB[("data.db<br/>SQLite WAL<br/>tasks · chat_history · scenes · scene_messages")]
         end
 
-        subgraph Raven["raven 反代 (:7024)"]
+        subgraph Raven["raven 反代 (:7024)<br/>Claude provider 可选"]
             RAVEN["Anthropic ↔ OpenAI<br/>翻译 + SSE 转换"]
         end
     end
 
     subgraph Cloud["云端"]
-        COPILOT["GitHub Copilot API<br/>claude-sonnet-4-6 / claude-opus-4.7 ..."]
+        COPILOT["GitHub Copilot API<br/>claude-opus-4.7 / claude-sonnet-4-6 ..."]
+        OPENAI["OpenAI Codex<br/>Codex SDK / CLI"]
         EXA["exa MCP<br/>(web search)"]
         CTX7["context7 MCP<br/>(library docs)"]
     end
@@ -72,8 +74,10 @@ flowchart LR
     CRON -->|"到点 dispatch"| TASK
     CRON -->|"type=script"| UC3
 
-    CHAT -->|"query()"| Raven
-    TASK -->|"query() + agents + tools"| Raven
+    CHAT -->|"Claude: messages.stream"| Raven
+    TASK -->|"Claude: query() + agents + tools"| Raven
+    CHAT -->|"Codex: read-only thread"| CODEX
+    TASK -->|"Codex: workspace-write thread"| CODEX
     TASK -.->|"加载 4 角色 + user skills"| SUBA
     SUBA -.->|"读取"| AGENTS["agents/*.md<br/>(repo)"]
     SUBA -.->|"读取"| UC4
@@ -88,6 +92,7 @@ flowchart LR
 
     Raven -->|"HTTPS<br/>/v1/messages"| COPILOT
     COPILOT -->|"SSE stream"| Raven
+    CODEX -->|"Codex SDK"| OPENAI
     Raven -->|"SSE 翻译为 Anthropic 流"| MiniClaw
     Raven -.->|"MCP 工具调用"| EXA
     Raven -.->|"MCP 工具调用"| CTX7
@@ -210,10 +215,10 @@ sequenceDiagram
 
 | 维度 | chat（@mention） | task（/task） |
 |---|---|---|
-| SDK | `@anthropic-ai/sdk` `messages.stream()` | `@anthropic-ai/claude-agent-sdk` `query()` |
+| SDK | Claude: `@anthropic-ai/sdk` / Codex: `@openai/codex-sdk` | Claude: `@anthropic-ai/claude-agent-sdk` / Codex: `@openai/codex-sdk` |
 | system prompt | 自定义短 prompt + memory + history | claude_code preset + memory + supervisorBlock |
-| 工具 | 4 个手写：read_file / bash / web_search / web_fetch | 全套 + Agent + MCP + Edit/Write |
-| 子进程 | 无（同进程 fetch） | SDK 子进程 |
+| 工具 | Claude: 4 个手写工具；Codex: read-only Codex thread | Claude: 全套 + Agent + MCP + Edit/Write；Codex: workspace-write Codex thread |
+| 子进程 | Claude chat 无；Codex 由 SDK 包装 CLI | SDK 子进程 |
 | TTFT | ~500-800ms | 2-5s |
 | 设计意图 | 闲聊 + 调研 + 信息查询 | 编码 + 多文件改动 + subagent 编排 |
 | 用户被要求"修代码" | 主动告知"请用 /task" | 实际执行 |
@@ -232,7 +237,7 @@ sequenceDiagram
     participant H as commands/handlers.ts
     participant T as agent/task.ts
     participant SA as agent/subagents.ts
-    participant Q as claude-agent-sdk<br/>主 query()
+    participant Q as Provider<br/>Claude query() / Codex thread
     participant R as raven → Copilot
     participant DB as SQLite tasks 表
 
@@ -244,7 +249,7 @@ sequenceDiagram
         H->>H: processAttachments 处理附件<br/>大文件落 cwd/.miniclaw-attachments/{taskId}/
     end
     H->>DB: insertTask(status='running')
-    H->>T: executeTask 携带 taskId / prompt / cwd / channel / 可选 attachmentBlocks / outputMode=embed
+    H->>T: executeTask 携带 taskId / prompt / cwd / channel / 可选 attachmentBlocks+codexInputs / outputMode=embed
 
     T->>SA: loadSubagents()
     SA->>SA: 读 agents/*.md (repo)<br/>+ ~/.miniclaw/skills/*.md (user)
@@ -252,8 +257,8 @@ sequenceDiagram
 
     T->>T: buildMemoryPrompt() + supervisorBlock<br/>(能力图谱 + 选择原则 + 编排纪律)
 
-    T->>Q: query(...)
-    Note over T,Q: prompt: 有附件→AsyncIterable / 否则→string<br/>systemPrompt: claude_code + supervisorBlock<br/>agents: researcher / code-investigator / planner / generator / evaluator<br/>allowedTools: Read / Write / Edit / Bash / Agent / mcp__exa / mcp__context7<br/>canUseTool: 拦 Skill triad/triad-resume + 高风险 Bash<br/>abortController + 可选 resume
+    T->>Q: provider run
+    Note over T,Q: Claude: claude_code preset + agents + MCP + canUseTool<br/>Codex: Codex SDK thread + workspace-write sandbox + event progress<br/>abortController + provider-prefixed resume
 
     Note over Q: Supervisor 按任务自由组合角色：<br/>简单任务可直接 generator 一步；<br/>调研类按是否需 Bash 选 researcher/code-investigator；<br/>不固定 1→2→3→4 流水线
 

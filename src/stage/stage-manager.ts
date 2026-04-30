@@ -10,6 +10,7 @@ import { config } from "../config.js";
 import { createLogger } from "../lib/log.js";
 import { loadPrompt } from "../agent/prompts.js";
 import type { Persona, SceneMessage } from "./types.js";
+import { codexInput, codexThreadOptions, getCodexClient } from "../agent/codex.js";
 
 const log = createLogger("stage-manager");
 
@@ -19,6 +20,9 @@ const MAX_TOKENS = 200;
 let client: Anthropic | null = null;
 function getClient(): Anthropic {
   if (!client) {
+    if (!config.anthropicApiKey) {
+      throw new Error("ANTHROPIC_API_KEY is required when MINICLAW_AGENT_PROVIDER=claude");
+    }
     client = new Anthropic({
       apiKey: config.anthropicApiKey,
       ...(config.anthropicBaseUrl ? { baseURL: config.anthropicBaseUrl } : {}),
@@ -56,6 +60,10 @@ ${transcript}
 
 下一发言者是？`;
 
+  if (config.agentProvider === "codex") {
+    return pickNextSpeakerCodex(userPrompt, participants, startedAt);
+  }
+
   const ant = getClient();
   let raw = "";
   let inputTokens = 0;
@@ -63,7 +71,7 @@ ${transcript}
 
   try {
     const res = await ant.messages.create({
-      model: config.model,
+      model: config.claudeModel,
       max_tokens: MAX_TOKENS,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: userPrompt }],
@@ -107,3 +115,34 @@ export function parseDecision(raw: string, participants: Persona[]): { next: str
 }
 
 export const __testables = { parseDecision, SYSTEM_PROMPT };
+
+async function pickNextSpeakerCodex(
+  userPrompt: string,
+  participants: Persona[],
+  startedAt: number,
+): Promise<NextSpeakerDecision> {
+  const schema = {
+    type: "object",
+    properties: {
+      next_speaker: { type: "string" },
+      reason: { type: "string" },
+    },
+    required: ["next_speaker", "reason"],
+    additionalProperties: false,
+  } as const;
+
+  try {
+    const codex = getCodexClient();
+    const thread = codex.startThread(codexThreadOptions("stage", config.defaultCwd));
+    const turn = await thread.run(
+      codexInput(`${SYSTEM_PROMPT}\n\n${userPrompt}`),
+      { outputSchema: schema },
+    );
+    const decision = parseDecision(turn.finalResponse, participants);
+    log.info(`stage-manager/codex → ${decision.next} (${decision.reason}) ${Date.now() - startedAt}ms`);
+    return { ...decision, costUsd: 0 };
+  } catch (err) {
+    log.error("pickNextSpeaker Codex error:", err);
+    return { next: "user", reason: "stage-manager 失败，交给用户", costUsd: 0 };
+  }
+}

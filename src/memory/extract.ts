@@ -3,6 +3,7 @@ import { config } from "../config.js";
 import { addMemory, getAllMemories } from "../store/memory.js";
 import { createLogger } from "../lib/log.js";
 import { loadPrompt } from "../agent/prompts.js";
+import { codexInput, codexThreadOptions, getCodexClient } from "../agent/codex.js";
 
 const log = createLogger("memory-extract");
 
@@ -31,6 +32,48 @@ export async function extractMemories(
       ? `\n已有记忆:\n${existing.map((m) => `- [${m.type}] ${m.name}: ${m.content}`).join("\n")}`
       : "";
 
+    if (config.agentProvider === "codex") {
+      // codex outputSchema 顶层必须是 type: "object"，所以包一层 { items: [...] }
+      const schema = {
+        type: "object",
+        properties: {
+          items: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                type: { type: "string" },
+                name: { type: "string" },
+                content: { type: "string" },
+              },
+              required: ["type", "name", "content"],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["items"],
+        additionalProperties: false,
+      } as const;
+      const codex = getCodexClient();
+      const thread = codex.startThread(codexThreadOptions("chat", config.defaultCwd));
+      const turn = await thread.run(
+        codexInput(`${EXTRACT_SYSTEM}\n\n${buildExtractUserPrompt(userMsg, assistantReply, existingBlock)}`),
+        { outputSchema: schema },
+      );
+      const parsed = JSON.parse(turn.finalResponse) as { items?: Array<{ type: string; name: string; content: string }> };
+      const items = parsed.items;
+      if (!Array.isArray(items)) return;
+      for (const item of items) {
+        if (item.type && item.name && item.content) {
+          addMemory(item.type, item.name.slice(0, 30), item.content);
+        }
+      }
+      return;
+    }
+
+    if (!config.anthropicApiKey) {
+      throw new Error("ANTHROPIC_API_KEY is required when MINICLAW_AGENT_PROVIDER=claude");
+    }
     const client = new Anthropic({ apiKey: config.anthropicApiKey });
     const response = await client.messages.create({
       model: "claude-haiku-4-5-20251001",

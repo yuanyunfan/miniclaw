@@ -120,7 +120,7 @@ if (!isAutoChannel && !isMentioned) return;
 | **中** | `:120-124` | `parseExplicitMemory` 命中"记住:" / "remember" / "/memory" | `addMemory` + reply ✅ → return |
 | **低** | `:127+` | 其他所有内容（含纯附件 → 默认 prompt"请分析这些附件"） | chat 主流程，附件以 content blocks 透传 |
 
-附件处理细节见 `docs/architecture.md`「附件流」段：图片/PDF 下载后 base64 编码塞 image/document block（raven 转 Copilot **不支持 URL 源**），文本内联，二进制落盘到 cwd 让 Claude 用 Bash/Read 读。
+附件处理细节见 `docs/architecture.md`「附件流」段：图片/PDF 下载后给 Claude 生成 base64 content blocks，同时给 Codex 生成 local_image/text 输入；文本内联，二进制落盘到 cwd 让 agent 用工具读取。
 
 ### chat 主流程（视觉反馈完整链）
 
@@ -129,7 +129,9 @@ react(👀)              ← 立即反馈
   ↓
 sendTyping() 每 8s     ← Discord "正在输入..." 循环刷新
   ↓
-chat() 调 @anthropic-ai/sdk messages.stream()  ← 不走 claude-agent-sdk
+chat() 按 MINICLAW_AGENT_PROVIDER 分发：
+  Claude → @anthropic-ai/sdk messages.stream()（不走 claude-agent-sdk）
+  Codex  → @openai/codex-sdk read-only thread
   ├─ tool loop（最多 10 轮）：
   │    finalMessage.stop_reason === "tool_use" → 调 chat-tools.ts 执行
   │    把 tool_result blocks 拼回 messages 进下一轮
@@ -144,7 +146,7 @@ chunkMessage 切 2000 字  ← Discord 单消息上限
 移除 👀 + 加 ✅          ← 完成态
 ```
 
-**chat 引擎**：messages.stream + 手写 4 工具循环（read_file / bash / web_search / web_fetch）。**与 task 的 SDK 模式有意区分** —— task 才用 claude-agent-sdk + claude_code preset + 全套工具 + Agent 编排。
+**chat 引擎**：Claude provider 下是 messages.stream + 手写 4 工具循环（read_file / bash / web_fetch）；Codex provider 下是 read-only Codex thread。**与 task 的写权限模式有意区分** —— task 才允许 workspace-write 和多文件改动。
 
 异常路径：catch → 移除 👀 + 加 ❌ + reply "回复出错"。
 

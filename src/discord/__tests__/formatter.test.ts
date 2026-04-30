@@ -17,6 +17,7 @@ describe("taskCompleteEmbed", () => {
     expect(data.fields?.map((f) => f.name)).toEqual(["耗时", "费用", "轮次", "Session"]);
     expect(data.fields?.find((f) => f.name === "耗时")?.value).toBe("5.4s");
     expect(data.fields?.find((f) => f.name === "费用")?.value).toBe("$0.1235");
+    expect(data.fields?.find((f) => f.name === "Session")?.value).toBe("claude:sess-123");
   });
 
   it("includes Tokens field when tokensSummary provided", () => {

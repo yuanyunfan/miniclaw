@@ -132,7 +132,7 @@ flowchart TB
 ---
 name: CEO
 emoji: 🎩
-model: claude-sonnet-4-6              # 可选，默认 config.model
+model: claude-opus-4-7                # 可选，默认 config.model
 tools: [read_file, web_fetch]         # 可选，默认全部 chat-tools
 budget_per_turn_usd: 0.20             # 可选（暂仅记录）
 ---

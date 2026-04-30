@@ -14,6 +14,7 @@ import { taskStartEmbed, statusOverviewEmbed, taskErrorEmbed } from "../discord/
 import { addMemory, deleteMemory, getAllMemories, getMemoriesByType } from "../store/memory.js";
 import { processAttachments } from "../discord/attachments.js";
 import { createLogger } from "../lib/log.js";
+import { assertProviderSession } from "../agent/session.js";
 
 const log = createLogger("handlers");
 
@@ -53,10 +54,12 @@ export async function handleTask(interaction: ChatInputCommandInteraction): Prom
   await interaction.deferReply();
 
   let attachmentBlocks: Awaited<ReturnType<typeof processAttachments>>["blocks"] = [];
+  let attachmentCodexInputs: Awaited<ReturnType<typeof processAttachments>>["codexInputs"] = [];
   let attachmentNotices: string[] = [];
   if (slotAtts.length) {
     const r = await processAttachments(slotAtts, { cwd, scope: taskId });
     attachmentBlocks = r.blocks;
+    attachmentCodexInputs = r.codexInputs;
     attachmentNotices = r.notices;
   }
 
@@ -96,6 +99,7 @@ export async function handleTask(interaction: ChatInputCommandInteraction): Prom
     cwd,
     channel: thread,
     attachmentBlocks,
+    attachmentCodexInputs,
   }).catch((err) => {
     log.error(`Task ${taskId} error:`, err);
   });
@@ -169,6 +173,16 @@ export async function handleResume(interaction: ChatInputCommandInteraction): Pr
   if (!match || !match.session_id) {
     await interaction.reply({
       content: `❌ 找不到可恢复的任务 \`${taskIdPrefix}\``,
+      ephemeral: true,
+    });
+    return;
+  }
+
+  try {
+    assertProviderSession(match.session_id, config.agentProvider);
+  } catch (err) {
+    await interaction.reply({
+      content: `❌ ${err instanceof Error ? err.message : String(err)}`,
       ephemeral: true,
     });
     return;

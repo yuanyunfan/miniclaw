@@ -1,6 +1,6 @@
 # MiniClaw 🤖
 
-极简 AI 助手 — 通过 Discord 沟通，通过 Claude Code Agent SDK 执行任务。
+极简 AI 助手 — 通过 Discord 沟通，可在 Claude Code / Codex 之间切换执行任务。
 
 个人单用户，本地 Mac 常驻运行，~1000 行核心代码。
 
@@ -10,9 +10,9 @@
 
 | 触发方式 | 引擎 | 能力 |
 |----------|------|------|
-| `#chat` 频道直接发消息 | Claude Code Agent SDK | 搜索、读写文件、执行命令 — 等同 Claude Code |
-| `@MiniClaw` 在任意频道 | Claude Code Agent SDK | 同上 |
-| `/task <描述>` | Claude Code Agent SDK | 创建独立线程，实时进度，完成 Embed |
+| `#chat` 频道直接发消息 | `.env` 选择 Claude / Codex | 搜索、读取文件、执行安全命令 |
+| `@MiniClaw` 在任意频道 | `.env` 选择 Claude / Codex | 同上 |
+| `/task <描述>` | `.env` 选择 Claude Code / Codex | 创建独立线程，实时进度，完成 Embed |
 | `/status` | — | 查看活跃/历史任务 |
 | `/cancel <id>` | — | 终止运行中的任务 |
 | `/resume <id> <指令>` | — | 恢复之前的 session 继续执行 |
@@ -29,8 +29,8 @@
 Discord 消息
   ↓
 Bot 事件监听 (discord.js v14)
-  ├─ @mention / #chat → Agent SDK query() → 流式回调 → Discord 回复
-  └─ /task → 创建线程 → Agent SDK query() → 进度推送 → 完成 Embed
+  ├─ @mention / #chat → Provider chat → 流式回调 → Discord 回复
+  └─ /task → 创建线程 → Provider task → 进度推送 → 完成 Embed
   ↓
 SQLite 持久化（任务状态 + 对话历史）
 ```
@@ -56,7 +56,8 @@ cp .env.example .env
 | `DISCORD_TOKEN` | Discord Bot Token |
 | `DISCORD_CLIENT_ID` | Discord Application ID |
 | `DISCORD_GUILD_ID` | 目标服务器 ID |
-| `ANTHROPIC_API_KEY` | Anthropic API Key |
+| `ANTHROPIC_API_KEY` | Anthropic API Key（`MINICLAW_AGENT_PROVIDER=claude` 时必填） |
+| `OPENAI_API_KEY` | OpenAI API Key（Codex 可选；也可复用本机 `codex login`） |
 | `MINICLAW_ALLOWED_USER_ID` | 你的 Discord 用户 ID |
 
 可选配置：
@@ -64,13 +65,26 @@ cp .env.example .env
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `MINICLAW_PROXY` | — | HTTP 代理地址（如 `http://127.0.0.1:7890`） |
+| `MINICLAW_AGENT_PROVIDER` | `claude` | 全局 provider：`claude` 或 `codex` |
 | `MINICLAW_AUTO_REPLY_CHANNELS` | — | 免 @ 自动回复的频道 ID（逗号分隔） |
 | `MINICLAW_DEFAULT_CWD` | `~/Code` | Agent SDK 默认工作目录 |
 | `MINICLAW_MAX_CONCURRENT_TASKS` | `3` | /task 最大并发数 |
 | `MINICLAW_DEFAULT_BUDGET_USD` | `1.0` | 单次任务费用上限 |
 | `MINICLAW_DEFAULT_MAX_TURNS` | `30` | 单次任务最大轮次 |
-| `MINICLAW_MODEL` | `claude-sonnet-4-6` | Claude 模型 |
+| `MINICLAW_CLAUDE_MODEL` | `claude-opus-4-7` | Claude 模型（旧 `MINICLAW_MODEL` 仍兼容） |
+| `MINICLAW_CODEX_MODEL` | `gpt-5.5` | Codex 模型 |
+| `MINICLAW_CODEX_TASK_SANDBOX` | `workspace-write` | Codex `/task` 沙箱 |
+| `MINICLAW_CODEX_CHAT_SANDBOX` | `read-only` | Codex chat/stage 沙箱 |
+| `MINICLAW_CODEX_REASONING_EFFORT` | `medium` | Codex reasoning effort |
 | `MINICLAW_DB_PATH` | `~/.miniclaw/data.db` | SQLite 数据库路径 |
+
+切换到 Codex 的最小配置：
+
+```bash
+MINICLAW_AGENT_PROVIDER=codex
+# 可选：OPENAI_API_KEY=...
+# 可选：MINICLAW_CODEX_MODEL=gpt-5.5
+```
 
 ### 3. 注册 Slash Commands
 
@@ -126,7 +140,9 @@ src/
 ├── proxy.ts              # HTTP + WebSocket 代理注入
 ├── agent/
 │   ├── chat.ts           # @mention/auto-reply 对话（Agent SDK）
-│   └── task.ts           # /task 任务执行（Agent SDK + 流式进度）
+│   ├── codex.ts          # Codex SDK 封装
+│   ├── session.ts        # provider-prefixed session id
+│   └── task.ts           # /task 任务执行（Claude/Codex + 流式进度）
 ├── commands/
 │   ├── register.ts       # Slash command 注册
 │   └── handlers.ts       # /task /status /cancel /resume 处理
@@ -143,6 +159,7 @@ src/
 - **TypeScript (ESM)** + Node.js 22+
 - **discord.js v14** — Discord Bot
 - **@anthropic-ai/claude-agent-sdk** — Claude Code 完整能力
+- **@openai/codex-sdk** — Codex coding agent
 - **better-sqlite3** — 轻量持久化
 - **pm2** — 进程守护
 

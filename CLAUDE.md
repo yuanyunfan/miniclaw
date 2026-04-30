@@ -1,17 +1,17 @@
 # MiniClaw
 
-极简 AI 助手 — Discord 消息 → Claude Code Agent SDK 执行任务 → Discord 回复结果。
+极简 AI 助手 — Discord 消息 → Claude Code / Codex provider 执行任务 → Discord 回复结果。
 
 ## 项目定位
 
-个人单用户使用的 AI 助手，通过 Discord 沟通、通过 Claude Code 执行任务，本地 Mac 常驻运行。
+个人单用户使用的 AI 助手，通过 Discord 沟通、通过 `.env` 选择 Claude Code 或 Codex 执行任务，本地 Mac 常驻运行。
 
 ## 架构概览
 
-Discord Bot (discord.js v14) → Orchestrator → Claude Code Agent SDK / Anthropic API
+Discord Bot (discord.js v14) → Orchestrator → provider（Claude Code/Anthropic API 或 Codex SDK）
 
-- @mention → 轻量对话（@anthropic-ai/sdk `messages.stream()` 直接调用 + 4 个手写工具 read_file/bash/web_search/web_fetch + 自写 tool loop；不走 claude-agent-sdk）
-- /task → Supervisor 模式：主 agent 通过 Agent SDK 的 Task tool 分派给角色化 subagent（researcher / code-investigator / planner / generator / evaluator）。Supervisor prompt 是"能力图谱"不是"流水线"，由 LLM 按任务自由组合
+- @mention → provider chat：Claude 下走 @anthropic-ai/sdk `messages.stream()` + 手写工具 loop；Codex 下走 read-only Codex thread
+- /task → provider task：Claude 下是 Supervisor + claude-agent-sdk；Codex 下是 workspace-write Codex thread + progress event 映射
 - /status, /cancel, /resume → 任务管理
 
 ## 运行命令
@@ -30,6 +30,7 @@ Discord Bot (discord.js v14) → Orchestrator → Claude Code Agent SDK / Anthro
 - discord.js v14
 - @anthropic-ai/claude-agent-sdk（任务执行）
 - @anthropic-ai/sdk（轻量对话）
+- @openai/codex-sdk（Codex provider）
 - better-sqlite3（持久化）
 - pm2（进程管理）
 
@@ -38,22 +39,24 @@ Discord Bot (discord.js v14) → Orchestrator → Claude Code Agent SDK / Anthro
 - src/index.ts — 入口
 - src/bot.ts — Discord 事件监听 + 路由
 - src/config.ts — 配置加载
-- src/agent/chat.ts — 轻量对话（@mention，Anthropic messages.stream + 自写 tool loop）
+- src/agent/chat.ts — 轻量对话（@mention，Claude/Codex provider）
 - src/agent/chat-tools.ts — 4 个 chat 工具的 schema + executor（read_file / bash / web_search / web_fetch）
-- src/agent/task.ts — 任务执行（/task，Agent SDK，Supervisor）
+- src/agent/codex.ts — Codex SDK 封装
+- src/agent/session.ts — provider-prefixed session id
+- src/agent/task.ts — 任务执行（/task，Claude/Codex provider）
 - src/agent/subagents.ts — 加载 agents/*.md 注册角色化 subagent
 - agents/*.md — 角色化 subagent 定义（researcher / code-investigator / planner / generator / evaluator），YAML frontmatter + 系统 prompt
 - src/commands/register.ts — Slash command 注册
 - src/commands/handlers.ts — 命令处理逻辑
 - src/discord/chunks.ts — 消息分片（2000 字符限制）
-- src/discord/attachments.ts — Discord 附件 → Anthropic ContentBlockParam（图片/PDF 用 URL，文本内联，二进制落盘）
+- src/discord/attachments.ts — Discord 附件 → Claude content blocks + Codex local image/text inputs
 - src/discord/formatter.ts — Embed 格式化
 - src/discord/progress.ts — 进度更新推送
 - src/store/db.ts — SQLite 存储
 
 ## 配置
 
-复制 .env.example → .env，填写 Discord Bot Token、Client ID、Guild ID、Anthropic API Key、允许的用户 ID。
+复制 .env.example → .env，填写 Discord Bot Token、Client ID、Guild ID、允许的用户 ID；`MINICLAW_AGENT_PROVIDER=claude` 时填 Anthropic API Key，`codex` 时可填 OpenAI API Key 或复用本机 `codex login`。
 
 ## 测试
 
@@ -75,7 +78,7 @@ pnpm test:cov   # 带覆盖率报告
 | `discord/formatter` taskCompleteEmbed | tokens 字段 / 错误 embed |
 | `memory/parse` parseExplicitMemory | 中文/英文/slash 前缀 |
 
-`executeTask()` 是 I/O heavy（调 Anthropic SDK），不在单测覆盖。端到端走 Discord 真实测。
+`executeTask()` 是 I/O heavy（调 Claude/Codex SDK），不在单测覆盖。端到端走 Discord 真实测。
 
 ## 用户级扩展（`~/.miniclaw/`）
 

@@ -13,7 +13,10 @@ async function main(): Promise<void> {
   log.info("Starting...");
   const budget = config.defaultBudgetUsd === undefined ? "unlimited" : `$${config.defaultBudgetUsd}`;
   const turns = config.defaultMaxTurns === undefined ? "unlimited" : String(config.defaultMaxTurns);
-  log.info(`config: model=${config.model} budget=${budget} maxTurns=${turns} maxConcurrent=${config.maxConcurrentTasks}`);
+  log.info(
+    `config: provider=${config.agentProvider} model=${config.model} ` +
+    `budget=${budget} maxTurns=${turns} maxConcurrent=${config.maxConcurrentTasks}`
+  );
 
   initDb();
   log.info("Database initialized");
