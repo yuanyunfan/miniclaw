@@ -83,6 +83,24 @@ describe("execBash", () => {
     expect(r.content.length).toBeLessThan(55_000);
     expect(r.content).toMatch(/截断/);
   });
+
+  it("拒绝明显写入/破坏性命令", async () => {
+    const r = await execBash("rm -rf /tmp/miniclaw-should-not-run");
+    expect(r.is_error).toBe(true);
+    expect(r.content).toMatch(/拒绝|只读/);
+  });
+
+  it("拒绝 shell 重定向写文件", async () => {
+    const r = await execBash("echo hi > /tmp/miniclaw-should-not-write");
+    expect(r.is_error).toBe(true);
+    expect(r.content).toMatch(/重定向/);
+  });
+
+  it("拒绝会修改 git 状态的命令", async () => {
+    const r = await execBash("git reset --hard HEAD");
+    expect(r.is_error).toBe(true);
+    expect(r.content).toMatch(/git/);
+  });
 });
 
 describe("isPrivateHost", () => {
@@ -96,6 +114,9 @@ describe("isPrivateHost", () => {
     ["169.254.169.254", true],
     ["0.0.0.0", true],
     ["::1", true],
+    ["[::1]", true],
+    ["localhost.", true],
+    ["fd00::1", true],
     ["8.8.8.8", false],
     ["172.32.0.1", false],
     ["example.com", false],

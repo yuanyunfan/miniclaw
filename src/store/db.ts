@@ -153,7 +153,7 @@ export function getTaskByThreadId(threadId: string): TaskRow | undefined {
   const row = db.prepare(
     `SELECT * FROM tasks
      WHERE discord_thread_id = ? AND session_id IS NOT NULL
-     ORDER BY created_at DESC LIMIT 1`
+     ORDER BY created_at DESC, rowid DESC LIMIT 1`
   ).get(threadId);
   if (!row) return undefined;
   return assertTaskRows([row])[0];

@@ -166,7 +166,7 @@ chunkMessage 切 2000 字  ← Discord 单消息上限
 
 ```ts
 client.once(Events.ClientReady, (c) => {
-  console.log(`[MiniClaw] Logged in as ${c.user.tag}`);
+  log.info(`Logged in as ${c.user.tag}`);
   void recoverInterruptedTasks(c);     // 把 status='running' 但进程已死的任务标 'interrupted'
 });
 ```

@@ -6,6 +6,18 @@
 
 ## [Unreleased]
 
+### Fixed
+- `/cancel` 后任务最终状态不再被 `executeTask()` 收尾逻辑覆盖成 `failed`；取消路径统一落库为 `cancelled`。
+- Thread continuation 查询同一线程最近 session 时增加 `rowid DESC` 兜底排序，避免同一秒内多条 task 造成恢复到旧 session。
+- Claude 轻量 chat 的 memory extraction 现在尊重 `ANTHROPIC_BASE_URL`，与主 chat 路径代理行为一致。
+
+### Security
+- 收紧 `chat` 路径的 `bash` 工具：拒绝重定向、文件写入/删除、`sudo`、修改 git 状态和包管理器执行/安装命令，避免轻量对话承担 `/task` 的写权限职责。
+- 强化 `web_fetch` 内网地址识别：补充 IPv6 bracket、尾点 localhost、ULA IPv6 等私网形式。
+
+### Changed
+- 配置解析对 `MINICLAW_MAX_CONCURRENT_TASKS` / `MINICLAW_MAX_ATTACHMENTS` 使用正整数校验，对 `MINICLAW_MAX_ATTACHMENT_MB` 使用正数校验，避免非法 env 静默变成 `NaN`。
+
 ### Changed
 - **Supervisor 灵活化重构**（task.ts + agents/*.md）—— 把"四阶段流水线"prompt 改成"能力图谱 + 选择原则"
   - 删除 Supervisor prompt 中"推荐工作流 1.Researcher → 2.Planner → 3.Generator → 4.Evaluator"硬编码

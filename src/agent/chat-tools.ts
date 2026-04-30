@@ -104,6 +104,8 @@ async function execReadFile(path: string): Promise<ToolExecResult> {
 
 async function execBash(command: string, timeoutMs?: number): Promise<ToolExecResult> {
   if (!command.trim()) return { content: "command 不能为空", is_error: true };
+  const denied = validateReadOnlyBash(command);
+  if (denied) return { content: `chat bash 拒绝执行：${denied}`, is_error: true };
   const timeout = Math.min(BASH_MAX_TIMEOUT_MS, Math.max(1000, timeoutMs ?? BASH_DEFAULT_TIMEOUT_MS));
   try {
     const { stdout, stderr } = await execFileAsync("bash", ["-lc", command], {
@@ -138,10 +140,36 @@ const PRIVATE_HOST_PATTERNS = [
   /^0\.0\.0\.0$/,
   /^::1$/,
   /^fe80:/i,
+  /^f[cd][0-9a-f]{2}:/i,
 ];
 
+function validateReadOnlyBash(command: string): string | null {
+  const compact = command.replace(/\s+/g, " ").trim();
+  const lower = compact.toLowerCase();
+  const denied: Array<{ re: RegExp; reason: string }> = [
+    { re: /(^|[^<])>{1,2}|<</, reason: "chat 只允许只读探查，禁止 shell 重定向/ heredoc" },
+    { re: /\b(?:rm|mv|cp|chmod|chown|mkdir|rmdir|touch|tee|dd|truncate)\b/, reason: "chat 只允许只读探查，禁止文件写入/删除类命令" },
+    { re: /\bsudo\b/, reason: "禁止 sudo" },
+    { re: /\bgit\s+(?:push|commit|reset|checkout|switch|clean|rebase|merge|pull)\b/, reason: "chat 禁止修改 git 工作区或远端" },
+    { re: /\b(?:npm|pnpm|yarn|bun)\s+(?:install|add|remove|update|publish|run|exec|dlx)\b/, reason: "chat 禁止包管理器执行/安装；需要执行请用 /task" },
+  ];
+
+  for (const d of denied) {
+    if (d.re.test(lower)) return `${d.reason}: ${compact.slice(0, 160)}`;
+  }
+  return null;
+}
+
+function normalizeHost(host: string): string {
+  let h = host.trim().toLowerCase();
+  if (h.startsWith("[") && h.endsWith("]")) h = h.slice(1, -1);
+  if (h.endsWith(".")) h = h.slice(0, -1);
+  return h;
+}
+
 function isPrivateHost(host: string): boolean {
-  return PRIVATE_HOST_PATTERNS.some((re) => re.test(host));
+  const normalized = normalizeHost(host);
+  return PRIVATE_HOST_PATTERNS.some((re) => re.test(normalized));
 }
 
 function safeHostname(url: string): string | null {
@@ -196,4 +224,4 @@ async function execWebFetch(rawUrl: string): Promise<ToolExecResult> {
   }
 }
 
-export const __testables = { execReadFile, execBash, execWebFetch, isPrivateHost };
+export const __testables = { execReadFile, execBash, execWebFetch, isPrivateHost, validateReadOnlyBash };

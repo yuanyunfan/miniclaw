@@ -74,7 +74,10 @@ export async function extractMemories(
     if (!config.anthropicApiKey) {
       throw new Error("ANTHROPIC_API_KEY is required when MINICLAW_AGENT_PROVIDER=claude");
     }
-    const client = new Anthropic({ apiKey: config.anthropicApiKey });
+    const client = new Anthropic({
+      apiKey: config.anthropicApiKey,
+      ...(config.anthropicBaseUrl ? { baseURL: config.anthropicBaseUrl } : {}),
+    });
     const response = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 500,

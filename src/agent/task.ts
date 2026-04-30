@@ -79,7 +79,7 @@ export interface TaskResult {
 
 const formatUsage = formatAnthropicUsage;
 
-export const __testables = { fmtTokens, formatUsage, buildSupervisorBlock, IDENTITY_LINE_TASK };
+export const __testables = { fmtTokens, formatUsage, buildSupervisorBlock, IDENTITY_LINE_TASK, finalTaskStatus };
 
 export function buildSupervisorBlock(subagentNames: string[]): string {
   if (!subagentNames.length) return "";
@@ -87,6 +87,7 @@ export function buildSupervisorBlock(subagentNames: string[]): string {
 }
 
 const activeTasks = new Map<string, AbortController>();
+const cancelledTasks = new Set<string>();
 
 export function getActiveTaskCount(): number {
   return activeTasks.size;
@@ -99,9 +100,19 @@ export function listActiveTaskIds(): string[] {
 export function cancelTask(taskId: string): boolean {
   const ctrl = activeTasks.get(taskId);
   if (!ctrl) return false;
+  cancelledTasks.add(taskId);
   ctrl.abort();
   activeTasks.delete(taskId);
   return true;
+}
+
+function wasCancelled(taskId: string, abortController: AbortController): boolean {
+  return cancelledTasks.has(taskId) || abortController.signal.aborted;
+}
+
+function finalTaskStatus(taskId: string, abortController: AbortController, success: boolean): "completed" | "failed" | "cancelled" {
+  if (wasCancelled(taskId, abortController)) return "cancelled";
+  return success ? "completed" : "failed";
 }
 
 interface ExecuteTaskParams {
@@ -240,12 +251,14 @@ async function executeCodexTask(
   }
 
   const lastResult: TaskResult = {
-    success: !failedMessage,
+    success: !failedMessage && !wasCancelled(params.taskId, abortController),
     sessionId,
     costUsd: 0,
     durationMs: Date.now() - startedAt,
     turns: turns || 1,
-    result: failedMessage || finalResponse.trim() || "[无文字回复]",
+    result: wasCancelled(params.taskId, abortController)
+      ? "任务已被用户取消"
+      : failedMessage || finalResponse.trim() || "[无文字回复]",
     ...(tokensSummary ? { tokensSummary } : {}),
   };
 
@@ -253,7 +266,7 @@ async function executeCodexTask(
 
   updateTask(params.taskId, {
     session_id: lastResult.sessionId,
-    status: lastResult.success ? "completed" : "failed",
+    status: finalTaskStatus(params.taskId, abortController, lastResult.success),
     result_summary: lastResult.result.slice(0, 10000),
     cost_usd: lastResult.costUsd,
     duration_ms: lastResult.durationMs,
@@ -529,15 +542,15 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
         costUsd: 0,
         durationMs: 0,
         turns: 0,
-        result: "任务被中断或无结果",
+        result: wasCancelled(params.taskId, abortController) ? "任务已被用户取消" : "任务被中断或无结果",
       };
     }
 
-    await progress.complete(params.channel);
+    await progress.complete(params.channel, lastResult.success ? undefined : { keepAsError: true });
 
     updateTask(params.taskId, {
       session_id: lastResult.sessionId,
-      status: lastResult.success ? "completed" : "failed",
+      status: finalTaskStatus(params.taskId, abortController, lastResult.success),
       result_summary: lastResult.result.slice(0, 10000),
       cost_usd: lastResult.costUsd,
       duration_ms: lastResult.durationMs,
@@ -619,12 +632,14 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
 
     return lastResult;
   } catch (err) {
-    const errMsg = err instanceof Error ? err.message : String(err);
+    const errMsg = wasCancelled(params.taskId, abortController)
+      ? "任务已被用户取消"
+      : err instanceof Error ? err.message : String(err);
     log.error(`✗ ${shortId} threw after ${Date.now() - startedAt}ms: ${errMsg}`);
     await progress.complete(params.channel, { keepAsError: true });
 
     updateTask(params.taskId, {
-      status: "failed",
+      status: wasCancelled(params.taskId, abortController) ? "cancelled" : "failed",
       result_summary: errMsg.slice(0, 10000),
       completed_at: new Date().toISOString(),
     });
@@ -641,6 +656,7 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
     };
   } finally {
     activeTasks.delete(params.taskId);
+    cancelledTasks.delete(params.taskId);
     // 清理 task 路径下落盘的附件
     try {
       rmSync(join(params.cwd, ".miniclaw-attachments", params.taskId), { recursive: true, force: true });

@@ -49,6 +49,13 @@ function envNumber(key: string, fallback: string): number {
   return n;
 }
 
+function envPositiveInt(key: string, fallback: string): number {
+  const raw = (process.env[key] ?? fallback).trim();
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n <= 0) throw new Error(`Invalid env ${key}: expected positive integer`);
+  return n;
+}
+
 const agentProvider = envOneOf<AgentProvider>("MINICLAW_AGENT_PROVIDER", "claude", ["claude", "codex"]);
 const claudeModel = envOptional("MINICLAW_CLAUDE_MODEL") ?? env("MINICLAW_MODEL", "claude-opus-4-7");
 const codexModel = envOptional("MINICLAW_CODEX_MODEL") ?? "gpt-5.5";
@@ -66,7 +73,7 @@ export const config = {
   openaiBaseUrl: envOptional("OPENAI_BASE_URL"),
   allowedUserId: env("MINICLAW_ALLOWED_USER_ID"),
   defaultCwd: resolveHome(env("MINICLAW_DEFAULT_CWD", "~/Code")),
-  maxConcurrentTasks: Number(env("MINICLAW_MAX_CONCURRENT_TASKS", "3")),
+  maxConcurrentTasks: envPositiveInt("MINICLAW_MAX_CONCURRENT_TASKS", "3"),
   defaultBudgetUsd: envNumberOrUnlimited("MINICLAW_DEFAULT_BUDGET_USD", "1.0"),
   defaultMaxTurns: envNumberOrUnlimited("MINICLAW_DEFAULT_MAX_TURNS", "30"),
   // Backward-compatible alias used by older code paths. New provider-aware code
@@ -109,6 +116,6 @@ export const config = {
     return ids;
   })(),
   dbPath: resolveHome(env("MINICLAW_DB_PATH", "~/.miniclaw/data.db")),
-  maxAttachmentMb: Number(env("MINICLAW_MAX_ATTACHMENT_MB", "32")),
-  maxAttachments: Number(env("MINICLAW_MAX_ATTACHMENTS", "10")),
+  maxAttachmentMb: envNumber("MINICLAW_MAX_ATTACHMENT_MB", "32"),
+  maxAttachments: envPositiveInt("MINICLAW_MAX_ATTACHMENTS", "10"),
 } as const;

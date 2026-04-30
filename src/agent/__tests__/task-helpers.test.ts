@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { __testables } from "../task.js";
 
-const { fmtTokens, formatUsage } = __testables;
+const { fmtTokens, formatUsage, finalTaskStatus } = __testables;
 
 describe("fmtTokens", () => {
   it("returns '-' for undefined / null", () => {
@@ -50,5 +50,19 @@ describe("formatUsage", () => {
   });
   it("formats partial fields (only output)", () => {
     expect(formatUsage({ output_tokens: 1500 })).toBe("out: 1.5K");
+  });
+});
+
+describe("finalTaskStatus", () => {
+  it("preserves completed/failed when not cancelled", () => {
+    const ctrl = new AbortController();
+    expect(finalTaskStatus("task-a", ctrl, true)).toBe("completed");
+    expect(finalTaskStatus("task-a", ctrl, false)).toBe("failed");
+  });
+
+  it("maps aborted controller to cancelled", () => {
+    const ctrl = new AbortController();
+    ctrl.abort();
+    expect(finalTaskStatus("task-a", ctrl, false)).toBe("cancelled");
   });
 });

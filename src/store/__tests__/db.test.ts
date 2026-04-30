@@ -52,12 +52,11 @@ describe("getTaskByThreadId", () => {
     const threadId = "thread-multi-" + uuid().slice(0, 6);
     const t1 = makeTask(threadId);
     updateTask(t1.id, { session_id: "sess-old" });
-    // small wait so created_at differs at second-precision
     const t2 = makeTask(threadId);
     updateTask(t2.id, { session_id: "sess-new" });
     const row = getTaskByThreadId(threadId);
     expect(row).toBeDefined();
-    expect(["sess-old", "sess-new"]).toContain(row?.session_id);
+    expect(row?.session_id).toBe("sess-new");
   });
 
   it("ignores tasks without session_id", () => {
