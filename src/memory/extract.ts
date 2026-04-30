@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { config } from "../config.js";
 import { addMemory, getAllMemories } from "../store/memory.js";
 import { createLogger } from "../lib/log.js";
+import { loadPrompt } from "../agent/prompts.js";
 
 const log = createLogger("memory-extract");
 
@@ -9,21 +10,7 @@ function buildExtractUserPrompt(userMsg: string, assistantReply: string, existin
   return `用户消息: ${userMsg}\n\n助手回复: ${assistantReply.slice(0, 1000)}${existingBlock}\n\n请提取值得长期记住的信息，输出 JSON 数组:`;
 }
 
-const EXTRACT_SYSTEM = `你是一个记忆提取助手。分析用户和助手的对话，提取值得长期记住的信息。
-
-只提取以下类型的信息：
-- user: 用户的身份、角色、偏好、知识背景
-- feedback: 用户对回答方式的反馈和纠正
-- project: 正在进行的项目、目标、截止日期等
-- reference: 外部资源的位置、链接等
-
-输出 JSON 数组，每个元素 {"type", "name", "content"}。name 不超过 30 字符。
-如果没有值得记住的信息，输出空数组 []。
-
-注意：
-- 不要提取临时性的、只在当前对话有用的信息
-- 不要重复已有的记忆
-- 简单问候、闲聊不需要提取`;
+const EXTRACT_SYSTEM = loadPrompt("memory-extractor");
 
 export async function extractMemories(
   userMsg: string,
