@@ -1,6 +1,6 @@
 # MiniClaw Stage — CLI 多 Agent 控制台
 
-> 终端里的"多 agent 群聊"。按需召唤角色（CEO / Engineer / Tester …），自由 @ 分派任务，做观察者看 agent 互相讨论。
+> 终端里的"多 agent 群聊"。三个内置 personas：CEO / Engineer / Tester（用户可在 `~/.miniclaw/personas/` 自定义覆盖），自由 @ 分派任务，做观察者看 agent 互相讨论。
 > Discord bot 子系统的"对偶"——同样复用 chat-tools / memory / db / log，只换载体。
 
 ---

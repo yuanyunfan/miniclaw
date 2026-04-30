@@ -15,7 +15,10 @@
 | `/task <描述>` | `.env` 选择 Claude Code / Codex | 创建独立线程，实时进度，完成 Embed |
 | `/status` | — | 查看活跃/历史任务 |
 | `/cancel <id>` | — | 终止运行中的任务 |
-| `/resume <id> <指令>` | — | 恢复之前的 session 继续执行 |
+| `/resume <id> <指令>` | — | 恢复之前的 session 继续执行（不能跨 provider 恢复） |
+| `/remember <text>` / 直接发"记住:..." | — | 写入长期记忆 `~/.miniclaw/memories/MEMORY.md` |
+| `/forget <name>` | — | 从长期记忆移除指定条目 |
+| `/memories` | — | 列出当前所有长期记忆 |
 
 **交互细节：**
 - 收到消息 → 👀 反应 → 处理中实时显示工具调用步骤 → 完成 ✅ / 失败 ❌
@@ -76,6 +79,10 @@ cp .env.example .env
 | `MINICLAW_CODEX_TASK_SANDBOX` | `workspace-write` | Codex `/task` 沙箱 |
 | `MINICLAW_CODEX_CHAT_SANDBOX` | `read-only` | Codex chat/stage 沙箱 |
 | `MINICLAW_CODEX_REASONING_EFFORT` | `medium` | Codex reasoning effort |
+| `MINICLAW_CODEX_APPROVAL_POLICY` | — | Codex 工具调用审批策略（如 `never` / `on-request`） |
+| `MINICLAW_CODEX_WEB_SEARCH` | — | Codex 是否启用 web_search 工具（`true`/`false`） |
+| `MINICLAW_CODEX_NETWORK_ACCESS` | `true` | Codex 沙箱是否允许出站网络 |
+| `MINICLAW_CODEX_TIMEOUT_MS` | `900000` | Codex 单 turn 超时（毫秒，默 15 分钟） |
 | `MINICLAW_DB_PATH` | `~/.miniclaw/data.db` | SQLite 数据库路径 |
 
 切换到 Codex 的最小配置：

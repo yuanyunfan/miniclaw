@@ -58,6 +58,11 @@ Discord Bot (discord.js v14) → Orchestrator → provider（Claude Code/Anthrop
 
 复制 .env.example → .env，填写 Discord Bot Token、Client ID、Guild ID、允许的用户 ID；`MINICLAW_AGENT_PROVIDER=claude` 时填 Anthropic API Key，`codex` 时可填 OpenAI API Key 或复用本机 `codex login`。
 
+**Provider 切换与 Session 恢复**：
+- 切换 `MINICLAW_AGENT_PROVIDER` 后必须重启 bot（`.env` 不在 `tsx --watch` 监听范围）
+- session id 自带 provider 前缀（`claude:xxx` / `codex:xxx`），由 `src/agent/session.ts:assertProviderSession()` 强校验
+- **跨 provider 不能 `/resume`**：claude 下创建的 session 切到 codex 后再 `/resume` 会拒绝，反之亦然。需要重新 `/task` 起一个新 session
+
 ## 测试
 
 ```bash

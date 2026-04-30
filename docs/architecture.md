@@ -78,7 +78,7 @@ flowchart LR
     TASK -->|"Claude: query() + agents + tools"| Raven
     CHAT -->|"Codex: read-only thread"| CODEX
     TASK -->|"Codex: workspace-write thread"| CODEX
-    TASK -.->|"加载 4 角色 + user skills"| SUBA
+    TASK -.->|"加载 5 角色 + user skills"| SUBA
     SUBA -.->|"读取"| AGENTS["agents/*.md<br/>(repo)"]
     SUBA -.->|"读取"| UC4
     TASK -.->|"加载 MCP"| MCP
