@@ -5,6 +5,7 @@ import type { Client, SendableChannels } from "discord.js";
 import { config } from "../config.js";
 import { createTask } from "../store/db.js";
 import { executeTask, getActiveTaskCount } from "../agent/task.js";
+import { loadPrompt } from "../agent/prompts.js";
 import type { CronJobTask, CronJobSkill } from "./types.js";
 import { renderTemplate } from "./template.js";
 import { resolve, join } from "node:path";
@@ -21,18 +22,26 @@ const SCRIPTS_DIR = process.env.MINICLAW_SCRIPTS_DIR ?? join(homedir(), ".minicl
 
 function buildCronPreScriptBlock(scriptName: string, stdout: string): string {
   const truncated = stdout.slice(0, 8000) + (stdout.length > 8000 ? "\n... (truncated)" : "");
-  return `## 📥 上方 script (\`${scriptName}\`) 采集到的数据 (stdout)\n\n\`\`\`\n${truncated}\n\`\`\`\n\n---\n\n`;
+  return loadPrompt("templates/cron-pre-script-block", { script_name: scriptName, output: truncated }) + "\n\n";
 }
 
 function buildCronTaskPrompt(jobName: string, prependedContext: string, renderedPrompt: string): string {
-  return `[cron:${jobName}]\n\n${prependedContext}${renderedPrompt}`;
+  return loadPrompt("templates/cron-task-prompt", {
+    job_name: jobName,
+    prepended_context: prependedContext,
+    user_prompt: renderedPrompt,
+  });
 }
 
 function buildCronSkillPrompt(jobName: string, skillName: string, skillArgs?: Record<string, string | number | boolean>): string {
   const argsStr = skillArgs
     ? "\n参数:\n" + Object.entries(skillArgs).map(([k, v]) => `- ${k}: ${v}`).join("\n")
     : "";
-  return `[cron:${jobName}] 请显式调用 ${skillName} skill 完成本次任务${argsStr}`;
+  return loadPrompt("templates/cron-skill-prompt", {
+    job_name: jobName,
+    skill_name: skillName,
+    args_block: argsStr,
+  });
 }
 
 export const __testables = { buildCronPreScriptBlock, buildCronTaskPrompt, buildCronSkillPrompt };
