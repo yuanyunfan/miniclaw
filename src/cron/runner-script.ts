@@ -10,6 +10,14 @@ import { createLogger } from "../lib/log.js";
 const log = createLogger("cron");
 
 const SCRIPTS_DIR_DEFAULT = join(homedir(), ".miniclaw/scripts");
+const DEFAULT_TIMEOUT_SEC = 300;
+
+class CronScriptRunError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CronScriptRunError";
+  }
+}
 
 function getScriptsDir(): string {
   return process.env.MINICLAW_SCRIPTS_DIR ?? SCRIPTS_DIR_DEFAULT;
@@ -22,6 +30,23 @@ function isExecutable(path: string): boolean {
   } catch {
     return false;
   }
+}
+
+function signalProcessTree(child: ReturnType<typeof spawn>, signal: NodeJS.Signals): void {
+  if (!child.pid) return;
+  try {
+    if (process.platform === "win32") child.kill(signal);
+    else process.kill(-child.pid, signal);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== "ESRCH") {
+      try { child.kill(signal); } catch { /* ignore */ }
+    }
+  }
+}
+
+function firstLine(text: string): string {
+  return text.trim().split(/\r?\n/)[0]?.slice(0, 300) ?? "";
 }
 
 // 解析 stdout 找出可发送的附件文件路径：
@@ -79,12 +104,12 @@ export async function runScript(job: CronJobScript, client: Client): Promise<voi
   if (!existsSync(scriptPath)) {
     log.warn(`${job.name}: script not found ${scriptPath}`);
     await postToChannel(client, job.channel, `⏰ cron \`${job.name}\` ❌ script 不存在: \`${job.script}\``);
-    return;
+    throw new CronScriptRunError(`script not found: ${job.script}`);
   }
   if (!isExecutable(scriptPath)) {
     log.warn(`${job.name}: script not executable, run: chmod +x ${scriptPath}`);
     await postToChannel(client, job.channel, `⏰ cron \`${job.name}\` ❌ script 不可执行: \`chmod +x ${scriptPath}\``);
-    return;
+    throw new CronScriptRunError(`script not executable: ${job.script}`);
   }
 
   const env = {
@@ -94,41 +119,57 @@ export async function runScript(job: CronJobScript, client: Client): Promise<voi
     MINICLAW_CHANNEL_ID: job.channel,
   };
   const args = job.args ?? [];
-  const timeoutMs = (job.timeout_sec ?? 300) * 1000;
+  const timeoutSec = job.timeout_sec ?? DEFAULT_TIMEOUT_SEC;
+  const timeoutMs = timeoutSec * 1000;
 
   const startedAt = Date.now();
   const child = spawn(scriptPath, args, {
     cwd: scriptsDir,
     env,
     stdio: ["ignore", "pipe", "pipe"],
+    detached: process.platform !== "win32",
   });
 
   let stdout = "";
   let stderr = "";
   let killed = false;
+  let forceKillTimer: NodeJS.Timeout | undefined;
 
   const timer = setTimeout(() => {
     killed = true;
-    child.kill("SIGTERM");
-    setTimeout(() => child.kill("SIGKILL"), 5000);
+    signalProcessTree(child, "SIGTERM");
+    forceKillTimer = setTimeout(() => signalProcessTree(child, "SIGKILL"), 5000);
   }, timeoutMs);
 
   child.stdout?.on("data", (chunk) => { stdout += chunk.toString(); });
   child.stderr?.on("data", (chunk) => { stderr += chunk.toString(); });
 
   await new Promise<void>((resolve) => {
-    child.on("exit", () => { clearTimeout(timer); resolve(); });
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      if (forceKillTimer) clearTimeout(forceKillTimer);
+      resolve();
+    };
+    child.on("close", finish);
     child.on("error", (err) => {
       stderr += `\nspawn error: ${err.message}`;
-      clearTimeout(timer);
-      resolve();
+      finish();
     });
   });
 
   const durationS = ((Date.now() - startedAt) / 1000).toFixed(1);
   const exitCode = child.exitCode ?? -1;
   const success = exitCode === 0 && !killed;
-  const status = killed ? `🛑 timeout(${job.timeout_sec}s)` : success ? `✅ exit=0` : `❌ exit=${exitCode}`;
+  const status = killed ? `🛑 timeout(${timeoutSec}s)` : success ? `✅ exit=0` : `❌ exit=${exitCode}`;
+  const failureDetail = firstLine(stderr || stdout);
+  const failureReason = killed
+    ? `script timed out after ${timeoutSec}s`
+    : success
+      ? undefined
+      : `script exited with code ${exitCode}${failureDetail ? `: ${failureDetail}` : ""}`;
 
   // 解析附件（PNG / image / media）
   const { paths: attachmentPaths, remaining } = success ? extractAttachments(stdout) : { paths: [], remaining: stdout };
@@ -139,7 +180,7 @@ export async function runScript(job: CronJobScript, client: Client): Promise<voi
   }
 
   const ch = await fetchChannel(client, job.channel);
-  if (!ch) return;
+  if (!ch) throw new CronScriptRunError(`failed to fetch channel ${job.channel}`);
 
   const files = attachmentPaths.map((p) => new AttachmentBuilder(p));
 
@@ -155,9 +196,19 @@ export async function runScript(job: CronJobScript, client: Client): Promise<voi
   const truncated = fullText.length > 1700 ? fullText.slice(0, 1700) + "\n... (truncated)" : fullText;
   const body = fullText
     ? `cron \`${job.name}\` ${status} (${durationS}s)\n\`\`\`\n${truncated}\n\`\`\``
-    : `cron \`${job.name}\` ${status} (${durationS}s)${files.length ? "" : " — 无输出"}`;
+    : `cron \`${job.name}\` ${status} (${durationS}s)${files.length ? "" : killed ? " — 超时前无输出" : " — 无输出"}`;
 
-  await ch.send(files.length ? { content: body.slice(0, 2000), files } : { content: body.slice(0, 2000) });
+  try {
+    await ch.send(files.length ? { content: body.slice(0, 2000), files } : { content: body.slice(0, 2000) });
+  } catch (err) {
+    if (failureReason) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new CronScriptRunError(`${failureReason}; failed to post result: ${msg}`);
+    }
+    throw err;
+  }
+
+  if (failureReason) throw new CronScriptRunError(failureReason);
 }
 
 async function fetchChannel(client: Client, channelId: string): Promise<SendableChannels | null> {
