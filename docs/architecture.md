@@ -448,7 +448,7 @@ classify by mime + ext
 
 ## 数据库 schema
 
-`~/.miniclaw/data.db`（SQLite WAL 模式）
+`~/.miniclaw/data.db`（SQLite WAL 模式）。schema 版本使用 SQLite `PRAGMA user_version` 管理，当前版本由 `src/store/db.ts` 的 `SCHEMA_VERSION` 定义。
 
 ```mermaid
 erDiagram

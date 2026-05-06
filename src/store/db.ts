@@ -4,9 +4,14 @@ import { dirname } from "path";
 import { config } from "../config.js";
 
 let db: Database.Database;
+export const SCHEMA_VERSION = 1;
 
 export function getDb(): Database.Database {
   return db;
+}
+
+export function getSchemaVersion(): number {
+  return Number(db.pragma("user_version", { simple: true }) ?? 0);
 }
 
 export const TASK_STATUSES = [
@@ -80,16 +85,43 @@ export function initDb(): void {
       cost_usd REAL,
       FOREIGN KEY (scene_id) REFERENCES scenes(id)
     );
-    CREATE INDEX IF NOT EXISTS idx_scene_msgs_scene ON scene_messages(scene_id);
-  `);
+	    CREATE INDEX IF NOT EXISTS idx_scene_msgs_scene ON scene_messages(scene_id);
+	  `);
 
-  // Idempotent migration for existing DBs that predate progress_message_id.
-  try {
-    db.exec(`ALTER TABLE tasks ADD COLUMN progress_message_id TEXT`);
-  } catch {
-    // column already exists — ignore
+  runMigrations();
+}
+
+function setSchemaVersion(version: number): void {
+  db.pragma(`user_version = ${version}`);
+}
+
+function columnExists(table: string, column: string): boolean {
+  const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name?: string }>;
+  return rows.some((r) => r.name === column);
+}
+
+function ensureColumn(table: string, column: string, definition: string): void {
+  if (!columnExists(table, column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
   }
 }
+
+function runMigrations(): void {
+  const current = getSchemaVersion();
+
+  // v1: existing DBs before 0.4.0 did not persist the Discord progress message id.
+  if (current < 1) {
+    ensureColumn("tasks", "progress_message_id", "TEXT");
+    setSchemaVersion(1);
+  }
+
+  const after = getSchemaVersion();
+  if (after < SCHEMA_VERSION) {
+    throw new Error(`Database schema migration incomplete: user_version=${after}, expected=${SCHEMA_VERSION}`);
+  }
+}
+
+export const __testables = { columnExists, runMigrations };
 
 export interface TaskRow {
   id: string;

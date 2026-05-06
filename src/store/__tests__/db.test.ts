@@ -1,6 +1,17 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { v4 as uuid } from "uuid";
-import { initDb, createTask, getTask, getTaskByThreadId, updateTask, markTaskInterrupted, getInterruptedTasks } from "../db.js";
+import {
+  SCHEMA_VERSION,
+  initDb,
+  createTask,
+  getTask,
+  getTaskByThreadId,
+  updateTask,
+  markTaskInterrupted,
+  getInterruptedTasks,
+  getSchemaVersion,
+  __testables,
+} from "../db.js";
 
 beforeAll(() => {
   initDb();
@@ -33,6 +44,16 @@ describe("createTask + getTask", () => {
 
   it("returns undefined for unknown id", () => {
     expect(getTask("nonexistent-id")).toBeUndefined();
+  });
+});
+
+describe("schema migrations", () => {
+  it("sets SQLite user_version to current schema version", () => {
+    expect(getSchemaVersion()).toBe(SCHEMA_VERSION);
+  });
+
+  it("ensures progress_message_id column exists", () => {
+    expect(__testables.columnExists("tasks", "progress_message_id")).toBe(true);
   });
 });
 
