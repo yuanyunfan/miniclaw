@@ -13,7 +13,7 @@ flowchart LR
 
     subgraph Discord["Discord 平台"]
         DC["#常规 / #chat<br/>4 分类频道（AI/PERSONAL/STOCK/NEWS）"]
-        SC["/task /status /cancel /resume<br/>/remember /forget /memories"]
+        SC["/task /status /health /cancel /resume<br/>/remember /forget /memories"]
     end
 
     subgraph LocalMac["本机 (Mac)"]

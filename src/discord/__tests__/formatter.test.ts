@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { taskCompleteEmbed, taskErrorEmbed } from "../formatter.js";
+import { healthEmbed, taskCompleteEmbed, taskErrorEmbed } from "../formatter.js";
 
 describe("taskCompleteEmbed", () => {
   it("renders 4 base fields", () => {
@@ -44,5 +44,27 @@ describe("taskErrorEmbed", () => {
     expect(data.title).toBe("❌ 任务失败");
     expect(data.description).toBe("boom");
     expect(data.fields?.[0].value).toBe("abcdef12");
+  });
+});
+
+describe("healthEmbed", () => {
+  it("renders process, task and cron health fields", () => {
+    const e = healthEmbed({
+      provider: "claude",
+      model: "claude-opus",
+      uptimeSec: 3661,
+      rssMb: 120.4,
+      heapUsedMb: 45.2,
+      activeTasks: 1,
+      maxConcurrentTasks: 4,
+      interruptedTasks: 2,
+      scheduledJobs: 15,
+      cronErrors: 0,
+      dbPath: "/tmp/miniclaw.db",
+    });
+    const data = e.toJSON();
+    expect(data.title).toBe("🩺 MiniClaw Health");
+    expect(data.fields?.map((f) => f.name)).toEqual(["Provider", "Uptime", "Memory", "Tasks", "Cron", "DB"]);
+    expect(data.fields?.find((f) => f.name === "Tasks")?.value).toContain("1/4 active");
   });
 });

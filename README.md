@@ -14,6 +14,7 @@
 | `@MiniClaw` 在任意频道 | `.env` 选择 Claude / Codex | 同上 |
 | `/task <描述>` | `.env` 选择 Claude Code / Codex | 创建独立线程，实时进度，完成 Embed |
 | `/status` | — | 查看活跃/历史任务 |
+| `/health` | — | 查看 MiniClaw 进程、任务和 cron 健康状态 |
 | `/cancel <id>` | — | 终止运行中的任务 |
 | `/resume <id> <指令>` | — | 恢复之前的 session 继续执行（不能跨 provider 恢复） |
 | `/remember <text>` / 直接发"记住:..." | — | 写入长期记忆 `~/.miniclaw/memories/MEMORY.md` |

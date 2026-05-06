@@ -10,11 +10,12 @@ import { homedir } from "os";
 import { config } from "../config.js";
 import { createTask, getActiveTasks, getInterruptedTasks, getRecentTasks, getTask, updateTask } from "../store/db.js";
 import { executeTask, getActiveTaskCount, cancelTask, listActiveTaskIds } from "../agent/task.js";
-import { taskStartEmbed, statusOverviewEmbed, taskErrorEmbed } from "../discord/formatter.js";
+import { taskStartEmbed, statusOverviewEmbed, taskErrorEmbed, healthEmbed } from "../discord/formatter.js";
 import { addMemory, deleteMemory, getAllMemories, getMemoriesByType } from "../store/memory.js";
 import { processAttachments } from "../discord/attachments.js";
 import { createLogger } from "../lib/log.js";
 import { assertProviderSession } from "../agent/session.js";
+import { listScheduled } from "../cron/scheduler.js";
 
 const log = createLogger("handlers");
 
@@ -122,6 +123,35 @@ export async function handleStatus(interaction: ChatInputCommandInteraction): Pr
 
   await interaction.reply({
     embeds: [statusOverviewEmbed({ active, interrupted, recent })],
+    ephemeral: true,
+  });
+}
+
+export async function handleHealth(interaction: ChatInputCommandInteraction): Promise<void> {
+  if (!isAllowed(interaction.user.id)) {
+    await interaction.reply({ content: "⛔ 无权限", ephemeral: true });
+    return;
+  }
+
+  const mem = process.memoryUsage();
+  const scheduled = listScheduled();
+  const cronErrors = scheduled.filter((j) => j.state?.last_status === "error").length;
+  const interrupted = getInterruptedTasks(20);
+
+  await interaction.reply({
+    embeds: [healthEmbed({
+      provider: config.agentProvider,
+      model: config.model,
+      uptimeSec: process.uptime(),
+      rssMb: mem.rss / 1024 / 1024,
+      heapUsedMb: mem.heapUsed / 1024 / 1024,
+      activeTasks: getActiveTaskCount(),
+      maxConcurrentTasks: config.maxConcurrentTasks,
+      interruptedTasks: interrupted.length,
+      scheduledJobs: scheduled.length,
+      cronErrors,
+      dbPath: config.dbPath,
+    })],
     ephemeral: true,
   });
 }

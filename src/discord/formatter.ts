@@ -95,3 +95,42 @@ export function statusOverviewEmbed(params: {
 
   return embed;
 }
+
+function fmtUptime(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h ${m}m`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+export function healthEmbed(params: {
+  provider: string;
+  model: string;
+  uptimeSec: number;
+  rssMb: number;
+  heapUsedMb: number;
+  activeTasks: number;
+  maxConcurrentTasks: number;
+  interruptedTasks: number;
+  scheduledJobs: number;
+  cronErrors: number;
+  dbPath: string;
+}): EmbedBuilder {
+  return new EmbedBuilder()
+    .setTitle("🩺 MiniClaw Health")
+    .setColor(params.cronErrors > 0 ? 0xf39c12 : 0x2ecc71)
+    .addFields(
+      { name: "Provider", value: `${params.provider} / ${params.model}`, inline: true },
+      { name: "Uptime", value: fmtUptime(params.uptimeSec), inline: true },
+      { name: "Memory", value: `rss ${params.rssMb.toFixed(1)}MB · heap ${params.heapUsedMb.toFixed(1)}MB`, inline: false },
+      { name: "Tasks", value: `${params.activeTasks}/${params.maxConcurrentTasks} active · ${params.interruptedTasks} interrupted`, inline: true },
+      { name: "Cron", value: `${params.scheduledJobs} scheduled · ${params.cronErrors} recent error`, inline: true },
+      { name: "DB", value: params.dbPath, inline: false },
+    )
+    .setTimestamp();
+}
+
+export const __testables = { fmtUptime };

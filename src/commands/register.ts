@@ -29,6 +29,10 @@ const commands = [
     .setDescription("查看当前活跃任务"),
 
   new SlashCommandBuilder()
+    .setName("health")
+    .setDescription("查看 MiniClaw 运行健康状态"),
+
+  new SlashCommandBuilder()
     .setName("cancel")
     .setDescription("取消正在运行的任务")
     .addStringOption((opt) =>
