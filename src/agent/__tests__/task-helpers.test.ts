@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { __testables } from "../task.js";
 
-const { fmtTokens, formatUsage, finalTaskStatus } = __testables;
+const { fmtTokens, formatUsage, finalTaskStatus, rawTaskMessages } = __testables;
 
 describe("fmtTokens", () => {
   it("returns '-' for undefined / null", () => {
@@ -64,5 +64,29 @@ describe("finalTaskStatus", () => {
     const ctrl = new AbortController();
     ctrl.abort();
     expect(finalTaskStatus("task-a", ctrl, false)).toBe("cancelled");
+  });
+});
+
+describe("rawTaskMessages", () => {
+  it("uses a fallback for empty successful raw output", () => {
+    expect(rawTaskMessages("1234567890", {
+      success: true,
+      sessionId: "",
+      costUsd: 0,
+      durationMs: 0,
+      turns: 0,
+      result: "   ",
+    })).toEqual(["[无文字回复]"]);
+  });
+
+  it("uses a fallback for empty failed raw output", () => {
+    expect(rawTaskMessages("1234567890", {
+      success: false,
+      sessionId: "",
+      costUsd: 0,
+      durationMs: 0,
+      turns: 0,
+      result: "",
+    })).toEqual(["❌ `12345678` 失败: 任务失败且无错误详情"]);
   });
 });

@@ -9,12 +9,20 @@ module.exports = {
   apps: [
     {
       name: "miniclaw",
-      script: "npx",
+      script: "pnpm",
       args: "tsx src/index.ts",
       cwd: __dirname,
       env: {
         NODE_ENV: "production",
       },
+      filter_env: [
+        "ANTHROPIC_",
+        "CODEX_",
+        "OPENAI_",
+        "OPENAPI_MCP_HEADERS",
+        "RAVEN_",
+        "TAVILY_",
+      ],
       watch: false,
       max_memory_restart: "500M",
       exp_backoff_restart_delay: 1000,

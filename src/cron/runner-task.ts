@@ -14,6 +14,13 @@ import { createLogger } from "../lib/log.js";
 const log = createLogger("cron");
 import { homedir } from "node:os";
 
+class CronTaskRunError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CronTaskRunError";
+  }
+}
+
 function resolveHome(p: string): string {
   return p.startsWith("~") ? resolve(homedir(), p.slice(2)) : resolve(p);
 }
@@ -103,8 +110,9 @@ async function fetchSendableChannel(client: Client, channelId: string): Promise<
 
 export async function runTask(job: CronJobTask, client: Client): Promise<void> {
   if (getActiveTaskCount() >= config.maxConcurrentTasks) {
-    log.warn(`${job.name} skipped: hit MINICLAW_MAX_CONCURRENT_TASKS=${config.maxConcurrentTasks}`);
-    return;
+    const msg = `${job.name} skipped: hit MINICLAW_MAX_CONCURRENT_TASKS=${config.maxConcurrentTasks}`;
+    log.warn(msg);
+    throw new CronTaskRunError(msg);
   }
   const channel = await fetchSendableChannel(client, job.channel);
   const taskId = uuid();
@@ -125,7 +133,7 @@ export async function runTask(job: CronJobTask, client: Client): Promise<void> {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       await channel.send(`⏰ cron \`${job.name}\` ❌ pre_script 失败: ${msg.slice(0, 1500)}`);
-      return;
+      throw new CronTaskRunError(`pre_script failed: ${msg}`);
     }
   }
 
@@ -145,8 +153,9 @@ export async function runTask(job: CronJobTask, client: Client): Promise<void> {
 
 export async function runSkill(job: CronJobSkill, client: Client): Promise<void> {
   if (getActiveTaskCount() >= config.maxConcurrentTasks) {
-    log.warn(`${job.name} skipped: hit concurrent limit`);
-    return;
+    const msg = `${job.name} skipped: hit MINICLAW_MAX_CONCURRENT_TASKS=${config.maxConcurrentTasks}`;
+    log.warn(msg);
+    throw new CronTaskRunError(msg);
   }
   const channel = await fetchSendableChannel(client, job.channel);
   const taskId = uuid();

@@ -79,7 +79,7 @@ export interface TaskResult {
 
 const formatUsage = formatAnthropicUsage;
 
-export const __testables = { fmtTokens, formatUsage, buildSupervisorBlock, IDENTITY_LINE_TASK, finalTaskStatus };
+export const __testables = { fmtTokens, formatUsage, buildSupervisorBlock, IDENTITY_LINE_TASK, finalTaskStatus, rawTaskMessages };
 
 export function buildSupervisorBlock(subagentNames: string[]): string {
   if (!subagentNames.length) return "";
@@ -113,6 +113,19 @@ function wasCancelled(taskId: string, abortController: AbortController): boolean
 function finalTaskStatus(taskId: string, abortController: AbortController, success: boolean): "completed" | "failed" | "cancelled" {
   if (wasCancelled(taskId, abortController)) return "cancelled";
   return success ? "completed" : "failed";
+}
+
+function rawTaskMessages(taskId: string, result: TaskResult): string[] {
+  const fallback = result.success ? "[无文字回复]" : "任务失败且无错误详情";
+  const text = result.result.trim() ? result.result : fallback;
+  if (result.success) return chunkMessage(text);
+  return [`❌ \`${taskId.slice(0, 8)}\` 失败: ${text.slice(0, 1900)}`];
+}
+
+async function sendRawTaskResult(channel: SendableChannels, taskId: string, result: TaskResult): Promise<void> {
+  for (const message of rawTaskMessages(taskId, result)) {
+    await channel.send(message);
+  }
 }
 
 interface ExecuteTaskParams {
@@ -281,12 +294,7 @@ async function executeCodexTask(
 
   const outputMode = params.outputMode ?? "embed";
   if (outputMode === "raw") {
-    if (lastResult.success) {
-      const chunks = chunkMessage(lastResult.result);
-      for (const chunk of chunks) await params.channel.send(chunk);
-    } else {
-      await params.channel.send(`❌ \`${params.taskId.slice(0, 8)}\` 失败: ${lastResult.result.slice(0, 1900)}`);
-    }
+    await sendRawTaskResult(params.channel, params.taskId, lastResult);
     return lastResult;
   }
 
@@ -573,14 +581,7 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
 
     if (outputMode === "raw") {
       // 程序化触发（cron 等）：直接发结果文本，不带任何元数据装饰
-      if (lastResult.success) {
-        const chunks = chunkMessage(lastResult.result);
-        for (const chunk of chunks) {
-          await params.channel.send(chunk);
-        }
-      } else {
-        await params.channel.send(`❌ \`${params.taskId.slice(0, 8)}\` 失败: ${lastResult.result.slice(0, 1900)}`);
-      }
+      await sendRawTaskResult(params.channel, params.taskId, lastResult);
       return lastResult;
     }
 
