@@ -1,39 +1,46 @@
 const DISCORD_LIMIT = 2000;
+const FENCE_CLOSE = "\n```";
+
+function normalizeFence(line: string): string {
+  const fence = line.trim();
+  return fence.length <= 80 ? fence : "```";
+}
+
+function nextOpenFence(current: string, text: string): string {
+  let openFence = current;
+  const matches = text.matchAll(/^```.*$/gm);
+  for (const match of matches) {
+    openFence = openFence ? "" : normalizeFence(match[0]);
+  }
+  return openFence;
+}
 
 export function chunkMessage(text: string): string[] {
   if (text.length <= DISCORD_LIMIT) return [text];
 
   const chunks: string[] = [];
-  let remaining = text;
+  let offset = 0;
   let openFence = "";
 
-  while (remaining.length > 0) {
-    let slice = remaining.slice(0, DISCORD_LIMIT);
+  while (offset < text.length) {
+    const prefix = openFence ? `${openFence}\n` : "";
+    const bodyLimit = Math.max(1, DISCORD_LIMIT - prefix.length - FENCE_CLOSE.length);
+    let body = text.slice(offset, offset + bodyLimit);
+    const isFinal = offset + body.length >= text.length;
 
-    if (openFence && !slice.startsWith(openFence)) {
-      slice = openFence + "\n" + slice;
-      slice = slice.slice(0, DISCORD_LIMIT);
+    if (!isFinal) {
+      const lastNewline = body.lastIndexOf("\n");
+      if (lastNewline > bodyLimit * 0.3) {
+        body = body.slice(0, lastNewline);
+      }
     }
 
-    const lastNewline = slice.lastIndexOf("\n");
-    if (remaining.length > DISCORD_LIMIT && lastNewline > DISCORD_LIMIT * 0.3) {
-      slice = slice.slice(0, lastNewline);
-    }
-
-    const fenceMatches = slice.match(/^```/gm);
-    const fenceCount = fenceMatches ? fenceMatches.length : 0;
-
-    if (fenceCount % 2 !== 0) {
-      const lastFenceIdx = slice.lastIndexOf("```");
-      const afterFence = slice.slice(lastFenceIdx + 3).split("\n")[0] ?? "";
-      slice += "\n```";
-      openFence = "```" + afterFence.trim();
-    } else {
-      openFence = "";
-    }
+    const nextFence = nextOpenFence(openFence, body);
+    const slice = prefix + body + (nextFence ? FENCE_CLOSE : "");
 
     chunks.push(slice);
-    remaining = remaining.slice(slice.replace(/\n```$/, "").length);
+    offset += body.length;
+    openFence = nextFence;
   }
 
   return chunks;

@@ -33,4 +33,11 @@ describe("chunkMessage", () => {
       expect(fences % 2).toBe(0);
     });
   });
+
+  it("keeps chunks under Discord limit when closing an open code fence", () => {
+    const text = "```ts\n" + "x".repeat(1994) + "\nmore";
+    const chunks = chunkMessage(text);
+    expect(chunks.length).toBeGreaterThan(1);
+    chunks.forEach((c) => expect(c.length).toBeLessThanOrEqual(2000));
+  });
 });
