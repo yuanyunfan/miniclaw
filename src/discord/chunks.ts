@@ -15,7 +15,8 @@ function nextOpenFence(current: string, text: string): string {
   return openFence;
 }
 
-export function chunkMessage(text: string): string[] {
+export function chunkMessage(text: string, fallback = "[无文字回复]"): string[] {
+  if (!text.trim()) return [(fallback.trim() || "[无文字回复]").slice(0, DISCORD_LIMIT)];
   if (text.length <= DISCORD_LIMIT) return [text];
 
   const chunks: string[] = [];

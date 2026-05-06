@@ -7,6 +7,11 @@ describe("chunkMessage", () => {
     expect(chunkMessage(text)).toEqual([text]);
   });
 
+  it("uses fallback for blank text so callers never send an empty Discord message", () => {
+    expect(chunkMessage("")).toEqual(["[无文字回复]"]);
+    expect(chunkMessage(" \n\t ", "fallback")).toEqual(["fallback"]);
+  });
+
   it("splits long text on newline boundaries", () => {
     const lines = Array.from({ length: 100 }, (_, i) => `line ${i} ` + "x".repeat(30));
     const text = lines.join("\n");
