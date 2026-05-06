@@ -11,11 +11,20 @@ import { createLogger } from "../lib/log.js";
 const log = createLogger("cron");
 
 const tasks = new Map<string, ScheduledTask>();
+const runningJobs = new Set<string>();
 
 async function dispatch(job: CronJob, client: Client): Promise<void> {
+  if (runningJobs.has(job.name)) {
+    const msg = `${job.name} skipped: previous run still active`;
+    log.warn(msg);
+    recordRun(job.name, false, 0, msg);
+    return;
+  }
+
   const startedAt = Date.now();
   let ok = true;
   let errorMsg: string | undefined;
+  runningJobs.add(job.name);
   try {
     if (job.type === "task")    await runTask(job, client);
     else if (job.type === "script") await runScript(job, client);
@@ -28,6 +37,7 @@ async function dispatch(job: CronJob, client: Client): Promise<void> {
   } finally {
     const durationMs = Date.now() - startedAt;
     recordRun(job.name, ok, durationMs, errorMsg);
+    runningJobs.delete(job.name);
   }
 }
 
@@ -79,3 +89,5 @@ export async function runJobNow(name: string, client: Client): Promise<void> {
   if (!job) throw new Error(`job not found: ${name}`);
   await dispatch(job, client);
 }
+
+export const __testables = { dispatch };
