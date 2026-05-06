@@ -24,6 +24,10 @@ const log = createLogger("bot");
 
 export function createBot(): Client {
   const client = new Client({
+    allowedMentions: {
+      parse: [],
+      repliedUser: false,
+    },
     intents: [
       GatewayIntentBits.Guilds,
       GatewayIntentBits.GuildMessages,
