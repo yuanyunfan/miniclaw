@@ -10,7 +10,7 @@ import { config } from "./config.js";
 import { chat, type ChatCallbacks } from "./agent/chat.js";
 import { chunkMessage } from "./discord/chunks.js";
 import { handleTask, handleStatus, handleCancel, handleResume, handleRemember, handleForget, handleMemories } from "./commands/handlers.js";
-import { executeTask } from "./agent/task.js";
+import { executeTask, getActiveTaskCount } from "./agent/task.js";
 import { recoverInterruptedTasks } from "./agent/recovery.js";
 import { createTask, getTaskByThreadId } from "./store/db.js";
 import { v4 as uuid } from "uuid";
@@ -54,6 +54,11 @@ export function createBot(): Client {
       const followupContent = message.content.trim();
       const followupAtts = Array.from(message.attachments.values());
       if (!followupContent && !followupAtts.length) return;
+
+      if (getActiveTaskCount() >= config.maxConcurrentTasks) {
+        await message.reply(`⚠️ 已达并发上限 (${config.maxConcurrentTasks})，请等待现有任务完成`);
+        return;
+      }
 
       const newTaskId = uuid();
       let followupBlocks: Awaited<ReturnType<typeof processAttachments>>["blocks"] = [];
