@@ -50,6 +50,20 @@ describe("execReadFile", () => {
     expect(r.is_error).toBe(true);
     expect(r.content).toMatch(/过大|head|tail/);
   });
+
+  it("拒绝读取 .env 文件", async () => {
+    const p = join(tmp, ".env.local");
+    writeFileSync(p, "TOKEN=secret");
+    const r = await execReadFile(p);
+    expect(r.is_error).toBe(true);
+    expect(r.content).toMatch(/敏感路径/);
+  });
+
+  it("拒绝读取 SSH key 路径，即使文件不存在", async () => {
+    const r = await execReadFile("/Users/yuan/.ssh/id_ed25519");
+    expect(r.is_error).toBe(true);
+    expect(r.content).toMatch(/敏感路径/);
+  });
 });
 
 describe("execBash", () => {
@@ -100,6 +114,18 @@ describe("execBash", () => {
     const r = await execBash("git reset --hard HEAD");
     expect(r.is_error).toBe(true);
     expect(r.content).toMatch(/git/);
+  });
+
+  it("拒绝读取敏感路径的命令", async () => {
+    const r = await execBash("cat ~/.ssh/id_ed25519");
+    expect(r.is_error).toBe(true);
+    expect(r.content).toMatch(/敏感路径/);
+  });
+
+  it("拒绝读取相对 .env 的命令", async () => {
+    const r = await execBash("cat .env");
+    expect(r.is_error).toBe(true);
+    expect(r.content).toMatch(/敏感路径/);
   });
 });
 

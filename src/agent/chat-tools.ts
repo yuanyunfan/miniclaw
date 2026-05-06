@@ -13,6 +13,8 @@ const BASH_DEFAULT_TIMEOUT_MS = 30_000;
 const BASH_MAX_TIMEOUT_MS = 120_000;
 const FETCH_OUTPUT_MAX = 100_000;
 const FETCH_TIMEOUT_MS = 15_000;
+const SENSITIVE_DIR_NAMES = new Set([".ssh", ".codex", ".claude", ".pm2"]);
+const SENSITIVE_FILE_NAMES = new Set([".claude.json", ".npmrc", ".netrc"]);
 
 export interface ToolExecResult {
   content: string;
@@ -88,6 +90,8 @@ export async function executeTool(name: string, input: unknown): Promise<ToolExe
 async function execReadFile(path: string): Promise<ToolExecResult> {
   if (!path) return { content: "path 不能为空", is_error: true };
   if (!isAbsolute(path)) return { content: `path 必须是绝对路径，收到：${path}`, is_error: true };
+  const sensitiveReason = sensitivePathReason(path);
+  if (sensitiveReason) return { content: `拒绝读取敏感路径：${sensitiveReason}`, is_error: true };
   let st: Awaited<ReturnType<typeof stat>>;
   try {
     st = await stat(path);
@@ -146,6 +150,8 @@ const PRIVATE_HOST_PATTERNS = [
 function validateReadOnlyBash(command: string): string | null {
   const compact = command.replace(/\s+/g, " ").trim();
   const lower = compact.toLowerCase();
+  const sensitiveReason = sensitiveCommandReason(compact);
+  if (sensitiveReason) return `禁止读取敏感路径: ${sensitiveReason}`;
   const denied: Array<{ re: RegExp; reason: string }> = [
     { re: /(^|[^<])>{1,2}|<</, reason: "chat 只允许只读探查，禁止 shell 重定向/ heredoc" },
     { re: /\b(?:rm|mv|cp|chmod|chown|mkdir|rmdir|touch|tee|dd|truncate)\b/, reason: "chat 只允许只读探查，禁止文件写入/删除类命令" },
@@ -156,6 +162,30 @@ function validateReadOnlyBash(command: string): string | null {
 
   for (const d of denied) {
     if (d.re.test(lower)) return `${d.reason}: ${compact.slice(0, 160)}`;
+  }
+  return null;
+}
+
+function sensitivePathReason(rawPath: string): string | null {
+  const normalized = rawPath.replace(/\\/g, "/").replace(/^["']|["']$/g, "");
+  const parts = normalized.split("/").filter(Boolean).map((p) => p.toLowerCase());
+  const base = parts.at(-1) ?? "";
+
+  for (const dir of SENSITIVE_DIR_NAMES) {
+    if (parts.includes(dir)) return normalized;
+  }
+  if (SENSITIVE_FILE_NAMES.has(base)) return normalized;
+  if (/^\.env(?:$|\.)/i.test(base)) return normalized;
+  if (/^id_(?:rsa|dsa|ecdsa|ed25519)(?:\.pub)?$/i.test(base)) return normalized;
+  if (/\.(?:pem|key|p12|pfx)$/i.test(base)) return normalized;
+  return null;
+}
+
+function sensitiveCommandReason(command: string): string | null {
+  const tokens = command.match(/(?:~|\$HOME|\/|\.{1,2}\/)?[^\s"'`|;&<>]+/g) ?? [];
+  for (const token of tokens) {
+    const reason = sensitivePathReason(token);
+    if (reason) return reason;
   }
   return null;
 }
@@ -224,4 +254,4 @@ async function execWebFetch(rawUrl: string): Promise<ToolExecResult> {
   }
 }
 
-export const __testables = { execReadFile, execBash, execWebFetch, isPrivateHost, validateReadOnlyBash };
+export const __testables = { execReadFile, execBash, execWebFetch, isPrivateHost, validateReadOnlyBash, sensitivePathReason };
