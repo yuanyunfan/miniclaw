@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { load as yamlLoad } from "js-yaml";
 import cron from "node-cron";
 import type { CronJob, CronJobLoadResult, CronJobType } from "./types.js";
+import { isPreProviderName } from "../providers/index.js";
 
 const CRON_DIR_DEFAULT = join(homedir(), ".miniclaw/cron");
 const VALID_TYPES: CronJobType[] = ["task", "script", "skill", "message"];
@@ -72,8 +73,24 @@ function validateJob(raw: unknown, file: string): CronJob {
   if (type === "task") {
     if (typeof r.prompt !== "string" || !r.prompt.trim()) throw new Error(`${file}: type=task 需 'prompt'`);
     const preScript = typeof r.pre_script === "string" ? r.pre_script.trim() : undefined;
+    const preProvider = typeof r.pre_provider === "string" ? r.pre_provider.trim() : undefined;
+    if (preScript && preProvider) {
+      throw new Error(`${file}: 'pre_script' 和 'pre_provider' 不能同时配置`);
+    }
     if (preScript && (preScript.includes("/") || preScript.includes(".."))) {
       throw new Error(`${file}: 'pre_script' 必须是单一文件名（不含路径分隔符）`);
+    }
+    if (preProvider) {
+      if (preProvider.includes("/") || preProvider.includes("..")) {
+        throw new Error(`${file}: 'pre_provider' 必须是 provider 名称（不含路径分隔符）`);
+      }
+      if (!isPreProviderName(preProvider)) {
+        throw new Error(`${file}: unknown pre_provider '${preProvider}'`);
+      }
+    }
+    const preProviderConfig = typeof r.pre_provider_config === "string" ? r.pre_provider_config.trim() : undefined;
+    if (preProviderConfig && (preProviderConfig.includes("/") || preProviderConfig.includes(".."))) {
+      throw new Error(`${file}: 'pre_provider_config' 必须是配置名（不含路径分隔符）`);
     }
     const preTimeout = typeof r.pre_script_timeout_sec === "number" ? r.pre_script_timeout_sec : 120;
     if (preTimeout > 600) throw new Error(`${file}: 'pre_script_timeout_sec' 上限 600 (10 分钟)`);
@@ -86,6 +103,10 @@ function validateJob(raw: unknown, file: string): CronJob {
         pre_script: preScript,
         pre_script_args: Array.isArray(r.pre_script_args) ? r.pre_script_args.map(String) : undefined,
         pre_script_timeout_sec: preTimeout,
+      } : {}),
+      ...(preProvider ? {
+        pre_provider: preProvider,
+        pre_provider_config: preProviderConfig,
       } : {}),
     };
   }

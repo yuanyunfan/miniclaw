@@ -50,6 +50,11 @@ describe("prompt snapshot baseline", () => {
     expect(hash(out)).toMatchInlineSnapshot(`"02451e75cdc0769b"`);
   });
 
+  it("cron.preProviderBlock.fixture", () => {
+    const out = cronT.buildCronPreProviderBlock("wechat-mp", "{\"total_articles\":1}");
+    expect(hash(out)).toMatchInlineSnapshot(`"1cd743a0a7e3f33e"`);
+  });
+
   it("cron.taskPrompt.fixture", () => {
     const out = cronT.buildCronTaskPrompt("morning-brief", "PRE_CTX\n\n", "do the thing");
     expect(hash(out)).toMatchInlineSnapshot(`"a822eed2bd677d6f"`);

@@ -51,6 +51,28 @@ prompt: "扫描 ~/Code 项目"
     }
   });
 
+  it("解析 type=task + pre_provider", () => {
+    write("daily-wechat.yaml", `
+name: daily-wechat
+schedule: "0 10 * * *"
+enabled: true
+type: task
+channel: "${VALID_CHANNEL}"
+pre_provider: wechat-mp
+pre_provider_config: daily-ai-wechat
+prompt: "总结微信公众号更新"
+`);
+    const r = loadCronJobs();
+    expect(r.errors).toEqual([]);
+    expect(r.jobs.length).toBe(1);
+    const j = r.jobs[0];
+    expect(j.type).toBe("task");
+    if (j.type === "task") {
+      expect(j.pre_provider).toBe("wechat-mp");
+      expect(j.pre_provider_config).toBe("daily-ai-wechat");
+    }
+  });
+
   it("解析 type=message + 默认 enabled=true", () => {
     write("morning.yaml", `
 name: morning
@@ -135,6 +157,33 @@ script: ../../etc/passwd
 `);
     const r = loadCronJobs();
     expect(r.errors[0].error).toMatch(/路径分隔符/);
+  });
+
+  it("pre_script 和 pre_provider 同时配置 → 拒绝", () => {
+    write("bad-pre.yaml", `
+name: x
+schedule: "0 9 * * *"
+type: task
+channel: "${VALID_CHANNEL}"
+pre_script: collect.py
+pre_provider: wechat-mp
+prompt: hi
+`);
+    const r = loadCronJobs();
+    expect(r.errors[0].error).toMatch(/不能同时配置/);
+  });
+
+  it("未知 pre_provider → 拒绝", () => {
+    write("bad-provider.yaml", `
+name: x
+schedule: "0 9 * * *"
+type: task
+channel: "${VALID_CHANNEL}"
+pre_provider: unknown
+prompt: hi
+`);
+    const r = loadCronJobs();
+    expect(r.errors[0].error).toMatch(/unknown pre_provider/);
   });
 
   it("timeout_sec > 1800 → 拒绝", () => {

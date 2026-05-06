@@ -21,6 +21,12 @@ export interface CronJobTask extends CronJobBase {
   pre_script?: string;
   pre_script_args?: string[];
   pre_script_timeout_sec?: number;
+  /**
+   * 可选：在调用 LLM 之前运行内置 provider，stdout-like 文本会被拼到 prompt 顶部。
+   * 和 pre_script 互斥；适合需要长期维护、可测试的采集逻辑。
+   */
+  pre_provider?: string;
+  pre_provider_config?: string;
 }
 
 export interface CronJobScript extends CronJobBase {

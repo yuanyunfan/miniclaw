@@ -1,0 +1,19 @@
+import type { PreProviderResult, PreProviderRunArgs } from "./types.js";
+import { runWechatMpProvider } from "./wechat-mp/index.js";
+
+const PRE_PROVIDERS = {
+  "wechat-mp": runWechatMpProvider,
+} as const;
+
+export type PreProviderName = keyof typeof PRE_PROVIDERS;
+
+export function isPreProviderName(name: string): name is PreProviderName {
+  return name in PRE_PROVIDERS;
+}
+
+export async function runPreProvider(name: string, args: PreProviderRunArgs): Promise<PreProviderResult> {
+  if (!isPreProviderName(name)) {
+    throw new Error(`unknown pre_provider: ${name}`);
+  }
+  return await PRE_PROVIDERS[name](args);
+}

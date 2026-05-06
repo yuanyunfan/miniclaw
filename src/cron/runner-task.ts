@@ -10,6 +10,7 @@ import type { CronJobTask, CronJobSkill } from "./types.js";
 import { renderTemplate } from "./template.js";
 import { resolve, join } from "node:path";
 import { createLogger } from "../lib/log.js";
+import { runPreProvider } from "../providers/index.js";
 
 const log = createLogger("cron");
 import { homedir } from "node:os";
@@ -32,6 +33,11 @@ function buildCronPreScriptBlock(scriptName: string, stdout: string): string {
   return loadPrompt("templates/cron-pre-script-block", { script_name: scriptName, output: truncated }) + "\n\n";
 }
 
+function buildCronPreProviderBlock(providerName: string, output: string): string {
+  const truncated = output.slice(0, 8000) + (output.length > 8000 ? "\n... (truncated)" : "");
+  return loadPrompt("templates/cron-pre-provider-block", { provider_name: providerName, output: truncated }) + "\n\n";
+}
+
 function buildCronTaskPrompt(jobName: string, prependedContext: string, renderedPrompt: string): string {
   return loadPrompt("templates/cron-task-prompt", {
     job_name: jobName,
@@ -51,7 +57,7 @@ function buildCronSkillPrompt(jobName: string, skillName: string, skillArgs?: Re
   });
 }
 
-export const __testables = { buildCronPreScriptBlock, buildCronTaskPrompt, buildCronSkillPrompt };
+export const __testables = { buildCronPreScriptBlock, buildCronPreProviderBlock, buildCronTaskPrompt, buildCronSkillPrompt };
 
 async function runPreScript(
   scriptName: string,
@@ -120,6 +126,7 @@ export async function runTask(job: CronJobTask, client: Client): Promise<void> {
 
   // 如果配了 pre_script，先跑它，把 stdout 拼到 prompt 顶部
   let prependedContext = "";
+  let preProviderCommit: (() => Promise<void>) | undefined;
   if (job.pre_script) {
     try {
       const stdout = await runPreScript(
@@ -136,6 +143,22 @@ export async function runTask(job: CronJobTask, client: Client): Promise<void> {
       throw new CronTaskRunError(`pre_script failed: ${msg}`);
     }
   }
+  if (job.pre_provider) {
+    try {
+      const result = await runPreProvider(job.pre_provider, {
+        configName: job.pre_provider_config,
+        jobName: job.name,
+        channelId: job.channel,
+        runAt: new Date(),
+      });
+      prependedContext += buildCronPreProviderBlock(job.pre_provider, result.text);
+      preProviderCommit = result.commit;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await channel.send(`⏰ cron \`${job.name}\` ❌ pre_provider 失败: ${msg.slice(0, 1500)}`);
+      throw new CronTaskRunError(`pre_provider failed: ${msg}`);
+    }
+  }
 
   const renderedPrompt = renderTemplate(job.prompt, { "cron.name": job.name });
   const prompt = buildCronTaskPrompt(job.name, prependedContext, renderedPrompt);
@@ -149,6 +172,9 @@ export async function runTask(job: CronJobTask, client: Client): Promise<void> {
     cwd,
   });
   await executeTask({ taskId, prompt, cwd, channel, outputMode: "raw" });
+  if (preProviderCommit) {
+    await preProviderCommit();
+  }
 }
 
 export async function runSkill(job: CronJobSkill, client: Client): Promise<void> {
