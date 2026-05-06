@@ -180,7 +180,7 @@ sequenceDiagram
 
         CH->>DB: getRecentHistory(channelId)<br/>取最近 N 条
         CH->>MD: getAllMemories()<br/>读 MEMORY.md
-        CH->>CH: 拼 system = 自定义 IDENTITY + memory + history<br/>(不用 claude_code preset)
+        CH->>CH: 拼 system = 自定义 IDENTITY + memory policy<br/>history 作为低信任 user context 注入
 
         loop tool loop（最多 10 轮）
             CH->>A: messages.stream({ model, system, tools:[read_file,bash,web_search,web_fetch], messages, max_tokens:4096 })
@@ -216,7 +216,7 @@ sequenceDiagram
 | 维度 | chat（@mention） | task（/task） |
 |---|---|---|
 | SDK | Claude: `@anthropic-ai/sdk` / Codex: `@openai/codex-sdk` | Claude: `@anthropic-ai/claude-agent-sdk` / Codex: `@openai/codex-sdk` |
-| system prompt | 自定义短 prompt + memory + history | claude_code preset + memory + supervisorBlock |
+| system prompt | 自定义短 prompt + memory policy；history 低信任注入 user context | claude_code preset + memory policy + supervisorBlock |
 | 工具 | Claude: 4 个手写工具；Codex: read-only Codex thread | Claude: 全套 + Agent + MCP + Edit/Write；Codex: workspace-write Codex thread |
 | 子进程 | Claude chat 无；Codex 由 SDK 包装 CLI | SDK 子进程 |
 | TTFT | ~500-800ms | 2-5s |
