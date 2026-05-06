@@ -9,8 +9,8 @@ module.exports = {
   apps: [
     {
       name: "miniclaw",
-      script: "pnpm",
-      args: "tsx src/index.ts",
+      script: "dist/index.js",
+      interpreter: "node",
       cwd: __dirname,
       env: {
         NODE_ENV: "production",
