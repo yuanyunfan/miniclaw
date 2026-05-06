@@ -21,7 +21,11 @@ async function main(): Promise<void> {
   initDb();
   log.info("Database initialized");
 
-  await registerCommands();
+  if (config.registerCommandsOnStart) {
+    await registerCommands();
+  } else {
+    log.info("Slash command registration skipped (run `pnpm register` after command changes)");
+  }
 
   bot = createBot();
   bot.once(Events.ClientReady, (client) => {

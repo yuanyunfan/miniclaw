@@ -78,6 +78,11 @@ export const config = {
   defaultMaxTurns: envNumberOrUnlimited("MINICLAW_DEFAULT_MAX_TURNS", "30"),
   chatTimeoutMs: envNumber("MINICLAW_CHAT_TIMEOUT_MS", "180000"),
   attachmentTimeoutMs: envNumber("MINICLAW_ATTACHMENT_TIMEOUT_MS", "30000"),
+  registerCommandsOnStart: envOneOf<"true" | "false">(
+    "MINICLAW_REGISTER_COMMANDS_ON_START",
+    "false",
+    ["true", "false"]
+  ) === "true",
   // Backward-compatible alias used by older code paths. New provider-aware code
   // should prefer claudeModel / codex.model.
   model: agentProvider === "claude" ? claudeModel : codexModel,

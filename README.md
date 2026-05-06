@@ -76,6 +76,7 @@ cp .env.example .env
 | `MINICLAW_DEFAULT_MAX_TURNS` | `30` | 单次任务最大轮次 |
 | `MINICLAW_CHAT_TIMEOUT_MS` | `180000` | 轻量 chat 单次回复整体超时 |
 | `MINICLAW_ATTACHMENT_TIMEOUT_MS` | `30000` | Discord 附件下载超时 |
+| `MINICLAW_REGISTER_COMMANDS_ON_START` | `false` | 启动时是否自动注册 slash commands；命令变更后建议手动跑 `pnpm register` |
 | `MINICLAW_CLAUDE_MODEL` | `claude-opus-4-7` | Claude 模型（旧 `MINICLAW_MODEL` 仍兼容） |
 | `MINICLAW_CODEX_MODEL` | `gpt-5.5` | Codex 模型 |
 | `MINICLAW_CODEX_TASK_SANDBOX` | `workspace-write` | Codex `/task` 沙箱 |
