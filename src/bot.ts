@@ -16,7 +16,7 @@ import { createTask, getTaskByThreadId } from "./store/db.js";
 import { v4 as uuid } from "uuid";
 import { parseExplicitMemory } from "./memory/parse.js";
 import { addMemory } from "./store/memory.js";
-import { processAttachments } from "./discord/attachments.js";
+import { cleanupAttachmentScope, processAttachments } from "./discord/attachments.js";
 import { createLogger } from "./lib/log.js";
 import { assertProviderSession } from "./agent/session.js";
 
@@ -126,84 +126,92 @@ export function createBot(): Client {
     const atts = Array.from(message.attachments.values());
     let attachmentBlocks: Awaited<ReturnType<typeof processAttachments>>["blocks"] = [];
     let attachmentCodexInputs: Awaited<ReturnType<typeof processAttachments>>["codexInputs"] = [];
-    if (atts.length) {
-      const r = await processAttachments(atts, { scope: message.id });
-      attachmentBlocks = r.blocks;
-      attachmentCodexInputs = r.codexInputs;
-      for (const n of r.notices) {
-        if (message.channel.isSendable()) await message.channel.send(n).catch(() => {});
-      }
-    }
-
-    if (!content && !attachmentBlocks.length) {
-      await message.reply("你好！有什么需要帮忙的？");
-      return;
-    }
-    const effectivePrompt = content || "请分析这些附件";
-
-    const explicitMemory = parseExplicitMemory(content);
-    if (explicitMemory) {
-      const row = addMemory(explicitMemory.type, explicitMemory.name, explicitMemory.content);
-      await message.reply(`✅ 已记住: **${row.name}** (ID: ${row.id})`);
-      return;
-    }
-
-    await message.react("👀").catch(() => {});
-
-    const typingInterval = message.channel.isSendable()
-      ? setInterval(() => { message.channel.isSendable() && message.channel.sendTyping().catch(() => {}); }, 8000)
-      : null;
-    if (message.channel.isSendable()) {
-      await message.channel.sendTyping();
-    }
+    const attachmentScope = atts.length ? { scope: message.id } : null;
 
     try {
-      let stepMsg: Message | null = null;
-      let steps: string[] = [];
-      let lastStepUpdate = 0;
-      let lastLine = "";
-
-      const flushSteps = async () => {
-        if (!steps.length) return;
-        const text = steps.join("\n").slice(-1800);
-        try {
-          if (stepMsg) {
-            await stepMsg.edit(text);
-          } else {
-            stepMsg = message.channel.isSendable() ? await message.channel.send(text) : null;
-          }
-        } catch { stepMsg = null; }
-        lastStepUpdate = Date.now();
-      };
-
-      const callbacks: ChatCallbacks = {
-        onToolUse: (display) => {
-          if (display === lastLine) return;
-          lastLine = display;
-          steps.push(display);
-          if (Date.now() - lastStepUpdate > 600) {
-            flushSteps();
-          }
-        },
-        onText: (_text) => {},
-      };
-
-      const reply = await chat(message.channel.id, message.author.id, effectivePrompt, attachmentBlocks, callbacks, attachmentCodexInputs);
-      if (typingInterval) clearInterval(typingInterval);
-      await flushSteps();
-
-      const chunks = chunkMessage(reply);
-      for (const chunk of chunks) {
-        await message.reply(chunk);
+      if (atts.length && attachmentScope) {
+        const r = await processAttachments(atts, attachmentScope);
+        attachmentBlocks = r.blocks;
+        attachmentCodexInputs = r.codexInputs;
+        for (const n of r.notices) {
+          if (message.channel.isSendable()) await message.channel.send(n).catch(() => {});
+        }
       }
-      await message.reactions.cache.get("👀")?.users.remove(client.user!.id).catch(() => {});
-      await message.react("✅").catch(() => {});
-    } catch (err) {
-      if (typingInterval) clearInterval(typingInterval);
-      log.error("Chat error:", err);
-      await message.reactions.cache.get("👀")?.users.remove(client.user!.id).catch(() => {});
-      await message.react("❌").catch(() => {});
-      await message.reply("❌ 回复出错，请稍后再试");
+
+      if (!content && !attachmentBlocks.length) {
+        await message.reply("你好！有什么需要帮忙的？");
+        return;
+      }
+      const effectivePrompt = content || "请分析这些附件";
+
+      const explicitMemory = parseExplicitMemory(content);
+      if (explicitMemory) {
+        const row = addMemory(explicitMemory.type, explicitMemory.name, explicitMemory.content);
+        await message.reply(`✅ 已记住: **${row.name}** (ID: ${row.id})`);
+        return;
+      }
+
+      await message.react("👀").catch(() => {});
+
+      const typingInterval = message.channel.isSendable()
+        ? setInterval(() => { message.channel.isSendable() && message.channel.sendTyping().catch(() => {}); }, 8000)
+        : null;
+      if (message.channel.isSendable()) {
+        await message.channel.sendTyping();
+      }
+
+      try {
+        let stepMsg: Message | null = null;
+        let steps: string[] = [];
+        let lastStepUpdate = 0;
+        let lastLine = "";
+
+        const flushSteps = async () => {
+          if (!steps.length) return;
+          const text = steps.join("\n").slice(-1800);
+          try {
+            if (stepMsg) {
+              await stepMsg.edit(text);
+            } else {
+              stepMsg = message.channel.isSendable() ? await message.channel.send(text) : null;
+            }
+          } catch { stepMsg = null; }
+          lastStepUpdate = Date.now();
+        };
+
+        const callbacks: ChatCallbacks = {
+          onToolUse: (display) => {
+            if (display === lastLine) return;
+            lastLine = display;
+            steps.push(display);
+            if (Date.now() - lastStepUpdate > 600) {
+              flushSteps();
+            }
+          },
+          onText: (_text) => {},
+        };
+
+        const reply = await chat(message.channel.id, message.author.id, effectivePrompt, attachmentBlocks, callbacks, attachmentCodexInputs);
+        if (typingInterval) clearInterval(typingInterval);
+        await flushSteps();
+
+        const chunks = chunkMessage(reply);
+        for (const chunk of chunks) {
+          await message.reply(chunk);
+        }
+        await message.reactions.cache.get("👀")?.users.remove(client.user!.id).catch(() => {});
+        await message.react("✅").catch(() => {});
+      } catch (err) {
+        if (typingInterval) clearInterval(typingInterval);
+        log.error("Chat error:", err);
+        await message.reactions.cache.get("👀")?.users.remove(client.user!.id).catch(() => {});
+        await message.react("❌").catch(() => {});
+        await message.reply("❌ 回复出错，请稍后再试");
+      }
+    } finally {
+      if (attachmentScope) {
+        cleanupAttachmentScope(attachmentScope);
+      }
     }
   });
 

@@ -1,6 +1,6 @@
 import type { Attachment } from "discord.js";
 import type { ContentBlockParam } from "@anthropic-ai/sdk/resources/messages.js";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, extname, basename } from "node:path";
 import { tmpdir } from "node:os";
 import { config } from "../config.js";
@@ -11,6 +11,11 @@ export interface AttachmentResult {
   codexInputs: CodexInputEntry[];
   textSummary: string;
   notices: string[];
+}
+
+export interface AttachmentScope {
+  cwd?: string;
+  scope: string;
 }
 
 const IMAGE_MIME = /^image\/(png|jpe?g|gif|webp)$/i;
@@ -71,17 +76,25 @@ async function downloadToBuffer(url: string, timeoutMs = config.attachmentTimeou
   }
 }
 
-function pickBaseDir(opts: { cwd?: string }, scope: string): string {
-  const root = opts.cwd
-    ? join(opts.cwd, ".miniclaw-attachments", scope)
-    : join(tmpdir(), "miniclaw-attachments", scope);
+function attachmentBaseDir(opts: AttachmentScope): string {
+  return opts.cwd
+    ? join(opts.cwd, ".miniclaw-attachments", opts.scope)
+    : join(tmpdir(), "miniclaw-attachments", opts.scope);
+}
+
+function ensureBaseDir(opts: AttachmentScope): string {
+  const root = attachmentBaseDir(opts);
   mkdirSync(root, { recursive: true });
   return root;
 }
 
+export function cleanupAttachmentScope(opts: AttachmentScope): void {
+  rmSync(attachmentBaseDir(opts), { recursive: true, force: true });
+}
+
 export async function processAttachments(
   attachments: Attachment[],
-  opts: { cwd?: string; scope: string },
+  opts: AttachmentScope,
 ): Promise<AttachmentResult> {
   const blocks: ContentBlockParam[] = [];
   const codexInputs: CodexInputEntry[] = [];
@@ -97,7 +110,7 @@ export async function processAttachments(
 
   let baseDir: string | null = null;
   const ensureDir = (): string => {
-    if (!baseDir) baseDir = pickBaseDir(opts, opts.scope);
+    if (!baseDir) baseDir = ensureBaseDir(opts);
     return baseDir;
   };
 
@@ -188,4 +201,4 @@ export async function processAttachments(
   return { blocks, codexInputs, textSummary, notices };
 }
 
-export const __testables = { classify, imageMediaType, safeName, downloadToBuffer };
+export const __testables = { classify, imageMediaType, safeName, downloadToBuffer, attachmentBaseDir };

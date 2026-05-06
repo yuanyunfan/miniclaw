@@ -3,7 +3,7 @@ import type { Attachment } from "discord.js";
 import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { processAttachments, __testables } from "../attachments.js";
+import { cleanupAttachmentScope, processAttachments, __testables } from "../attachments.js";
 
 const { classify, safeName } = __testables;
 
@@ -165,6 +165,19 @@ describe("processAttachments", () => {
     const path = join(dir, ".miniclaw-attachments", "s6", "x.zip");
     expect(existsSync(path)).toBe(true);
     expect(readFileSync(path)).toEqual(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+  });
+
+  it("cleanupAttachmentScope removes files for a scope", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(Buffer.from([0x50, 0x4b, 0x03, 0x04]))
+    );
+    const att = makeAtt({ name: "x.zip", size: 4, contentType: "application/zip" });
+    await processAttachments([att], { cwd: dir, scope: "cleanup" });
+
+    const path = join(dir, ".miniclaw-attachments", "cleanup", "x.zip");
+    expect(existsSync(path)).toBe(true);
+    cleanupAttachmentScope({ cwd: dir, scope: "cleanup" });
+    expect(existsSync(path)).toBe(false);
   });
 
   it("超过 maxAttachmentMb 上限 → notice + 跳过", async () => {
