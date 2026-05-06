@@ -24,10 +24,27 @@ export interface WechatMpProviderConfig {
   auth_path: string;
   state_path: string;
   window_hours: number;
+  window?: WechatMpWindowConfig;
   max_pages_per_account: number;
   page_size: number;
   dedupe: boolean;
   accounts: WechatMpAccountConfig[];
+}
+
+export type WechatMpWindowConfig =
+  | { mode: "relative"; hours: number }
+  | {
+      mode: "fixed_slots";
+      timezone_offset_hours: number;
+      slots: WechatMpFixedWindowSlot[];
+    };
+
+export interface WechatMpFixedWindowSlot {
+  at_hour: number;
+  start_day_offset: number;
+  start_hour: number;
+  end_day_offset: number;
+  end_hour: number;
 }
 
 export interface WechatMpFakeidCacheEntry {
@@ -74,6 +91,7 @@ export interface WechatMpCollectResult {
   generated_at: string;
   window_start: string;
   window_end: string;
+  window_label?: string;
   accounts: Array<{
     name: string;
     alias?: string;

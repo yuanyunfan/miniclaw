@@ -5,6 +5,7 @@ export function formatWechatMpCollectResult(result: WechatMpCollectResult): stri
     generated_at: result.generated_at,
     window_start: result.window_start,
     window_end: result.window_end,
+    window_label: result.window_label,
     total_articles: result.total_articles,
     skipped_duplicates: result.skipped_duplicates,
     accounts: result.accounts.map((account) => ({

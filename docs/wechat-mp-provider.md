@@ -11,8 +11,21 @@ Create `~/.miniclaw/providers/wechat-mp/daily-ai-wechat.yaml`:
 ```yaml
 auth_path: "~/.miniclaw/secrets/wechat-mp-session.json"
 state_path: "~/.miniclaw/providers/wechat-mp/state.json"
-window_hours: 24
-max_pages_per_account: 1
+window:
+  mode: fixed_slots
+  timezone_offset_hours: 8
+  slots:
+    - at_hour: 10
+      start_day_offset: -1
+      start_hour: 17
+      end_day_offset: 0
+      end_hour: 10
+    - at_hour: 17
+      start_day_offset: 0
+      start_hour: 10
+      end_day_offset: 0
+      end_hour: 17
+max_pages_per_account: 5
 page_size: 10
 dedupe: true
 accounts:
@@ -32,6 +45,12 @@ accounts:
     query: DataFunSummit
     alias: DataFunSummit
 ```
+
+This fixed-slot window means:
+
+- The 10:00 Beijing run collects articles published from yesterday 17:00 to today 10:00.
+- The 17:00 Beijing run collects articles published from today 10:00 to today 17:00.
+- The start boundary is inclusive and the end boundary is exclusive, so articles exactly at 10:00 are handled by the 17:00 run.
 
 ## Session Refresh
 
@@ -61,7 +80,7 @@ Create `~/.miniclaw/cron/daily-wechat-mp.yaml` and set `channel` to the target D
 
 ```yaml
 name: daily-wechat-mp
-schedule: "0 10 * * *"
+schedule: "0 10,17 * * *"
 timezone: Asia/Shanghai
 enabled: true
 type: task
@@ -69,7 +88,7 @@ channel: "REPLACE_WITH_DISCORD_CHANNEL_ID"
 pre_provider: wechat-mp
 pre_provider_config: daily-ai-wechat
 prompt: |
-  你是中文 AI/数据技术信息编辑。上方 JSON 是最近 24 小时微信公众号文章列表。
+  你是中文 AI/数据技术信息编辑。上方 JSON 是当前固定时间段内尚未推送过的微信公众号文章列表。
 
   请生成一份 Discord 友好的中文日报：
   1. 开头给出 3-5 条今日重点

@@ -7,6 +7,7 @@ describe("formatWechatMpCollectResult", () => {
       generated_at: "2026-05-06T10:00:00.000Z",
       window_start: "2026-05-05T10:00:00.000Z",
       window_end: "2026-05-06T10:00:00.000Z",
+      window_label: "2026-05-05 17:00 - 2026-05-06 10:00 UTC+8",
       total_articles: 1,
       skipped_duplicates: 0,
       accounts: [{
@@ -27,6 +28,7 @@ describe("formatWechatMpCollectResult", () => {
     });
 
     expect(JSON.parse(text)).toMatchObject({ total_articles: 1 });
+    expect(JSON.parse(text)).toMatchObject({ window_label: "2026-05-05 17:00 - 2026-05-06 10:00 UTC+8" });
     expect(text).not.toMatch(/token|cookie|slave_sid|bizuin/i);
   });
 });

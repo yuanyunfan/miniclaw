@@ -20,6 +20,12 @@ export interface CollectedWechatMpProviderData {
   commit: () => Promise<void>;
 }
 
+export interface CollectionWindow {
+  start: number;
+  end: number;
+  label?: string;
+}
+
 async function resolveFakeid(
   account: WechatMpAccountConfig,
   state: WechatMpState,
@@ -57,6 +63,61 @@ function mergeArticles(account: WechatMpAccountConfig, alias: string | undefined
   return merged.sort((a, b) => b.publish_time - a.publish_time);
 }
 
+function localDateParts(date: Date, offsetHours: number): { year: number; month: number; day: number; hour: number } {
+  const local = new Date(date.getTime() + offsetHours * 3600_000);
+  return {
+    year: local.getUTCFullYear(),
+    month: local.getUTCMonth(),
+    day: local.getUTCDate(),
+    hour: local.getUTCHours(),
+  };
+}
+
+function localSlotToUtcSeconds(
+  base: { year: number; month: number; day: number },
+  dayOffset: number,
+  hour: number,
+  offsetHours: number,
+): number {
+  const localMs = Date.UTC(base.year, base.month, base.day + dayOffset, hour, 0, 0, 0);
+  return Math.floor((localMs - offsetHours * 3600_000) / 1000);
+}
+
+function formatLocalWindowLabel(start: number, end: number, offsetHours: number): string {
+  const fmt = (timestamp: number) => {
+    const local = new Date(timestamp * 1000 + offsetHours * 3600_000);
+    const y = local.getUTCFullYear();
+    const m = String(local.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(local.getUTCDate()).padStart(2, "0");
+    const h = String(local.getUTCHours()).padStart(2, "0");
+    return `${y}-${m}-${d} ${h}:00`;
+  };
+  return `${fmt(start)} - ${fmt(end)} UTC${offsetHours >= 0 ? "+" : ""}${offsetHours}`;
+}
+
+export function resolveCollectionWindow(config: WechatMpProviderConfig, now: Date): CollectionWindow {
+  const windowConfig = config.window ?? { mode: "relative" as const, hours: config.window_hours };
+  if (windowConfig.mode === "relative") {
+    const end = Math.floor(now.getTime() / 1000);
+    return { start: end - windowConfig.hours * 3600, end };
+  }
+
+  const offset = windowConfig.timezone_offset_hours;
+  const parts = localDateParts(now, offset);
+  const sorted = [...windowConfig.slots].sort((a, b) => a.at_hour - b.at_hour);
+  let baseDayOffset = 0;
+  let slot = [...sorted].reverse().find((candidate) => parts.hour >= candidate.at_hour);
+  if (!slot) {
+    slot = sorted[sorted.length - 1];
+    baseDayOffset = -1;
+  }
+  const base = { year: parts.year, month: parts.month, day: parts.day + baseDayOffset };
+  const start = localSlotToUtcSeconds(base, slot.start_day_offset, slot.start_hour, offset);
+  const end = localSlotToUtcSeconds(base, slot.end_day_offset, slot.end_hour, offset);
+  if (start >= end) throw new Error("wechat-mp fixed slot window start must be before end");
+  return { start, end, label: formatLocalWindowLabel(start, end, offset) };
+}
+
 async function fetchAccountArticles(
   account: WechatMpAccountConfig,
   fakeid: string,
@@ -89,8 +150,7 @@ export async function collectWechatMpArticles(
 ): Promise<CollectedWechatMpProviderData> {
   const now = options.now ?? new Date();
   const state = options.state ?? loadWechatMpState(config.state_path);
-  const windowEnd = Math.floor(now.getTime() / 1000);
-  const windowStart = windowEnd - config.window_hours * 3600;
+  const window = resolveCollectionWindow(config, now);
   const collectedForCommit: WechatMpArticle[] = [];
   let skippedDuplicates = 0;
 
@@ -99,7 +159,7 @@ export async function collectWechatMpArticles(
     try {
       const { fakeid, alias } = await resolveFakeid(account, state, client);
       const fetched = await fetchAccountArticles(account, fakeid, alias, config, client);
-      const inWindow = fetched.filter((article) => article.publish_time >= windowStart && article.publish_time <= windowEnd);
+      const inWindow = fetched.filter((article) => article.publish_time >= window.start && article.publish_time < window.end);
       const deduped = config.dedupe
         ? inWindow.filter((article) => {
           if (state.sent_articles[article.id]) {
@@ -131,8 +191,9 @@ export async function collectWechatMpArticles(
 
   const result: WechatMpCollectResult = {
     generated_at: now.toISOString(),
-    window_start: new Date(windowStart * 1000).toISOString(),
-    window_end: new Date(windowEnd * 1000).toISOString(),
+    window_start: new Date(window.start * 1000).toISOString(),
+    window_end: new Date(window.end * 1000).toISOString(),
+    window_label: window.label,
     accounts,
     total_articles: accounts.reduce((sum, account) => sum + account.article_count, 0),
     skipped_duplicates: skippedDuplicates,
