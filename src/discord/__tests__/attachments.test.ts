@@ -62,6 +62,7 @@ describe("processAttachments", () => {
 
   afterEach(() => {
     rmSync(dir, { recursive: true, force: true });
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -85,6 +86,34 @@ describe("processAttachments", () => {
     });
     expect((r.blocks[0] as { source: { data: string } }).source.data).toBe("iVBORw==");
     expect(r.codexInputs[0]).toMatchObject({ type: "local_image" });
+  });
+
+  it("附件下载会传入 AbortSignal", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(Buffer.from("hello"))
+    );
+    const att = makeAtt({ name: "x.md", size: 5, contentType: "text/markdown" });
+    await processAttachments([att], { scope: "s-signal" });
+    expect(fetchMock).toHaveBeenCalledWith(
+      att.url,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it("附件下载卡住时会超时", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(globalThis, "fetch").mockImplementation((_url, init) => (
+      new Promise((_resolve, reject) => {
+        const signal = (init as RequestInit).signal as AbortSignal;
+        signal.addEventListener("abort", () => reject(new Error("aborted")));
+      })
+    ));
+
+    const pending = expect(__testables.downloadToBuffer("https://cdn/stall", 5))
+      .rejects.toThrow(/attachment download timeout/);
+    await vi.advanceTimersByTimeAsync(5);
+    await pending;
+    vi.useRealTimers();
   });
 
   it("PDF → base64 document block", async () => {

@@ -82,6 +82,13 @@ export async function chat(
     return result.reply;
   }
 
+  const timeoutCtrl = new AbortController();
+  const timeout = setTimeout(
+    () => timeoutCtrl.abort(new Error(`chat timeout after ${config.chatTimeoutMs}ms`)),
+    config.chatTimeoutMs,
+  );
+  timeout.unref?.();
+
   // 首轮 user message：附件 + 文字
   const userContent: ContentBlockParam[] = [
     ...(attachmentBlocks ?? []),
@@ -97,57 +104,69 @@ export async function chat(
   let iters = 0;
   let stopReason: string | null = null;
 
-  const ant = getClient();
+  try {
+    const ant = getClient();
 
-  for (let i = 0; i < MAX_ITERATIONS; i++) {
-    iters++;
-    const stream = ant.messages.stream({
-      model: config.claudeModel,
-      max_tokens: MAX_TOKENS_PER_TURN,
-      system,
-      tools: CHAT_TOOLS,
-      messages,
-    });
+    for (let i = 0; i < MAX_ITERATIONS; i++) {
+      if (timeoutCtrl.signal.aborted) {
+        throw new Error(`chat timeout after ${config.chatTimeoutMs}ms`);
+      }
+      iters++;
+      const stream = ant.messages.stream({
+        model: config.claudeModel,
+        max_tokens: MAX_TOKENS_PER_TURN,
+        system,
+        tools: CHAT_TOOLS,
+        messages,
+      }, { signal: timeoutCtrl.signal });
 
-    if (callbacks) {
-      stream.on("text", (delta) => {
-        if (delta) callbacks.onText(delta);
-      });
+      if (callbacks) {
+        stream.on("text", (delta) => {
+          if (delta) callbacks.onText(delta);
+        });
+      }
+
+      const finalMsg = await stream.finalMessage();
+
+      inputTokens += finalMsg.usage?.input_tokens ?? 0;
+      outputTokens += finalMsg.usage?.output_tokens ?? 0;
+      cacheReadTokens += finalMsg.usage?.cache_read_input_tokens ?? 0;
+      cacheCreationTokens += finalMsg.usage?.cache_creation_input_tokens ?? 0;
+      stopReason = finalMsg.stop_reason;
+
+      messages.push({ role: "assistant", content: finalMsg.content });
+
+      if (finalMsg.stop_reason !== "tool_use") break;
+
+      // 收集所有 tool_use blocks 并执行
+      const toolResults: ToolResultBlockParam[] = [];
+      for (const block of finalMsg.content) {
+        if (block.type !== "tool_use") continue;
+        // Anthropic 服务端 web_search 由服务器端执行 + 在 finalMsg 里回灌结果，我们这里跳过
+        if (block.name === "web_search") continue;
+        toolCount++;
+        const input = (block.input ?? {}) as Record<string, unknown>;
+        callbacks?.onToolUse(formatToolLine(block.name, input));
+        const result = await executeTool(block.name, block.input);
+        toolResults.push({
+          type: "tool_result",
+          tool_use_id: block.id,
+          content: result.content,
+          is_error: result.is_error,
+        });
+      }
+
+      if (!toolResults.length) break; // 只有服务端工具，无客户端要执行
+
+      messages.push({ role: "user", content: toolResults });
     }
-
-    const finalMsg = await stream.finalMessage();
-
-    inputTokens += finalMsg.usage?.input_tokens ?? 0;
-    outputTokens += finalMsg.usage?.output_tokens ?? 0;
-    cacheReadTokens += finalMsg.usage?.cache_read_input_tokens ?? 0;
-    cacheCreationTokens += finalMsg.usage?.cache_creation_input_tokens ?? 0;
-    stopReason = finalMsg.stop_reason;
-
-    messages.push({ role: "assistant", content: finalMsg.content });
-
-    if (finalMsg.stop_reason !== "tool_use") break;
-
-    // 收集所有 tool_use blocks 并执行
-    const toolResults: ToolResultBlockParam[] = [];
-    for (const block of finalMsg.content) {
-      if (block.type !== "tool_use") continue;
-      // Anthropic 服务端 web_search 由服务器端执行 + 在 finalMsg 里回灌结果，我们这里跳过
-      if (block.name === "web_search") continue;
-      toolCount++;
-      const input = (block.input ?? {}) as Record<string, unknown>;
-      callbacks?.onToolUse(formatToolLine(block.name, input));
-      const result = await executeTool(block.name, block.input);
-      toolResults.push({
-        type: "tool_result",
-        tool_use_id: block.id,
-        content: result.content,
-        is_error: result.is_error,
-      });
+  } catch (err) {
+    if (timeoutCtrl.signal.aborted) {
+      throw new Error(`chat timeout after ${config.chatTimeoutMs}ms`);
     }
-
-    if (!toolResults.length) break; // 只有服务端工具，无客户端要执行
-
-    messages.push({ role: "user", content: toolResults });
+    throw err;
+  } finally {
+    clearTimeout(timeout);
   }
 
   if (iters >= MAX_ITERATIONS && stopReason === "tool_use") {
@@ -218,53 +237,64 @@ async function chatWithCodex(
   const codex = getCodexClient();
   const thread = codex.startThread(codexThreadOptions("chat", config.defaultCwd));
   const ctrl = new AbortController();
-  const timeoutCtrl = withCodexTimeout(ctrl.signal, config.codex.timeoutMs);
+  const timeoutCtrl = withCodexTimeout(ctrl.signal, config.chatTimeoutMs);
   const fullPrompt = [
     system,
     "你正在处理 Discord 轻量聊天。默认直接回答；只有在需要确认本地文件、运行只读命令或搜索资料时才使用工具。用中文回复。",
     `<user_message>\n${prompt}\n</user_message>`,
   ].filter(Boolean).join("\n\n");
 
-  const { events } = await thread.runStreamed(
-    codexInput(fullPrompt, attachmentCodexInputs),
-    { signal: timeoutCtrl.signal },
-  );
+  try {
+    const { events } = await thread.runStreamed(
+      codexInput(fullPrompt, attachmentCodexInputs),
+      { signal: timeoutCtrl.signal },
+    );
 
-  let reply = "";
-  let tokensSummary: string | undefined;
-  let toolCount = 0;
-  let lastToolLine = "";
+    let reply = "";
+    let tokensSummary: string | undefined;
+    let toolCount = 0;
+    let lastToolLine = "";
 
-  for await (const event of events) {
-    switch (event.type) {
-      case "turn.completed":
-        tokensSummary = formatCodexUsage(event.usage);
-        break;
-      case "turn.failed":
-        throw new Error(event.error.message);
-      case "error":
-        throw new Error(event.message);
-      case "item.started":
-      case "item.updated":
-      case "item.completed":
-        if (event.item.type === "agent_message") {
-          reply = event.item.text;
-          callbacks?.onText(reply);
+    for await (const event of events) {
+      switch (event.type) {
+        case "turn.completed":
+          tokensSummary = formatCodexUsage(event.usage);
           break;
-        }
-        {
-          const line = formatCodexItemLine(event.item);
-          if (line && line !== lastToolLine) {
-            toolCount++;
-            lastToolLine = line;
-            callbacks?.onToolUse(line);
+        case "turn.failed":
+          throw new Error(event.error.message);
+        case "error":
+          throw new Error(event.message);
+        case "item.started":
+        case "item.updated":
+        case "item.completed":
+          if (event.item.type === "agent_message") {
+            reply = event.item.text;
+            callbacks?.onText(reply);
+            break;
           }
-        }
-        break;
+          {
+            const line = formatCodexItemLine(event.item);
+            if (line && line !== lastToolLine) {
+              toolCount++;
+              lastToolLine = line;
+              callbacks?.onToolUse(line);
+            }
+          }
+          break;
+      }
     }
+
+    if (timeoutCtrl.signal.aborted) {
+      throw new Error(`chat timeout after ${config.chatTimeoutMs}ms`);
+    }
+
+    return { reply: reply.trim() || "[无文字回复]", ...(tokensSummary ? { tokensSummary } : {}), toolCount };
+  } catch (err) {
+    if (timeoutCtrl.signal.aborted) {
+      throw new Error(`chat timeout after ${config.chatTimeoutMs}ms`);
+    }
+    throw err;
+  } finally {
+    if (!timeoutCtrl.signal.aborted) timeoutCtrl.abort();
   }
-
-  if (!timeoutCtrl.signal.aborted) timeoutCtrl.abort();
-
-  return { reply: reply.trim() || "[无文字回复]", ...(tokensSummary ? { tokensSummary } : {}), toolCount };
 }

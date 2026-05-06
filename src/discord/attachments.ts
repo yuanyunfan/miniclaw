@@ -53,10 +53,22 @@ function safeName(name: string): string {
   return b.slice(0, 200) || "file";
 }
 
-async function downloadToBuffer(url: string): Promise<Buffer> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`fetch ${url} → HTTP ${res.status}`);
-  return Buffer.from(await res.arrayBuffer());
+async function downloadToBuffer(url: string, timeoutMs = config.attachmentTimeoutMs): Promise<Buffer> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(new Error(`attachment download timeout after ${timeoutMs}ms`)), timeoutMs);
+  timer.unref?.();
+  try {
+    const res = await fetch(url, { signal: ctrl.signal });
+    if (!res.ok) throw new Error(`fetch ${url} → HTTP ${res.status}`);
+    return Buffer.from(await res.arrayBuffer());
+  } catch (err) {
+    if (ctrl.signal.aborted) {
+      throw new Error(`attachment download timeout after ${timeoutMs}ms`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function pickBaseDir(opts: { cwd?: string }, scope: string): string {
@@ -176,4 +188,4 @@ export async function processAttachments(
   return { blocks, codexInputs, textSummary, notices };
 }
 
-export const __testables = { classify, imageMediaType, safeName };
+export const __testables = { classify, imageMediaType, safeName, downloadToBuffer };

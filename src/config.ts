@@ -76,6 +76,8 @@ export const config = {
   maxConcurrentTasks: envPositiveInt("MINICLAW_MAX_CONCURRENT_TASKS", "3"),
   defaultBudgetUsd: envNumberOrUnlimited("MINICLAW_DEFAULT_BUDGET_USD", "1.0"),
   defaultMaxTurns: envNumberOrUnlimited("MINICLAW_DEFAULT_MAX_TURNS", "30"),
+  chatTimeoutMs: envNumber("MINICLAW_CHAT_TIMEOUT_MS", "180000"),
+  attachmentTimeoutMs: envNumber("MINICLAW_ATTACHMENT_TIMEOUT_MS", "30000"),
   // Backward-compatible alias used by older code paths. New provider-aware code
   // should prefer claudeModel / codex.model.
   model: agentProvider === "claude" ? claudeModel : codexModel,
