@@ -1,5 +1,7 @@
 # MiniClaw 🤖
 
+[English](README.en.md) | 简体中文
+
 极简 AI 助手 — 通过 Discord 沟通，可在 Claude Code / Codex 之间切换执行任务。
 
 个人单用户，本地 Mac 常驻运行，提供 Discord bot、cron 定时任务、长期记忆和 Stage 多 agent 控制台。
