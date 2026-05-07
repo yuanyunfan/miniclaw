@@ -1,6 +1,8 @@
 import "./proxy.js";
-import { resolve } from "path";
-import { homedir } from "os";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
+import yaml from "js-yaml";
 import { createLogger } from "./lib/log.js";
 
 const log = createLogger("config");
@@ -12,14 +14,20 @@ export type CodexReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhig
 export type CodexWebSearchMode = "disabled" | "cached" | "live";
 export type ClaudeSettingSource = "user" | "project" | "local";
 
-function resolveHome(p: string): string {
-  return p.startsWith("~") ? resolve(homedir(), p.slice(2)) : resolve(p);
+type ConfigObject = Record<string, unknown>;
+type ConfigPath = readonly string[];
+
+const DEFAULT_CONFIG_PATH = join(homedir(), ".miniclaw", "config.yaml");
+
+function isPlainObject(v: unknown): v is ConfigObject {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-function env(key: string, fallback?: string): string {
-  const v = process.env[key] ?? fallback;
-  if (v === undefined) throw new Error(`Missing env: ${key}`);
-  return v;
+function resolveHome(p: string): string {
+  const trimmed = p.trim();
+  if (trimmed === "~") return homedir();
+  if (trimmed.startsWith("~/")) return resolve(homedir(), trimmed.slice(2));
+  return resolve(trimmed);
 }
 
 function envOptional(key: string): string | undefined {
@@ -29,144 +37,340 @@ function envOptional(key: string): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
-function envOneOf<T extends string>(key: string, fallback: T, allowed: readonly T[]): T {
-  const configured = process.env[key]?.trim();
-  const raw = (configured ? configured : fallback).toLowerCase();
-  if ((allowed as readonly string[]).includes(raw)) return raw as T;
-  throw new Error(`Invalid env ${key}: ${raw}. Expected one of: ${allowed.join(", ")}`);
+function envRaw(key: string): string | undefined {
+  return process.env[key];
 }
 
-function envOneOfOrInherit<T extends string>(key: string, fallback: T, allowed: readonly T[]): T | undefined {
-  const configured = process.env[key]?.trim();
-  const raw = (configured ? configured : fallback).toLowerCase();
-  if (raw === "inherit") return undefined;
-  if ((allowed as readonly string[]).includes(raw)) return raw as T;
-  throw new Error(`Invalid env ${key}: ${raw}. Expected one of: inherit, ${allowed.join(", ")}`);
+function isDefaultConfigReference(raw: string | undefined): boolean {
+  if (!raw) return true;
+  const trimmed = raw.trim();
+  return trimmed === "~/.miniclaw/config.yaml" || trimmed === DEFAULT_CONFIG_PATH;
 }
 
-function envStringOrInherit(key: string, fallback: string): string | undefined {
-  const raw = (process.env[key] ?? fallback).trim();
+function loadYamlConfig(
+  path: string,
+  explicitPath: boolean,
+  rawPath: string | undefined
+): { data: ConfigObject; loaded: boolean } {
+  if (!existsSync(path)) {
+    if (explicitPath && !isDefaultConfigReference(rawPath)) {
+      throw new Error(`MINICLAW_CONFIG points to a missing file: ${path}`);
+    }
+    return { data: {}, loaded: false };
+  }
+
+  const raw = readFileSync(path, "utf8");
+  const parsed = yaml.load(raw) ?? {};
+  if (!isPlainObject(parsed)) {
+    throw new Error(`MiniClaw config must be a YAML object: ${path}`);
+  }
+
+  return { data: parsed, loaded: true };
+}
+
+const configuredConfigPath = envOptional("MINICLAW_CONFIG");
+const configPath = resolveHome(configuredConfigPath ?? DEFAULT_CONFIG_PATH);
+const configFile = loadYamlConfig(configPath, configuredConfigPath !== undefined, configuredConfigPath);
+
+function getPath(data: ConfigObject, path: ConfigPath): unknown {
+  let current: unknown = data;
+  for (const segment of path) {
+    if (!isPlainObject(current)) return undefined;
+    current = current[segment];
+  }
+  return current;
+}
+
+function normalizePaths(paths: ConfigPath | readonly ConfigPath[]): ConfigPath[] {
+  if (paths.length === 0) return [];
+  return typeof paths[0] === "string" ? [paths as ConfigPath] : [...(paths as readonly ConfigPath[])];
+}
+
+function normalizeKeys(keys: string | readonly string[]): string[] {
+  return typeof keys === "string" ? [keys] : [...keys];
+}
+
+function optionName(paths: ConfigPath | readonly ConfigPath[], envKeys: string | readonly string[]): string {
+  const envPart = normalizeKeys(envKeys).join(" / ");
+  const pathPart = normalizePaths(paths).map((p) => p.join(".")).join(" / ");
+  return `${envPart || "(no env)"} / ${pathPart}`;
+}
+
+function readRaw(
+  paths: ConfigPath | readonly ConfigPath[],
+  envKeys: string | readonly string[],
+  fallback?: unknown
+): unknown {
+  for (const key of normalizeKeys(envKeys)) {
+    const v = envOptional(key);
+    if (v !== undefined) return v;
+  }
+
+  for (const path of normalizePaths(paths)) {
+    const v = getPath(configFile.data, path);
+    if (v !== undefined && v !== null) return v;
+  }
+
+  return fallback;
+}
+
+function scalarString(raw: unknown, name: string): string | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (Array.isArray(raw) || isPlainObject(raw)) {
+    throw new Error(`Invalid config ${name}: expected string`);
+  }
+  const v = String(raw).trim();
+  return v ? v : undefined;
+}
+
+function requiredString(
+  paths: ConfigPath | readonly ConfigPath[],
+  envKeys: string | readonly string[],
+  fallback?: string
+): string {
+  const name = optionName(paths, envKeys);
+  const v = scalarString(readRaw(paths, envKeys, fallback), name);
+  if (!v) throw new Error(`Missing config: ${name}`);
+  return v;
+}
+
+function optionalString(paths: ConfigPath | readonly ConfigPath[], envKeys: string | readonly string[]): string | undefined {
+  return scalarString(readRaw(paths, envKeys), optionName(paths, envKeys));
+}
+
+function stringOrInherit(
+  paths: ConfigPath | readonly ConfigPath[],
+  envKeys: string | readonly string[],
+  fallback: string
+): string | undefined {
+  const name = optionName(paths, envKeys);
+  const raw = scalarString(readRaw(paths, envKeys, fallback), name);
   if (!raw) return fallback;
   return raw.toLowerCase() === "inherit" ? undefined : raw;
 }
 
-function envBoolOrInherit(key: string, fallback: "true" | "false"): boolean | undefined {
-  const raw = (process.env[key] ?? fallback).trim().toLowerCase();
-  if (raw === "inherit") return undefined;
-  if (raw === "true") return true;
-  if (raw === "false") return false;
-  throw new Error(`Invalid env ${key}: ${raw}. Expected one of: inherit, true, false`);
+function oneOf<T extends string>(
+  paths: ConfigPath | readonly ConfigPath[],
+  envKeys: string | readonly string[],
+  fallback: T,
+  allowed: readonly T[]
+): T {
+  const name = optionName(paths, envKeys);
+  const raw = scalarString(readRaw(paths, envKeys, fallback), name)?.toLowerCase() ?? fallback;
+  if ((allowed as readonly string[]).includes(raw)) return raw as T;
+  throw new Error(`Invalid config ${name}: ${raw}. Expected one of: ${allowed.join(", ")}`);
 }
 
-function envSettingSources(key: string, fallback: string): ClaudeSettingSource[] {
-  const raw = (process.env[key] ?? fallback).trim().toLowerCase();
-  if (!raw || raw === "none" || raw === "disabled" || raw === "false") return [];
+function oneOfOrInherit<T extends string>(
+  paths: ConfigPath | readonly ConfigPath[],
+  envKeys: string | readonly string[],
+  fallback: T,
+  allowed: readonly T[]
+): T | undefined {
+  const name = optionName(paths, envKeys);
+  const raw = scalarString(readRaw(paths, envKeys, fallback), name)?.toLowerCase() ?? fallback;
+  if (raw === "inherit") return undefined;
+  if ((allowed as readonly string[]).includes(raw)) return raw as T;
+  throw new Error(`Invalid config ${name}: ${raw}. Expected one of: inherit, ${allowed.join(", ")}`);
+}
+
+function boolValue(
+  paths: ConfigPath | readonly ConfigPath[],
+  envKeys: string | readonly string[],
+  fallback: boolean
+): boolean {
+  const raw = readRaw(paths, envKeys, fallback);
+  if (typeof raw === "boolean") return raw;
+  const name = optionName(paths, envKeys);
+  const s = scalarString(raw, name)?.toLowerCase();
+  if (s === "true") return true;
+  if (s === "false") return false;
+  throw new Error(`Invalid config ${name}: ${String(raw)}. Expected true or false`);
+}
+
+function boolOrInherit(
+  paths: ConfigPath | readonly ConfigPath[],
+  envKeys: string | readonly string[],
+  fallback: boolean
+): boolean | undefined {
+  const raw = readRaw(paths, envKeys, fallback);
+  if (typeof raw === "boolean") return raw;
+  const name = optionName(paths, envKeys);
+  const s = scalarString(raw, name)?.toLowerCase();
+  if (s === "inherit") return undefined;
+  if (s === "true") return true;
+  if (s === "false") return false;
+  throw new Error(`Invalid config ${name}: ${String(raw)}. Expected one of: inherit, true, false`);
+}
+
+function stringArray(
+  paths: ConfigPath | readonly ConfigPath[],
+  envKeys: string | readonly string[],
+  fallback: readonly string[] = []
+): string[] {
+  const raw = readRaw(paths, envKeys, fallback);
+  const name = optionName(paths, envKeys);
+  if (Array.isArray(raw)) {
+    return raw.map((v) => scalarString(v, name)).filter((v): v is string => Boolean(v));
+  }
+
+  const s = scalarString(raw, name);
+  if (!s) return [];
+  const lower = s.toLowerCase();
+  if (lower === "none" || lower === "disabled" || lower === "false") return [];
+  return s.split(",").map((v) => v.trim()).filter(Boolean);
+}
+
+function settingSources(paths: ConfigPath, envKeys: string | readonly string[], fallback: readonly string[]): ClaudeSettingSource[] {
   const allowed: readonly ClaudeSettingSource[] = ["user", "project", "local"];
+  const values = stringArray(paths, envKeys, fallback).map((v) => v.toLowerCase());
   const seen = new Set<ClaudeSettingSource>();
-  for (const part of raw.split(",")) {
-    const value = part.trim();
-    if (!value) continue;
+  for (const value of values) {
     if (!(allowed as readonly string[]).includes(value)) {
-      throw new Error(`Invalid env ${key}: ${value}. Expected one of: ${allowed.join(", ")}, none`);
+      throw new Error(`Invalid config ${optionName(paths, envKeys)}: ${value}. Expected one of: ${allowed.join(", ")}, none`);
     }
     seen.add(value as ClaudeSettingSource);
   }
   return [...seen];
 }
 
-// 把 env 字符串解析为 number。空字符串 / "0" / "unlimited" 都视为"无限制"返回 undefined
-function envNumberOrUnlimited(key: string, fallback: string): number | undefined {
-  const raw = (process.env[key] ?? fallback).trim().toLowerCase();
-  if (raw === "" || raw === "0" || raw === "unlimited" || raw === "none") return undefined;
-  const n = Number(raw);
+function positiveNumber(paths: ConfigPath, envKeys: string | readonly string[], fallback: number): number {
+  const raw = readRaw(paths, envKeys, fallback);
+  const name = optionName(paths, envKeys);
+  const n = typeof raw === "number" ? raw : Number(scalarString(raw, name));
+  if (!Number.isFinite(n) || n <= 0) throw new Error(`Invalid config ${name}: expected positive number`);
+  return n;
+}
+
+function positiveInt(paths: ConfigPath, envKeys: string | readonly string[], fallback: number): number {
+  const n = positiveNumber(paths, envKeys, fallback);
+  if (!Number.isInteger(n)) throw new Error(`Invalid config ${optionName(paths, envKeys)}: expected positive integer`);
+  return n;
+}
+
+function numberOrUnlimited(paths: ConfigPath, envKeys: string | readonly string[], fallback: number): number | undefined {
+  const name = optionName(paths, envKeys);
+
+  for (const key of normalizeKeys(envKeys)) {
+    const env = envRaw(key);
+    if (env !== undefined) return parseNumberOrUnlimited(env, name);
+  }
+
+  return parseNumberOrUnlimited(readRaw(paths, [], fallback), name);
+}
+
+function parseNumberOrUnlimited(raw: unknown, name: string): number | undefined {
+  if (typeof raw === "number") {
+    if (raw === 0) return undefined;
+    return Number.isFinite(raw) && raw > 0 ? raw : undefined;
+  }
+  const s = scalarString(raw, name)?.toLowerCase();
+  if (!s || s === "0" || s === "unlimited" || s === "none") return undefined;
+  const n = Number(s);
   return Number.isFinite(n) && n > 0 ? n : undefined;
 }
 
-function envNumber(key: string, fallback: string): number {
-  const n = Number(process.env[key] ?? fallback);
-  if (!Number.isFinite(n) || n <= 0) throw new Error(`Invalid env ${key}: expected positive number`);
-  return n;
-}
+const agentProvider = oneOf<AgentProvider>(["agent", "provider"], "MINICLAW_AGENT_PROVIDER", "claude", [
+  "claude",
+  "codex",
+]);
+const claudeModel = requiredString(["claude", "model"], ["MINICLAW_CLAUDE_MODEL", "MINICLAW_MODEL"], "claude-opus-4-7");
+const codexModel = stringOrInherit(["codex", "model"], "MINICLAW_CODEX_MODEL", "gpt-5.5");
+const autoReplyChannelIds = stringArray(["routing", "auto_reply_channels"], "MINICLAW_AUTO_REPLY_CHANNELS");
+const anthropicBaseUrl = optionalString(["anthropic", "base_url"], "ANTHROPIC_BASE_URL");
+const openaiBaseUrl = optionalString(["openai", "base_url"], "OPENAI_BASE_URL");
 
-function envPositiveInt(key: string, fallback: string): number {
-  const raw = (process.env[key] ?? fallback).trim();
-  const n = Number(raw);
-  if (!Number.isInteger(n) || n <= 0) throw new Error(`Invalid env ${key}: expected positive integer`);
-  return n;
-}
+if (anthropicBaseUrl && !process.env.ANTHROPIC_BASE_URL) process.env.ANTHROPIC_BASE_URL = anthropicBaseUrl;
+if (openaiBaseUrl && !process.env.OPENAI_BASE_URL) process.env.OPENAI_BASE_URL = openaiBaseUrl;
 
-const agentProvider = envOneOf<AgentProvider>("MINICLAW_AGENT_PROVIDER", "claude", ["claude", "codex"]);
-const claudeModel = envOptional("MINICLAW_CLAUDE_MODEL") ?? env("MINICLAW_MODEL", "claude-opus-4-7");
-const codexModel = envStringOrInherit("MINICLAW_CODEX_MODEL", "gpt-5.5");
+if (!autoReplyChannelIds.length) {
+  log.warn("auto_reply_channels 未配置，所有频道需 @mention 触发");
+}
 
 export const config = {
+  configFile: {
+    path: configPath,
+    loaded: configFile.loaded,
+  },
   discord: {
-    token: env("DISCORD_TOKEN"),
-    clientId: env("DISCORD_CLIENT_ID"),
-    guildId: env("DISCORD_GUILD_ID"),
+    token: requiredString(["discord", "token"], "DISCORD_TOKEN"),
+    clientId: requiredString(["discord", "client_id"], "DISCORD_CLIENT_ID"),
+    guildId: requiredString(["discord", "guild_id"], "DISCORD_GUILD_ID"),
   },
   agentProvider,
-  anthropicApiKey: agentProvider === "claude" ? env("ANTHROPIC_API_KEY") : envOptional("ANTHROPIC_API_KEY"),
-  anthropicBaseUrl: process.env.ANTHROPIC_BASE_URL,
-  openaiApiKey: envOptional("OPENAI_API_KEY"),
-  openaiBaseUrl: envOptional("OPENAI_BASE_URL"),
-  allowedUserId: env("MINICLAW_ALLOWED_USER_ID"),
-  defaultCwd: resolveHome(env("MINICLAW_DEFAULT_CWD", "~/Code")),
-  maxConcurrentTasks: envPositiveInt("MINICLAW_MAX_CONCURRENT_TASKS", "3"),
-  defaultBudgetUsd: envNumberOrUnlimited("MINICLAW_DEFAULT_BUDGET_USD", "1.0"),
-  defaultMaxTurns: envNumberOrUnlimited("MINICLAW_DEFAULT_MAX_TURNS", "30"),
-  chatTimeoutMs: envNumber("MINICLAW_CHAT_TIMEOUT_MS", "180000"),
-  attachmentTimeoutMs: envNumber("MINICLAW_ATTACHMENT_TIMEOUT_MS", "30000"),
-  registerCommandsOnStart: envOneOf<"true" | "false">(
+  anthropicApiKey:
+    agentProvider === "claude"
+      ? requiredString(["anthropic", "api_key"], "ANTHROPIC_API_KEY")
+      : optionalString(["anthropic", "api_key"], "ANTHROPIC_API_KEY"),
+  anthropicBaseUrl,
+  openaiApiKey: optionalString(["openai", "api_key"], "OPENAI_API_KEY"),
+  openaiBaseUrl,
+  allowedUserId: requiredString(["discord", "allowed_user_id"], "MINICLAW_ALLOWED_USER_ID"),
+  defaultCwd: resolveHome(requiredString(["agent", "default_cwd"], "MINICLAW_DEFAULT_CWD", "~/Code")),
+  maxConcurrentTasks: positiveInt(["agent", "max_concurrent_tasks"], "MINICLAW_MAX_CONCURRENT_TASKS", 3),
+  defaultBudgetUsd: numberOrUnlimited(["agent", "budget_usd"], "MINICLAW_DEFAULT_BUDGET_USD", 1.0),
+  defaultMaxTurns: numberOrUnlimited(["agent", "max_turns"], "MINICLAW_DEFAULT_MAX_TURNS", 30),
+  chatTimeoutMs: positiveNumber(["agent", "chat_timeout_ms"], "MINICLAW_CHAT_TIMEOUT_MS", 180000),
+  attachmentTimeoutMs: positiveNumber(["agent", "attachment_timeout_ms"], "MINICLAW_ATTACHMENT_TIMEOUT_MS", 30000),
+  registerCommandsOnStart: boolValue(
+    ["agent", "register_commands_on_start"],
     "MINICLAW_REGISTER_COMMANDS_ON_START",
-    "false",
-    ["true", "false"]
-  ) === "true",
+    false
+  ),
   // Backward-compatible alias used by older code paths. New provider-aware code
   // should prefer claudeModel / codex.model.
   model: agentProvider === "claude" ? claudeModel : (codexModel ?? "inherit"),
   claudeModel,
   claude: {
-    settingSources: envSettingSources("MINICLAW_CLAUDE_SETTING_SOURCES", "user,project,local"),
-    disableHooks: envOneOf<"true" | "false">("MINICLAW_CLAUDE_DISABLE_HOOKS", "true", ["true", "false"]) === "true",
+    settingSources: settingSources(["claude", "setting_sources"], "MINICLAW_CLAUDE_SETTING_SOURCES", [
+      "user",
+      "project",
+      "local",
+    ]),
+    disableHooks: boolValue(["claude", "disable_hooks"], "MINICLAW_CLAUDE_DISABLE_HOOKS", true),
   },
   codex: {
     model: codexModel,
-    reasoningEffort: envOneOfOrInherit<CodexReasoningEffort>(
+    reasoningEffort: oneOfOrInherit<CodexReasoningEffort>(
+      ["codex", "reasoning_effort"],
       "MINICLAW_CODEX_REASONING_EFFORT",
       "medium",
       ["minimal", "low", "medium", "high", "xhigh"]
     ),
-    taskSandbox: envOneOfOrInherit<CodexSandboxMode>(
+    taskSandbox: oneOfOrInherit<CodexSandboxMode>(
+      ["codex", "sandbox", "task"],
       "MINICLAW_CODEX_TASK_SANDBOX",
       "workspace-write",
       ["read-only", "workspace-write", "danger-full-access"]
     ),
-    chatSandbox: envOneOfOrInherit<CodexSandboxMode>(
+    chatSandbox: oneOfOrInherit<CodexSandboxMode>(
+      ["codex", "sandbox", "chat"],
       "MINICLAW_CODEX_CHAT_SANDBOX",
       "read-only",
       ["read-only", "workspace-write", "danger-full-access"]
     ),
-    approvalPolicy: envOneOfOrInherit<CodexApprovalPolicy>(
+    approvalPolicy: oneOfOrInherit<CodexApprovalPolicy>(
+      ["codex", "approval_policy"],
       "MINICLAW_CODEX_APPROVAL_POLICY",
       "never",
       ["never", "on-request", "on-failure", "untrusted"]
     ),
-    webSearchMode: envOneOfOrInherit<CodexWebSearchMode>(
+    webSearchMode: oneOfOrInherit<CodexWebSearchMode>(
+      ["codex", "web_search"],
       "MINICLAW_CODEX_WEB_SEARCH",
       "live",
       ["disabled", "cached", "live"]
     ),
-    timeoutMs: envNumber("MINICLAW_CODEX_TIMEOUT_MS", "900000"),
-    networkAccess: envBoolOrInherit("MINICLAW_CODEX_NETWORK_ACCESS", "true"),
+    timeoutMs: positiveNumber(["codex", "timeout_ms"], "MINICLAW_CODEX_TIMEOUT_MS", 900000),
+    networkAccess: boolOrInherit(["codex", "network_access"], "MINICLAW_CODEX_NETWORK_ACCESS", true),
   },
-  autoReplyChannelIds: (() => {
-    const ids = env("MINICLAW_AUTO_REPLY_CHANNELS", "").split(",").filter(Boolean);
-    if (!ids.length) log.warn("MINICLAW_AUTO_REPLY_CHANNELS 未配置，所有频道需 @mention 触发");
-    return ids;
-  })(),
-  taskChannelIds: env("MINICLAW_TASK_CHANNELS", "").split(",").map((s) => s.trim()).filter(Boolean),
-  dbPath: resolveHome(env("MINICLAW_DB_PATH", "~/.miniclaw/data.db")),
-  maxAttachmentMb: envNumber("MINICLAW_MAX_ATTACHMENT_MB", "32"),
-  maxAttachments: envPositiveInt("MINICLAW_MAX_ATTACHMENTS", "10"),
+  mcp: {
+    configPath: resolveHome(requiredString(["mcp", "config"], "MINICLAW_MCP_CONFIG", "~/.claude.json")),
+    allowlist: stringArray(["mcp", "allowlist"], "MINICLAW_MCP_ALLOWLIST", ["exa", "context7"]),
+  },
+  autoReplyChannelIds,
+  taskChannelIds: stringArray(["routing", "task_channels"], "MINICLAW_TASK_CHANNELS"),
+  dbPath: resolveHome(requiredString(["storage", "db_path"], "MINICLAW_DB_PATH", "~/.miniclaw/data.db")),
+  maxAttachmentMb: positiveNumber(["attachments", "max_mb"], "MINICLAW_MAX_ATTACHMENT_MB", 32),
+  maxAttachments: positiveInt(["attachments", "max_count"], "MINICLAW_MAX_ATTACHMENTS", 10),
 } as const;

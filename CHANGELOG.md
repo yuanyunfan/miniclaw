@@ -7,6 +7,7 @@
 ## [Unreleased]
 
 ### Added
+- 新增 `~/.miniclaw/config.yaml` 分层配置支持和 `config.example.yaml` 模板，推荐把结构化 MiniClaw 设置从扁平 `.env` 迁移到 YAML。
 - `MINICLAW_TASK_CHANNELS` 支持专用 Discord task intake 频道：频道内普通消息无需 `@MiniClaw`，会自动创建 task thread 并走 `/task` 同一套执行和输出链路。
 - `CLAUDE.md` 增加 docs-first development planning 规则，要求非平凡开发先在 `docs/plans/` 写计划文档，再改业务代码；新增 `docs/plans/README.md` 模板。
 - 新增 `README.en.md` 英文版 README，并在中文 `README.md` 顶部加入语言切换入口。
@@ -15,6 +16,7 @@
 - README 增加 `/agent-config`、Codex `inherit`、Claude setting sources / hooks、MCP allowlist、WeChat 频道配置入口说明。
 
 ### Changed
+- 配置加载优先级调整为“内置默认值 < YAML < env override”；旧 `MINICLAW_*` env 继续兼容，MCP config path / allowlist 也收敛到主配置对象。
 - `docs/architecture.md` 同步当前架构：`/agent-config` runtime summary、Codex/Claude 本机配置继承、cron `pre_provider` 链路、`~/.miniclaw/providers` 与 `secrets` 用户级目录。
 
 ### Fixed

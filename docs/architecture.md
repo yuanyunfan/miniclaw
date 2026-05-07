@@ -39,6 +39,7 @@ flowchart LR
         end
 
         subgraph UserCfg["~/.miniclaw/ 用户级数据"]
+            UC0["config.yaml<br/>MiniClaw 分层配置"]
             UC1["cron/*.yaml<br/>定时 job"]
             UC2["cron/state.json<br/>last_run/completed 持久化"]
             UC3["scripts/*.{py,sh}<br/>cron type=script 调用"]
@@ -131,23 +132,24 @@ flowchart LR
     class DC,SC discord
     class BOT,CHAT,TASK,HANDLERS,SUBA,CRON,MCP,RCFG miniclaw
     class STG_UI,STG_ORCH,STG_AGT,STG_SM,STG_PERS stage
-    class UC1,UC2,UC3,UC4,UC5,UC6,UC7,UC8,UC9,UC10,UC11,DB,AGENTS,MCPCFG,CODEXCFG,CLAUDECFG,PERSREPO usercfg
+    class UC0,UC1,UC2,UC3,UC4,UC5,UC6,UC7,UC8,UC9,UC10,UC11,DB,AGENTS,MCPCFG,CODEXCFG,CLAUDECFG,PERSREPO usercfg
     class RAVEN raven
     class COPILOT,EXA,CTX7 cloud
 ```
 
 **关键设计点**
 
-- **四入口**：`@mention` / auto-reply 走 `chat.ts`（轻量对话）；`/task` 和 `MINICLAW_TASK_CHANNELS` 走 `task.ts`（Supervisor 模式 + subagent 编排）；`cron` 调度自动触发
+- **四入口**：`@mention` / auto-reply 走 `chat.ts`（轻量对话）；`/task` 和 `routing.task_channels` 走 `task.ts`（Supervisor 模式 + subagent 编排）；`cron` 调度自动触发
 - **Stage 是对偶子系统**：`pnpm stage` 启另一进程（Ink TUI），多 agent 群聊编排，与 Discord bot 路径独立但共享 chat-tools / db / config / log（详见 `docs/stage.md`）
 - **代码 vs 用户级数据严格分离**：
   - 代码在 git repo（`agents/*.md` / `src/`）
-  - 用户级数据全在 `~/.miniclaw/`（cron / skills / scripts / memories / channel-map）
+  - 用户级数据全在 `~/.miniclaw/`（config / cron / skills / scripts / memories / channel-map）
 - **memories 走 markdown 不再走 SQLite 表**：`~/.miniclaw/memories/MEMORY.md` 可直接 vim 编辑、git diff、跨工具复用（hermes 同模式）
-- **可控继承本机 Agent 配置**：Codex 可用 `inherit` 回落到 `~/.codex/config.toml`；Claude task 显式加载 `user/project/local` settings，默认禁用 hooks；MCP 仍通过 allowlist 控制
+- **分层配置**：结构化设置优先放 `~/.miniclaw/config.yaml`；`.env` 保留 secrets、代理和临时 override；优先级是内置默认值 < YAML < env
+- **可控继承本机 Agent 配置**：Codex 可用 `inherit` 回落到 `~/.codex/config.toml`；Claude task 显式加载 `user/project/local` settings，默认禁用 hooks；MCP 仍通过 `mcp.allowlist` 控制
 - **Discord task 三层输出**：状态 embed 只放元数据；progress message 执行中持续 edit、完成后保留 Execution Summary；最终结果走普通 Markdown 分片
 - **pre-provider 扩展点**：cron `task` 可先运行 provider 采集结构化数据，再把 JSON 注入 prompt；微信公众号日报通过 `wechat-mp` provider 落地
-- **白名单两道闸**：`MINICLAW_ALLOWED_USER_ID` 限制谁能用，`MINICLAW_AUTO_REPLY_CHANNELS` 决定哪些频道无需 @mention 进入 chat，`MINICLAW_TASK_CHANNELS` 决定哪些频道无需 @mention 直接创建 task
+- **白名单两道闸**：`discord.allowed_user_id` 限制谁能用，`routing.auto_reply_channels` 决定哪些频道无需 @mention 进入 chat，`routing.task_channels` 决定哪些频道无需 @mention 直接创建 task；旧 `MINICLAW_*` env 仍可覆盖
 - **LLM 流量全部经过 raven**：`ANTHROPIC_BASE_URL=http://localhost:7024` 让两个 SDK 都走本地代理
 
 ---
@@ -392,6 +394,7 @@ flowchart LR
 
 ```
 ~/.miniclaw/
+├── config.yaml              # MiniClaw 分层配置（非 secret）
 ├── data.db                  # SQLite: tasks + chat_history + scenes + scene_messages
 ├── memories/
 │   └── MEMORY.md            # 长期记忆（4 section + § 分隔，可 vim 编辑）
@@ -461,7 +464,7 @@ classify by mime + ext
 
 **清理**：task 路径附件落到 `<cwd>/.miniclaw-attachments/<taskId>/`，executeTask `finally` 块 `rmSync` 整目录。chat 路径走 `os.tmpdir()`，靠 OS 周期清理。
 
-**配置**：`MINICLAW_MAX_ATTACHMENT_MB`（默认 32）、`MINICLAW_MAX_ATTACHMENTS`（默认 10）。
+**配置**：推荐写在 `attachments.max_mb` / `attachments.max_count`；旧 `MINICLAW_MAX_ATTACHMENT_MB` / `MINICLAW_MAX_ATTACHMENTS` env 仍可覆盖。
 
 **chat_history 取舍**：附件不写入 chat_history（只写文字 prompt），续话需要重新上传——避免 base64 反复进 context。
 

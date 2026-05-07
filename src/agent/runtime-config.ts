@@ -5,6 +5,12 @@ import { config } from "../config.js";
 import { loadMcpServers } from "./mcp.js";
 
 export interface AgentRuntimeSummary {
+  config: {
+    filePath: string;
+    fileLoaded: boolean;
+    mcpConfigPath: string;
+    mcpAllowlist: string[];
+  };
   provider: string;
   model: string;
   defaultCwd: string;
@@ -105,6 +111,12 @@ function joinNames(values: string[], max = 12): string {
 
 export function getAgentRuntimeSummary(): AgentRuntimeSummary {
   return {
+    config: {
+      filePath: config.configFile.path,
+      fileLoaded: config.configFile.loaded,
+      mcpConfigPath: config.mcp.configPath,
+      mcpAllowlist: [...config.mcp.allowlist],
+    },
     provider: config.agentProvider,
     model: config.model,
     defaultCwd: config.defaultCwd,
@@ -137,6 +149,7 @@ export function formatAgentRuntimeSummary(summary = getAgentRuntimeSummary()): s
   return [
     "**Agent Config**",
     `Provider: ${code(summary.provider)} / Model: ${code(summary.model)}`,
+    `Config: ${code(summary.config.filePath)} (${summary.config.fileLoaded ? "loaded" : "not found, defaults/env only"})`,
     `Default CWD: ${code(summary.defaultCwd)}`,
     "",
     "**Codex**",
@@ -147,6 +160,7 @@ export function formatAgentRuntimeSummary(summary = getAgentRuntimeSummary()): s
     "",
     "**Claude**",
     `model=${code(summary.claude.model)} settingSources=${code(summary.claude.settingSources.join(",") || "none")} hooks=${code(summary.claude.hooks)}`,
+    `MCP config=${code(summary.config.mcpConfigPath)} allowlist=${code(summary.config.mcpAllowlist.join(",") || "none")}`,
     `MCP loaded by MiniClaw: ${joinNames(summary.claude.mcpServers)}`,
     `Skills: ${joinNames(summary.claude.skills)}`,
     `Agents: ${joinNames(summary.claude.agents)}`,

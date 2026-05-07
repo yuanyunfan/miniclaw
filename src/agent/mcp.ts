@@ -1,7 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
+import { config } from "../config.js";
 import { createLogger } from "../lib/log.js";
 
 const log = createLogger("mcp");
@@ -10,16 +9,11 @@ export type McpServers = Record<string, McpServerConfig>;
 
 let cache: McpServers | null = null;
 
-function parseAllowlist(raw: string): { names: string[]; allowAll: boolean } {
+function parseAllowlist(raw: readonly string[]): { names: string[]; allowAll: boolean } {
   const names = raw
-    .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
   return { names, allowAll: names.includes("*") };
-}
-
-function resolveHome(path: string): string {
-  return path.startsWith("~/") ? join(homedir(), path.slice(2)) : path;
 }
 
 export function resetMcpCache(): void {
@@ -29,8 +23,8 @@ export function resetMcpCache(): void {
 export function loadMcpServers(): McpServers {
   if (cache) return cache;
 
-  const configPath = resolveHome(process.env.MINICLAW_MCP_CONFIG ?? join(homedir(), ".claude.json"));
-  const allowlist = parseAllowlist(process.env.MINICLAW_MCP_ALLOWLIST ?? "exa,context7");
+  const configPath = config.mcp.configPath;
+  const allowlist = parseAllowlist(config.mcp.allowlist);
 
   if (!existsSync(configPath)) {
     log.warn(`配置文件不存在: ${configPath}，跳过 MCP 接入`);

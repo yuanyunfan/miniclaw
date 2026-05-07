@@ -1,0 +1,62 @@
+# MiniClaw user config example.
+# Copy to ~/.miniclaw/config.yaml, then keep secrets in .env.
+# Quote Discord IDs because they are larger than JavaScript's safe integer range.
+
+discord:
+  client_id: "your_discord_application_id"
+  guild_id: "your_discord_guild_id"
+  allowed_user_id: "your_discord_user_id"
+
+routing:
+  # Plain messages in these channels become lightweight chat replies.
+  auto_reply_channels: []
+  # Plain messages in these channels create /task-style task threads.
+  # Task channels take precedence over auto-reply channels.
+  task_channels: []
+
+agent:
+  provider: claude # claude | codex
+  default_cwd: "~/Code"
+  max_concurrent_tasks: 3
+  budget_usd: 1.0 # use unlimited for no cap
+  max_turns: 30 # use unlimited for no cap
+  chat_timeout_ms: 180000
+  attachment_timeout_ms: 30000
+  register_commands_on_start: false
+
+anthropic:
+  # Keep ANTHROPIC_API_KEY in .env.
+  # base_url: "http://localhost:7024"
+
+openai:
+  # Keep OPENAI_API_KEY in .env when needed.
+  # base_url: "https://api.openai.com/v1"
+
+claude:
+  model: claude-opus-4-7
+  setting_sources: [user, project, local] # use [] to disable filesystem settings
+  disable_hooks: true
+
+codex:
+  # Set any field to inherit to let Codex CLI use ~/.codex/config.toml.
+  model: gpt-5.5
+  reasoning_effort: medium
+  sandbox:
+    task: workspace-write
+    chat: read-only
+  approval_policy: never
+  web_search: live
+  timeout_ms: 900000
+  network_access: true
+
+mcp:
+  # Claude provider task mode can reuse MCP servers from Claude Code config.
+  config: "~/.claude.json"
+  allowlist: [exa, context7] # use ["*"] to expose every server
+
+storage:
+  db_path: "~/.miniclaw/data.db"
+
+attachments:
+  max_mb: 32
+  max_count: 10

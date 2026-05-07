@@ -12,9 +12,9 @@
 
 | 触发方式 | 引擎 | 能力 |
 |----------|------|------|
-| `#chat` 频道直接发消息 | `.env` 选择 Claude / Codex | 搜索、读取文件、执行安全命令 |
-| `@MiniClaw` 在任意频道 | `.env` 选择 Claude / Codex | 同上 |
-| `/task <描述>` | `.env` 选择 Claude Code / Codex | 创建独立线程，状态卡片 + 实时进度 + Markdown 最终结果 |
+| `#chat` 频道直接发消息 | `config.yaml` 选择 Claude / Codex | 搜索、读取文件、执行安全命令 |
+| `@MiniClaw` 在任意频道 | `config.yaml` 选择 Claude / Codex | 同上 |
+| `/task <描述>` | `config.yaml` 选择 Claude Code / Codex | 创建独立线程，状态卡片 + 实时进度 + Markdown 最终结果 |
 | `/status` | — | 查看活跃/历史任务 |
 | `/health` | — | 查看 MiniClaw 进程、任务和 cron 健康状态 |
 | `/agent-config` | — | 查看当前 provider、模型、Codex/Claude settings、MCP、skills 继承摘要 |
@@ -51,56 +51,51 @@ SQLite 持久化（任务状态 + 对话历史）
 pnpm install
 ```
 
-### 2. 配置环境变量
+### 2. 配置
 
 ```bash
 cp .env.example .env
+mkdir -p ~/.miniclaw
+cp config.example.yaml ~/.miniclaw/config.yaml
 ```
 
-编辑 `.env`，填入以下必填项：
+编辑 `.env`，只填 secrets 和启动前必须生效的值：
 
-| 变量 | 说明 |
-|------|------|
-| `DISCORD_TOKEN` | Discord Bot Token |
-| `DISCORD_CLIENT_ID` | Discord Application ID |
-| `DISCORD_GUILD_ID` | 目标服务器 ID |
-| `ANTHROPIC_API_KEY` | Anthropic API Key（`MINICLAW_AGENT_PROVIDER=claude` 时必填） |
-| `OPENAI_API_KEY` | OpenAI API Key（Codex 可选；也可复用本机 `codex login`） |
-| `MINICLAW_ALLOWED_USER_ID` | 你的 Discord 用户 ID |
+- `DISCORD_TOKEN`: Discord Bot Token。
+- `ANTHROPIC_API_KEY`: Claude provider 使用时必填。
+- `OPENAI_API_KEY`: Codex 可选；如果本机已经 `codex login`，通常可以不填。
+- `MINICLAW_CONFIG`: 配置文件路径，默认推荐 `~/.miniclaw/config.yaml`。
+- `MINICLAW_PROXY`: 可选 HTTP 代理。它仍是 env，因为代理必须在 YAML loader 初始化前注入。
 
-可选配置：
+编辑 `~/.miniclaw/config.yaml`，放结构化配置：
 
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `MINICLAW_PROXY` | — | HTTP 代理地址（如 `http://127.0.0.1:7890`） |
-| `MINICLAW_AGENT_PROVIDER` | `claude` | 全局 provider：`claude` 或 `codex` |
-| `MINICLAW_AUTO_REPLY_CHANNELS` | — | 免 @ 自动回复的频道 ID（逗号分隔） |
-| `MINICLAW_TASK_CHANNELS` | — | 免 @ 创建 task 的频道 ID（逗号分隔）；优先级高于 auto-reply |
-| `MINICLAW_DEFAULT_CWD` | `~/Code` | Agent SDK 默认工作目录 |
-| `MINICLAW_MAX_CONCURRENT_TASKS` | `3` | /task 最大并发数 |
-| `MINICLAW_DEFAULT_BUDGET_USD` | `1.0` | 单次任务费用上限 |
-| `MINICLAW_DEFAULT_MAX_TURNS` | `30` | 单次任务最大轮次 |
-| `MINICLAW_CHAT_TIMEOUT_MS` | `180000` | 轻量 chat 单次回复整体超时 |
-| `MINICLAW_ATTACHMENT_TIMEOUT_MS` | `30000` | Discord 附件下载超时 |
-| `MINICLAW_REGISTER_COMMANDS_ON_START` | `false` | 启动时是否自动注册 slash commands；命令变更后建议手动跑 `pnpm register` |
-| `MINICLAW_LOG_LEVEL` | `info` | 日志级别：`debug` / `info` / `warn` / `error` |
-| `MINICLAW_LOG_FORMAT` | `text` | 日志格式：`text` 或 `json`（JSON line，便于日志检索） |
-| `MINICLAW_CLAUDE_MODEL` | `claude-opus-4-7` | Claude 模型（旧 `MINICLAW_MODEL` 仍兼容） |
-| `MINICLAW_CLAUDE_SETTING_SOURCES` | `user,project,local` | Claude task 读取哪些本机 settings source；设为 `none` 可禁用 |
-| `MINICLAW_CLAUDE_DISABLE_HOOKS` | `true` | Claude task 默认禁用 hooks，避免把本机交互 hook 带入 Discord 流程 |
-| `MINICLAW_MCP_CONFIG` | `~/.claude.json` | Claude provider 读取 MCP server 的配置文件 |
-| `MINICLAW_MCP_ALLOWLIST` | `exa,context7` | Claude provider 允许加载的 MCP server；`*` 表示全部 |
-| `MINICLAW_CODEX_MODEL` | `gpt-5.5` | Codex 模型；可设 `inherit` 复用本机 Codex 配置 |
-| `MINICLAW_CODEX_TASK_SANDBOX` | `workspace-write` | Codex `/task` 沙箱；可设 `inherit` |
-| `MINICLAW_CODEX_CHAT_SANDBOX` | `read-only` | Codex chat/stage 沙箱；可设 `inherit` |
-| `MINICLAW_CODEX_REASONING_EFFORT` | `medium` | Codex reasoning effort；可设 `inherit` |
-| `MINICLAW_CODEX_APPROVAL_POLICY` | `never` | Codex 工具调用审批策略（如 `never` / `on-request`）；可设 `inherit` |
-| `MINICLAW_CODEX_WEB_SEARCH` | `live` | Codex web search 模式（`disabled` / `cached` / `live`）；可设 `inherit` |
-| `MINICLAW_CODEX_NETWORK_ACCESS` | `true` | Codex 沙箱是否允许出站网络；可设 `inherit` |
-| `MINICLAW_CODEX_TIMEOUT_MS` | `900000` | Codex 单 turn 超时（毫秒，默 15 分钟） |
-| `MINICLAW_DB_PATH` | `~/.miniclaw/data.db` | SQLite 数据库路径 |
-| `MINICLAW_MAX_ATTACHMENT_MB` | `32` | 单附件最大大小 |
-| `MINICLAW_MAX_ATTACHMENTS` | `10` | 单条消息最多处理附件数 |
+```yaml
+discord:
+  client_id: "your_discord_application_id"
+  guild_id: "your_discord_guild_id"
+  allowed_user_id: "your_discord_user_id"
+
+routing:
+  auto_reply_channels: []
+  task_channels: []
+
+agent:
+  provider: codex
+  default_cwd: "~/Code"
+  max_concurrent_tasks: 3
+  budget_usd: 1.0
+  max_turns: 30
+```
+
+完整模板见 [`config.example.yaml`](config.example.yaml)。Discord ID 必须加引号，避免 YAML 把超大整数解析成不安全的 number。
+
+配置优先级：
+
+```text
+内置默认值 < ~/.miniclaw/config.yaml < 环境变量覆盖
+```
+
+旧的 `MINICLAW_*` env 变量仍兼容，并且优先级高于 YAML；推荐只在部署临时覆盖时使用。显式清空数组可用 `none`。除旧版 budget/max turns 空值继续兼容为 `unlimited` 外，空字符串通常会被视为未配置，避免 `.env` 里的空值意外覆盖 YAML。
 
 切换到 Codex 的最小配置：
 
@@ -122,7 +117,23 @@ MINICLAW_CODEX_WEB_SEARCH=inherit
 MINICLAW_CODEX_NETWORK_ACCESS=inherit
 ```
 
-运行 `/agent-config` 可在 Discord 中检查当前 provider/model、Codex MCP/skills、Claude settings/MCP/skills 的继承摘要。
+在 YAML 中也可以这样写：
+
+```yaml
+agent:
+  provider: codex
+codex:
+  model: inherit
+  reasoning_effort: inherit
+  sandbox:
+    task: inherit
+    chat: read-only
+  approval_policy: inherit
+  web_search: inherit
+  network_access: inherit
+```
+
+运行 `/agent-config` 可在 Discord 中检查当前配置文件路径、provider/model、Codex MCP/skills、Claude settings/MCP/skills 的继承摘要。
 
 ### 3. 注册 Slash Commands
 
@@ -171,7 +182,7 @@ python3 scripts/update-cron-channels.py
 
 如果你想用**自己的**频道结构（而不是 hermes-style），跳过这两个脚本，直接 `vim ~/.miniclaw/cron/*.yaml` 改各自的 `channel: "<id>"`。
 
-专门收任务的频道可以写入 `MINICLAW_TASK_CHANNELS`。这些频道里普通消息会直接创建 task thread 并进入 `/task` 同一套执行和输出链路，不需要 `@MiniClaw`，也不会走轻量 chat。
+专门收任务的频道推荐写入 `routing.task_channels`，也可以用旧 env `MINICLAW_TASK_CHANNELS` 临时覆盖。这些频道里普通消息会直接创建 task thread 并进入 `/task` 同一套执行和输出链路，不需要 `@MiniClaw`，也不会走轻量 chat。
 
 ## 项目结构
 
@@ -179,7 +190,7 @@ python3 scripts/update-cron-channels.py
 src/
 ├── index.ts              # 入口：初始化 DB → 注册命令 → 启动 Bot
 ├── bot.ts                # Discord 事件监听 + 消息路由
-├── config.ts             # 环境变量加载
+├── config.ts             # YAML + env layered 配置加载
 ├── proxy.ts              # HTTP + WebSocket 代理注入
 ├── agent/
 │   ├── chat.ts           # @mention/auto-reply 对话（Agent SDK）

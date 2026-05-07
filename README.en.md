@@ -12,9 +12,9 @@ MiniClaw provides a Discord bot, scheduled cron tasks, markdown-based long-term 
 
 | Trigger | Engine | Capability |
 | --- | --- | --- |
-| Direct messages in the configured `#chat` channel | Claude or Codex from `.env` | Search, read files, and run safe commands |
-| `@MiniClaw` in any channel | Claude or Codex from `.env` | Same as above |
-| `/task <description>` | Claude Code or Codex from `.env` | Create an isolated thread with a status card, live progress, and final Markdown output |
+| Direct messages in the configured `#chat` channel | Claude or Codex from `config.yaml` | Search, read files, and run safe commands |
+| `@MiniClaw` in any channel | Claude or Codex from `config.yaml` | Same as above |
+| `/task <description>` | Claude Code or Codex from `config.yaml` | Create an isolated thread with a status card, live progress, and final Markdown output |
 | `/status` | - | View active and recent tasks |
 | `/health` | - | Inspect process, task, and cron health |
 | `/agent-config` | - | Show provider, model, Codex/Claude settings, MCP, and skills inheritance |
@@ -55,56 +55,51 @@ SQLite persistence (task state + chat history)
 pnpm install
 ```
 
-### 2. Configure environment variables
+### 2. Configure MiniClaw
 
 ```bash
 cp .env.example .env
+mkdir -p ~/.miniclaw
+cp config.example.yaml ~/.miniclaw/config.yaml
 ```
 
-Required variables:
+Edit `.env` for secrets and bootstrap values only:
 
-| Variable | Description |
-| --- | --- |
-| `DISCORD_TOKEN` | Discord bot token |
-| `DISCORD_CLIENT_ID` | Discord application ID |
-| `DISCORD_GUILD_ID` | Target Discord server ID |
-| `ANTHROPIC_API_KEY` | Anthropic API key. Required when `MINICLAW_AGENT_PROVIDER=claude` |
-| `OPENAI_API_KEY` | OpenAI API key. Optional for Codex if local `codex login` is available |
-| `MINICLAW_ALLOWED_USER_ID` | Your Discord user ID |
+- `DISCORD_TOKEN`: Discord bot token.
+- `ANTHROPIC_API_KEY`: required when the Claude provider is active.
+- `OPENAI_API_KEY`: optional for Codex when local `codex login` is not used.
+- `MINICLAW_CONFIG`: recommended path is `~/.miniclaw/config.yaml`.
+- `MINICLAW_PROXY`: optional HTTP proxy. It remains env-based because it must be applied before the YAML config loader initializes.
 
-Optional variables:
+Edit `~/.miniclaw/config.yaml` for structured settings:
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `MINICLAW_PROXY` | - | HTTP proxy URL, for example `http://127.0.0.1:7890` |
-| `MINICLAW_AGENT_PROVIDER` | `claude` | Global provider: `claude` or `codex` |
-| `MINICLAW_AUTO_REPLY_CHANNELS` | - | Comma-separated channel IDs where MiniClaw replies without @mention |
-| `MINICLAW_TASK_CHANNELS` | - | Comma-separated channel IDs where plain messages create task threads without @mention. Takes precedence over auto-reply |
-| `MINICLAW_DEFAULT_CWD` | `~/Code` | Default Agent SDK working directory |
-| `MINICLAW_MAX_CONCURRENT_TASKS` | `3` | Maximum concurrent `/task` runs |
-| `MINICLAW_DEFAULT_BUDGET_USD` | `1.0` | Per-task cost budget |
-| `MINICLAW_DEFAULT_MAX_TURNS` | `30` | Per-task turn limit |
-| `MINICLAW_CHAT_TIMEOUT_MS` | `180000` | Timeout for lightweight chat replies |
-| `MINICLAW_ATTACHMENT_TIMEOUT_MS` | `30000` | Discord attachment download timeout |
-| `MINICLAW_REGISTER_COMMANDS_ON_START` | `false` | Register slash commands during startup. Prefer `pnpm register` after command changes |
-| `MINICLAW_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error` |
-| `MINICLAW_LOG_FORMAT` | `text` | `text` or JSON lines |
-| `MINICLAW_CLAUDE_MODEL` | `claude-opus-4-7` | Claude model. Legacy `MINICLAW_MODEL` is still supported |
-| `MINICLAW_CLAUDE_SETTING_SOURCES` | `user,project,local` | Claude task setting sources. Use `none` to disable |
-| `MINICLAW_CLAUDE_DISABLE_HOOKS` | `true` | Disable Claude hooks by default in Discord task flow |
-| `MINICLAW_MCP_CONFIG` | `~/.claude.json` | Config file used to load Claude provider MCP servers |
-| `MINICLAW_MCP_ALLOWLIST` | `exa,context7` | Claude provider MCP allowlist. Use `*` to load all |
-| `MINICLAW_CODEX_MODEL` | `gpt-5.5` | Codex model. Use `inherit` to let local Codex config decide |
-| `MINICLAW_CODEX_TASK_SANDBOX` | `workspace-write` | Codex `/task` sandbox. Supports `inherit` |
-| `MINICLAW_CODEX_CHAT_SANDBOX` | `read-only` | Codex chat/stage sandbox. Supports `inherit` |
-| `MINICLAW_CODEX_REASONING_EFFORT` | `medium` | Codex reasoning effort. Supports `inherit` |
-| `MINICLAW_CODEX_APPROVAL_POLICY` | `never` | Codex approval policy. Supports `inherit` |
-| `MINICLAW_CODEX_WEB_SEARCH` | `live` | Codex web search mode: `disabled`, `cached`, or `live`. Supports `inherit` |
-| `MINICLAW_CODEX_NETWORK_ACCESS` | `true` | Whether Codex sandbox has network access. Supports `inherit` |
-| `MINICLAW_CODEX_TIMEOUT_MS` | `900000` | Codex single-turn timeout in milliseconds |
-| `MINICLAW_DB_PATH` | `~/.miniclaw/data.db` | SQLite database path |
-| `MINICLAW_MAX_ATTACHMENT_MB` | `32` | Maximum size for one attachment |
-| `MINICLAW_MAX_ATTACHMENTS` | `10` | Maximum attachments per message |
+```yaml
+discord:
+  client_id: "your_discord_application_id"
+  guild_id: "your_discord_guild_id"
+  allowed_user_id: "your_discord_user_id"
+
+routing:
+  auto_reply_channels: []
+  task_channels: []
+
+agent:
+  provider: codex
+  default_cwd: "~/Code"
+  max_concurrent_tasks: 3
+  budget_usd: 1.0
+  max_turns: 30
+```
+
+See [config.example.yaml](config.example.yaml) for the full template. Quote Discord IDs because they are larger than JavaScript's safe integer range.
+
+Configuration precedence:
+
+```text
+built-in defaults < ~/.miniclaw/config.yaml < environment overrides
+```
+
+Legacy `MINICLAW_*` environment variables still work and override YAML. Prefer YAML for readability and use env only for deployment overrides. Use `none` to explicitly override an array to empty. Blank env values are usually treated as unset, except legacy blank budget/max-turn values still mean `unlimited`.
 
 Minimal Codex setup:
 
@@ -126,7 +121,23 @@ MINICLAW_CODEX_WEB_SEARCH=inherit
 MINICLAW_CODEX_NETWORK_ACCESS=inherit
 ```
 
-Use `/agent-config` in Discord to inspect the active provider/model, Codex MCP/skills, and Claude settings/MCP/skills summary.
+The same Codex inheritance setup can be expressed in YAML:
+
+```yaml
+agent:
+  provider: codex
+codex:
+  model: inherit
+  reasoning_effort: inherit
+  sandbox:
+    task: inherit
+    chat: read-only
+  approval_policy: inherit
+  web_search: inherit
+  network_access: inherit
+```
+
+Use `/agent-config` in Discord to inspect the active config file path, provider/model, Codex MCP/skills, and Claude settings/MCP/skills summary.
 
 ### 3. Register slash commands
 
@@ -176,7 +187,7 @@ The WeChat Official Account digest job `daily-wechat-mp` needs an additional Off
 
 If you use your own channel layout, skip the setup scripts and edit the `channel` field in `~/.miniclaw/cron/*.yaml` manually.
 
-For a dedicated task intake channel, set `MINICLAW_TASK_CHANNELS`. Plain messages in those channels create task threads and use the same execution/output path as `/task`, without needing `@MiniClaw`.
+For a dedicated task intake channel, prefer `routing.task_channels` in `config.yaml`; legacy `MINICLAW_TASK_CHANNELS` can still be used as an env override. Plain messages in those channels create task threads and use the same execution/output path as `/task`, without needing `@MiniClaw`.
 
 ## Project Structure
 
@@ -184,7 +195,7 @@ For a dedicated task intake channel, set `MINICLAW_TASK_CHANNELS`. Plain message
 src/
 |-- index.ts              # Entry point: DB init -> command registration -> bot startup
 |-- bot.ts                # Discord event listeners and message routing
-|-- config.ts             # Environment variable loading
+|-- config.ts             # Layered YAML + env configuration loading
 |-- proxy.ts              # HTTP and WebSocket proxy setup
 |-- agent/
 |   |-- chat.ts           # @mention / auto-reply chat
