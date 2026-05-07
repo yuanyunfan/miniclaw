@@ -27,6 +27,41 @@ describe("classifyMessageIntent", () => {
     expect(d.matchedSignals).toContain("explain");
   });
 
+  it("classifies plain Chinese summaries as chat", () => {
+    const d = classifyMessageIntent({ content: "总结一下这篇文章", channelId: "chat-1" });
+    expect(d.intent).toBe("chat");
+    expect(d.matchedSignals).toContain("summary");
+  });
+
+  it("classifies ordinary URL summaries as chat but asks the LLM classifier to verify", () => {
+    const d = classifyMessageIntent({ content: "https://example.com/post 给我总结一下", channelId: "chat-1" });
+    expect(d.intent).toBe("chat");
+    expect(d.matchedSignals).toContain("summary");
+    expect(d.matchedSignals).toContain("external_url");
+    expect(shouldUseLlmClassifier(d, policy)).toBe(true);
+  });
+
+  it("suggests task mode for WeChat public-account article summaries", () => {
+    const d = classifyMessageIntent({
+      content: "链接：https://mp.weixin.qq.com/s/43wPVMKzNxC_R0ZYmUn0Rg 给我总结一下",
+      channelId: "chat-1",
+    });
+    expect(d.intent).toBe("task_suggest");
+    expect(d.matchedSignals).toContain("wechat_article");
+    expect(d.matchedSignals).toContain("browser_required");
+    expect(d.riskFlags).toContain("browser_required");
+
+    const resolved = resolveSmartRouterAction(d, policy, "chat-1");
+    expect(resolved.intent).toBe("task_suggest");
+  });
+
+  it("suggests task mode for URL-only messages so the LLM classifier can decide", () => {
+    const d = classifyMessageIntent({ content: "https://example.com/post", channelId: "chat-1" });
+    expect(d.intent).toBe("task_suggest");
+    expect(d.matchedSignals).toContain("external_url");
+    expect(shouldUseLlmClassifier(d, policy)).toBe(true);
+  });
+
   it("classifies file modification plus validation as task_confirm", () => {
     const d = classifyMessageIntent({ content: "修改 README 并跑测试", channelId: "chat-1" });
     expect(d.intent).toBe("task_confirm");
@@ -38,6 +73,16 @@ describe("classifyMessageIntent", () => {
     const d = classifyMessageIntent({ content: "commit 并 push 到 GitHub main", channelId: "chat-1" });
     expect(d.intent).toBe("task_confirm");
     expect(d.riskFlags).toContain("git_operation");
+  });
+
+  it("classifies explicit capture or persistent output requests as task_confirm", () => {
+    const d = classifyMessageIntent({
+      content: "抓取这个公众号链接，整理成 Obsidian 笔记",
+      channelId: "chat-1",
+    });
+    expect(d.intent).toBe("task_confirm");
+    expect(d.matchedSignals).toContain("capture_or_persist");
+    expect(d.riskFlags).toContain("long_running_or_persistent_output");
   });
 
   it("keeps attachment-only messages in chat by default", () => {

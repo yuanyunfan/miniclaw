@@ -121,7 +121,8 @@ Examples:
 - "解释一下 RSS 是什么"
 - "帮我分析这个方案是否合理"
 - "这个函数大概在做什么"
-- "总结一下这篇文章"
+- "总结一下这段文字"
+- "总结一下这个普通静态网页"
 
 `task_suggest`
 
@@ -132,6 +133,8 @@ Examples:
 - "看看这个项目有没有问题"
 - "帮我深入分析这个 repo"
 - "研究一下有没有方案"
+- "总结一下这个微信公众号文章"
+- "这个链接需要浏览器/登录态才能读取，帮我看一下"
 
 `task_confirm`
 
@@ -144,6 +147,8 @@ Examples:
 - "更新 README 和 docs"
 - "给我触发一次 E2E"
 - "帮我在 Discord 上测试一个编码任务"
+- "抓取这个链接并整理成 Obsidian 笔记"
+- "持续监控这个公众号的文章更新"
 
 `task_auto`
 
@@ -174,12 +179,14 @@ Strong task signals:
 - Validation verbs: `跑测试`, `构建`, `build`, `lint`, `typecheck`, `e2e`, `回归测试`.
 - Execution verbs: `触发一次`, `部署`, `启动服务`, `重启`, `运行`.
 - Artifact requests: "生成一个 web 游戏", "创建文件", "写到 docs", "更新 README".
+- Capture or persistence requests: `抓取`, `爬取`, `采集`, `持续监控`, `输出到`, `写入`, `保存笔记`, `整理成 Obsidian 笔记`.
 - Multi-step completion language: "实现并验证", "修改并 push", "跑完后告诉我结果".
 - Attachments plus action verbs: "基于这个文件修改", "把附件里的内容整理到项目里".
 
 Strong chat signals:
 
 - Explanation verbs: `解释`, `简述`, `分析一下`, `对比`, `讲讲`, `是什么`.
+- Summary verbs for local text or static pages: `总结`, `概括`, `摘要`, `归纳`, `summarize`.
 - Knowledge questions: `为什么`, `能否`, `原理`, `风险`, `关系`.
 - Low-action requests: "给我补充背景", "帮我理解".
 
@@ -188,6 +195,7 @@ Ambiguous signals:
 - `分析这个项目` can be read-only chat or a deep task.
 - `调研一下` can be chat if it only needs explanation, task if it needs repository changes or web/API execution.
 - `测试一下` often means task, but could mean "explain how to test".
+- URL summaries can be chat for ordinary static pages, but should become `task_suggest` for `mp.weixin.qq.com`, login/cookie pages, anti-bot pages, dynamic pages, or browser-required pages.
 
 The heuristic layer should return:
 

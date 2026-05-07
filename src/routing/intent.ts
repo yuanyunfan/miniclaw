@@ -44,6 +44,7 @@ interface SignalDef {
 const TASK_SIGNALS: SignalDef[] = [
   { label: "modify", pattern: /(修复|修一下|改一下|修改|实现|重构|更新|加上|删除|迁移|改成|补上|落地|implement|fix|refactor|update|modify|add|delete|migrate)/i, weight: 3, risk: "writes_files" },
   { label: "docs_or_file", pattern: /(README|readme|docs?|文档|文件|写到|整理到|创建文件|生成.*(web|游戏|页面|文件|报告)|create .*file|write .*docs?)/i, weight: 2, risk: "creates_artifact" },
+  { label: "capture_or_persist", pattern: /(抓取|爬取|采集|持续监控|监控.*(更新|发布|文章)|输出到|写入|落盘|导出|保存(成|到)?.*(文件|docs?|文档|报告|笔记|Obsidian|obsidian|markdown|md)|整理(成|到).*(文件|docs?|文档|报告|笔记|Obsidian|obsidian|markdown|md)|保存笔记|整理成笔记)/i, weight: 5, risk: "long_running_or_persistent_output" },
   { label: "validation", pattern: /(跑测试|测试一下|回归测试|构建|编译|build|lint|typecheck|tsc|e2e|regression test|run tests?)/i, weight: 3, risk: "runs_tests" },
   { label: "execution", pattern: /(触发一次|部署|启动服务|重启|运行|执行|run|start|restart|deploy|trigger)/i, weight: 2, risk: "runs_commands" },
   { label: "git", pattern: /(commit|push|提交|推到|推送|git\s+(commit|push|merge|rebase))/i, weight: 4, risk: "git_operation" },
@@ -51,7 +52,8 @@ const TASK_SIGNALS: SignalDef[] = [
 ];
 
 const CHAT_SIGNALS: SignalDef[] = [
-  { label: "explain", pattern: /(解释|简述|讲讲|是什么|什么意思|基础知识|原理|关系|为什么|why|what is|explain|describe|summari[sz]e)/i, weight: 3 },
+  { label: "explain", pattern: /(解释|简述|讲讲|是什么|什么意思|基础知识|原理|关系|为什么|why|what is|explain|describe)/i, weight: 3 },
+  { label: "summary", pattern: /(总结|概括|摘要|归纳|提炼|tldr|tl;dr|summari[sz]e)/i, weight: 3 },
   { label: "analysis", pattern: /(分析一下|分析下|对比|风险|是否可行|能否|方案|怎么看|review the idea|compare|analy[sz]e)/i, weight: 2 },
   { label: "knowledge", pattern: /(如何理解|怎么理解|补充背景|概念|设计是什么样|what can|how does|can it)/i, weight: 2 },
 ];
@@ -61,6 +63,20 @@ const AMBIGUOUS_SIGNALS: SignalDef[] = [
   { label: "research", pattern: /(调研|研究一下|找.*方案|research|investigate)/i, weight: 1 },
   { label: "test_word", pattern: /(测试一下|test this|try it)/i, weight: 1 },
 ];
+
+const URL_PATTERN = /https?:\/\/[^\s<>"'`，。！？、)）]+/i;
+const WECHAT_ARTICLE_PATTERN = /https?:\/\/mp\.weixin\.qq\.com\/[^\s<>"'`，。！？、)）]+|微信公众号|公众号文章/i;
+const BROWSER_REQUIRED_PATTERN = /(浏览器|登录态|动态加载|反爬|验证码|cookie|cookies|opencli|browser)/i;
+
+function urlContext(content: string): { hasUrl: boolean; isWechatArticle: boolean; needsBrowser: boolean } {
+  const hasUrl = URL_PATTERN.test(content);
+  const isWechatArticle = WECHAT_ARTICLE_PATTERN.test(content);
+  return {
+    hasUrl,
+    isWechatArticle,
+    needsBrowser: isWechatArticle || BROWSER_REQUIRED_PATTERN.test(content),
+  };
+}
 
 function collectSignals(content: string, defs: SignalDef[]): { score: number; labels: string[]; risks: string[] } {
   let score = 0;
@@ -96,8 +112,21 @@ export function classifyMessageIntent(input: RouteClassifierInput): RouteDecisio
   const task = collectSignals(content, TASK_SIGNALS);
   const chat = collectSignals(content, CHAT_SIGNALS);
   const ambiguous = collectSignals(content, AMBIGUOUS_SIGNALS);
-  const matchedSignals = [...new Set([...task.labels, ...chat.labels, ...ambiguous.labels])];
-  const riskFlags = [...new Set([...task.risks, ...(hasAttachments ? ["attachments"] : [])])];
+  const url = urlContext(content);
+  const urlSignals = [
+    ...(url.hasUrl ? ["external_url"] : []),
+    ...(url.isWechatArticle ? ["wechat_article"] : []),
+    ...(url.needsBrowser ? ["browser_required"] : []),
+  ];
+  const matchedSignals = [...new Set([...task.labels, ...chat.labels, ...ambiguous.labels, ...urlSignals])];
+  const riskFlags = [
+    ...new Set([
+      ...task.risks,
+      ...(hasAttachments ? ["attachments"] : []),
+      ...(url.hasUrl ? ["external_url"] : []),
+      ...(url.needsBrowser ? ["browser_required"] : []),
+    ]),
+  ];
 
   if (!content && hasAttachments) {
     return {
@@ -115,6 +144,26 @@ export function classifyMessageIntent(input: RouteClassifierInput): RouteDecisio
       intent: "task_confirm",
       confidence: clampConfidence(0.68 + Math.min(task.score, 7) * 0.04),
       reason: "message contains strong task execution signals",
+      matchedSignals,
+      riskFlags,
+    };
+  }
+
+  if (url.needsBrowser && task.score === 0 && chat.score > 0) {
+    return {
+      intent: "task_suggest",
+      confidence: 0.52,
+      reason: "message asks for a summary of a browser-dependent or dynamic URL",
+      matchedSignals,
+      riskFlags,
+    };
+  }
+
+  if (url.hasUrl && task.score === 0 && chat.score === 0) {
+    return {
+      intent: "task_suggest",
+      confidence: 0.5,
+      reason: "message contains a URL but no clear lightweight chat intent",
       matchedSignals,
       riskFlags,
     };
@@ -145,6 +194,16 @@ export function classifyMessageIntent(input: RouteClassifierInput): RouteDecisio
       intent: "task_suggest",
       confidence: 0.52,
       reason: "message is ambiguous and may benefit from task mode",
+      matchedSignals,
+      riskFlags,
+    };
+  }
+
+  if (url.hasUrl && task.score === 0 && chat.score > 0) {
+    return {
+      intent: "chat",
+      confidence: 0.68,
+      reason: "message asks for a read-only URL summary or analysis",
       matchedSignals,
       riskFlags,
     };
