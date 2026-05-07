@@ -215,6 +215,16 @@ bot.once(Events.ClientReady, (client) => startScheduler(client));
 
 ---
 
+## Proposed: Smart Task Router
+
+当前路由把入口当成意图：普通 chat channel 里的消息默认走 chat，task channel 或 `/task` 才走 task。这个模型清晰，但用户把真实 task prompt 发到 chat channel 时会失败，因为 chat 路径没有写权限。
+
+后续推荐加一层 smart router：在 chat 执行前先判断自然语言消息是否明显是 task。如果是，则让 MiniClaw 自动创建 task，或在普通 auto-reply channel 里用按钮确认后升级为 task。
+
+详细设计见 `docs/smart-task-router.md`。核心原则是：**不提升 chat 权限，而是把 task-like prompt 转入现有 task 执行链路**。
+
+---
+
 ## 想改路由时的常见场景
 
 | 想做什么 | 改哪里 |
