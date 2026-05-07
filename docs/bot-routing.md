@@ -221,7 +221,7 @@ bot.once(Events.ClientReady, (client) => startScheduler(client));
 
 后续推荐加一层 smart router：在 chat 执行前先判断自然语言消息是否明显是 task。如果是，则让 MiniClaw 自动创建 task，或在普通 auto-reply channel 里用按钮确认后升级为 task。
 
-详细设计见 `docs/smart-task-router.md`。核心原则是：**不提升 chat 权限，而是把 task-like prompt 转入现有 task 执行链路**。
+详细设计见 `docs/smart-task-router.zh.md`（中文复查版）和 `docs/smart-task-router.md`（英文版）。核心原则是：**不提升 chat 权限，而是把 task-like prompt 转入现有 task 执行链路**。
 
 ---
 
