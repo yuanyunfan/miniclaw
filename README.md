@@ -75,6 +75,7 @@ cp .env.example .env
 | `MINICLAW_PROXY` | — | HTTP 代理地址（如 `http://127.0.0.1:7890`） |
 | `MINICLAW_AGENT_PROVIDER` | `claude` | 全局 provider：`claude` 或 `codex` |
 | `MINICLAW_AUTO_REPLY_CHANNELS` | — | 免 @ 自动回复的频道 ID（逗号分隔） |
+| `MINICLAW_TASK_CHANNELS` | — | 免 @ 创建 task 的频道 ID（逗号分隔）；优先级高于 auto-reply |
 | `MINICLAW_DEFAULT_CWD` | `~/Code` | Agent SDK 默认工作目录 |
 | `MINICLAW_MAX_CONCURRENT_TASKS` | `3` | /task 最大并发数 |
 | `MINICLAW_DEFAULT_BUDGET_USD` | `1.0` | 单次任务费用上限 |
@@ -169,6 +170,8 @@ python3 scripts/update-cron-channels.py
 微信公众号日报 `daily-wechat-mp` 需要额外的公众号后台登录态和 `daily-wechat-article` 频道，默认不由模板脚本创建。配置方式见 [`docs/wechat-mp-provider.md`](docs/wechat-mp-provider.md)。
 
 如果你想用**自己的**频道结构（而不是 hermes-style），跳过这两个脚本，直接 `vim ~/.miniclaw/cron/*.yaml` 改各自的 `channel: "<id>"`。
+
+专门收任务的频道可以写入 `MINICLAW_TASK_CHANNELS`。这些频道里普通消息会直接创建 task thread 并进入 `/task` 同一套执行和输出链路，不需要 `@MiniClaw`，也不会走轻量 chat。
 
 ## 项目结构
 

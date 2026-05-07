@@ -66,11 +66,13 @@ flowchart LR
     end
 
     User -->|"@bot / 在白名单频道发消息"| DC
+    User -->|"task intake 频道普通消息"| DC
     User -->|"slash command"| SC
     DC -->|"MessageCreate event"| BOT
     SC -->|"InteractionCreate event"| BOT
 
     BOT -->|"普通消息"| CHAT
+    BOT -->|"task intake 消息"| TASK
     BOT -->|"thread 续话"| TASK
     BOT -->|"/task"| HANDLERS
     HANDLERS --> TASK
@@ -136,7 +138,7 @@ flowchart LR
 
 **关键设计点**
 
-- **三入口**：`@mention` 走 `chat.ts`（轻量对话）；`/task` 走 `task.ts`（Supervisor 模式 + subagent 编排）；`cron` 调度自动触发
+- **四入口**：`@mention` / auto-reply 走 `chat.ts`（轻量对话）；`/task` 和 `MINICLAW_TASK_CHANNELS` 走 `task.ts`（Supervisor 模式 + subagent 编排）；`cron` 调度自动触发
 - **Stage 是对偶子系统**：`pnpm stage` 启另一进程（Ink TUI），多 agent 群聊编排，与 Discord bot 路径独立但共享 chat-tools / db / config / log（详见 `docs/stage.md`）
 - **代码 vs 用户级数据严格分离**：
   - 代码在 git repo（`agents/*.md` / `src/`）
@@ -145,7 +147,7 @@ flowchart LR
 - **可控继承本机 Agent 配置**：Codex 可用 `inherit` 回落到 `~/.codex/config.toml`；Claude task 显式加载 `user/project/local` settings，默认禁用 hooks；MCP 仍通过 allowlist 控制
 - **Discord task 三层输出**：状态 embed 只放元数据；progress message 执行中持续 edit、完成后保留 Execution Summary；最终结果走普通 Markdown 分片
 - **pre-provider 扩展点**：cron `task` 可先运行 provider 采集结构化数据，再把 JSON 注入 prompt；微信公众号日报通过 `wechat-mp` provider 落地
-- **白名单两道闸**：`MINICLAW_ALLOWED_USER_ID` 限制谁能用，`MINICLAW_AUTO_REPLY_CHANNELS` 决定哪些频道无需 @mention
+- **白名单两道闸**：`MINICLAW_ALLOWED_USER_ID` 限制谁能用，`MINICLAW_AUTO_REPLY_CHANNELS` 决定哪些频道无需 @mention 进入 chat，`MINICLAW_TASK_CHANNELS` 决定哪些频道无需 @mention 直接创建 task
 - **LLM 流量全部经过 raven**：`ANTHROPIC_BASE_URL=http://localhost:7024` 让两个 SDK 都走本地代理
 
 ---
@@ -235,7 +237,7 @@ sequenceDiagram
 
 ## 3. /task Supervisor + Verdict 自动迭代
 
-> 场景：`/task prompt:"加 /metrics 命令"`，看 5 角色 subagent 由 Supervisor 按"能力图谱"自由编排（非固定流水线）
+> 场景：`/task prompt:"加 /metrics 命令"`，或在 task intake 频道直接发同样的任务描述；看 5 角色 subagent 由 Supervisor 按"能力图谱"自由编排（非固定流水线）
 
 ```mermaid
 sequenceDiagram
@@ -249,11 +251,11 @@ sequenceDiagram
     participant R as raven → Copilot
     participant DB as SQLite tasks 表
 
-    U->>D: /task 命令 (prompt + cwd + 可选附件 file1/file2/file3)
+    U->>D: /task 命令或 task intake 频道消息<br/>(prompt + 可选附件)
     D-->>H: InteractionCreate
 
-    H->>D: 创建 thread + defer
-    opt 命令带 file1/file2/file3
+    H->>D: 创建 thread + defer/ack
+    opt 带附件
         H->>H: processAttachments 处理附件<br/>大文件落 cwd/.miniclaw-attachments/{taskId}/
     end
     H->>DB: insertTask(status='running')

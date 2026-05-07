@@ -165,6 +165,7 @@ export const config = {
     if (!ids.length) log.warn("MINICLAW_AUTO_REPLY_CHANNELS 未配置，所有频道需 @mention 触发");
     return ids;
   })(),
+  taskChannelIds: env("MINICLAW_TASK_CHANNELS", "").split(",").map((s) => s.trim()).filter(Boolean),
   dbPath: resolveHome(env("MINICLAW_DB_PATH", "~/.miniclaw/data.db")),
   maxAttachmentMb: envNumber("MINICLAW_MAX_ATTACHMENT_MB", "32"),
   maxAttachments: envPositiveInt("MINICLAW_MAX_ATTACHMENTS", "10"),

@@ -79,6 +79,7 @@ Optional variables:
 | `MINICLAW_PROXY` | - | HTTP proxy URL, for example `http://127.0.0.1:7890` |
 | `MINICLAW_AGENT_PROVIDER` | `claude` | Global provider: `claude` or `codex` |
 | `MINICLAW_AUTO_REPLY_CHANNELS` | - | Comma-separated channel IDs where MiniClaw replies without @mention |
+| `MINICLAW_TASK_CHANNELS` | - | Comma-separated channel IDs where plain messages create task threads without @mention. Takes precedence over auto-reply |
 | `MINICLAW_DEFAULT_CWD` | `~/Code` | Default Agent SDK working directory |
 | `MINICLAW_MAX_CONCURRENT_TASKS` | `3` | Maximum concurrent `/task` runs |
 | `MINICLAW_DEFAULT_BUDGET_USD` | `1.0` | Per-task cost budget |
@@ -174,6 +175,8 @@ Default channel layout:
 The WeChat Official Account digest job `daily-wechat-mp` needs an additional Official Platform session and a target `daily-wechat-article` channel. See [docs/wechat-mp-provider.md](docs/wechat-mp-provider.md).
 
 If you use your own channel layout, skip the setup scripts and edit the `channel` field in `~/.miniclaw/cron/*.yaml` manually.
+
+For a dedicated task intake channel, set `MINICLAW_TASK_CHANNELS`. Plain messages in those channels create task threads and use the same execution/output path as `/task`, without needing `@MiniClaw`.
 
 ## Project Structure
 

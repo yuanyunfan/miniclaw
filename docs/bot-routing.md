@@ -22,11 +22,13 @@ flowchart TD
     F2 -->|是| P1{"Path 1?<br/>消息在真正的<br/>Discord thread 内<br/>且对应 task 存在<br/>且非 cron 触发"}
 
     P1 -->|是| RES[加 🔄 reaction<br/>resume 上次 session<br/>executeTask 续话]
-    P1 -->|否| F3{"Path 2?<br/>channel ∈ auto_reply_list<br/>OR 被 @mention?"}
+    P1 -->|否| TCH{"Path 2?<br/>channel ∈ task_channel_list?"}
+    TCH -->|是| TASKMSG[创建 task thread<br/>taskStartEmbed<br/>executeTask]
+    TCH -->|否| F3{"Path 3?<br/>channel ∈ auto_reply_list<br/>OR 被 @mention?"}
     F3 -->|否| X3[忽略]
     F3 -->|是| F4{"message_id<br/>已处理过?"}
     F4 -->|是| X4[去重丢弃]
-    F4 -->|否| ROUTE[进入 Path 2 内部分流]
+    F4 -->|否| ROUTE[进入 Path 3 内部分流]
 
     ROUTE --> R0{"content 为空?<br/>仅 @ 没正文"}
     R0 -->|是| GREET[reply 你好]
@@ -52,8 +54,8 @@ flowchart TD
     classDef filter fill:#fff7e6,stroke:#fa8c16
     classDef route fill:#e6f7ff,stroke:#1890ff
     classDef drop fill:#fff1f0,stroke:#cf1322,color:#a8071a
-    class F1,F2,F3,F4,P1,R0,R1,IS,SW filter
-    class CHAT,RES,MEM,GREET,T,S,C,RS,RM,FG,MM,RECOV,SCHED route
+    class F1,F2,F3,F4,P1,TCH,R0,R1,IS,SW filter
+    class CHAT,RES,TASKMSG,MEM,GREET,T,S,C,RS,RM,FG,MM,RECOV,SCHED route
     class X1,X2,X3,X4,X5 drop
 ```
 
@@ -63,7 +65,7 @@ flowchart TD
 
 | 行号 | 事件 | 干什么 |
 |------|------|--------|
-| `bot.ts:32` | `MessageCreate` | 处理普通消息（thread 续话 / @mention / 自动频道 / 记忆指令） |
+| `bot.ts:32` | `MessageCreate` | 处理普通消息（thread 续话 / task intake 频道 / @mention / 自动 chat 频道 / 记忆指令） |
 | `bot.ts:158` | `InteractionCreate` | 处理 9 个 slash commands |
 | `bot.ts:203` | `ClientReady` | 启动 scheduler + 恢复中断任务 |
 
@@ -102,7 +104,31 @@ if (continuableTask && continuableTask.session_id && continuableTask.discord_use
 3. `executeTask({ ..., resumeSessionId: continuableTask.session_id })`
 4. SDK 接住上次的完整 transcript，不需要 prompt 里重复上下文
 
-### 闸 3+4：Path 2 入口（行 68-79）
+### Path 2: Task Intake Channel
+
+> 设计意图：专门的任务频道里，普通消息无需 `@MiniClaw`，直接变成 `/task` 风格任务。
+
+入口条件：
+
+```ts
+const isTaskChannel = config.taskChannelIds.includes(message.channel.id);
+```
+
+匹配则：
+
+1. 去重 `message.id`
+2. 取消息正文；如果只有附件则默认 prompt 为 `请处理这些附件`
+3. 检查 `getActiveTaskCount() < maxConcurrentTasks`
+4. `message.startThread()` 创建 task thread
+5. `createTask()` 写 DB
+6. 发送 `taskStartEmbed`
+7. `executeTask()` 在 thread 中运行
+
+这个路径和 `/task` 使用同一套 `executeTask()`、progress message、完成 embed 和最终 Markdown 输出。它只改变触发方式，不改变 provider、sandbox、cwd、附件处理和 session 存储。
+
+如果一个频道同时出现在 `MINICLAW_TASK_CHANNELS` 和 `MINICLAW_AUTO_REPLY_CHANNELS`，task channel 优先，避免写权限任务被误走 chat，也避免同一条消息双处理。
+
+### 闸 3+4：Path 3 Chat 入口
 
 ```ts
 const isAutoChannel = config.autoReplyChannelIds.includes(message.channel.id);
@@ -111,7 +137,7 @@ if (!isAutoChannel && !isMentioned) return;
 // 然后 processed 去重 Map（5 分钟 TTL，500 条做老化）
 ```
 
-### Path 2 内部分流（按优先级 if-else）
+### Path 3 内部分流（按优先级 if-else）
 
 | 优先级 | 行 | 判断 | 走向 |
 |--------|----|------|------|
@@ -184,7 +210,7 @@ bot.once(Events.ClientReady, (client) => startScheduler(client));
 1. **Path 1 三重守卫** —— 防 cron 在普通 channel 留下的 fake `discord_thread_id` 误命中
 2. **去重 Map 在内存里** —— 单进程单机简单粗暴够用；分布式才需要 Redis
 3. **记忆指令短路** —— "记住 xxx" 直接进 markdown 文件不调 LLM，零延迟、零费用
-4. **chat 默认走 chat 而非 task** —— 默认轻量回答，要执行任务必须显式 `/task`
+4. **chat 默认走 chat 而非 task** —— 默认轻量回答，要执行任务必须显式 `/task` 或把消息发到 `MINICLAW_TASK_CHANNELS`
 5. **scheduler 跟随 ClientReady** —— bot 没登录前不调度（避免 "channel not found"）
 
 ---
@@ -195,6 +221,7 @@ bot.once(Events.ClientReady, (client) => startScheduler(client));
 |----------|--------|
 | 加**新触发词**（如 `/search`） | `register.ts` 加定义 → `handlers.ts` 加 handler → `bot.ts:158+` 加 case |
 | 让 bot **不响应某频道** | 把该频道 ID 从 `MINICLAW_AUTO_REPLY_CHANNELS` 拿掉，且别 @ 它 |
+| 新增**免 @ task 频道** | 创建 Discord 频道 → 把频道 ID 加到 `MINICLAW_TASK_CHANNELS` → 重启 bot |
 | 加**多用户支持** | 把 `config.allowedUserId` 改成数组，`:34` 改 `includes` |
 | 让 bot 响应**按钮点击** | `InteractionCreate` 加 `interaction.isButton()` 分支 |
 | **关掉 thread 续话** | `bot.ts:36+` 整段 if 注释掉（保留 Path 2） |

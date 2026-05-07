@@ -19,6 +19,7 @@ import { addMemory } from "./store/memory.js";
 import { cleanupAttachmentScope, processAttachments } from "./discord/attachments.js";
 import { createLogger } from "./lib/log.js";
 import { assertProviderSession } from "./agent/session.js";
+import { taskStartEmbed } from "./discord/formatter.js";
 
 const log = createLogger("bot");
 
@@ -102,6 +103,99 @@ export function createBot(): Client {
             void message.channel.send(`❌ resume error: ${e?.message ?? e}`);
           }
         });
+      }
+      return;
+    }
+
+    const isTaskChannel = config.taskChannelIds.includes(message.channel.id);
+    if (isTaskChannel) {
+      const now = Date.now();
+      if (processed.has(message.id)) return;
+      processed.set(message.id, now);
+      if (processed.size > 500) {
+        for (const [k, ts] of processed) {
+          if (now - ts > 300_000) processed.delete(k);
+        }
+      }
+
+      const content = message.content
+        .replace(new RegExp(`<@!?${client.user!.id}>`, "g"), "")
+        .trim();
+      const atts = Array.from(message.attachments.values());
+      if (!content && !atts.length) {
+        await message.reply("请直接发送任务描述，或附上文件后说明要 MiniClaw 做什么。");
+        return;
+      }
+
+      if (getActiveTaskCount() >= config.maxConcurrentTasks) {
+        await message.reply(`⚠️ 已达并发上限 (${config.maxConcurrentTasks})，请等待现有任务完成`);
+        return;
+      }
+
+      if (!("threads" in message.channel)) {
+        await message.reply("❌ 当前频道不支持创建任务线程");
+        return;
+      }
+
+      const taskId = uuid();
+      const cwd = config.defaultCwd;
+      const effectivePrompt = content || "请处理这些附件";
+      const threadName = `🤖 ${effectivePrompt.replace(/\s+/g, " ").slice(0, 90)}`;
+
+      let attachmentBlocks: Awaited<ReturnType<typeof processAttachments>>["blocks"] = [];
+      let attachmentCodexInputs: Awaited<ReturnType<typeof processAttachments>>["codexInputs"] = [];
+      let attachmentNotices: string[] = [];
+
+      await message.react("👀").catch(() => {});
+      try {
+        if (atts.length) {
+          const r = await processAttachments(atts, { cwd, scope: taskId });
+          attachmentBlocks = r.blocks;
+          attachmentCodexInputs = r.codexInputs;
+          attachmentNotices = r.notices;
+        }
+
+        const thread = await message.startThread({
+          name: threadName,
+          autoArchiveDuration: 1440,
+        });
+
+        createTask({
+          id: taskId,
+          discord_thread_id: thread.id,
+          discord_user_id: message.author.id,
+          prompt: effectivePrompt,
+          cwd,
+        });
+
+        await message.reply(`✅ 任务已创建，请查看线程 <#${thread.id}>`);
+        const statusMessage = await thread.send({
+          embeds: [taskStartEmbed(taskId, effectivePrompt, cwd, {
+            provider: config.agentProvider,
+            model: config.model,
+          })],
+        });
+        for (const n of attachmentNotices) {
+          await thread.send(n).catch(() => {});
+        }
+
+        executeTask({
+          taskId,
+          prompt: effectivePrompt,
+          cwd,
+          channel: thread,
+          attachmentBlocks,
+          attachmentCodexInputs,
+          statusMessage,
+        }).catch((err) => {
+          log.error(`Task ${taskId} error:`, err);
+          void thread.send(`❌ task error: ${err?.message ?? err}`).catch(() => {});
+        });
+      } catch (err) {
+        log.error("Task channel message failed:", err);
+        await message.reactions.cache.get("👀")?.users.remove(client.user!.id).catch(() => {});
+        await message.react("❌").catch(() => {});
+        await message.reply(`❌ 创建任务失败: ${err instanceof Error ? err.message : String(err)}`);
       }
       return;
     }
