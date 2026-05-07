@@ -393,7 +393,7 @@ export const config = {
       "live",
       ["disabled", "cached", "live"]
     ),
-    timeoutMs: positiveNumber(["codex", "timeout_ms"], "MINICLAW_CODEX_TIMEOUT_MS", 900000),
+    timeoutMs: positiveNumber(["codex", "timeout_ms"], "MINICLAW_CODEX_TIMEOUT_MS", 1800000),
     networkAccess: boolOrInherit(["codex", "network_access"], "MINICLAW_CODEX_NETWORK_ACCESS", true),
   },
   mcp: {

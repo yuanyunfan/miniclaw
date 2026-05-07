@@ -169,6 +169,7 @@ attachments:
     expect(config.codex.reasoningEffort).toBeUndefined();
     expect(config.codex.taskSandbox).toBeUndefined();
     expect(config.codex.chatSandbox).toBe("read-only");
+    expect(config.codex.timeoutMs).toBe(3000);
     expect(config.codex.networkAccess).toBeUndefined();
     expect(config.mcp).toEqual({ configPath: mcpConfig, allowlist: ["exa", "context7"] });
     expect(config.taskChannelIds).toEqual(["task-yaml"]);
@@ -224,6 +225,7 @@ storage:
     expect(config.codex.model).toBe("env-model");
     expect(config.mcp.allowlist).toEqual(["*"]);
     expect(config.taskChannelIds).toEqual(["task-yaml"]);
+    expect(config.codex.timeoutMs).toBe(1800000);
     expect(config.smartRouter.enabled).toBe(false);
     expect(config.smartRouter.llmClassifier.enabled).toBe(true);
   });

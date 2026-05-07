@@ -75,7 +75,7 @@ codex:
     chat: read-only
   approval_policy: never
   web_search: live
-  timeout_ms: 900000
+  timeout_ms: 1800000
   network_access: true
 
 mcp:
