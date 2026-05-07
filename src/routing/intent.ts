@@ -231,6 +231,13 @@ export function classifyMessageIntent(input: RouteClassifierInput): RouteDecisio
 export function shouldUseLlmClassifier(decision: RouteDecision, policy: SmartRouterPolicy): boolean {
   if (!policy.enabled || !policy.llmClassifier.enabled) return false;
   if (!policy.llmClassifier.onlyWhenAmbiguous) return true;
+  if (
+    decision.intent === "task_suggest" &&
+    (decision.matchedSignals.includes("wechat_article") ||
+      (decision.matchedSignals.includes("external_url") && decision.riskFlags.includes("browser_required")))
+  ) {
+    return false;
+  }
   if (decision.intent === "task_suggest") return true;
   if (decision.confidence < policy.minConfirmConfidence) return true;
   return decision.riskFlags.length > 0 && decision.confidence < 0.75;

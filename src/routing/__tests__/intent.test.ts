@@ -55,6 +55,14 @@ describe("classifyMessageIntent", () => {
     expect(resolved.intent).toBe("task_suggest");
   });
 
+  it("does not ask the LLM classifier to downgrade WeChat article summaries", () => {
+    const d = classifyMessageIntent({
+      content: "链接：https://mp.weixin.qq.com/s/43wPVMKzNxC_R0ZYmUn0Rg 给我总结一下",
+      channelId: "chat-1",
+    });
+    expect(shouldUseLlmClassifier(d, policy)).toBe(false);
+  });
+
   it("suggests task mode for URL-only messages so the LLM classifier can decide", () => {
     const d = classifyMessageIntent({ content: "https://example.com/post", channelId: "chat-1" });
     expect(d.intent).toBe("task_suggest");
@@ -117,6 +125,39 @@ describe("LLM classifier decision points", () => {
     );
     expect(d.intent).toBe("chat");
     expect(d.matchedSignals).toContain("research");
+    expect(d.matchedSignals).toContain("llm_classifier");
+  });
+
+  it("keeps deterministic browser-required URL summaries as task_suggest without LLM override", async () => {
+    const d = await classifySmartRoute(
+      { content: "链接：https://mp.weixin.qq.com/s/43wPVMKzNxC_R0ZYmUn0Rg 给我总结一下", channelId: "chat-1" },
+      policy,
+      async () => ({
+        intent: "chat",
+        confidence: 0.9,
+        reason: "should not be used",
+        matchedSignals: ["llm_classifier"],
+        riskFlags: [],
+      })
+    );
+    expect(d.intent).toBe("task_suggest");
+    expect(d.matchedSignals).not.toContain("llm_classifier");
+  });
+
+  it("still asks the LLM classifier to review ordinary URL summaries", async () => {
+    const d = await classifySmartRoute(
+      { content: "https://example.com/post 给我总结一下", channelId: "chat-1" },
+      policy,
+      async () => ({
+        intent: "chat",
+        confidence: 0.8,
+        reason: "ordinary static page summary",
+        matchedSignals: ["llm_classifier"],
+        riskFlags: [],
+      })
+    );
+    expect(d.intent).toBe("chat");
+    expect(d.matchedSignals).toContain("external_url");
     expect(d.matchedSignals).toContain("llm_classifier");
   });
 
