@@ -1,11 +1,13 @@
 import type { PreProviderResult, PreProviderRunArgs } from "./types.js";
 import { runCmbCreditCardEmailProvider } from "./cmb-credit-card-email/index.js";
 import { runEmailQueryProvider } from "./email-query/index.js";
+import { runFutuStockProvider } from "./futu-stock/index.js";
 import { runWechatMpProvider } from "./wechat-mp/index.js";
 
 const PRE_PROVIDERS = {
   "cmb-credit-card-email": runCmbCreditCardEmailProvider,
   "email-query": runEmailQueryProvider,
+  "futu-stock": runFutuStockProvider,
   "wechat-mp": runWechatMpProvider,
 } as const;
 

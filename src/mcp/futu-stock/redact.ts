@@ -28,8 +28,17 @@ function formatAssetRange(value: number | undefined, currency: string): string {
 export function redactSensitiveText(text: string): string {
   return text
     .replace(/\b1[3-9]\d{9}\b/g, "[redacted-phone]")
-    .replace(/\b\d{10,20}\b/g, "[redacted-account]")
+    .replace(/(?<![.\d])\b\d{10,20}\b(?![.\d])/g, "[redacted-account]")
     .replace(/(password|token|cookie|secret|acc_id)\s*[:=]\s*[^,\s}]+/gi, "$1=[redacted]");
+}
+
+export function redactJsonStringValues(value: unknown): unknown {
+  if (typeof value === "string") return redactSensitiveText(value);
+  if (Array.isArray(value)) return value.map(redactJsonStringValues);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, redactJsonStringValues(item)]),
+  );
 }
 
 export function redactedSnapshotJson(snapshot: FutuAccountSnapshot, profile: FutuStockProfileConfig): string {
@@ -51,7 +60,7 @@ export function redactedSnapshotJson(snapshot: FutuAccountSnapshot, profile: Fut
     positions_count: snapshot.positions.length,
     warnings: snapshot.warnings,
   };
-  return redactSensitiveText(JSON.stringify(compact, null, 2));
+  return JSON.stringify(redactJsonStringValues(compact), null, 2);
 }
 
 function positionLine(position: FutuPositionSummary, currency: string): string {

@@ -51,6 +51,31 @@ describe("futu-stock redaction", () => {
     expect(text).toContain("total_assets_range");
   });
 
+  it("keeps long fractional percentages valid while redacting account-like whole numbers", () => {
+    const text = redactedSnapshotJson({
+      ...snapshot,
+      daily_pnl_pct: 0.004016064257028112,
+      warnings: ["acc_id=123456789012 should be hidden"],
+    }, profile);
+    const parsed = JSON.parse(text);
+
+    expect(parsed.daily_pnl_pct).toBe(0.004016064257028112);
+    expect(text).toContain("acc_id=[redacted]");
+    expect(text).not.toContain("123456789012");
+  });
+
+  it("does not corrupt large numeric JSON values during string redaction", () => {
+    const text = redactedSnapshotJson({
+      ...snapshot,
+      daily_pnl: 12345678901,
+      warnings: ["phone=13800138000"],
+    }, profile);
+    const parsed = JSON.parse(text);
+
+    expect(parsed.daily_pnl).toBe(12345678901);
+    expect(text).toContain("[redacted-phone]");
+  });
+
   it("formats a Discord-ready daily report without exact total assets", () => {
     const text = formatFutuDailyPnlReport(snapshot, profile, { topPositionsLimit: 3 });
 

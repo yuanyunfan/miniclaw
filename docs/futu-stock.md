@@ -38,6 +38,12 @@ src/mcp/futu-stock/
   safety.ts        # 只读 tool 名称与 forbidden API 约束
   state.ts         # 本地 snapshot 读写工具
   types.ts         # 类型定义
+
+src/providers/futu-stock/
+  index.ts         # cron pre_provider 入口，固定调用只读 Futu 查询并输出脱敏 JSON
+  config.ts        # 读取 ~/.miniclaw/providers/futu-stock/<name>.yaml
+  format.ts        # 将 snapshot 格式化为 LLM/Discord 安全上下文
+  types.ts         # provider 配置与输出类型
 ```
 
 已提供命令：
@@ -53,6 +59,7 @@ pnpm mcp:futu-stock
 - `futu_get_account_snapshot` 可返回脱敏账户快照。
 - `futu_get_positions_summary` 可返回脱敏持仓贡献摘要。
 - `futu_get_daily_pnl_report` 可返回面向 Discord 日报的脱敏文本。
+- `futu-stock` cron `pre_provider` 可在 LLM 任务前采集脱敏账户上下文，并把 JSON 拼到 prompt 顶部。
 
 运行前置：
 
@@ -396,6 +403,64 @@ Codex provider 说明：
 - 如果 MiniClaw 的 Codex 配置使用 `inherit`，需要把 `futu-stock` 同样配置到 `~/.codex/config.toml` 的 MCP servers 中。
 - 不要把富途密码、交易密码或账号 token 写入 Codex 配置。
 
+### Cron pre_provider 配置
+
+推荐让 cron task 使用 `pre_provider: futu-stock`，由 MiniClaw 在调用 LLM 前固定执行只读查询。这样比让 LLM 主动调用 MCP 更可控：采集逻辑可测试，输出会统一脱敏，OpenD 不可用时也能在 cron 层明确失败。
+
+Provider 配置文件放在用户目录，不进入 git：
+
+```text
+~/.miniclaw/providers/futu-stock/daily-stock-market.yaml
+```
+
+示例：
+
+```yaml
+profile: default
+account_alias: Futu
+redaction: summary
+top_positions_limit: 8
+include_account_snapshot: true
+include_daily_report: true
+include_positions_summary: true
+market_session_by_job:
+  stock-market-premarket: premarket_0915
+  a-share-hk-postmarket: a_hk_postmarket_1515
+```
+
+字段说明：
+
+- `profile`: 引用 `~/.miniclaw/providers/futu-stock/config.yaml` 中的 OpenD profile。
+- `account_alias`: 展示用别名，不是资金账号。
+- `redaction`: 默认 `summary`，总资产只展示区间。
+- `top_positions_limit`: 注入 LLM 的主要贡献/拖累持仓数量上限。
+- `include_*`: 控制输出中是否包含账户快照、文本报告、持仓贡献摘要。
+- `market_session_by_job`: 同一个 provider 配置可服务多个 cron job，并按 job name 标记采集口径。
+
+输出会是紧凑 JSON，核心字段包括：
+
+```json
+{
+  "source": "futu-opend-readonly",
+  "account_alias": "Futu",
+  "market_session": "a_hk_postmarket_1515",
+  "report": "...脱敏日报文本...",
+  "snapshot": {
+    "daily_pnl": 123.45,
+    "daily_pnl_pct": 0.12,
+    "total_assets_range": "100k-500k HKD",
+    "positions_count": 8
+  },
+  "positions_summary": {
+    "positions_count": 8,
+    "top_positions": []
+  },
+  "warnings": []
+}
+```
+
+Provider 默认不输出完整资金账号、手机号、token、cookie、交易密码、完整总资产，也不会输出持仓数量或持仓市值等可反推出仓位规模的字段。
+
 ### Cron 任务示例
 
 港股/A 股盘后可以先用北京时间 16:30 或 17:00。美股账户如果需要覆盖美股收盘，应额外配置北京时间次日早上。
@@ -409,8 +474,10 @@ timezone: Asia/Shanghai
 enabled: true
 type: task
 channel: "<discord-channel-id>"
+pre_provider: futu-stock
+pre_provider_config: daily-stock-market
 prompt: |
-  使用 futu-stock MCP 的 futu_get_daily_pnl_report 工具获取今日富途账户盈亏摘要。
+  上方 pre_provider JSON 是我的富途账户脱敏持仓与盈亏摘要。
 
   生成一份简洁的 Discord 日报：
   - 不输出账号、token、手机号、完整流水。
@@ -418,8 +485,6 @@ prompt: |
   - 列出主要贡献和主要拖累。
   - 如果 MCP 返回口径风险，必须在末尾提醒。
 ```
-
-后续如果希望减少 LLM 主动调用工具的不确定性，可以再增加一个 MiniClaw `pre_provider` 包装层，由 provider 固定调用 MCP，再把脱敏结果拼到 prompt 顶部。
 
 ## 推荐目录结构
 
@@ -441,6 +506,16 @@ src/mcp/futu-stock/
     redact.test.ts
     safety.test.ts
     server-tools.test.ts
+
+src/providers/futu-stock/
+  index.ts
+  config.ts
+  format.ts
+  types.ts
+  __tests__/
+    config.test.ts
+    format.test.ts
+    index.test.ts
 ```
 
 职责：
@@ -453,6 +528,9 @@ src/mcp/futu-stock/
 - `safety.ts`: 中央化 forbidden method 列表与运行期保护。
 - `state.ts`: 保存本地 snapshot，用于昨日对比和口径校验。
 - `types.ts`: 定义 `FutuSnapshot`、`FutuPositionSummary`、`FutuDailyPnlReport`。
+- `src/providers/futu-stock/index.ts`: `pre_provider` 入口，调用只读 Futu client 并返回脱敏 JSON。
+- `src/providers/futu-stock/config.ts`: 读取 cron provider 配置，支持按 job name 选择 `market_session`。
+- `src/providers/futu-stock/format.ts`: 输出 `source/report/snapshot/positions_summary/warnings`，并统一脱敏。
 
 ## 安全测试
 
@@ -549,6 +627,8 @@ cancel_order
 - Discord 输出无敏感字段。
 - 报告包含今日盈亏、百分比、主要贡献和口径风险。
 - OpenD 不可用时 Discord 报错简洁且不泄漏敏感信息。
+
+状态：已实现 `futu-stock` cron `pre_provider`，并接入 `stock-market-premarket` 与 `a-share-hk-postmarket` 本地 cron。两个任务分别在北京时间 09:15 / 15:15 运行，任务 prompt 会结合脱敏持仓上下文做市场分析和持仓归因。
 
 ## 最终边界
 

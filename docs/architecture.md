@@ -388,7 +388,7 @@ flowchart LR
 |------|----------|------|
 | `task` | 纯 LLM 任务（搜资料 + 整理） | github-trending |
 | `task` + `pre_script` | 先执行用户脚本再 LLM 分析（hermes hybrid 模式） | daily-tldr / daily-app-trending |
-| `task` + `pre_provider` | 先运行内置 provider 采集结构化数据，再由 LLM 总结 | daily-wechat-mp / daily-cmb-credit-card |
+| `task` + `pre_provider` | 先运行内置 provider 采集结构化数据，再由 LLM 总结 | daily-wechat-mp / daily-cmb-credit-card / daily-stock-market |
 | `script` | 纯脚本输出（含图片附件） | hourly-token-report → PNG dashboard |
 | `skill` | 调用用户级 subagent | （自定义）|
 | `message` | 模板化推送 | morning-greet `{{date}}` |
@@ -415,8 +415,11 @@ flowchart LR
 │   │   └── state.json       # fakeid cache + 已发送文章去重
 │   ├── email-query/
 │   │   └── *.yaml           # 通用邮件查询 provider 配置
-│   └── cmb-credit-card-email/
-│       └── *.yaml           # 招商信用卡邮件解析 provider 配置
+│   ├── cmb-credit-card-email/
+│   │   └── *.yaml           # 招商信用卡邮件解析 provider 配置
+│   └── futu-stock/
+│       ├── config.yaml      # 富途 OpenD profile 配置（无密码、无 token）
+│       └── *.yaml           # 股票日报 provider 配置（脱敏级别、market_session）
 ├── capabilities/
 │   └── email/               # 通用只读邮箱能力（IMAP adapter、MIME 解析、dedupe state）
 │       ├── config.yaml      # 邮箱 profile 配置（非 secret）
