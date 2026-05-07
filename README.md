@@ -208,12 +208,16 @@ src/
 │   ├── register.ts       # Slash command 注册
 │   └── handlers.ts       # /task /status /cancel /resume 处理
 ├── cron/                 # node-cron 调度、runner、state 持久化
+├── capabilities/
+│   └── email/            # 通用只读邮箱能力（IMAP、MIME 解析、脱敏、dedupe state）
 ├── discord/
 │   ├── chunks.ts         # 消息分片（2000 字符 + 代码围栏平衡）
 │   ├── formatter.ts      # Embed 模板（启动/完成/失败/状态）
 │   └── progress.ts       # 进度更新推送（节流 + 编辑式）
 ├── providers/
-│   └── wechat-mp/        # 微信公众号 pre-provider
+│   ├── wechat-mp/        # 微信公众号 pre-provider
+│   ├── email-query/      # 通用邮件查询 pre-provider
+│   └── cmb-credit-card-email/ # 招商信用卡邮件消费解析 pre-provider
 ├── memory/               # markdown 长期记忆
 ├── stage/                # pnpm stage 多 agent TUI
 └── store/

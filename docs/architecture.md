@@ -148,7 +148,7 @@ flowchart LR
 - **分层配置**：结构化设置优先放 `~/.miniclaw/config.yaml`；`.env` 保留 secrets、代理和临时 override；优先级是内置默认值 < YAML < env
 - **可控继承本机 Agent 配置**：Codex 可用 `inherit` 回落到 `~/.codex/config.toml`；Claude task 显式加载 `user/project/local` settings，默认禁用 hooks；MCP 仍通过 `mcp.allowlist` 控制
 - **Discord task 三层输出**：状态 embed 只放元数据；progress message 执行中持续 edit、完成后保留 Execution Summary；最终结果走普通 Markdown 分片
-- **pre-provider 扩展点**：cron `task` 可先运行 provider 采集结构化数据，再把 JSON 注入 prompt；微信公众号日报通过 `wechat-mp` provider 落地
+- **pre-provider 扩展点**：cron `task` 可先运行 provider 采集结构化数据，再把 JSON 注入 prompt；微信公众号日报通过 `wechat-mp` provider 落地，邮件类任务通过通用 `email` capability + `email-query` / `cmb-credit-card-email` provider 复用同一只读邮箱基础能力
 - **白名单两道闸**：`discord.allowed_user_id` 限制谁能用，`routing.auto_reply_channels` 决定哪些频道无需 @mention 进入 chat，`routing.task_channels` 决定哪些频道无需 @mention 直接创建 task；旧 `MINICLAW_*` env 仍可覆盖
 - **Smart Task Router 是 chat/task 边界上的升级层**：启用后只在本来会响应的 chat 入口运行，先用 heuristic + LLM classifier 判断自然语言 prompt，必要时用按钮确认后复用 `/task` 的线程、DB、progress 和 final output 链路；决策默认以 hash + capped preview 写入 SQLite
 - **LLM 流量全部经过 raven**：`ANTHROPIC_BASE_URL=http://localhost:7024` 让两个 SDK 都走本地代理
@@ -388,7 +388,7 @@ flowchart LR
 |------|----------|------|
 | `task` | 纯 LLM 任务（搜资料 + 整理） | github-trending |
 | `task` + `pre_script` | 先执行用户脚本再 LLM 分析（hermes hybrid 模式） | daily-tldr / daily-app-trending |
-| `task` + `pre_provider` | 先运行内置 provider 采集结构化数据，再由 LLM 总结 | daily-wechat-mp |
+| `task` + `pre_provider` | 先运行内置 provider 采集结构化数据，再由 LLM 总结 | daily-wechat-mp / daily-cmb-credit-card |
 | `script` | 纯脚本输出（含图片附件） | hourly-token-report → PNG dashboard |
 | `skill` | 调用用户级 subagent | （自定义）|
 | `message` | 模板化推送 | morning-greet `{{date}}` |
@@ -410,11 +410,21 @@ flowchart LR
 │   ├── *.py / *.sh          # cron type=script + pre_script 调用
 │   └── ...                  # 可执行权限必需 (chmod +x)
 ├── providers/
-│   └── wechat-mp/
-│       ├── *.yaml           # provider 配置（账号列表、窗口、state_path）
-│       └── state.json       # fakeid cache + 已发送文章去重
+│   ├── wechat-mp/
+│   │   ├── *.yaml           # provider 配置（账号列表、窗口、state_path）
+│   │   └── state.json       # fakeid cache + 已发送文章去重
+│   ├── email-query/
+│   │   └── *.yaml           # 通用邮件查询 provider 配置
+│   └── cmb-credit-card-email/
+│       └── *.yaml           # 招商信用卡邮件解析 provider 配置
+├── capabilities/
+│   └── email/               # 通用只读邮箱能力（IMAP adapter、MIME 解析、dedupe state）
+│       ├── config.yaml      # 邮箱 profile 配置（非 secret）
+│       └── *-state.json     # 邮件 UID/hash 去重 state
 ├── secrets/
-│   └── wechat-mp-session.json # 公众号后台 token/cookies，敏感凭据
+│   ├── wechat-mp-session.json # 公众号后台 token/cookies，敏感凭据
+│   └── email/
+│       └── *.json           # 邮箱 app password / OAuth token，敏感凭据
 ├── skills/
 │   └── *.md                 # 用户级 subagent (覆盖 repo agents/)
 ├── personas/

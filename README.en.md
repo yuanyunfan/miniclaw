@@ -213,12 +213,16 @@ src/
 |   |-- register.ts       # Slash command registration
 |   `-- handlers.ts       # /task /status /cancel /resume handlers
 |-- cron/                 # node-cron scheduler, runners, and state persistence
+|-- capabilities/
+|   `-- email/            # Read-only mailbox capability: IMAP, MIME parsing, redaction, dedupe state
 |-- discord/
 |   |-- chunks.ts         # 2000-char message chunking with code fence balancing
 |   |-- formatter.ts      # Embed templates
 |   `-- progress.ts       # Throttled progress message editing
 |-- providers/
-|   `-- wechat-mp/        # WeChat Official Account pre-provider
+|   |-- wechat-mp/        # WeChat Official Account pre-provider
+|   |-- email-query/      # Generic email query pre-provider
+|   `-- cmb-credit-card-email/ # CMB credit-card email parsing pre-provider
 |-- memory/               # Markdown long-term memory
 |-- stage/                # pnpm stage multi-agent TUI
 `-- store/
