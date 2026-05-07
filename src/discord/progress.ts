@@ -8,17 +8,19 @@ export class ProgressReporter {
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private taskId: string | null;
   private messageIdPersisted = false;
+  private minUpdateIntervalMs: number;
 
-  constructor(taskId?: string) {
+  constructor(taskId?: string, options: { minUpdateIntervalMs?: number } = {}) {
     this.taskId = taskId ?? null;
+    this.minUpdateIntervalMs = options.minUpdateIntervalMs ?? 2000;
   }
 
   async update(text: string, channel: SendableChannels): Promise<void> {
     this.pendingText = text.slice(0, 2000);
     const now = Date.now();
-    if (now - this.lastUpdate < 500) {
+    if (now - this.lastUpdate < this.minUpdateIntervalMs) {
       if (this.flushTimer) clearTimeout(this.flushTimer);
-      this.flushTimer = setTimeout(() => this.flush(channel), 500);
+      this.flushTimer = setTimeout(() => this.flush(channel), this.minUpdateIntervalMs);
       return;
     }
     await this.flush(channel);
@@ -50,11 +52,13 @@ export class ProgressReporter {
     }
   }
 
-  async complete(_channel: SendableChannels, opts?: { keepAsError?: boolean }): Promise<void> {
+  async complete(_channel: SendableChannels, opts?: { keepAsError?: boolean; finalText?: string }): Promise<void> {
     if (this.flushTimer) clearTimeout(this.flushTimer);
     try {
       if (!this.statusMessage) return;
-      if (opts?.keepAsError) {
+      if (opts?.finalText) {
+        await this.statusMessage.edit(opts.finalText.slice(0, 2000));
+      } else if (opts?.keepAsError) {
         const current = this.statusMessage.content ?? "";
         const suffix = "\n\n❌ 任务异常终止";
         const next = (current + suffix).slice(0, 2000);

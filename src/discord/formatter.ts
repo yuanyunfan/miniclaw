@@ -5,13 +5,21 @@ function ellipsis(text: string, max: number): string {
   return text.length > max ? text.slice(0, max - 3) + "..." : text;
 }
 
-export function taskStartEmbed(taskId: string, prompt: string, cwd: string): EmbedBuilder {
+export function taskStartEmbed(
+  taskId: string,
+  prompt: string,
+  cwd: string,
+  meta: { provider?: string; model?: string } = {},
+): EmbedBuilder {
   return new EmbedBuilder()
     .setTitle("🔵 任务执行中")
-    .setDescription(ellipsis(prompt, 4096))
+    .setDescription("任务已开始，实时进度和最终结果会在下方消息中更新。")
     .addFields(
+      { name: "状态", value: "running", inline: true },
+      { name: "Provider / Model", value: `${meta.provider ?? "-"} / ${meta.model ?? "-"}`, inline: true },
       { name: "任务 ID", value: taskId.slice(0, 8), inline: true },
-      { name: "工作目录", value: cwd, inline: true }
+      { name: "工作目录", value: cwd, inline: false },
+      { name: "任务", value: ellipsis(prompt, 1000), inline: false }
     )
     .setTimestamp()
     .setColor(0x3498db);
@@ -19,26 +27,38 @@ export function taskStartEmbed(taskId: string, prompt: string, cwd: string): Emb
 
 export function taskCompleteEmbed(params: {
   taskId: string;
-  result: string;
   durationMs: number;
   costUsd: number;
   turns: number;
   sessionId: string;
   tokensSummary?: string;
+  provider?: string;
+  model?: string;
+  cwd?: string;
+  toolCount?: number;
 }): EmbedBuilder {
   const duration = (params.durationMs / 1000).toFixed(1);
   const fields = [
+    { name: "状态", value: "completed", inline: true },
+    { name: "Provider / Model", value: `${params.provider ?? "-"} / ${params.model ?? "-"}`, inline: true },
+    { name: "任务 ID", value: params.taskId.slice(0, 8), inline: true },
     { name: "耗时", value: `${duration}s`, inline: true },
     { name: "费用", value: `$${params.costUsd.toFixed(4)}`, inline: true },
     { name: "轮次", value: String(params.turns), inline: true },
     { name: "Session", value: displaySessionId(params.sessionId), inline: true },
   ];
+  if (typeof params.toolCount === "number") {
+    fields.push({ name: "工具调用", value: String(params.toolCount), inline: true });
+  }
+  if (params.cwd) {
+    fields.push({ name: "工作目录", value: params.cwd, inline: false });
+  }
   if (params.tokensSummary) {
     fields.push({ name: "Tokens", value: params.tokensSummary, inline: false });
   }
   return new EmbedBuilder()
     .setTitle("✅ 任务完成")
-    .setDescription(ellipsis(params.result, 4096))
+    .setDescription("任务已完成，完整结果见下方普通 Markdown 消息。")
     .addFields(...fields)
     .setTimestamp()
     .setColor(0x2ecc71);

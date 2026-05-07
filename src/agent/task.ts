@@ -1,11 +1,11 @@
-import type { SendableChannels } from "discord.js";
+import type { Message, SendableChannels } from "discord.js";
 import type { ContentBlockParam } from "@anthropic-ai/sdk/resources/messages.js";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { config } from "../config.js";
 import { updateTask } from "../store/db.js";
 import { ProgressReporter } from "../discord/progress.js";
-import { taskCompleteEmbed, taskErrorEmbed } from "../discord/formatter.js";
+import { taskCompleteEmbed, taskErrorEmbed, taskStartEmbed } from "../discord/formatter.js";
 import { chunkMessage } from "../discord/chunks.js";
 import { buildMemoryPrompt } from "../memory/inject.js";
 import { loadSubagents, listSubagentNames } from "./subagents.js";
@@ -79,7 +79,16 @@ export interface TaskResult {
 
 const formatUsage = formatAnthropicUsage;
 
-export const __testables = { fmtTokens, formatUsage, buildSupervisorBlock, IDENTITY_LINE_TASK, finalTaskStatus, rawTaskMessages };
+export const __testables = {
+  fmtTokens,
+  formatUsage,
+  buildSupervisorBlock,
+  IDENTITY_LINE_TASK,
+  finalTaskStatus,
+  rawTaskMessages,
+  buildExecutionSummary,
+  buildRealtimeProgress,
+};
 
 export function buildSupervisorBlock(subagentNames: string[]): string {
   if (!subagentNames.length) return "";
@@ -128,6 +137,104 @@ async function sendRawTaskResult(channel: SendableChannels, taskId: string, resu
   }
 }
 
+async function sendMarkdownTaskResult(channel: SendableChannels, result: TaskResult): Promise<void> {
+  const fallback = result.success ? "[无文字回复]" : "任务失败且无错误详情";
+  const prefix = result.success ? "" : "❌ **任务失败**\n\n";
+  for (const message of chunkMessage(prefix + (result.result.trim() || fallback))) {
+    await channel.send(message);
+  }
+}
+
+function formatSeconds(ms: number): string {
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+function buildExecutionSummary(
+  status: "completed" | "failed" | "cancelled",
+  result: TaskResult,
+  toolCallLog: string[],
+  toolCount: number,
+): string {
+  const recent = toolCallLog.slice(-8);
+  const recentText = recent.length
+    ? recent.map((line) => `- ${line}`).join("\n")
+    : "- (no tool calls recorded)";
+  return [
+    "### Execution Summary",
+    `status: ${status}`,
+    `elapsed: ${formatSeconds(result.durationMs)}`,
+    `turns: ${result.turns}`,
+    `tools: ${toolCount}`,
+    ...(result.tokensSummary ? [`tokens: ${result.tokensSummary}`] : []),
+    "",
+    "recent steps:",
+    recentText,
+  ].join("\n").slice(0, 2000);
+}
+
+function buildRealtimeProgress(lines: string[], turns: number, toolCount: number): string {
+  const tail = lines.slice(-PROGRESS_TAIL_LINES);
+  const omitted = lines.length - tail.length;
+  const recent = tail.length
+    ? tail.map((line) => `- ${line}`).join("\n")
+    : "- waiting for SDK events";
+  return [
+    "### Realtime Progress",
+    "status: running",
+    `turns: ${turns || 0}`,
+    `tools: ${toolCount}`,
+    ...(omitted > 0 ? [`omitted: ${omitted} earlier steps`] : []),
+    "",
+    "recent steps:",
+    recent,
+  ].join("\n").slice(0, 2000);
+}
+
+async function updateStatusMessage(channel: SendableChannels, message: Message | undefined, embed: ReturnType<typeof taskCompleteEmbed>): Promise<void> {
+  if (message) {
+    try {
+      await message.edit({ embeds: [embed] });
+      return;
+    } catch {
+      // Fall back to sending a new status card below.
+    }
+  }
+  await channel.send({ embeds: [embed] });
+}
+
+async function sendEmbedTaskResult(
+  params: ExecuteTaskParams,
+  progress: ProgressReporter,
+  abortController: AbortController,
+  result: TaskResult,
+  toolCallLog: string[],
+  toolCount: number,
+  statusMessage?: Message,
+): Promise<void> {
+  const status = finalTaskStatus(params.taskId, abortController, result.success);
+  await progress.complete(params.channel, {
+    finalText: buildExecutionSummary(status, result, toolCallLog, toolCount),
+  });
+
+  const embed = result.success
+    ? taskCompleteEmbed({
+        taskId: params.taskId,
+        durationMs: result.durationMs,
+        costUsd: result.costUsd,
+        turns: result.turns,
+        sessionId: result.sessionId,
+        provider: config.agentProvider,
+        model: config.model,
+        cwd: params.cwd,
+        toolCount,
+        ...(result.tokensSummary ? { tokensSummary: result.tokensSummary } : {}),
+      })
+    : taskErrorEmbed(params.taskId, result.result);
+
+  await updateStatusMessage(params.channel, statusMessage, embed);
+  await sendMarkdownTaskResult(params.channel, result);
+}
+
 interface ExecuteTaskParams {
   taskId: string;
   prompt: string;
@@ -141,6 +248,7 @@ interface ExecuteTaskParams {
    * "raw"：直接发 LLM 输出文本，无任何元数据装饰（cron / 程序化触发用）
    */
   outputMode?: "embed" | "raw";
+  statusMessage?: Message;
 }
 
 function pushCompactedLine(lines: string[], line: string): boolean {
@@ -163,11 +271,10 @@ async function updateProgressTail(
   progress: ProgressReporter,
   channel: SendableChannels,
   lines: string[],
+  turns: number,
+  toolCount: number,
 ): Promise<void> {
-  const tail = lines.slice(-PROGRESS_TAIL_LINES);
-  const omitted = lines.length - tail.length;
-  const header = omitted > 0 ? `*…前 ${omitted} 步省略…*\n` : "";
-  await progress.update((header + tail.join("\n")).slice(0, 1900), channel);
+  await progress.update(buildRealtimeProgress(lines, turns, toolCount), channel);
 }
 
 async function executeCodexTask(
@@ -249,7 +356,7 @@ async function executeCodexTask(
         const line = formatCodexItemLine(event.item);
         if (line && pushCompactedLine(toolCallLog, line)) {
           toolStep++;
-          await updateProgressTail(progress, params.channel, toolCallLog);
+          await updateProgressTail(progress, params.channel, toolCallLog, turns, toolStep);
         }
         break;
       }
@@ -275,8 +382,6 @@ async function executeCodexTask(
     ...(tokensSummary ? { tokensSummary } : {}),
   };
 
-  await progress.complete(params.channel, lastResult.success ? undefined : { keepAsError: true });
-
   updateTask(params.taskId, {
     session_id: lastResult.sessionId,
     status: finalTaskStatus(params.taskId, abortController, lastResult.success),
@@ -294,51 +399,12 @@ async function executeCodexTask(
 
   const outputMode = params.outputMode ?? "embed";
   if (outputMode === "raw") {
+    await progress.complete(params.channel, lastResult.success ? undefined : { keepAsError: true });
     await sendRawTaskResult(params.channel, params.taskId, lastResult);
     return lastResult;
   }
 
-  const embed = lastResult.success
-    ? taskCompleteEmbed({
-        taskId: params.taskId,
-        result: lastResult.result,
-        durationMs: lastResult.durationMs,
-        costUsd: lastResult.costUsd,
-        turns: lastResult.turns,
-        sessionId: lastResult.sessionId,
-        ...(lastResult.tokensSummary ? { tokensSummary: lastResult.tokensSummary } : {}),
-      })
-    : taskErrorEmbed(params.taskId, lastResult.result);
-  await params.channel.send({ embeds: [embed] });
-
-  if (toolCallLog.length) {
-    const header = `📋 **执行轨迹** (${toolCallLog.length} 步)\n\`\`\`\n`;
-    const footer = "\n```";
-    const body = toolCallLog.join("\n");
-    const maxBodyLen = 1900 - header.length - footer.length;
-    if (body.length <= maxBodyLen) {
-      await params.channel.send(header + body + footer);
-    } else {
-      const lines = body.split("\n");
-      let buf = "";
-      let part = 1;
-      for (const line of lines) {
-        if (buf.length + line.length + 1 > maxBodyLen) {
-          await params.channel.send(`📋 **执行轨迹** (part ${part})\n\`\`\`\n${buf}\n\`\`\``);
-          buf = line;
-          part++;
-        } else {
-          buf = buf ? buf + "\n" + line : line;
-        }
-      }
-      if (buf) await params.channel.send(`📋 **执行轨迹** (part ${part})\n\`\`\`\n${buf}\n\`\`\``);
-    }
-  }
-
-  if (lastResult.result.length > 4096) {
-    const chunks = chunkMessage(lastResult.result);
-    for (const chunk of chunks) await params.channel.send(chunk);
-  }
+  await sendEmbedTaskResult(params, progress, abortController, lastResult, toolCallLog, toolStep, params.statusMessage);
 
   return lastResult;
 }
@@ -346,7 +412,8 @@ async function executeCodexTask(
 export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult> {
   const abortController = new AbortController();
   activeTasks.set(params.taskId, abortController);
-  const progress = new ProgressReporter(params.taskId);
+  const outputMode = params.outputMode ?? "embed";
+  const progress = new ProgressReporter(params.taskId, { minUpdateIntervalMs: 2000 });
   const startedAt = Date.now();
   const shortId = params.taskId.slice(0, 8);
   log.info(`▶ ${shortId} start cwd=${params.cwd}${params.resumeSessionId ? ` resume=${params.resumeSessionId.slice(0, 8)}` : ""} prompt="${params.prompt.slice(0, 80).replace(/\s+/g, " ")}"`);
@@ -357,6 +424,22 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
   }
 
   try {
+    if (outputMode === "embed" && !params.statusMessage) {
+      try {
+        params.statusMessage = await params.channel.send({
+          embeds: [taskStartEmbed(params.taskId, params.prompt, params.cwd, {
+            provider: config.agentProvider,
+            model: config.model,
+          })],
+        });
+      } catch {
+        // Status card is best-effort; task execution should continue.
+      }
+    }
+    if (outputMode === "embed") {
+      await progress.update(buildRealtimeProgress([], 0, 0), params.channel);
+    }
+
     if (config.agentProvider === "codex") {
       return await executeCodexTask(params, progress, abortController, startedAt, shortId);
     }
@@ -510,11 +593,7 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
           }
 
           if (toolCallLog.length) {
-            const tail = toolCallLog.slice(-PROGRESS_TAIL_LINES);
-            const omitted = toolCallLog.length - tail.length;
-            const header = omitted > 0 ? `*…前 ${omitted} 步省略…*\n` : "";
-            const body = tail.join("\n");
-            await progress.update((header + body).slice(0, 1900), params.channel);
+            await progress.update(buildRealtimeProgress(toolCallLog, lastResult?.turns ?? 0, toolStep), params.channel);
           }
           break;
         }
@@ -554,8 +633,6 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
       };
     }
 
-    await progress.complete(params.channel, lastResult.success ? undefined : { keepAsError: true });
-
     updateTask(params.taskId, {
       session_id: lastResult.sessionId,
       status: finalTaskStatus(params.taskId, abortController, lastResult.success),
@@ -577,59 +654,15 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
       (lastResult.tokensSummary ? ` ${lastResult.tokensSummary}` : "")
     );
 
-    const outputMode = params.outputMode ?? "embed";
-
     if (outputMode === "raw") {
       // 程序化触发（cron 等）：直接发结果文本，不带任何元数据装饰
+      await progress.complete(params.channel, lastResult.success ? undefined : { keepAsError: true });
       await sendRawTaskResult(params.channel, params.taskId, lastResult);
       return lastResult;
     }
 
     // outputMode === "embed"（/task 默认）
-    const embed = lastResult.success
-      ? taskCompleteEmbed({
-          taskId: params.taskId,
-          result: lastResult.result,
-          durationMs: lastResult.durationMs,
-          costUsd: lastResult.costUsd,
-          turns: lastResult.turns,
-          sessionId: lastResult.sessionId,
-          ...(lastResult.tokensSummary ? { tokensSummary: lastResult.tokensSummary } : {}),
-        })
-      : taskErrorEmbed(params.taskId, lastResult.result);
-
-    await params.channel.send({ embeds: [embed] });
-
-    if (toolCallLog.length) {
-      const header = `📋 **执行轨迹** (${toolCallLog.length} 步)\n\`\`\`\n`;
-      const footer = "\n```";
-      const body = toolCallLog.join("\n");
-      const maxBodyLen = 1900 - header.length - footer.length;
-      if (body.length <= maxBodyLen) {
-        await params.channel.send(header + body + footer);
-      } else {
-        const lines = body.split("\n");
-        let buf = "";
-        let part = 1;
-        for (const line of lines) {
-          if (buf.length + line.length + 1 > maxBodyLen) {
-            await params.channel.send(`📋 **执行轨迹** (part ${part})\n\`\`\`\n${buf}\n\`\`\``);
-            buf = line;
-            part++;
-          } else {
-            buf = buf ? buf + "\n" + line : line;
-          }
-        }
-        if (buf) await params.channel.send(`📋 **执行轨迹** (part ${part})\n\`\`\`\n${buf}\n\`\`\``);
-      }
-    }
-
-    if (lastResult.result.length > 4096) {
-      const chunks = chunkMessage(lastResult.result);
-      for (const chunk of chunks) {
-        await params.channel.send(chunk);
-      }
-    }
+    await sendEmbedTaskResult(params, progress, abortController, lastResult, toolCallLog, toolStep, params.statusMessage);
 
     return lastResult;
   } catch (err) {

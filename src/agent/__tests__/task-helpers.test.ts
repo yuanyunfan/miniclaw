@@ -1,7 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { __testables } from "../task.js";
 
-const { fmtTokens, formatUsage, finalTaskStatus, rawTaskMessages } = __testables;
+const {
+  fmtTokens,
+  formatUsage,
+  finalTaskStatus,
+  rawTaskMessages,
+  buildExecutionSummary,
+  buildRealtimeProgress,
+} = __testables;
 
 describe("fmtTokens", () => {
   it("returns '-' for undefined / null", () => {
@@ -88,5 +95,40 @@ describe("rawTaskMessages", () => {
       turns: 0,
       result: "",
     })).toEqual(["❌ `12345678` 失败: 任务失败且无错误详情"]);
+  });
+});
+
+describe("buildExecutionSummary", () => {
+  it("keeps a compact completed summary with recent tool steps", () => {
+    const text = buildExecutionSummary("completed", {
+      success: true,
+      sessionId: "codex:thread-12345678",
+      costUsd: 0,
+      durationMs: 12_340,
+      turns: 3,
+      result: "done",
+      tokensSummary: "in: 100 · out: 50",
+    }, [
+      "web_search: \"warp\"",
+      "terminal: \"pnpm test\"",
+    ], 2);
+
+    expect(text).toContain("status: completed");
+    expect(text).toContain("elapsed: 12.3s");
+    expect(text).toContain("turns: 3");
+    expect(text).toContain("tools: 2");
+    expect(text).toContain("tokens: in: 100 · out: 50");
+    expect(text).toContain("- terminal: \"pnpm test\"");
+  });
+});
+
+describe("buildRealtimeProgress", () => {
+  it("renders a running progress block even before tool events", () => {
+    const text = buildRealtimeProgress([], 0, 0);
+
+    expect(text).toContain("### Realtime Progress");
+    expect(text).toContain("status: running");
+    expect(text).toContain("tools: 0");
+    expect(text).toContain("- waiting for SDK events");
   });
 });

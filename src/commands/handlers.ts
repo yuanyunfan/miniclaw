@@ -84,7 +84,12 @@ export async function handleTask(interaction: ChatInputCommandInteraction): Prom
   });
 
   await interaction.editReply(`✅ 任务已创建，请查看线程 <#${thread.id}>`);
-  await thread.send({ embeds: [taskStartEmbed(taskId, description, cwd)] });
+  const statusMessage = await thread.send({
+    embeds: [taskStartEmbed(taskId, description, cwd, {
+      provider: config.agentProvider,
+      model: config.model,
+    })],
+  });
   for (const n of attachmentNotices) {
     await thread.send(n).catch(() => {});
   }
@@ -101,6 +106,7 @@ export async function handleTask(interaction: ChatInputCommandInteraction): Prom
     channel: thread,
     attachmentBlocks,
     attachmentCodexInputs,
+    statusMessage,
   }).catch((err) => {
     log.error(`Task ${taskId} error:`, err);
   });
@@ -243,8 +249,11 @@ export async function handleResume(interaction: ChatInputCommandInteraction): Pr
   });
 
   await interaction.editReply(`✅ 恢复任务，请查看线程 <#${thread.id}>`);
-  await thread.send({
-    embeds: [taskStartEmbed(newTaskId, `[恢复] ${followup}`, cwd)],
+  const statusMessage = await thread.send({
+    embeds: [taskStartEmbed(newTaskId, `[恢复] ${followup}`, cwd, {
+      provider: config.agentProvider,
+      model: config.model,
+    })],
   });
 
   if (!thread.isTextBased() || thread.type !== ChannelType.PublicThread) {
@@ -258,6 +267,7 @@ export async function handleResume(interaction: ChatInputCommandInteraction): Pr
     cwd,
     channel: thread,
     resumeSessionId: match.session_id,
+    statusMessage,
   }).catch((err) => {
     log.error(`Resume task ${newTaskId} error:`, err);
   });

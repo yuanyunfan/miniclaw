@@ -249,7 +249,8 @@ sequenceDiagram
         H->>H: processAttachments 处理附件<br/>大文件落 cwd/.miniclaw-attachments/{taskId}/
     end
     H->>DB: insertTask(status='running')
-    H->>T: executeTask 携带 taskId / prompt / cwd / channel / 可选 attachmentBlocks+codexInputs / outputMode=embed
+    H->>D: send taskStartEmbed 状态卡片
+    H->>T: executeTask 携带 taskId / prompt / cwd / channel / 可选 attachmentBlocks+codexInputs / statusMessage / outputMode=embed
 
     T->>SA: loadSubagents()
     SA->>SA: 读 agents/*.md (repo)<br/>+ ~/.miniclaw/skills/*.md (user)
@@ -285,7 +286,7 @@ sequenceDiagram
         alt parent_tool_use_id 存在
             T->>T: 标记 ↳ subagent
         end
-        T->>T: toolCallLog.push + ProgressReporter.update
+        T->>T: toolCallLog.push + ProgressReporter.update<br/>edit persistent Realtime Progress 消息
     end
 
     Q-->>T: msg.type=result  含 cost / turns / duration / usage
@@ -293,8 +294,9 @@ sequenceDiagram
     T->>DB: updateTask  status / result_summary / cost_usd ...
 
     alt outputMode=embed  /task 默认
-        T->>D: send taskCompleteEmbed  含 Tokens 字段
-        T->>D: send 📋 执行轨迹 N 步
+        T->>D: edit taskStartEmbed → taskCompleteEmbed<br/>只保留状态 / model / tokens / session 元数据
+        T->>D: edit Realtime Progress → Execution Summary
+        T->>D: chunkMessage 发送最终 Markdown 结果
     else outputMode=raw  cron 触发
         T->>D: 直接 chunkMessage 发文本
     end
