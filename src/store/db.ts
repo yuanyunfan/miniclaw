@@ -4,7 +4,7 @@ import { dirname } from "path";
 import { config } from "../config.js";
 
 let db: Database.Database;
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export function getDb(): Database.Database {
   return db;
@@ -86,6 +86,25 @@ export function initDb(): void {
       FOREIGN KEY (scene_id) REFERENCES scenes(id)
     );
 	    CREATE INDEX IF NOT EXISTS idx_scene_msgs_scene ON scene_messages(scene_id);
+    CREATE TABLE IF NOT EXISTS smart_router_decisions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      message_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      prompt_hash TEXT NOT NULL,
+      prompt_preview TEXT,
+      full_prompt TEXT,
+      intent TEXT NOT NULL,
+      confidence REAL NOT NULL,
+      reason TEXT,
+      matched_signals TEXT NOT NULL DEFAULT '[]',
+      risk_flags TEXT NOT NULL DEFAULT '[]',
+      action_result TEXT,
+      created_task_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_smart_router_decisions_message ON smart_router_decisions(message_id);
+    CREATE INDEX IF NOT EXISTS idx_smart_router_decisions_created_at ON smart_router_decisions(created_at);
 	  `);
 
   runMigrations();
@@ -113,6 +132,32 @@ function runMigrations(): void {
   if (current < 1) {
     ensureColumn("tasks", "progress_message_id", "TEXT");
     setSchemaVersion(1);
+  }
+
+  // v2: persist redacted smart-router decisions for false-positive/negative review.
+  if (current < 2) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS smart_router_decisions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        message_id TEXT NOT NULL,
+        channel_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        prompt_hash TEXT NOT NULL,
+        prompt_preview TEXT,
+        full_prompt TEXT,
+        intent TEXT NOT NULL,
+        confidence REAL NOT NULL,
+        reason TEXT,
+        matched_signals TEXT NOT NULL DEFAULT '[]',
+        risk_flags TEXT NOT NULL DEFAULT '[]',
+        action_result TEXT,
+        created_task_id TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_smart_router_decisions_message ON smart_router_decisions(message_id);
+      CREATE INDEX IF NOT EXISTS idx_smart_router_decisions_created_at ON smart_router_decisions(created_at);
+    `);
+    setSchemaVersion(2);
   }
 
   const after = getSchemaVersion();
@@ -228,6 +273,89 @@ export function getChatHistory(
        WHERE discord_channel_id = ? ORDER BY id DESC LIMIT ?`
     )
     .all(channelId, limit) as Array<{ role: string; content: string }>;
+}
+
+export interface SmartRouterDecisionRow {
+  id: number;
+  message_id: string;
+  channel_id: string;
+  user_id: string;
+  prompt_hash: string;
+  prompt_preview: string | null;
+  full_prompt: string | null;
+  intent: string;
+  confidence: number;
+  reason: string | null;
+  matched_signals: string;
+  risk_flags: string;
+  action_result: string | null;
+  created_task_id: string | null;
+  created_at: string;
+}
+
+export function recordSmartRouterDecision(row: {
+  message_id: string;
+  channel_id: string;
+  user_id: string;
+  prompt_hash: string;
+  prompt_preview?: string;
+  full_prompt?: string;
+  intent: string;
+  confidence: number;
+  reason?: string;
+  matched_signals?: string[];
+  risk_flags?: string[];
+  action_result?: string;
+  created_task_id?: string;
+}): number {
+  const result = db.prepare(
+    `INSERT INTO smart_router_decisions (
+      message_id, channel_id, user_id, prompt_hash, prompt_preview, full_prompt,
+      intent, confidence, reason, matched_signals, risk_flags, action_result, created_task_id
+    ) VALUES (
+      @message_id, @channel_id, @user_id, @prompt_hash, @prompt_preview, @full_prompt,
+      @intent, @confidence, @reason, @matched_signals, @risk_flags, @action_result, @created_task_id
+    )`
+  ).run({
+    message_id: row.message_id,
+    channel_id: row.channel_id,
+    user_id: row.user_id,
+    prompt_hash: row.prompt_hash,
+    prompt_preview: row.prompt_preview ?? null,
+    full_prompt: row.full_prompt ?? null,
+    intent: row.intent,
+    confidence: row.confidence,
+    reason: row.reason ?? null,
+    matched_signals: JSON.stringify(row.matched_signals ?? []),
+    risk_flags: JSON.stringify(row.risk_flags ?? []),
+    action_result: row.action_result ?? null,
+    created_task_id: row.created_task_id ?? null,
+  });
+  return Number(result.lastInsertRowid);
+}
+
+export function updateSmartRouterDecision(
+  id: number,
+  updates: { action_result?: string; created_task_id?: string }
+): void {
+  const fields: string[] = [];
+  const params: Record<string, unknown> = { id };
+  if (updates.action_result !== undefined) {
+    fields.push("action_result = @action_result");
+    params.action_result = updates.action_result;
+  }
+  if (updates.created_task_id !== undefined) {
+    fields.push("created_task_id = @created_task_id");
+    params.created_task_id = updates.created_task_id;
+  }
+  if (!fields.length) return;
+  db.prepare(`UPDATE smart_router_decisions SET ${fields.join(", ")} WHERE id = @id`).run(params);
+}
+
+export function getRecentSmartRouterDecisions(limit = 20): SmartRouterDecisionRow[] {
+  return db
+    .prepare("SELECT * FROM smart_router_decisions ORDER BY created_at DESC, id DESC LIMIT ?")
+    .all(limit) as SmartRouterDecisionRow[];
 }
 
 // ===== Stage 子系统：scenes / scene_messages =====

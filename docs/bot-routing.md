@@ -34,9 +34,14 @@ flowchart TD
     R0 -->|是| GREET[reply 你好]
     R0 -->|否| R1{"记忆指令?<br/>记住: / remember / /memory"}
     R1 -->|是| MEM[addMemory + reply ✅]
-    R1 -->|否| CHAT[chat 主流程<br/>👀 → typing → SDK → ✅]
+    R1 -->|否| SMART{smart_router<br/>enabled?}
+    SMART -->|chat/disabled| CHAT[chat 主流程<br/>👀 → typing → SDK → ✅]
+    SMART -->|task_suggest/task_confirm| BTN[发送按钮<br/>转为 task / 继续 chat / 取消]
+    SMART -->|task_auto| AUTOTASK[创建 task thread<br/>executeTask]
 
-    IC --> IS{isChatInputCommand?}
+    IC --> IB{isButton?}
+    IB -->|smart router button| BACT[处理确认按钮<br/>task/chat/cancel]
+    IB -->|否| IS{isChatInputCommand?}
     IS -->|否| X5[忽略]
     IS -->|是| SW{"commandName<br/>switch"}
     SW --> T["/task → handleTask"]
@@ -55,7 +60,7 @@ flowchart TD
     classDef route fill:#e6f7ff,stroke:#1890ff
     classDef drop fill:#fff1f0,stroke:#cf1322,color:#a8071a
     class F1,F2,F3,F4,P1,TCH,R0,R1,IS,SW filter
-    class CHAT,RES,TASKMSG,MEM,GREET,T,S,C,RS,RM,FG,MM,RECOV,SCHED route
+    class CHAT,RES,TASKMSG,MEM,GREET,SMART,BTN,AUTOTASK,BACT,T,S,C,RS,RM,FG,MM,RECOV,SCHED route
     class X1,X2,X3,X4,X5 drop
 ```
 
@@ -66,7 +71,7 @@ flowchart TD
 | 行号 | 事件 | 干什么 |
 |------|------|--------|
 | `bot.ts:32` | `MessageCreate` | 处理普通消息（thread 续话 / task intake 频道 / @mention / 自动 chat 频道 / 记忆指令） |
-| `bot.ts:158` | `InteractionCreate` | 处理 9 个 slash commands |
+| `bot.ts:158` | `InteractionCreate` | 先处理 smart router 按钮，再处理 9 个 slash commands |
 | `bot.ts:203` | `ClientReady` | 启动 scheduler + 恢复中断任务 |
 
 ---
@@ -144,7 +149,32 @@ if (!isAutoChannel && !isMentioned) return;
 | **预处理** | `:104-112` | `message.attachments` 非空 | `processAttachments()` → `attachmentBlocks: ContentBlockParam[]`，notices 直发频道 |
 | **高** | `:114-117` | content 为空 **且** attachmentBlocks 为空 | `reply("你好！...")` → return |
 | **中** | `:120-124` | `parseExplicitMemory` 命中"记住:" / "remember" / "/memory" | `addMemory` + reply ✅ → return |
-| **低** | `:127+` | 其他所有内容（含纯附件 → 默认 prompt"请分析这些附件"） | chat 主流程，附件以 content blocks 透传 |
+| **低** | `:127+` | 其他所有内容（含纯附件 → 默认 prompt"请分析这些附件"） | smart router（如果启用）→ chat / 按钮确认 / task_auto |
+
+### Smart Task Router
+
+> 设计意图：chat 入口仍保持轻量和只读，但在真正进入 chat 前识别“这其实是一个 task”的自然语言请求。
+
+入口条件：
+
+- 只在已通过 `allowed_user_id`、且本来就会响应的 auto-reply channel 或 @mention 消息中运行。
+- `routing.task_channels` 仍然优先，专用 task 频道不会再弹确认按钮。
+- `routing.smart_router.enabled: false` 时行为保持旧逻辑。
+
+处理顺序：
+
+1. 先处理空消息和显式记忆指令。
+2. `classifyMessageIntent()` 用 deterministic heuristics 判断 `chat` / `task_suggest` / `task_confirm`。
+3. ambiguous、冲突或低置信高风险场景调用 LLM classifier；失败时回退到 heuristic，不让路由失败阻断 chat。
+4. `resolveSmartRouterAction()` 根据频道配置决定最终动作：
+   - `chat`：继续原 chat 流程；
+   - `task_suggest` / `task_confirm`：发送 `转为 task` / `继续 chat` / `取消` 按钮；
+   - `task_auto`：仅在 `routing.smart_router.auto_task_channels` 中直接创建 task。
+5. route decision 写入 SQLite `smart_router_decisions`，默认只存 prompt hash 和 capped preview，不存完整 prompt。
+
+确认按钮状态是 10 分钟内存态。按钮 `custom_id` 只包含短 token，不携带 prompt；重启后旧按钮会过期，用户重新发送即可。
+
+确认后的 task 通过 `src/discord/task-intake.ts` 进入和 `/task` 相同的创建线程、写 DB、发送 status embed、启动 `executeTask()` 流程。默认只把当前消息作为 task 指令；如果 prompt 明确引用“上面/刚才/your plan/continue”等上下文，才会注入最近少量 chat history，并标记为 untrusted context。
 
 附件处理细节见 `docs/architecture.md`「附件流」段：图片/PDF 下载后给 Claude 生成 base64 content blocks，同时给 Codex 生成 local_image/text 输入；文本内联，二进制落盘到 cwd 让 agent 用工具读取。
 
@@ -180,7 +210,7 @@ chunkMessage 切 2000 字  ← Discord 单消息上限
 
 ## InteractionCreate 的简单 switch（`:158`-）
 
-只处理 `isChatInputCommand`（slash command），其他交互（按钮、菜单）目前不处理。
+现在先处理 `interaction.isButton()` 的 smart router 确认按钮，再处理 `isChatInputCommand`（slash command）。其他按钮或菜单仍忽略。
 
 9 个 case **直接转发到 `commands/handlers.ts`** 的对应 handler，`bot.ts` 不做业务逻辑。
 
@@ -215,13 +245,9 @@ bot.once(Events.ClientReady, (client) => startScheduler(client));
 
 ---
 
-## Proposed: Smart Task Router
+## Smart Task Router 文档
 
-当前路由把入口当成意图：普通 chat channel 里的消息默认走 chat，task channel 或 `/task` 才走 task。这个模型清晰，但用户把真实 task prompt 发到 chat channel 时会失败，因为 chat 路径没有写权限。
-
-后续推荐加一层 smart router：在 chat 执行前先判断自然语言消息是否明显是 task。如果是，则让 MiniClaw 自动创建 task，或在普通 auto-reply channel 里用按钮确认后升级为 task。
-
-详细设计见 `docs/smart-task-router.zh.md`（中文复查版）和 `docs/smart-task-router.md`（英文版）。核心原则是：**不提升 chat 权限，而是把 task-like prompt 转入现有 task 执行链路**。
+详细设计见 `docs/smart-task-router.zh.md`（中文复查版）和 `docs/smart-task-router.md`（英文版）。当前实现遵循核心原则：**不提升 chat 权限，而是把 task-like prompt 转入现有 task 执行链路**。
 
 ---
 
@@ -232,8 +258,9 @@ bot.once(Events.ClientReady, (client) => startScheduler(client));
 | 加**新触发词**（如 `/search`） | `register.ts` 加定义 → `handlers.ts` 加 handler → `bot.ts:158+` 加 case |
 | 让 bot **不响应某频道** | 把该频道 ID 从 `MINICLAW_AUTO_REPLY_CHANNELS` 拿掉，且别 @ 它 |
 | 新增**免 @ task 频道** | 创建 Discord 频道 → 把频道 ID 加到 `MINICLAW_TASK_CHANNELS` → 重启 bot |
+| 在 chat 入口启用自然语言 task 识别 | `routing.smart_router.enabled: true`，必要时配置 `confirm_channels` / `auto_task_channels` |
 | 加**多用户支持** | 把 `config.allowedUserId` 改成数组，`:34` 改 `includes` |
-| 让 bot 响应**按钮点击** | `InteractionCreate` 加 `interaction.isButton()` 分支 |
+| 让 bot 响应**新按钮点击** | `InteractionCreate` 现已有 `interaction.isButton()` 分支，新增按钮需避免和 `miniclaw:smart:*` custom id 冲突 |
 | **关掉 thread 续话** | `bot.ts:36+` 整段 if 注释掉（保留 Path 2） |
 | 加**新 cron job** | 不改代码，写 `~/.miniclaw/cron/<name>.yaml` 重启 bot |
 

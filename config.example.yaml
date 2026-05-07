@@ -13,6 +13,35 @@ routing:
   # Plain messages in these channels create /task-style task threads.
   # Task channels take precedence over auto-reply channels.
   task_channels: []
+  # Optional per-channel task cwd. Explicit /task cwd still wins.
+  channel_defaults:
+    # "1501826352028975125":
+    #   cwd: "/Users/you/ProjectRepo/miniclaw"
+  smart_router:
+    # Disabled by default to preserve existing chat behavior until you opt in.
+    enabled: false
+    default_mode: confirm # suggest | confirm | auto
+    min_confirm_confidence: 0.55
+    min_auto_confidence: 0.9
+    # Empty confirm_channels means any eligible auto-reply or mention channel can show upgrade buttons.
+    confirm_channels: []
+    # Auto task creation is trusted-channel only. Keep empty unless every message there should be executable work.
+    auto_task_channels: []
+    llm_classifier:
+      enabled: true
+      only_when_ambiguous: true
+    confirmation:
+      state: memory
+      timeout_seconds: 600
+    context:
+      include_recent_when_referenced: true
+      recent_turns: 6
+      max_chars: 8000
+    decision_log:
+      enabled: true
+      store: sqlite
+      prompt_preview_chars: 160
+      store_full_prompt: false
 
 agent:
   provider: claude # claude | codex

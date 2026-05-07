@@ -14,9 +14,11 @@
 - `wechat-mp` pre-provider 文档同步到当前实现：9:00 / 17:00 固定窗口、9 个公众号账号列表、登录态刷新、dry-run 采集和 dedupe state 说明。
 - Discord `/task` 输出文档增加当前落地状态和 E2E 回归记录：状态 embed、persistent progress message、普通 Markdown 最终结果三层输出。
 - README 增加 `/agent-config`、Codex `inherit`、Claude setting sources / hooks、MCP allowlist、WeChat 频道配置入口说明。
+- 新增 Smart Task Router：chat 入口可识别自然语言 task prompt，使用确认按钮升级到 `/task` 线程；支持 per-channel cwd、LLM classifier、内存确认态和 SQLite redacted decision log。
 
 ### Changed
 - 配置加载优先级调整为“内置默认值 < YAML < env override”；旧 `MINICLAW_*` env 继续兼容，MCP config path / allowlist 也收敛到主配置对象。
+- `/task`、task intake channel、smart-router 确认升级共用 `src/discord/task-intake.ts`，减少任务线程创建链路重复。
 - `docs/architecture.md` 同步当前架构：`/agent-config` runtime summary、Codex/Claude 本机配置继承、cron `pre_provider` 链路、`~/.miniclaw/providers` 与 `secrets` 用户级目录。
 
 ### Fixed

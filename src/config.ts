@@ -13,6 +13,7 @@ export type CodexApprovalPolicy = "never" | "on-request" | "on-failure" | "untru
 export type CodexReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh";
 export type CodexWebSearchMode = "disabled" | "cached" | "live";
 export type ClaudeSettingSource = "user" | "project" | "local";
+export type SmartRouterDefaultMode = "suggest" | "confirm" | "auto";
 
 type ConfigObject = Record<string, unknown>;
 type ConfigPath = readonly string[];
@@ -242,6 +243,16 @@ function positiveNumber(paths: ConfigPath, envKeys: string | readonly string[], 
   return n;
 }
 
+function confidenceNumber(paths: ConfigPath, envKeys: string | readonly string[], fallback: number): number {
+  const raw = readRaw(paths, envKeys, fallback);
+  const name = optionName(paths, envKeys);
+  const n = typeof raw === "number" ? raw : Number(scalarString(raw, name));
+  if (!Number.isFinite(n) || n < 0 || n > 1) {
+    throw new Error(`Invalid config ${name}: expected number between 0 and 1`);
+  }
+  return n;
+}
+
 function positiveInt(paths: ConfigPath, envKeys: string | readonly string[], fallback: number): number {
   const n = positiveNumber(paths, envKeys, fallback);
   if (!Number.isInteger(n)) throw new Error(`Invalid config ${optionName(paths, envKeys)}: expected positive integer`);
@@ -257,6 +268,26 @@ function numberOrUnlimited(paths: ConfigPath, envKeys: string | readonly string[
   }
 
   return parseNumberOrUnlimited(readRaw(paths, [], fallback), name);
+}
+
+function channelDefaults(paths: ConfigPath, envKeys: string | readonly string[]): Record<string, { cwd: string }> {
+  const raw = readRaw(paths, envKeys, {});
+  const name = optionName(paths, envKeys);
+  if (raw === undefined || raw === null) return {};
+  if (!isPlainObject(raw)) {
+    throw new Error(`Invalid config ${name}: expected object keyed by Discord channel id`);
+  }
+
+  const out: Record<string, { cwd: string }> = {};
+  for (const [channelId, value] of Object.entries(raw)) {
+    if (!channelId.trim()) continue;
+    if (!isPlainObject(value)) {
+      throw new Error(`Invalid config ${name}.${channelId}: expected object`);
+    }
+    const cwdRaw = scalarString(value.cwd, `${name}.${channelId}.cwd`);
+    if (cwdRaw) out[channelId] = { cwd: resolveHome(cwdRaw) };
+  }
+  return out;
 }
 
 function parseNumberOrUnlimited(raw: unknown, name: string): number | undefined {
@@ -279,6 +310,7 @@ const codexModel = stringOrInherit(["codex", "model"], "MINICLAW_CODEX_MODEL", "
 const autoReplyChannelIds = stringArray(["routing", "auto_reply_channels"], "MINICLAW_AUTO_REPLY_CHANNELS");
 const anthropicBaseUrl = optionalString(["anthropic", "base_url"], "ANTHROPIC_BASE_URL");
 const openaiBaseUrl = optionalString(["openai", "base_url"], "OPENAI_BASE_URL");
+const smartRouterEnabled = boolValue(["routing", "smart_router", "enabled"], "MINICLAW_SMART_ROUTER_ENABLED", false);
 
 if (anthropicBaseUrl && !process.env.ANTHROPIC_BASE_URL) process.env.ANTHROPIC_BASE_URL = anthropicBaseUrl;
 if (openaiBaseUrl && !process.env.OPENAI_BASE_URL) process.env.OPENAI_BASE_URL = openaiBaseUrl;
@@ -370,6 +402,99 @@ export const config = {
   },
   autoReplyChannelIds,
   taskChannelIds: stringArray(["routing", "task_channels"], "MINICLAW_TASK_CHANNELS"),
+  channelDefaults: channelDefaults(["routing", "channel_defaults"], []),
+  smartRouter: {
+    enabled: smartRouterEnabled,
+    defaultMode: oneOf<SmartRouterDefaultMode>(
+      ["routing", "smart_router", "default_mode"],
+      "MINICLAW_SMART_ROUTER_DEFAULT_MODE",
+      "confirm",
+      ["suggest", "confirm", "auto"]
+    ),
+    minConfirmConfidence: confidenceNumber(
+      ["routing", "smart_router", "min_confirm_confidence"],
+      "MINICLAW_SMART_ROUTER_MIN_CONFIRM_CONFIDENCE",
+      0.55
+    ),
+    minAutoConfidence: confidenceNumber(
+      ["routing", "smart_router", "min_auto_confidence"],
+      "MINICLAW_SMART_ROUTER_MIN_AUTO_CONFIDENCE",
+      0.9
+    ),
+    confirmChannelIds: stringArray(
+      ["routing", "smart_router", "confirm_channels"],
+      "MINICLAW_SMART_ROUTER_CONFIRM_CHANNELS"
+    ),
+    autoTaskChannelIds: stringArray(
+      ["routing", "smart_router", "auto_task_channels"],
+      "MINICLAW_SMART_ROUTER_AUTO_TASK_CHANNELS"
+    ),
+    llmClassifier: {
+      enabled: boolValue(
+        ["routing", "smart_router", "llm_classifier", "enabled"],
+        "MINICLAW_SMART_ROUTER_LLM_ENABLED",
+        true
+      ),
+      onlyWhenAmbiguous: boolValue(
+        ["routing", "smart_router", "llm_classifier", "only_when_ambiguous"],
+        "MINICLAW_SMART_ROUTER_LLM_ONLY_WHEN_AMBIGUOUS",
+        true
+      ),
+    },
+    confirmation: {
+      state: oneOf<"memory">(
+        ["routing", "smart_router", "confirmation", "state"],
+        "MINICLAW_SMART_ROUTER_CONFIRMATION_STATE",
+        "memory",
+        ["memory"]
+      ),
+      timeoutSeconds: positiveInt(
+        ["routing", "smart_router", "confirmation", "timeout_seconds"],
+        "MINICLAW_SMART_ROUTER_CONFIRMATION_TIMEOUT_SECONDS",
+        600
+      ),
+    },
+    context: {
+      includeRecentWhenReferenced: boolValue(
+        ["routing", "smart_router", "context", "include_recent_when_referenced"],
+        "MINICLAW_SMART_ROUTER_CONTEXT_INCLUDE_RECENT_WHEN_REFERENCED",
+        true
+      ),
+      recentTurns: positiveInt(
+        ["routing", "smart_router", "context", "recent_turns"],
+        "MINICLAW_SMART_ROUTER_CONTEXT_RECENT_TURNS",
+        6
+      ),
+      maxChars: positiveInt(
+        ["routing", "smart_router", "context", "max_chars"],
+        "MINICLAW_SMART_ROUTER_CONTEXT_MAX_CHARS",
+        8000
+      ),
+    },
+    decisionLog: {
+      enabled: boolValue(
+        ["routing", "smart_router", "decision_log", "enabled"],
+        "MINICLAW_SMART_ROUTER_DECISION_LOG_ENABLED",
+        true
+      ),
+      store: oneOf<"sqlite">(
+        ["routing", "smart_router", "decision_log", "store"],
+        "MINICLAW_SMART_ROUTER_DECISION_LOG_STORE",
+        "sqlite",
+        ["sqlite"]
+      ),
+      promptPreviewChars: positiveInt(
+        ["routing", "smart_router", "decision_log", "prompt_preview_chars"],
+        "MINICLAW_SMART_ROUTER_DECISION_LOG_PROMPT_PREVIEW_CHARS",
+        160
+      ),
+      storeFullPrompt: boolValue(
+        ["routing", "smart_router", "decision_log", "store_full_prompt"],
+        "MINICLAW_SMART_ROUTER_DECISION_LOG_STORE_FULL_PROMPT",
+        false
+      ),
+    },
+  },
   dbPath: resolveHome(requiredString(["storage", "db_path"], "MINICLAW_DB_PATH", "~/.miniclaw/data.db")),
   maxAttachmentMb: positiveNumber(["attachments", "max_mb"], "MINICLAW_MAX_ATTACHMENT_MB", 32),
   maxAttachments: positiveInt(["attachments", "max_count"], "MINICLAW_MAX_ATTACHMENTS", 10),

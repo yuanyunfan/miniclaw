@@ -1,6 +1,6 @@
 # Smart Task Router 设计
 
-> 状态：提案。本文档说明 MiniClaw 如何把自然语言里的 task 需求从 chat 自动升级到 task 执行，避免用户必须始终记得使用 `/task`。
+> 状态：已实现。本文档说明 MiniClaw 如何把自然语言里的 task 需求从 chat 自动升级到 task 执行，避免用户必须始终记得使用 `/task`。
 
 ## TLDR
 
@@ -328,6 +328,8 @@ routing:
 这样可以保持现有确定性入口稳定，同时只在系统本来就会响应的地方增加语义路由。
 
 ## 实施计划
+
+实现已落在 `src/routing/*`、`src/discord/task-intake.ts`、`src/bot.ts`、`src/config.ts` 和 `src/store/db.ts`。下面的 phase 列表作为设计追踪保留。
 
 Phase 1：无行为变化的重构
 

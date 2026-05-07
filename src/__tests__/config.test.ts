@@ -35,6 +35,23 @@ const ENV_KEYS = [
   "MINICLAW_CODEX_NETWORK_ACCESS",
   "MINICLAW_AUTO_REPLY_CHANNELS",
   "MINICLAW_TASK_CHANNELS",
+  "MINICLAW_SMART_ROUTER_ENABLED",
+  "MINICLAW_SMART_ROUTER_DEFAULT_MODE",
+  "MINICLAW_SMART_ROUTER_MIN_CONFIRM_CONFIDENCE",
+  "MINICLAW_SMART_ROUTER_MIN_AUTO_CONFIDENCE",
+  "MINICLAW_SMART_ROUTER_CONFIRM_CHANNELS",
+  "MINICLAW_SMART_ROUTER_AUTO_TASK_CHANNELS",
+  "MINICLAW_SMART_ROUTER_LLM_ENABLED",
+  "MINICLAW_SMART_ROUTER_LLM_ONLY_WHEN_AMBIGUOUS",
+  "MINICLAW_SMART_ROUTER_CONFIRMATION_STATE",
+  "MINICLAW_SMART_ROUTER_CONFIRMATION_TIMEOUT_SECONDS",
+  "MINICLAW_SMART_ROUTER_CONTEXT_INCLUDE_RECENT_WHEN_REFERENCED",
+  "MINICLAW_SMART_ROUTER_CONTEXT_RECENT_TURNS",
+  "MINICLAW_SMART_ROUTER_CONTEXT_MAX_CHARS",
+  "MINICLAW_SMART_ROUTER_DECISION_LOG_ENABLED",
+  "MINICLAW_SMART_ROUTER_DECISION_LOG_STORE",
+  "MINICLAW_SMART_ROUTER_DECISION_LOG_PROMPT_PREVIEW_CHARS",
+  "MINICLAW_SMART_ROUTER_DECISION_LOG_STORE_FULL_PROMPT",
   "MINICLAW_MCP_CONFIG",
   "MINICLAW_MCP_ALLOWLIST",
   "MINICLAW_DB_PATH",
@@ -79,6 +96,31 @@ routing:
     - "chat-yaml"
   task_channels:
     - "task-yaml"
+  channel_defaults:
+    "task-yaml":
+      cwd: "${tmpDir}"
+  smart_router:
+    enabled: true
+    default_mode: suggest
+    min_confirm_confidence: 0.6
+    min_auto_confidence: 0.95
+    confirm_channels: ["chat-yaml"]
+    auto_task_channels: ["task-yaml"]
+    llm_classifier:
+      enabled: true
+      only_when_ambiguous: false
+    confirmation:
+      state: memory
+      timeout_seconds: 300
+    context:
+      include_recent_when_referenced: true
+      recent_turns: 4
+      max_chars: 4000
+    decision_log:
+      enabled: true
+      store: sqlite
+      prompt_preview_chars: 120
+      store_full_prompt: false
 agent:
   provider: codex
   default_cwd: "${tmpDir}"
@@ -130,6 +172,19 @@ attachments:
     expect(config.codex.networkAccess).toBeUndefined();
     expect(config.mcp).toEqual({ configPath: mcpConfig, allowlist: ["exa", "context7"] });
     expect(config.taskChannelIds).toEqual(["task-yaml"]);
+    expect(config.channelDefaults["task-yaml"]).toEqual({ cwd: tmpDir });
+    expect(config.smartRouter).toMatchObject({
+      enabled: true,
+      defaultMode: "suggest",
+      minConfirmConfidence: 0.6,
+      minAutoConfidence: 0.95,
+      confirmChannelIds: ["chat-yaml"],
+      autoTaskChannelIds: ["task-yaml"],
+      llmClassifier: { enabled: true, onlyWhenAmbiguous: false },
+      confirmation: { state: "memory", timeoutSeconds: 300 },
+      context: { includeRecentWhenReferenced: true, recentTurns: 4, maxChars: 4000 },
+      decisionLog: { enabled: true, store: "sqlite", promptPreviewChars: 120, storeFullPrompt: false },
+    });
     expect(config.maxAttachments).toBe(3);
   });
 
@@ -169,6 +224,8 @@ storage:
     expect(config.codex.model).toBe("env-model");
     expect(config.mcp.allowlist).toEqual(["*"]);
     expect(config.taskChannelIds).toEqual(["task-yaml"]);
+    expect(config.smartRouter.enabled).toBe(false);
+    expect(config.smartRouter.llmClassifier.enabled).toBe(true);
   });
 
   it("preserves legacy blank budget and turn env values as unlimited", async () => {

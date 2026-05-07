@@ -5,24 +5,19 @@ import {
   type Attachment,
 } from "discord.js";
 import { v4 as uuid } from "uuid";
-import { resolve } from "path";
-import { homedir } from "os";
 import { config } from "../config.js";
 import { createTask, getActiveTasks, getInterruptedTasks, getRecentTasks, getTask, updateTask } from "../store/db.js";
 import { executeTask, getActiveTaskCount, cancelTask, listActiveTaskIds } from "../agent/task.js";
 import { taskStartEmbed, statusOverviewEmbed, taskErrorEmbed, healthEmbed } from "../discord/formatter.js";
 import { addMemory, deleteMemory, getAllMemories, getMemoriesByType } from "../store/memory.js";
-import { processAttachments } from "../discord/attachments.js";
 import { createLogger } from "../lib/log.js";
 import { assertProviderSession } from "../agent/session.js";
 import { listScheduled } from "../cron/scheduler.js";
 import { formatAgentRuntimeSummary } from "../agent/runtime-config.js";
+import { createAndRunDiscordTask, taskCapacityError } from "../discord/task-intake.js";
+import { resolveTaskCwd } from "../routing/cwd.js";
 
 const log = createLogger("handlers");
-
-function resolveHome(p: string): string {
-  return p.startsWith("~") ? resolve(homedir(), p.slice(2)) : resolve(p);
-}
 
 function isAllowed(userId: string): boolean {
   return userId === config.allowedUserId;
@@ -34,18 +29,17 @@ export async function handleTask(interaction: ChatInputCommandInteraction): Prom
     return;
   }
 
-  if (getActiveTaskCount() >= config.maxConcurrentTasks) {
+  const capacity = taskCapacityError();
+  if (capacity) {
     await interaction.reply({
-      content: `⚠️ 已达并发上限 (${config.maxConcurrentTasks})，请等待现有任务完成`,
+      content: capacity,
       ephemeral: true,
     });
     return;
   }
 
   const description = interaction.options.getString("description", true);
-  const cwdRaw = interaction.options.getString("cwd") ?? config.defaultCwd;
-  const cwd = resolveHome(cwdRaw);
-  const taskId = uuid();
+  const cwd = resolveTaskCwd(interaction.channelId, interaction.options.getString("cwd"));
 
   const slotAtts: Attachment[] = [];
   for (const slot of ["file1", "file2", "file3"]) {
@@ -55,61 +49,24 @@ export async function handleTask(interaction: ChatInputCommandInteraction): Prom
 
   await interaction.deferReply();
 
-  let attachmentBlocks: Awaited<ReturnType<typeof processAttachments>>["blocks"] = [];
-  let attachmentCodexInputs: Awaited<ReturnType<typeof processAttachments>>["codexInputs"] = [];
-  let attachmentNotices: string[] = [];
-  if (slotAtts.length) {
-    const r = await processAttachments(slotAtts, { cwd, scope: taskId });
-    attachmentBlocks = r.blocks;
-    attachmentCodexInputs = r.codexInputs;
-    attachmentNotices = r.notices;
-  }
-
   const parentChannel = interaction.channel;
   if (!parentChannel || !("threads" in parentChannel)) {
     await interaction.editReply("❌ 无法在此频道创建线程");
     return;
   }
 
-  const thread = await parentChannel.threads.create({
-    name: `🤖 ${description.slice(0, 90)}`,
-    autoArchiveDuration: 1440,
-  });
-
-  createTask({
-    id: taskId,
-    discord_thread_id: thread.id,
-    discord_user_id: interaction.user.id,
+  await createAndRunDiscordTask({
     prompt: description,
     cwd,
-  });
-
-  await interaction.editReply(`✅ 任务已创建，请查看线程 <#${thread.id}>`);
-  const statusMessage = await thread.send({
-    embeds: [taskStartEmbed(taskId, description, cwd, {
-      provider: config.agentProvider,
-      model: config.model,
-    })],
-  });
-  for (const n of attachmentNotices) {
-    await thread.send(n).catch(() => {});
-  }
-
-  if (!thread.isTextBased() || thread.type !== ChannelType.PublicThread) {
-    await interaction.editReply("❌ 线程创建异常");
-    return;
-  }
-
-  executeTask({
-    taskId,
-    prompt: description,
-    cwd,
-    channel: thread,
-    attachmentBlocks,
-    attachmentCodexInputs,
-    statusMessage,
-  }).catch((err) => {
-    log.error(`Task ${taskId} error:`, err);
+    userId: interaction.user.id,
+    attachments: slotAtts,
+    createThread: (name) => parentChannel.threads.create({
+      name,
+      autoArchiveDuration: 1440,
+    }),
+    onCreated: async (result) => {
+      await interaction.editReply(`✅ 任务已创建，请查看线程 <#${result.threadId}>`);
+    },
   });
 }
 

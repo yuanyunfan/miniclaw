@@ -1,6 +1,6 @@
 # Smart Task Router Design
 
-> Status: proposed. This document describes how MiniClaw can upgrade natural-language task requests from chat into task execution without requiring the user to always remember `/task`.
+> Status: implemented. This document describes how MiniClaw upgrades natural-language task requests from chat into task execution without requiring the user to always remember `/task`.
 
 ## TLDR
 
@@ -328,6 +328,8 @@ Recommended order in `MessageCreate`:
 This keeps existing deterministic entry points stable while adding semantic routing only where the system already intended to respond.
 
 ## Implementation Plan
+
+Implementation landed in `src/routing/*`, `src/discord/task-intake.ts`, `src/bot.ts`, `src/config.ts`, and `src/store/db.ts`. The phase list below is kept as the design trace.
 
 Phase 1: Refactor Without Behavior Change
 

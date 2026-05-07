@@ -14,6 +14,7 @@
 |----------|------|------|
 | `#chat` 频道直接发消息 | `config.yaml` 选择 Claude / Codex | 搜索、读取文件、执行安全命令 |
 | `@MiniClaw` 在任意频道 | `config.yaml` 选择 Claude / Codex | 同上 |
+| Smart Router 按钮确认 | `config.yaml` 选择 Claude Code / Codex | 在 chat 入口识别自然语言 task prompt，确认后升级为 `/task` 线程 |
 | `/task <描述>` | `config.yaml` 选择 Claude Code / Codex | 创建独立线程，状态卡片 + 实时进度 + Markdown 最终结果 |
 | `/status` | — | 查看活跃/历史任务 |
 | `/health` | — | 查看 MiniClaw 进程、任务和 cron 健康状态 |
@@ -78,6 +79,9 @@ discord:
 routing:
   auto_reply_channels: []
   task_channels: []
+  smart_router:
+    enabled: false
+    default_mode: confirm
 
 agent:
   provider: codex
@@ -88,6 +92,8 @@ agent:
 ```
 
 完整模板见 [`config.example.yaml`](config.example.yaml)。Discord ID 必须加引号，避免 YAML 把超大整数解析成不安全的 number。
+
+`routing.smart_router.enabled: true` 后，MiniClaw 会在 chat 入口执行自然语言路由：普通解释问题继续走 chat，明显需要改文件/跑测试/git 的请求会显示“转为 task / 继续 chat / 取消”按钮；`routing.smart_router.auto_task_channels` 仅适合专门的受信 task 频道。
 
 配置优先级：
 

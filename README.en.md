@@ -14,6 +14,7 @@ MiniClaw provides a Discord bot, scheduled cron tasks, markdown-based long-term 
 | --- | --- | --- |
 | Direct messages in the configured `#chat` channel | Claude or Codex from `config.yaml` | Search, read files, and run safe commands |
 | `@MiniClaw` in any channel | Claude or Codex from `config.yaml` | Same as above |
+| Smart Router confirmation buttons | Claude Code or Codex from `config.yaml` | Detect natural-language task prompts at chat entry points and upgrade them to `/task` threads after confirmation |
 | `/task <description>` | Claude Code or Codex from `config.yaml` | Create an isolated thread with a status card, live progress, and final Markdown output |
 | `/status` | - | View active and recent tasks |
 | `/health` | - | Inspect process, task, and cron health |
@@ -82,6 +83,9 @@ discord:
 routing:
   auto_reply_channels: []
   task_channels: []
+  smart_router:
+    enabled: false
+    default_mode: confirm
 
 agent:
   provider: codex
@@ -92,6 +96,8 @@ agent:
 ```
 
 See [config.example.yaml](config.example.yaml) for the full template. Quote Discord IDs because they are larger than JavaScript's safe integer range.
+
+When `routing.smart_router.enabled` is `true`, MiniClaw classifies chat-entry messages before answering. Normal explanation questions still use chat; prompts that likely need file edits, tests, Git, or long-running work show `convert to task / continue chat / cancel` buttons. `routing.smart_router.auto_task_channels` should only be used for dedicated trusted task channels.
 
 Configuration precedence:
 

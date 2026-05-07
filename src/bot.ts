@@ -1,8 +1,13 @@
 import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   Client,
   Events,
   GatewayIntentBits,
   Partials,
+  type Attachment,
+  type ButtonInteraction,
   type ChatInputCommandInteraction,
   type Message,
 } from "discord.js";
@@ -12,16 +17,244 @@ import { chunkMessage } from "./discord/chunks.js";
 import { handleTask, handleStatus, handleHealth, handleAgentConfig, handleCancel, handleResume, handleRemember, handleForget, handleMemories } from "./commands/handlers.js";
 import { executeTask, getActiveTaskCount } from "./agent/task.js";
 import { recoverInterruptedTasks } from "./agent/recovery.js";
-import { createTask, getTaskByThreadId } from "./store/db.js";
+import { createTask, getChatHistory, getTaskByThreadId, recordSmartRouterDecision, updateSmartRouterDecision } from "./store/db.js";
 import { v4 as uuid } from "uuid";
 import { parseExplicitMemory } from "./memory/parse.js";
 import { addMemory } from "./store/memory.js";
 import { cleanupAttachmentScope, processAttachments } from "./discord/attachments.js";
 import { createLogger } from "./lib/log.js";
 import { assertProviderSession } from "./agent/session.js";
-import { taskStartEmbed } from "./discord/formatter.js";
+import { createAndRunDiscordTask, taskCapacityError } from "./discord/task-intake.js";
+import { buildSmartTaskPrompt } from "./routing/context.js";
+import { resolveTaskCwd } from "./routing/cwd.js";
+import { hashPrompt, promptPreview } from "./routing/decision-log.js";
+import { classifySmartRoute, resolveSmartRouterAction, type RouteDecision } from "./routing/intent.js";
+import { classifyRouteWithLlm } from "./routing/llm.js";
+import {
+  buildSmartRouterCustomId,
+  consumePendingConfirmation,
+  createPendingConfirmation,
+  parseSmartRouterCustomId,
+  type ConfirmationAction,
+  type PendingTaskConfirmation,
+} from "./routing/confirmations.js";
 
 const log = createLogger("bot");
+
+function recordRouteDecisionForMessage(
+  message: Message,
+  prompt: string,
+  decision: RouteDecision,
+  actionResult: string,
+  createdTaskId?: string
+): number | undefined {
+  if (!config.smartRouter.decisionLog.enabled) return undefined;
+  try {
+    return recordSmartRouterDecision({
+      message_id: message.id,
+      channel_id: message.channel.id,
+      user_id: message.author.id,
+      prompt_hash: hashPrompt(prompt),
+      prompt_preview: promptPreview(prompt, config.smartRouter.decisionLog.promptPreviewChars),
+      ...(config.smartRouter.decisionLog.storeFullPrompt ? { full_prompt: prompt } : {}),
+      intent: decision.intent,
+      confidence: decision.confidence,
+      reason: decision.reason,
+      matched_signals: decision.matchedSignals,
+      risk_flags: decision.riskFlags,
+      action_result: actionResult,
+      ...(createdTaskId ? { created_task_id: createdTaskId } : {}),
+    });
+  } catch (err) {
+    log.error("Failed to record smart-router decision:", err);
+    return undefined;
+  }
+}
+
+function buildSmartTaskPromptForChannel(channelId: string, prompt: string): string {
+  const rows = getChatHistory(channelId, config.smartRouter.context.recentTurns * 2).reverse();
+  return buildSmartTaskPrompt(prompt, rows, config.smartRouter.context);
+}
+
+function buttonLabel(action: ConfirmationAction): string {
+  if (action === "task") return "转为 task";
+  if (action === "chat") return "继续 chat";
+  return "取消";
+}
+
+function confirmationComponents(id: string): ActionRowBuilder<ButtonBuilder>[] {
+  return [
+    new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(buildSmartRouterCustomId("task", id))
+        .setLabel(buttonLabel("task"))
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId(buildSmartRouterCustomId("chat", id))
+        .setLabel(buttonLabel("chat"))
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(buildSmartRouterCustomId("cancel", id))
+        .setLabel(buttonLabel("cancel"))
+        .setStyle(ButtonStyle.Danger),
+    ),
+  ];
+}
+
+function routerPromptText(decision: RouteDecision, prompt: string): string {
+  const preview = promptPreview(prompt, 500) || "(仅附件)";
+  const headline = decision.intent === "task_suggest"
+    ? "这个请求可能更适合 task 模式。"
+    : "这个请求需要 task 模式执行，因为它可能修改文件或运行命令。";
+  return [
+    headline,
+    "",
+    `原因：${decision.reason}`,
+    "",
+    "Task preview:",
+    "```text",
+    preview,
+    "```",
+  ].join("\n");
+}
+
+async function askForTaskUpgrade(
+  message: Message,
+  decision: RouteDecision,
+  prompt: string,
+  cwd: string,
+  attachments: Attachment[]
+): Promise<void> {
+  const logId = recordRouteDecisionForMessage(message, prompt, decision, "confirmation_pending");
+  const pending = createPendingConfirmation({
+    userId: message.author.id,
+    channelId: message.channel.id,
+    messageId: message.id,
+    prompt,
+    cwd,
+    attachments,
+    decision,
+    ...(logId !== undefined ? { decisionLogId: logId } : {}),
+    ttlMs: config.smartRouter.confirmation.timeoutSeconds * 1000,
+  });
+  await message.reply({
+    content: routerPromptText(decision, prompt),
+    components: confirmationComponents(pending.id),
+  });
+}
+
+async function continueChatFromConfirmation(
+  interaction: ButtonInteraction,
+  confirmation: PendingTaskConfirmation
+): Promise<void> {
+  const channel = interaction.channel;
+  if (!channel?.isSendable()) {
+    await interaction.followUp({ content: "❌ 当前频道不支持发送 chat 回复", ephemeral: true });
+    return;
+  }
+
+  let attachmentBlocks: Awaited<ReturnType<typeof processAttachments>>["blocks"] = [];
+  let attachmentCodexInputs: Awaited<ReturnType<typeof processAttachments>>["codexInputs"] = [];
+  const attachmentScope = confirmation.attachments.length ? { scope: `smart-chat-${confirmation.id}` } : null;
+
+  try {
+    if (attachmentScope) {
+      const processed = await processAttachments(confirmation.attachments, attachmentScope);
+      attachmentBlocks = processed.blocks;
+      attachmentCodexInputs = processed.codexInputs;
+      for (const notice of processed.notices) {
+        await channel.send(notice).catch(() => {});
+      }
+    }
+    await channel.sendTyping().catch(() => {});
+    const reply = await chat(
+      confirmation.channelId,
+      confirmation.userId,
+      confirmation.prompt,
+      attachmentBlocks,
+      undefined,
+      attachmentCodexInputs
+    );
+    for (const chunk of chunkMessage(reply)) {
+      await channel.send(chunk);
+    }
+  } finally {
+    if (attachmentScope) cleanupAttachmentScope(attachmentScope);
+  }
+}
+
+async function handleSmartRouterButton(interaction: ButtonInteraction): Promise<boolean> {
+  const parsed = parseSmartRouterCustomId(interaction.customId);
+  if (!parsed) return false;
+
+  if (interaction.user.id !== config.allowedUserId) {
+    await interaction.reply({ content: "⛔ 无权限", ephemeral: true });
+    return true;
+  }
+
+  const consumed = consumePendingConfirmation(parsed.id, parsed.action, interaction.user.id);
+  if (!consumed.ok) {
+    const msg = consumed.reason === "unauthorized"
+      ? "⛔ 只有原始请求用户可以操作这个确认。"
+      : consumed.reason === "expired" || consumed.reason === "missing"
+        ? "确认已过期，请重新发送请求。"
+        : "这个确认已经被处理。";
+    await interaction.reply({ content: msg, ephemeral: true });
+    return true;
+  }
+
+  const confirmation = consumed.confirmation;
+  const updateDecision = (actionResult: string, taskId?: string) => {
+    if (confirmation.decisionLogId === undefined) return;
+    updateSmartRouterDecision(confirmation.decisionLogId, {
+      action_result: actionResult,
+      ...(taskId ? { created_task_id: taskId } : {}),
+    });
+  };
+
+  if (parsed.action === "cancel") {
+    updateDecision("cancelled");
+    await interaction.update({ content: "已取消 task 升级。", components: [] });
+    return true;
+  }
+
+  if (parsed.action === "chat") {
+    updateDecision("continued_chat");
+    await interaction.update({ content: "已选择继续 chat，正在回复...", components: [] });
+    try {
+      await continueChatFromConfirmation(interaction, confirmation);
+    } catch (err) {
+      log.error("Continue-chat confirmation failed:", err);
+      await interaction.followUp({ content: `❌ chat 回复失败: ${err instanceof Error ? err.message : String(err)}`, ephemeral: true });
+    }
+    return true;
+  }
+
+  await interaction.update({ content: "已确认，正在创建 task 线程...", components: [] });
+  try {
+    const taskPrompt = buildSmartTaskPromptForChannel(confirmation.channelId, confirmation.prompt);
+    const result = await createAndRunDiscordTask({
+      prompt: taskPrompt,
+      displayPrompt: confirmation.displayPrompt,
+      cwd: confirmation.cwd,
+      userId: confirmation.userId,
+      attachments: confirmation.attachments,
+      createThread: (name) => interaction.message.startThread({
+        name,
+        autoArchiveDuration: 1440,
+      }),
+      onCreated: async (created) => {
+        await interaction.followUp(`✅ 任务已创建，请查看线程 <#${created.threadId}>`);
+      },
+    });
+    updateDecision("confirmed_task_created", result.taskId);
+  } catch (err) {
+    updateDecision("task_creation_failed");
+    log.error("Confirmed task creation failed:", err);
+    await interaction.followUp({ content: `❌ 创建任务失败: ${err instanceof Error ? err.message : String(err)}`, ephemeral: true });
+  }
+  return true;
+}
 
 export function createBot(): Client {
   const client = new Client({
@@ -127,69 +360,29 @@ export function createBot(): Client {
         return;
       }
 
-      if (getActiveTaskCount() >= config.maxConcurrentTasks) {
-        await message.reply(`⚠️ 已达并发上限 (${config.maxConcurrentTasks})，请等待现有任务完成`);
+      const capacity = taskCapacityError();
+      if (capacity) {
+        await message.reply(capacity);
         return;
       }
 
-      if (!("threads" in message.channel)) {
-        await message.reply("❌ 当前频道不支持创建任务线程");
-        return;
-      }
-
-      const taskId = uuid();
-      const cwd = config.defaultCwd;
+      const cwd = resolveTaskCwd(message.channel.id);
       const effectivePrompt = content || "请处理这些附件";
-      const threadName = `🤖 ${effectivePrompt.replace(/\s+/g, " ").slice(0, 90)}`;
-
-      let attachmentBlocks: Awaited<ReturnType<typeof processAttachments>>["blocks"] = [];
-      let attachmentCodexInputs: Awaited<ReturnType<typeof processAttachments>>["codexInputs"] = [];
-      let attachmentNotices: string[] = [];
 
       await message.react("👀").catch(() => {});
       try {
-        if (atts.length) {
-          const r = await processAttachments(atts, { cwd, scope: taskId });
-          attachmentBlocks = r.blocks;
-          attachmentCodexInputs = r.codexInputs;
-          attachmentNotices = r.notices;
-        }
-
-        const thread = await message.startThread({
-          name: threadName,
-          autoArchiveDuration: 1440,
-        });
-
-        createTask({
-          id: taskId,
-          discord_thread_id: thread.id,
-          discord_user_id: message.author.id,
+        await createAndRunDiscordTask({
           prompt: effectivePrompt,
           cwd,
-        });
-
-        await message.reply(`✅ 任务已创建，请查看线程 <#${thread.id}>`);
-        const statusMessage = await thread.send({
-          embeds: [taskStartEmbed(taskId, effectivePrompt, cwd, {
-            provider: config.agentProvider,
-            model: config.model,
-          })],
-        });
-        for (const n of attachmentNotices) {
-          await thread.send(n).catch(() => {});
-        }
-
-        executeTask({
-          taskId,
-          prompt: effectivePrompt,
-          cwd,
-          channel: thread,
-          attachmentBlocks,
-          attachmentCodexInputs,
-          statusMessage,
-        }).catch((err) => {
-          log.error(`Task ${taskId} error:`, err);
-          void thread.send(`❌ task error: ${err?.message ?? err}`).catch(() => {});
+          userId: message.author.id,
+          attachments: atts,
+          createThread: (name) => message.startThread({
+            name,
+            autoArchiveDuration: 1440,
+          }),
+          onCreated: async (result) => {
+            await message.reply(`✅ 任务已创建，请查看线程 <#${result.threadId}>`);
+          },
         });
       } catch (err) {
         log.error("Task channel message failed:", err);
@@ -223,6 +416,88 @@ export function createBot(): Client {
     const attachmentScope = atts.length ? { scope: message.id } : null;
 
     try {
+      if (!content && !atts.length) {
+        await message.reply("你好！有什么需要帮忙的？");
+        return;
+      }
+      const effectivePrompt = content || "请分析这些附件";
+      const taskPrompt = content || "请处理这些附件";
+
+      const explicitMemory = parseExplicitMemory(content);
+      if (explicitMemory) {
+        const row = addMemory(explicitMemory.type, explicitMemory.name, explicitMemory.content);
+        await message.reply(`✅ 已记住: **${row.name}** (ID: ${row.id})`);
+        return;
+      }
+
+      if (config.smartRouter.enabled) {
+        try {
+          const heuristicOrLlm = await classifySmartRoute(
+            {
+              content: taskPrompt,
+              channelId: message.channel.id,
+              hasAttachments: atts.length > 0,
+            },
+            config.smartRouter,
+            classifyRouteWithLlm
+          );
+          const decision = resolveSmartRouterAction(heuristicOrLlm, config.smartRouter, message.channel.id);
+          log.info(
+            `route decision ch=${message.channel.id.slice(-6)} intent=${decision.intent} ` +
+            `confidence=${decision.confidence} signals=${decision.matchedSignals.join(",") || "none"}`
+          );
+
+          if (decision.intent === "task_auto") {
+            const cwd = resolveTaskCwd(message.channel.id);
+            const decisionLogId = recordRouteDecisionForMessage(message, taskPrompt, decision, "auto_task_start");
+            await message.reply("已识别为 task，正在创建任务线程...");
+            await message.react("👀").catch(() => {});
+            try {
+              const executionPrompt = buildSmartTaskPromptForChannel(message.channel.id, taskPrompt);
+              const result = await createAndRunDiscordTask({
+                prompt: executionPrompt,
+                displayPrompt: taskPrompt,
+                cwd,
+                userId: message.author.id,
+                attachments: atts,
+                createThread: (name) => message.startThread({
+                  name,
+                  autoArchiveDuration: 1440,
+                }),
+                onCreated: async (created) => {
+                  await message.reply(`✅ 任务已创建，请查看线程 <#${created.threadId}>`);
+                },
+              });
+              if (decisionLogId !== undefined) {
+                updateSmartRouterDecision(decisionLogId, {
+                  action_result: "auto_task_created",
+                  created_task_id: result.taskId,
+                });
+              }
+            } catch (err) {
+              if (decisionLogId !== undefined) {
+                updateSmartRouterDecision(decisionLogId, { action_result: "auto_task_failed" });
+              }
+              log.error("Auto task creation failed:", err);
+              await message.reactions.cache.get("👀")?.users.remove(client.user!.id).catch(() => {});
+              await message.react("❌").catch(() => {});
+              await message.reply(`❌ 创建任务失败: ${err instanceof Error ? err.message : String(err)}`);
+            }
+            return;
+          }
+
+          if (decision.intent === "task_suggest" || decision.intent === "task_confirm") {
+            const cwd = resolveTaskCwd(message.channel.id);
+            await askForTaskUpgrade(message, decision, taskPrompt, cwd, atts);
+            return;
+          }
+
+          recordRouteDecisionForMessage(message, effectivePrompt, decision, "chat");
+        } catch (err) {
+          log.error("Smart router failed; falling back to chat:", err);
+        }
+      }
+
       if (atts.length && attachmentScope) {
         const r = await processAttachments(atts, attachmentScope);
         attachmentBlocks = r.blocks;
@@ -230,19 +505,6 @@ export function createBot(): Client {
         for (const n of r.notices) {
           if (message.channel.isSendable()) await message.channel.send(n).catch(() => {});
         }
-      }
-
-      if (!content && !attachmentBlocks.length) {
-        await message.reply("你好！有什么需要帮忙的？");
-        return;
-      }
-      const effectivePrompt = content || "请分析这些附件";
-
-      const explicitMemory = parseExplicitMemory(content);
-      if (explicitMemory) {
-        const row = addMemory(explicitMemory.type, explicitMemory.name, explicitMemory.content);
-        await message.reply(`✅ 已记住: **${row.name}** (ID: ${row.id})`);
-        return;
       }
 
       await message.react("👀").catch(() => {});
@@ -310,6 +572,25 @@ export function createBot(): Client {
   });
 
   client.on(Events.InteractionCreate, async (interaction) => {
+    if (interaction.isButton()) {
+      try {
+        const handled = await handleSmartRouterButton(interaction);
+        if (handled) return;
+      } catch (err) {
+        log.error("Button interaction error:", err);
+        try {
+          if (interaction.deferred || interaction.replied) {
+            await interaction.followUp({ content: "❌ 按钮处理出错", ephemeral: true });
+          } else {
+            await interaction.reply({ content: "❌ 按钮处理出错", ephemeral: true });
+          }
+        } catch (replyErr) {
+          log.error("Failed to send button error reply:", replyErr);
+        }
+        return;
+      }
+    }
+
     if (!interaction.isChatInputCommand()) return;
     const cmd = interaction as ChatInputCommandInteraction;
 
