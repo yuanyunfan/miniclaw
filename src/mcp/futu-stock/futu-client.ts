@@ -3,7 +3,7 @@ import { Socket } from "node:net";
 import { assertSafeOpendHost, sanitizeError } from "./safety.js";
 import type { FutuHealthCheck, FutuRawBrokerData, FutuStockClient, FutuStockProfileConfig } from "./types.js";
 
-const PYTHON_TIMEOUT_MS = 15_000;
+const PYTHON_TIMEOUT_MS = 45_000;
 
 const FUTU_QUERY_BRIDGE = String.raw`
 import json
@@ -105,8 +105,18 @@ finally:
 
 const FUTU_IMPORT_CHECK = "import importlib.util, json; print(json.dumps({'ok': bool(importlib.util.find_spec('futu') or importlib.util.find_spec('moomoo'))}))";
 
-function lastJsonLine(stdout: string): string {
-  return stdout.trim().split(/\r?\n/).filter(Boolean).at(-1) ?? "{}";
+export function parseLastJsonPayload<T = unknown>(stdout: string): T {
+  const lines = stdout.trim().split(/\r?\n/).filter(Boolean).reverse();
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) continue;
+    try {
+      return JSON.parse(trimmed) as T;
+    } catch {
+      // Futu SDK logs may include braces in non-payload lines; keep scanning.
+    }
+  }
+  throw new Error(`futu python bridge did not emit JSON payload: ${sanitizeError(stdout.slice(-800))}`);
 }
 
 function runPython(
@@ -114,13 +124,15 @@ function runPython(
   args: string[],
   stdin: string,
   timeoutMs = PYTHON_TIMEOUT_MS,
-): Promise<{ code: number | null; stdout: string; stderr: string }> {
+): Promise<{ code: number | null; signal: NodeJS.Signals | null; stdout: string; stderr: string; timedOut: boolean }> {
   return new Promise((resolve, reject) => {
     const child = spawn(pythonBin, args, { stdio: ["pipe", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
     let settled = false;
+    let timedOut = false;
     const timer = setTimeout(() => {
+      timedOut = true;
       child.kill("SIGTERM");
       setTimeout(() => child.kill("SIGKILL"), 1000).unref();
     }, timeoutMs);
@@ -132,11 +144,11 @@ function runPython(
       clearTimeout(timer);
       reject(err);
     });
-    child.on("exit", (code) => {
+    child.on("exit", (code, signal) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      resolve({ code, stdout, stderr });
+      resolve({ code, signal, stdout, stderr, timedOut });
     });
     child.stdin.end(stdin);
   });
@@ -166,7 +178,7 @@ async function checkPython(profile: FutuStockProfileConfig): Promise<FutuHealthC
     if (result.code !== 0) {
       return { ok: false, bin: profile.python_bin, futu_api_available: false, error: sanitizeError(result.stderr || result.stdout) };
     }
-    const parsed = JSON.parse(lastJsonLine(result.stdout)) as { ok?: boolean };
+    const parsed = parseLastJsonPayload<{ ok?: boolean }>(result.stdout);
     return { ok: Boolean(parsed.ok), bin: profile.python_bin, futu_api_available: Boolean(parsed.ok) };
   } catch (err) {
     return { ok: false, bin: profile.python_bin, futu_api_available: false, error: sanitizeError(err) };
@@ -199,8 +211,9 @@ export class PythonFutuStockClient implements FutuStockClient {
     assertSafeOpendHost(profile);
     const payload = JSON.stringify({ profile });
     const result = await runPython(profile.python_bin, ["-c", FUTU_QUERY_BRIDGE], payload);
-    if (result.code !== 0) throw new Error(`futu python bridge exited with ${result.code}: ${sanitizeError(result.stderr)}`);
-    const parsed = JSON.parse(lastJsonLine(result.stdout)) as { ok?: boolean; error?: string } & FutuRawBrokerData;
+    if (result.timedOut) throw new Error(`futu python bridge timed out after ${PYTHON_TIMEOUT_MS}ms: ${sanitizeError(result.stderr || result.stdout)}`);
+    if (result.code !== 0) throw new Error(`futu python bridge exited with ${result.code ?? result.signal}: ${sanitizeError(result.stderr || result.stdout)}`);
+    const parsed = parseLastJsonPayload<{ ok?: boolean; error?: string } & FutuRawBrokerData>(result.stdout);
     if (!parsed.ok) throw new Error(sanitizeError(parsed.error ?? "futu python bridge failed"));
     return {
       captured_at: parsed.captured_at,
