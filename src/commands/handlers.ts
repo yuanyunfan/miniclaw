@@ -16,6 +16,7 @@ import { processAttachments } from "../discord/attachments.js";
 import { createLogger } from "../lib/log.js";
 import { assertProviderSession } from "../agent/session.js";
 import { listScheduled } from "../cron/scheduler.js";
+import { formatAgentRuntimeSummary } from "../agent/runtime-config.js";
 
 const log = createLogger("handlers");
 
@@ -158,6 +159,18 @@ export async function handleHealth(interaction: ChatInputCommandInteraction): Pr
       cronErrors,
       dbPath: config.dbPath,
     })],
+    ephemeral: true,
+  });
+}
+
+export async function handleAgentConfig(interaction: ChatInputCommandInteraction): Promise<void> {
+  if (!isAllowed(interaction.user.id)) {
+    await interaction.reply({ content: "⛔ 无权限", ephemeral: true });
+    return;
+  }
+
+  await interaction.reply({
+    content: formatAgentRuntimeSummary(),
     ephemeral: true,
   });
 }

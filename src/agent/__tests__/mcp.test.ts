@@ -35,6 +35,22 @@ describe("loadMcpServers", () => {
     expect(Object.keys(servers).sort()).toEqual(["context7", "exa"]);
   });
 
+  it("loads all servers when allowlist is wildcard", () => {
+    const cfg = join(tmpDir, "config.json");
+    writeFileSync(cfg, JSON.stringify({
+      mcpServers: {
+        exa: { type: "http", url: "https://exa.example/mcp" },
+        context7: { type: "http", url: "https://context7.example" },
+        kusto: { type: "stdio", command: "kusto-mcp" },
+      },
+    }));
+    process.env.MINICLAW_MCP_CONFIG = cfg;
+    process.env.MINICLAW_MCP_ALLOWLIST = "*";
+
+    const servers = loadMcpServers();
+    expect(Object.keys(servers).sort()).toEqual(["context7", "exa", "kusto"]);
+  });
+
   it("returns empty object when config file missing", () => {
     process.env.MINICLAW_MCP_CONFIG = join(tmpDir, "missing.json");
     process.env.MINICLAW_MCP_ALLOWLIST = "exa";

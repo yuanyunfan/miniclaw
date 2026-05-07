@@ -33,6 +33,10 @@ const commands = [
     .setDescription("查看 MiniClaw 运行健康状态"),
 
   new SlashCommandBuilder()
+    .setName("agent-config")
+    .setDescription("查看当前 agent settings / MCP / skills 继承摘要"),
+
+  new SlashCommandBuilder()
     .setName("cancel")
     .setDescription("取消正在运行的任务")
     .addStringOption((opt) =>

@@ -456,6 +456,9 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
     const subagentNames = listSubagentNames();
     const mcpServers = loadMcpServers();
     const supervisorBlock = buildSupervisorBlock(subagentNames);
+    const claudeFlagSettings = config.claude.disableHooks
+      ? { disableAllHooks: true as const }
+      : undefined;
 
     const appendParts = [identityLine, supervisorBlock, memoryBlock].filter(Boolean);
 
@@ -482,6 +485,8 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
         model: config.claudeModel,
         cwd: params.cwd,
         permissionMode: "acceptEdits",
+        settingSources: config.claude.settingSources,
+        ...(claudeFlagSettings ? { settings: claudeFlagSettings } : {}),
         systemPrompt: {
           type: "preset",
           preset: "claude_code",

@@ -10,6 +10,18 @@ export type McpServers = Record<string, McpServerConfig>;
 
 let cache: McpServers | null = null;
 
+function parseAllowlist(raw: string): { names: string[]; allowAll: boolean } {
+  const names = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return { names, allowAll: names.includes("*") };
+}
+
+function resolveHome(path: string): string {
+  return path.startsWith("~/") ? join(homedir(), path.slice(2)) : path;
+}
+
 export function resetMcpCache(): void {
   cache = null;
 }
@@ -17,11 +29,8 @@ export function resetMcpCache(): void {
 export function loadMcpServers(): McpServers {
   if (cache) return cache;
 
-  const configPath = process.env.MINICLAW_MCP_CONFIG ?? join(homedir(), ".claude.json");
-  const allowlist = (process.env.MINICLAW_MCP_ALLOWLIST ?? "exa,context7")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const configPath = resolveHome(process.env.MINICLAW_MCP_CONFIG ?? join(homedir(), ".claude.json"));
+  const allowlist = parseAllowlist(process.env.MINICLAW_MCP_ALLOWLIST ?? "exa,context7");
 
   if (!existsSync(configPath)) {
     log.warn(`配置文件不存在: ${configPath}，跳过 MCP 接入`);
@@ -49,9 +58,13 @@ export function loadMcpServers(): McpServers {
 
   const all = (parsed as { mcpServers?: Record<string, McpServerConfig> })?.mcpServers ?? {};
   const filtered: McpServers = {};
-  for (const name of allowlist) {
-    if (all[name]) filtered[name] = all[name];
-    else log.warn(`allowlist 中的 ${name} 在 ${configPath} 未找到`);
+  if (allowlist.allowAll) {
+    Object.assign(filtered, all);
+  } else {
+    for (const name of allowlist.names) {
+      if (all[name]) filtered[name] = all[name];
+      else log.warn(`allowlist 中的 ${name} 在 ${configPath} 未找到`);
+    }
   }
 
   log.info(`加载 ${Object.keys(filtered).length} 个 MCP server: ${Object.keys(filtered).join(", ") || "(无)"}`);

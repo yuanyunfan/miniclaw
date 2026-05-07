@@ -64,7 +64,7 @@ flowchart TD
 | 行号 | 事件 | 干什么 |
 |------|------|--------|
 | `bot.ts:32` | `MessageCreate` | 处理普通消息（thread 续话 / @mention / 自动频道 / 记忆指令） |
-| `bot.ts:158` | `InteractionCreate` | 处理 7 个 slash commands |
+| `bot.ts:158` | `InteractionCreate` | 处理 9 个 slash commands |
 | `bot.ts:203` | `ClientReady` | 启动 scheduler + 恢复中断任务 |
 
 ---
@@ -156,7 +156,7 @@ chunkMessage 切 2000 字  ← Discord 单消息上限
 
 只处理 `isChatInputCommand`（slash command），其他交互（按钮、菜单）目前不处理。
 
-7 个 case **直接转发到 `commands/handlers.ts`** 的对应 handler，`bot.ts` 不做业务逻辑。
+9 个 case **直接转发到 `commands/handlers.ts`** 的对应 handler，`bot.ts` 不做业务逻辑。
 
 错误处理（`:204+`）有个细节：要根据 `cmd.deferred || cmd.replied` 决定用 `editReply` 还是 `reply` —— 因为 handler 可能已经 `deferReply()` 过了（耗时任务必须在 3 秒内 defer）。包了 `try-catch` 防错误回复本身又抛异常导致进程崩。
 

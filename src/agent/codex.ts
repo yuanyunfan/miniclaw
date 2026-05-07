@@ -27,14 +27,15 @@ export function getCodexClient(): Codex {
 }
 
 export function codexThreadOptions(mode: CodexMode, cwd?: string): ThreadOptions {
+  const sandboxMode = mode === "task" ? config.codex.taskSandbox : config.codex.chatSandbox;
   const opts: ThreadOptions = {
     skipGitRepoCheck: true,
-    sandboxMode: mode === "task" ? config.codex.taskSandbox : config.codex.chatSandbox,
-    approvalPolicy: config.codex.approvalPolicy,
-    modelReasoningEffort: config.codex.reasoningEffort,
-    webSearchMode: config.codex.webSearchMode,
-    networkAccessEnabled: config.codex.networkAccess,
   };
+  if (sandboxMode) opts.sandboxMode = sandboxMode;
+  if (config.codex.approvalPolicy) opts.approvalPolicy = config.codex.approvalPolicy;
+  if (config.codex.reasoningEffort) opts.modelReasoningEffort = config.codex.reasoningEffort;
+  if (config.codex.webSearchMode) opts.webSearchMode = config.codex.webSearchMode;
+  if (config.codex.networkAccess !== undefined) opts.networkAccessEnabled = config.codex.networkAccess;
   if (config.codex.model) opts.model = config.codex.model;
   if (cwd) opts.workingDirectory = cwd;
   return opts;

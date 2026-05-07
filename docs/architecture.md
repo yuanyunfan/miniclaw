@@ -13,7 +13,7 @@ flowchart LR
 
     subgraph Discord["Discord 平台"]
         DC["#常规 / #chat<br/>4 分类频道（AI/PERSONAL/STOCK/NEWS）"]
-        SC["/task /status /health /cancel /resume<br/>/remember /forget /memories"]
+        SC["/task /status /health /agent-config<br/>/cancel /resume /remember /forget /memories"]
     end
 
     subgraph LocalMac["本机 (Mac)"]
@@ -136,7 +136,7 @@ flowchart LR
   - 代码在 git repo（`agents/*.md` / `src/`）
   - 用户级数据全在 `~/.miniclaw/`（cron / skills / scripts / memories / channel-map）
 - **memories 走 markdown 不再走 SQLite 表**：`~/.miniclaw/memories/MEMORY.md` 可直接 vim 编辑、git diff、跨工具复用（hermes 同模式）
-- **MCP 复用不重维护**：mcp.ts 直接读 `~/.claude.json` 的 `mcpServers` 段，零 key 管理
+- **可控继承本机 Agent 配置**：Codex 可用 `inherit` 回落到 `~/.codex/config.toml`；Claude task 显式加载 `user/project/local` settings，默认禁用 hooks；MCP 仍通过 allowlist 控制
 - **白名单两道闸**：`MINICLAW_ALLOWED_USER_ID` 限制谁能用，`MINICLAW_AUTO_REPLY_CHANNELS` 决定哪些频道无需 @mention
 - **LLM 流量全部经过 raven**：`ANTHROPIC_BASE_URL=http://localhost:7024` 让两个 SDK 都走本地代理
 
@@ -259,7 +259,7 @@ sequenceDiagram
     T->>T: buildMemoryPrompt() + supervisorBlock<br/>(能力图谱 + 选择原则 + 编排纪律)
 
     T->>Q: provider run
-    Note over T,Q: Claude: claude_code preset + agents + MCP + canUseTool<br/>Codex: Codex SDK thread + workspace-write sandbox + event progress<br/>abortController + provider-prefixed resume
+    Note over T,Q: Claude: claude_code preset + settingSources + agents + MCP allowlist + canUseTool<br/>Codex: Codex SDK thread + 可继承本机 config + event progress<br/>abortController + provider-prefixed resume
 
     Note over Q: Supervisor 按任务自由组合角色：<br/>简单任务可直接 generator 一步；<br/>调研类按是否需 Bash 选 researcher/code-investigator；<br/>不固定 1→2→3→4 流水线
 

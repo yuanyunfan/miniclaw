@@ -10,6 +10,7 @@ export type CodexSandboxMode = "read-only" | "workspace-write" | "danger-full-ac
 export type CodexApprovalPolicy = "never" | "on-request" | "on-failure" | "untrusted";
 export type CodexReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh";
 export type CodexWebSearchMode = "disabled" | "cached" | "live";
+export type ClaudeSettingSource = "user" | "project" | "local";
 
 function resolveHome(p: string): string {
   return p.startsWith("~") ? resolve(homedir(), p.slice(2)) : resolve(p);
@@ -35,6 +36,44 @@ function envOneOf<T extends string>(key: string, fallback: T, allowed: readonly 
   throw new Error(`Invalid env ${key}: ${raw}. Expected one of: ${allowed.join(", ")}`);
 }
 
+function envOneOfOrInherit<T extends string>(key: string, fallback: T, allowed: readonly T[]): T | undefined {
+  const configured = process.env[key]?.trim();
+  const raw = (configured ? configured : fallback).toLowerCase();
+  if (raw === "inherit") return undefined;
+  if ((allowed as readonly string[]).includes(raw)) return raw as T;
+  throw new Error(`Invalid env ${key}: ${raw}. Expected one of: inherit, ${allowed.join(", ")}`);
+}
+
+function envStringOrInherit(key: string, fallback: string): string | undefined {
+  const raw = (process.env[key] ?? fallback).trim();
+  if (!raw) return fallback;
+  return raw.toLowerCase() === "inherit" ? undefined : raw;
+}
+
+function envBoolOrInherit(key: string, fallback: "true" | "false"): boolean | undefined {
+  const raw = (process.env[key] ?? fallback).trim().toLowerCase();
+  if (raw === "inherit") return undefined;
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  throw new Error(`Invalid env ${key}: ${raw}. Expected one of: inherit, true, false`);
+}
+
+function envSettingSources(key: string, fallback: string): ClaudeSettingSource[] {
+  const raw = (process.env[key] ?? fallback).trim().toLowerCase();
+  if (!raw || raw === "none" || raw === "disabled" || raw === "false") return [];
+  const allowed: readonly ClaudeSettingSource[] = ["user", "project", "local"];
+  const seen = new Set<ClaudeSettingSource>();
+  for (const part of raw.split(",")) {
+    const value = part.trim();
+    if (!value) continue;
+    if (!(allowed as readonly string[]).includes(value)) {
+      throw new Error(`Invalid env ${key}: ${value}. Expected one of: ${allowed.join(", ")}, none`);
+    }
+    seen.add(value as ClaudeSettingSource);
+  }
+  return [...seen];
+}
+
 // 把 env 字符串解析为 number。空字符串 / "0" / "unlimited" 都视为"无限制"返回 undefined
 function envNumberOrUnlimited(key: string, fallback: string): number | undefined {
   const raw = (process.env[key] ?? fallback).trim().toLowerCase();
@@ -58,7 +97,7 @@ function envPositiveInt(key: string, fallback: string): number {
 
 const agentProvider = envOneOf<AgentProvider>("MINICLAW_AGENT_PROVIDER", "claude", ["claude", "codex"]);
 const claudeModel = envOptional("MINICLAW_CLAUDE_MODEL") ?? env("MINICLAW_MODEL", "claude-opus-4-7");
-const codexModel = envOptional("MINICLAW_CODEX_MODEL") ?? "gpt-5.5";
+const codexModel = envStringOrInherit("MINICLAW_CODEX_MODEL", "gpt-5.5");
 
 export const config = {
   discord: {
@@ -85,37 +124,41 @@ export const config = {
   ) === "true",
   // Backward-compatible alias used by older code paths. New provider-aware code
   // should prefer claudeModel / codex.model.
-  model: agentProvider === "claude" ? claudeModel : codexModel,
+  model: agentProvider === "claude" ? claudeModel : (codexModel ?? "inherit"),
   claudeModel,
+  claude: {
+    settingSources: envSettingSources("MINICLAW_CLAUDE_SETTING_SOURCES", "user,project,local"),
+    disableHooks: envOneOf<"true" | "false">("MINICLAW_CLAUDE_DISABLE_HOOKS", "true", ["true", "false"]) === "true",
+  },
   codex: {
     model: codexModel,
-    reasoningEffort: envOneOf<CodexReasoningEffort>(
+    reasoningEffort: envOneOfOrInherit<CodexReasoningEffort>(
       "MINICLAW_CODEX_REASONING_EFFORT",
       "medium",
       ["minimal", "low", "medium", "high", "xhigh"]
     ),
-    taskSandbox: envOneOf<CodexSandboxMode>(
+    taskSandbox: envOneOfOrInherit<CodexSandboxMode>(
       "MINICLAW_CODEX_TASK_SANDBOX",
       "workspace-write",
       ["read-only", "workspace-write", "danger-full-access"]
     ),
-    chatSandbox: envOneOf<CodexSandboxMode>(
+    chatSandbox: envOneOfOrInherit<CodexSandboxMode>(
       "MINICLAW_CODEX_CHAT_SANDBOX",
       "read-only",
       ["read-only", "workspace-write", "danger-full-access"]
     ),
-    approvalPolicy: envOneOf<CodexApprovalPolicy>(
+    approvalPolicy: envOneOfOrInherit<CodexApprovalPolicy>(
       "MINICLAW_CODEX_APPROVAL_POLICY",
       "never",
       ["never", "on-request", "on-failure", "untrusted"]
     ),
-    webSearchMode: envOneOf<CodexWebSearchMode>(
+    webSearchMode: envOneOfOrInherit<CodexWebSearchMode>(
       "MINICLAW_CODEX_WEB_SEARCH",
       "live",
       ["disabled", "cached", "live"]
     ),
     timeoutMs: envNumber("MINICLAW_CODEX_TIMEOUT_MS", "900000"),
-    networkAccess: envOneOf<"true" | "false">("MINICLAW_CODEX_NETWORK_ACCESS", "true", ["true", "false"]) === "true",
+    networkAccess: envBoolOrInherit("MINICLAW_CODEX_NETWORK_ACCESS", "true"),
   },
   autoReplyChannelIds: (() => {
     const ids = env("MINICLAW_AUTO_REPLY_CHANNELS", "").split(",").filter(Boolean);
