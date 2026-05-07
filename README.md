@@ -12,9 +12,10 @@
 |----------|------|------|
 | `#chat` 频道直接发消息 | `.env` 选择 Claude / Codex | 搜索、读取文件、执行安全命令 |
 | `@MiniClaw` 在任意频道 | `.env` 选择 Claude / Codex | 同上 |
-| `/task <描述>` | `.env` 选择 Claude Code / Codex | 创建独立线程，实时进度，完成 Embed |
+| `/task <描述>` | `.env` 选择 Claude Code / Codex | 创建独立线程，状态卡片 + 实时进度 + Markdown 最终结果 |
 | `/status` | — | 查看活跃/历史任务 |
 | `/health` | — | 查看 MiniClaw 进程、任务和 cron 健康状态 |
+| `/agent-config` | — | 查看当前 provider、模型、Codex/Claude settings、MCP、skills 继承摘要 |
 | `/cancel <id>` | — | 终止运行中的任务 |
 | `/resume <id> <指令>` | — | 恢复之前的 session 继续执行（不能跨 provider 恢复） |
 | `/remember <text>` / 直接发"记住:..." | — | 写入长期记忆 `~/.miniclaw/memories/MEMORY.md` |
@@ -23,7 +24,8 @@
 
 **交互细节：**
 - 收到消息 → 👀 反应 → 处理中实时显示工具调用步骤 → 完成 ✅ / 失败 ❌
-- `/task` 自动创建 Discord 线程隔离上下文，embed 展示耗时、费用、轮次
+- `/task` 自动创建 Discord 线程隔离上下文，embed 只承载任务元数据；最终结果用普通 Markdown 消息分片发送，保留更宽的阅读区域
+- `/task` 保留一条 persistent progress message，执行中持续 edit，完成后变成 Execution Summary，可回看最近工具调用
 - 中间步骤可读化：`🔌 github: search_repositories`、`⚡ Bash ls -la`、`🌐 WebSearch ...`
 - 支持代理（ClashX / VPN），HTTP + WebSocket 双通道
 
@@ -34,7 +36,7 @@ Discord 消息
   ↓
 Bot 事件监听 (discord.js v14)
   ├─ @mention / #chat → Provider chat → 流式回调 → Discord 回复
-  └─ /task → 创建线程 → Provider task → 进度推送 → 完成 Embed
+  └─ /task → 创建线程 → Provider task → 状态卡片 + 进度摘要 + Markdown 结果
   ↓
 SQLite 持久化（任务状态 + 对话历史）
 ```
@@ -81,13 +83,17 @@ cp .env.example .env
 | `MINICLAW_LOG_LEVEL` | `info` | 日志级别：`debug` / `info` / `warn` / `error` |
 | `MINICLAW_LOG_FORMAT` | `text` | 日志格式：`text` 或 `json`（JSON line，便于日志检索） |
 | `MINICLAW_CLAUDE_MODEL` | `claude-opus-4-7` | Claude 模型（旧 `MINICLAW_MODEL` 仍兼容） |
-| `MINICLAW_CODEX_MODEL` | `gpt-5.5` | Codex 模型 |
-| `MINICLAW_CODEX_TASK_SANDBOX` | `workspace-write` | Codex `/task` 沙箱 |
-| `MINICLAW_CODEX_CHAT_SANDBOX` | `read-only` | Codex chat/stage 沙箱 |
-| `MINICLAW_CODEX_REASONING_EFFORT` | `medium` | Codex reasoning effort |
-| `MINICLAW_CODEX_APPROVAL_POLICY` | — | Codex 工具调用审批策略（如 `never` / `on-request`） |
-| `MINICLAW_CODEX_WEB_SEARCH` | `live` | Codex web search 模式（`disabled` / `cached` / `live`） |
-| `MINICLAW_CODEX_NETWORK_ACCESS` | `true` | Codex 沙箱是否允许出站网络 |
+| `MINICLAW_CLAUDE_SETTING_SOURCES` | `user,project,local` | Claude task 读取哪些本机 settings source；设为 `none` 可禁用 |
+| `MINICLAW_CLAUDE_DISABLE_HOOKS` | `true` | Claude task 默认禁用 hooks，避免把本机交互 hook 带入 Discord 流程 |
+| `MINICLAW_MCP_CONFIG` | `~/.claude.json` | Claude provider 读取 MCP server 的配置文件 |
+| `MINICLAW_MCP_ALLOWLIST` | `exa,context7` | Claude provider 允许加载的 MCP server；`*` 表示全部 |
+| `MINICLAW_CODEX_MODEL` | `gpt-5.5` | Codex 模型；可设 `inherit` 复用本机 Codex 配置 |
+| `MINICLAW_CODEX_TASK_SANDBOX` | `workspace-write` | Codex `/task` 沙箱；可设 `inherit` |
+| `MINICLAW_CODEX_CHAT_SANDBOX` | `read-only` | Codex chat/stage 沙箱；可设 `inherit` |
+| `MINICLAW_CODEX_REASONING_EFFORT` | `medium` | Codex reasoning effort；可设 `inherit` |
+| `MINICLAW_CODEX_APPROVAL_POLICY` | `never` | Codex 工具调用审批策略（如 `never` / `on-request`）；可设 `inherit` |
+| `MINICLAW_CODEX_WEB_SEARCH` | `live` | Codex web search 模式（`disabled` / `cached` / `live`）；可设 `inherit` |
+| `MINICLAW_CODEX_NETWORK_ACCESS` | `true` | Codex 沙箱是否允许出站网络；可设 `inherit` |
 | `MINICLAW_CODEX_TIMEOUT_MS` | `900000` | Codex 单 turn 超时（毫秒，默 15 分钟） |
 | `MINICLAW_DB_PATH` | `~/.miniclaw/data.db` | SQLite 数据库路径 |
 | `MINICLAW_MAX_ATTACHMENT_MB` | `32` | 单附件最大大小 |
@@ -100,6 +106,20 @@ MINICLAW_AGENT_PROVIDER=codex
 # 可选：OPENAI_API_KEY=...
 # 可选：MINICLAW_CODEX_MODEL=gpt-5.5
 ```
+
+如果你希望 MiniClaw 尽量复用本机 Codex CLI 的 `~/.codex/config.toml`、MCP 和 skills，把对应 Codex override 设为 `inherit`：
+
+```bash
+MINICLAW_AGENT_PROVIDER=codex
+MINICLAW_CODEX_MODEL=inherit
+MINICLAW_CODEX_REASONING_EFFORT=inherit
+MINICLAW_CODEX_TASK_SANDBOX=inherit
+MINICLAW_CODEX_APPROVAL_POLICY=inherit
+MINICLAW_CODEX_WEB_SEARCH=inherit
+MINICLAW_CODEX_NETWORK_ACCESS=inherit
+```
+
+运行 `/agent-config` 可在 Discord 中检查当前 provider/model、Codex MCP/skills、Claude settings/MCP/skills 的继承摘要。
 
 ### 3. 注册 Slash Commands
 
@@ -124,7 +144,7 @@ pm2 start ecosystem.config.cjs
 
 ### 5. （可选）批量配置 Discord 频道与 Cron 任务
 
-如果你想直接复用我同款的"hermes-style"频道结构（4 分类 + 13 频道，对应 15 个定时简报任务），跑下面 2 个**可选模板**脚本：
+如果你想直接复用我同款的"hermes-style"频道结构（4 分类 + 13 个核心频道，对应 15 个通用定时简报任务），跑下面 2 个**可选模板**脚本：
 
 ```bash
 # 1. 在你的 Discord guild 里创建 4 分类 + 13 频道（需要 bot 有 Manage Channels 权限）
@@ -144,6 +164,8 @@ python3 scripts/update-cron-channels.py
 | 💹 STOCK | daily-stock-market |
 | 📰 NEWS | news-domestic / news-international / trending / tldr / monitor-github-repo |
 
+微信公众号日报 `daily-wechat-mp` 需要额外的公众号后台登录态和 `daily-wechat-article` 频道，默认不由模板脚本创建。配置方式见 [`docs/wechat-mp-provider.md`](docs/wechat-mp-provider.md)。
+
 如果你想用**自己的**频道结构（而不是 hermes-style），跳过这两个脚本，直接 `vim ~/.miniclaw/cron/*.yaml` 改各自的 `channel: "<id>"`。
 
 ## 项目结构
@@ -157,15 +179,21 @@ src/
 ├── agent/
 │   ├── chat.ts           # @mention/auto-reply 对话（Agent SDK）
 │   ├── codex.ts          # Codex SDK 封装
+│   ├── runtime-config.ts # /agent-config 运行时继承摘要
 │   ├── session.ts        # provider-prefixed session id
 │   └── task.ts           # /task 任务执行（Claude/Codex + 流式进度）
 ├── commands/
 │   ├── register.ts       # Slash command 注册
 │   └── handlers.ts       # /task /status /cancel /resume 处理
+├── cron/                 # node-cron 调度、runner、state 持久化
 ├── discord/
 │   ├── chunks.ts         # 消息分片（2000 字符 + 代码围栏平衡）
 │   ├── formatter.ts      # Embed 模板（启动/完成/失败/状态）
 │   └── progress.ts       # 进度更新推送（节流 + 编辑式）
+├── providers/
+│   └── wechat-mp/        # 微信公众号 pre-provider
+├── memory/               # markdown 长期记忆
+├── stage/                # pnpm stage 多 agent TUI
 └── store/
     └── db.ts             # SQLite 存储（tasks + chat_history）
 ```

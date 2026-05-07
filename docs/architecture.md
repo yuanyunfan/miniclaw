@@ -26,7 +26,8 @@ flowchart LR
             HANDLERS["commands/handlers.ts"]
             SUBA["agent/subagents.ts<br/>加载 agents/*.md +<br/>~/.miniclaw/skills/*.md"]
             CRON["cron/scheduler.ts<br/>node-cron 调度"]
-            MCP["agent/mcp.ts<br/>从 ~/.claude.json 复用 MCP"]
+            MCP["agent/mcp.ts<br/>从 ~/.claude.json 复用 Claude MCP"]
+            RCFG["agent/runtime-config.ts<br/>/agent-config 继承摘要"]
         end
 
         subgraph Stage["Stage 子系统进程 (pnpm stage)"]
@@ -38,7 +39,7 @@ flowchart LR
         end
 
         subgraph UserCfg["~/.miniclaw/ 用户级数据"]
-            UC1["cron/*.yaml<br/>15 个定时 job"]
+            UC1["cron/*.yaml<br/>定时 job"]
             UC2["cron/state.json<br/>last_run/completed 持久化"]
             UC3["scripts/*.{py,sh}<br/>cron type=script 调用"]
             UC4["skills/*.md<br/>用户级 subagent"]
@@ -47,6 +48,8 @@ flowchart LR
             UC7["personas/*.md<br/>Stage 用户级 persona<br/>（覆盖 repo personas/）"]
             UC8["scenes/*.md<br/>/save 输出的 transcript"]
             UC9["logs/miniclaw-{out,error}.log<br/>pm2 日志落盘"]
+            UC10["providers/wechat-mp/*.yaml<br/>公众号采集配置 + state"]
+            UC11["secrets/wechat-mp-session.json<br/>公众号后台登录态"]
             DB[("data.db<br/>SQLite WAL<br/>tasks · chat_history · scenes · scene_messages")]
         end
 
@@ -57,7 +60,7 @@ flowchart LR
 
     subgraph Cloud["云端"]
         COPILOT["GitHub Copilot API<br/>claude-opus-4.7 / claude-sonnet-4-6 ..."]
-        OPENAI["OpenAI Codex<br/>Codex SDK / CLI"]
+        OPENAI["OpenAI Codex<br/>Codex SDK / CLI config"]
         EXA["exa MCP<br/>(web search)"]
         CTX7["context7 MCP<br/>(library docs)"]
     end
@@ -83,6 +86,9 @@ flowchart LR
     SUBA -.->|"读取"| UC4
     TASK -.->|"加载 MCP"| MCP
     MCP -.->|"读"| MCPCFG["~/.claude.json<br/>mcpServers 段"]
+    HANDLERS -.->|"/agent-config"| RCFG
+    RCFG -.->|"读摘要"| CODEXCFG["~/.codex/config.toml<br/>MCP + skills"]
+    RCFG -.->|"读摘要"| CLAUDECFG["~/.claude/*<br/>settings + skills + agents"]
 
     CHAT -->|"读"| UC5
     TASK -->|"读"| UC5
@@ -121,9 +127,9 @@ flowchart LR
     classDef cloud fill:#f6ffed,stroke:#52c41a
     class User,Term user
     class DC,SC discord
-    class BOT,CHAT,TASK,HANDLERS,SUBA,CRON,MCP miniclaw
+    class BOT,CHAT,TASK,HANDLERS,SUBA,CRON,MCP,RCFG miniclaw
     class STG_UI,STG_ORCH,STG_AGT,STG_SM,STG_PERS stage
-    class UC1,UC2,UC3,UC4,UC5,UC6,UC7,UC8,UC9,DB,AGENTS,MCPCFG,PERSREPO usercfg
+    class UC1,UC2,UC3,UC4,UC5,UC6,UC7,UC8,UC9,UC10,UC11,DB,AGENTS,MCPCFG,CODEXCFG,CLAUDECFG,PERSREPO usercfg
     class RAVEN raven
     class COPILOT,EXA,CTX7 cloud
 ```
@@ -137,6 +143,8 @@ flowchart LR
   - 用户级数据全在 `~/.miniclaw/`（cron / skills / scripts / memories / channel-map）
 - **memories 走 markdown 不再走 SQLite 表**：`~/.miniclaw/memories/MEMORY.md` 可直接 vim 编辑、git diff、跨工具复用（hermes 同模式）
 - **可控继承本机 Agent 配置**：Codex 可用 `inherit` 回落到 `~/.codex/config.toml`；Claude task 显式加载 `user/project/local` settings，默认禁用 hooks；MCP 仍通过 allowlist 控制
+- **Discord task 三层输出**：状态 embed 只放元数据；progress message 执行中持续 edit、完成后保留 Execution Summary；最终结果走普通 Markdown 分片
+- **pre-provider 扩展点**：cron `task` 可先运行 provider 采集结构化数据，再把 JSON 注入 prompt；微信公众号日报通过 `wechat-mp` provider 落地
 - **白名单两道闸**：`MINICLAW_ALLOWED_USER_ID` 限制谁能用，`MINICLAW_AUTO_REPLY_CHANNELS` 决定哪些频道无需 @mention
 - **LLM 流量全部经过 raven**：`ANTHROPIC_BASE_URL=http://localhost:7024` 让两个 SDK 都走本地代理
 
@@ -339,7 +347,9 @@ flowchart LR
     end
 
     RT -->|"可选 pre_script"| Spawn[spawn 脚本 → stdout 拼到 prompt 顶部]
+    RT -->|"可选 pre_provider"| PP[runPreProvider<br/>采集结构化数据 → JSON 拼到 prompt 顶部]
     RT --> ET1[executeTask<br/>outputMode='raw']
+    PP --> ET1
 
     RS --> Spawn2[spawn 脚本]
     Spawn2 -->|stdout| Parse[extractAttachments<br/>解析 MEDIA: 或 png_path]
@@ -359,7 +369,7 @@ flowchart LR
     classDef state fill:#f6ffed,stroke:#52c41a
     class Boot,SS boot
     class LD,Reg,Disp,Tick sched
-    class RT,RS,RK,RM,Spawn,Spawn2,Parse,ET1,ET2,RT2 runner
+    class RT,RS,RK,RM,Spawn,PP,Spawn2,Parse,ET1,ET2,RT2 runner
     class State,Send1,Send2 state
 ```
 
@@ -368,7 +378,8 @@ flowchart LR
 | type | 适合场景 | 示例 |
 |------|----------|------|
 | `task` | 纯 LLM 任务（搜资料 + 整理） | github-trending |
-| `task` + `pre_script` | 先采集结构化数据再 LLM 分析（hermes hybrid 模式） | daily-tldr / daily-app-trending |
+| `task` + `pre_script` | 先执行用户脚本再 LLM 分析（hermes hybrid 模式） | daily-tldr / daily-app-trending |
+| `task` + `pre_provider` | 先运行内置 provider 采集结构化数据，再由 LLM 总结 | daily-wechat-mp |
 | `script` | 纯脚本输出（含图片附件） | hourly-token-report → PNG dashboard |
 | `skill` | 调用用户级 subagent | （自定义）|
 | `message` | 模板化推送 | morning-greet `{{date}}` |
@@ -383,11 +394,17 @@ flowchart LR
 ├── memories/
 │   └── MEMORY.md            # 长期记忆（4 section + § 分隔，可 vim 编辑）
 ├── cron/
-│   ├── *.yaml               # 15 个定时 job 定义
+│   ├── *.yaml               # 定时 job 定义
 │   └── state.json           # last_run/completed/duration 持久化
 ├── scripts/
 │   ├── *.py / *.sh          # cron type=script + pre_script 调用
 │   └── ...                  # 可执行权限必需 (chmod +x)
+├── providers/
+│   └── wechat-mp/
+│       ├── *.yaml           # provider 配置（账号列表、窗口、state_path）
+│       └── state.json       # fakeid cache + 已发送文章去重
+├── secrets/
+│   └── wechat-mp-session.json # 公众号后台 token/cookies，敏感凭据
 ├── skills/
 │   └── *.md                 # 用户级 subagent (覆盖 repo agents/)
 ├── personas/
@@ -510,4 +527,5 @@ erDiagram
 2. **想改 chat 行为** → 看图 2，集中改 `src/agent/chat.ts`
 3. **想加新 subagent** → 看图 3 + Supervisor 表，新增 `agents/<name>.md`（repo） 或 `~/.miniclaw/skills/<name>.md`（user）
 4. **想加新 cron** → 看图 4，写 `~/.miniclaw/cron/<name>.yaml` 重启 bot
-5. **想加新 slash command** → `register.ts` 注册 + `handlers.ts` 处理 + `bot.ts` switch case
+5. **想改微信公众号日报** → 看 `docs/wechat-mp-provider.md`，重点是 provider config、固定窗口、登录态刷新和 dedupe state
+6. **想加新 slash command** → `register.ts` 注册 + `handlers.ts` 处理 + `bot.ts` switch case

@@ -6,6 +6,14 @@
 
 ## [Unreleased]
 
+### Added
+- `wechat-mp` pre-provider 文档同步到当前实现：9:00 / 17:00 固定窗口、9 个公众号账号列表、登录态刷新、dry-run 采集和 dedupe state 说明。
+- Discord `/task` 输出文档增加当前落地状态和 E2E 回归记录：状态 embed、persistent progress message、普通 Markdown 最终结果三层输出。
+- README 增加 `/agent-config`、Codex `inherit`、Claude setting sources / hooks、MCP allowlist、WeChat 频道配置入口说明。
+
+### Changed
+- `docs/architecture.md` 同步当前架构：`/agent-config` runtime summary、Codex/Claude 本机配置继承、cron `pre_provider` 链路、`~/.miniclaw/providers` 与 `secrets` 用户级目录。
+
 ### Fixed
 - `/cancel` 后任务最终状态不再被 `executeTask()` 收尾逻辑覆盖成 `failed`；取消路径统一落库为 `cancelled`。
 - Thread continuation 查询同一线程最近 session 时增加 `rowid DESC` 兜底排序，避免同一秒内多条 task 造成恢复到旧 session。

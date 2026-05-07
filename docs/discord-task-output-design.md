@@ -1,6 +1,22 @@
 # Discord Task Output Design
 
-本文档记录 MiniClaw task 在 Discord 中的输出改造方案。目标是保留 Codex SDK / Claude Agent SDK 的实时执行进度，同时让最终结果更适合 Discord 阅读。
+本文档记录 MiniClaw task 在 Discord 中的输出改造方案与当前落地状态。目标是保留 Codex SDK / Claude Agent SDK 的实时执行进度，同时让最终结果更适合 Discord 阅读。
+
+## 当前状态
+
+截至 2026-05-07，Phase 1 和 Phase 2 已经落地：
+
+- `/task` 开始时发送短 embed 状态卡片，完成时 edit 为 completed / failed 元数据卡片。
+- 完整最终结果不再放入 embed description，而是始终通过普通 Markdown 消息分片发送。
+- 任务执行中维护一条 persistent progress message，完成后 edit 成 `Execution Summary`，保留最近工具调用、turns、tools、tokens 等摘要。
+- Codex provider 已把 `command_execution`、`file_change`、`mcp_tool_call`、`web_search`、`todo_list` 等 SDK item 映射为 Discord 进度行。
+- progress 更新节流为约 2s，降低 Discord edit rate limit 风险。
+- `tasks.progress_message_id` 已持久化，用于进程重启后把悬挂任务标记为 interrupted。
+
+仍未落地的扩展：
+
+- 统一 `TaskViewEvent` / `TaskReporter` 抽象尚未拆出，当前映射逻辑仍主要在 `src/agent/task.ts`。
+- 完整 trace 附件尚未实现，Discord 主消息只保留最近步骤摘要。
 
 ## 背景
 
@@ -9,7 +25,7 @@
 - `/task` handler 创建 Discord thread，并发送 `taskStartEmbed`。
 - `executeTask` 根据 `MINICLAW_AGENT_PROVIDER` 选择 Codex SDK 或 Claude Agent SDK。
 - SDK 执行期间，MiniClaw 把工具调用事件压缩成进度行，通过 `ProgressReporter` 持续 edit 一条普通消息。
-- 任务完成后，MiniClaw 发送 `taskCompleteEmbed`。
+- 任务完成后，MiniClaw edit 状态 embed，保留 progress summary，并用普通 Markdown 消息发送最终结果。
 
 关键代码：
 
@@ -19,11 +35,11 @@
 - `src/discord/formatter.ts`: 构造 task start / complete / error embed。
 - `src/discord/chunks.ts`: 普通 Discord 消息分片。
 
-## 当前问题
+## 改造前问题
 
 ### 1. 最终结果放在 embed description 中
 
-`taskCompleteEmbed` 当前把完整结果放进 embed description。Discord embed 更适合状态卡片和短摘要，不适合承载长报告。
+旧实现把完整结果放进 `taskCompleteEmbed` description。Discord embed 更适合状态卡片和短摘要，不适合承载长报告。
 
 影响：
 
@@ -31,9 +47,9 @@
 - 长段落、列表、代码块和类表格内容更拥挤。
 - 报告型输出的阅读体验不如普通 Markdown 消息。
 
-### 2. 成功后进度消息会被删除
+### 2. 改造前成功后进度消息会被删除
 
-`ProgressReporter.complete()` 成功时会删除进度消息。用户能在执行中看到进度，但任务完成后无法回看中间执行过程。
+旧实现里 `ProgressReporter.complete()` 成功时会删除进度消息。用户能在执行中看到进度，但任务完成后无法回看中间执行过程。
 
 影响：
 
@@ -42,7 +58,7 @@
 
 ### 3. 结果和轨迹展示割裂
 
-当前最终结果、执行轨迹、进度消息分别由不同代码路径处理，缺少统一的 task view 模型。
+最终结果、执行轨迹、进度消息仍由不同代码路径处理，缺少统一的 task view 模型。
 
 影响：
 
@@ -51,7 +67,7 @@
 
 ### 4. 长结果可能重复
 
-当前逻辑在 embed description 放截断结果；如果结果超过 4096 字符，再额外发送完整分片。
+旧逻辑在 embed description 放截断结果；如果结果超过 4096 字符，再额外发送完整分片。
 
 影响：
 
@@ -194,7 +210,7 @@ Codex / Claude 适配层负责把 SDK 原始事件转换为 `TaskViewEvent`。Di
 
 ## 推荐实施阶段
 
-### Phase 1: 先修最终结果宽度
+### Phase 1: 先修最终结果宽度（已完成）
 
 目标：最小改动解决当前最明显的问题。
 
@@ -211,13 +227,13 @@ Codex / Claude 适配层负责把 SDK 原始事件转换为 `TaskViewEvent`。Di
 - `/task` 长结果不重复。
 - cron 的 `outputMode: raw` 行为不受影响。
 
-### Phase 2: 保留实时进度消息
+### Phase 2: 保留实时进度消息（已完成）
 
 目标：保留实时性，同时让完成后的进度可回看。
 
 改动：
 
-- `ProgressReporter.complete()` 成功时不 delete，而是 edit 为最终摘要。
+- `/task` embed 模式下，`ProgressReporter.complete()` 成功时不 delete，而是 edit 为最终摘要。
 - 更新节流从 500ms 调整到约 2s。
 - 增加 `finalize(summary)` 或 `complete({ finalText })` 接口。
 
@@ -227,7 +243,7 @@ Codex / Claude 适配层负责把 SDK 原始事件转换为 `TaskViewEvent`。Di
 - 成功后 progress message 保留。
 - 失败后 progress message 仍保留，并标记失败。
 
-### Phase 3: 引入 TaskReporter
+### Phase 3: 引入 TaskReporter（待实现）
 
 目标：把 SDK 执行逻辑和 Discord 展示逻辑解耦。
 
@@ -255,7 +271,7 @@ Codex / Claude 适配层负责把 SDK 原始事件转换为 `TaskViewEvent`。Di
 - Codex provider 保留更丰富的 command / file / todo / search trace。
 - Claude provider 至少保留 tool_use trace。
 
-### Phase 4: 完整 trace 附件
+### Phase 4: 完整 trace 附件（待实现）
 
 目标：长任务可审计，不污染 Discord 主消息流。
 
@@ -303,3 +319,13 @@ MiniClaw 应迁移的是 Codex CLI 背后的信息结构：
 - Claude provider 仍能显示基本 tool trace。
 - 长结果不重复发送。
 - cron 的 `outputMode: raw` 不受 `/task` 展示改造影响。
+
+## 回归验证记录
+
+2026-05-07 做过一次 Discord E2E smoke test：
+
+- 在 Discord `MiniClaw Hub #test` 通过 `/task` 触发 Codex 编码任务，生成一个本地 Tetris Web 游戏。
+- 任务 ID：`2cf6c71b-f8b4-438c-8450-4336700a49c7`。
+- DB 状态：`completed`；PM2 日志显示 `codex done turns=1 wall=132152ms tools=10`。
+- Discord thread 中能看到三层输出：completed 状态 embed、保留的 `Execution Summary` progress message、最终普通 Markdown 结果。
+- 本地 Playwright 额外验证生成页面可加载、canvas 非空、方向键 / hard drop / pause 可用。
