@@ -7,6 +7,7 @@
 ## [Unreleased]
 
 ### Added
+- `CLAUDE.md` 增加 docs-first development planning 规则，要求非平凡开发先在 `docs/plans/` 写计划文档，再改业务代码；新增 `docs/plans/README.md` 模板。
 - 新增 `README.en.md` 英文版 README，并在中文 `README.md` 顶部加入语言切换入口。
 - `wechat-mp` pre-provider 文档同步到当前实现：9:00 / 17:00 固定窗口、9 个公众号账号列表、登录态刷新、dry-run 采集和 dedupe state 说明。
 - Discord `/task` 输出文档增加当前落地状态和 E2E 回归记录：状态 embed、persistent progress message、普通 Markdown 最终结果三层输出。

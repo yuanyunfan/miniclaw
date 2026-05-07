@@ -85,6 +85,40 @@ pnpm test:cov   # 带覆盖率报告
 
 `executeTask()` 是 I/O heavy（调 Claude/Codex SDK），不在单测覆盖。端到端走 Discord 真实测。
 
+## Docs-First Development Planning
+
+> 非平凡开发任务必须先把计划写进 `docs/`，再开始改业务代码。
+
+MiniClaw 的长期维护依赖文档和代码同步。LLM 在开发时不能只把计划留在对话里；对后续 session 有价值的设计、取舍、验证标准，都要沉淀到 repo 文档中。
+
+**什么时候必须先写计划文档**：
+- 涉及新功能、跨模块改动、公共 API/schema/auth/权限、cron/provider/task 执行链路、Discord 输出行为、Agent/Codex/Claude runtime、Stage、数据库、配置语义或安全边界。
+- 需要多步实现、存在架构取舍、风险不确定、或预计会修改 3 个以上文件。
+
+**什么时候可以跳过计划文档**：
+- 纯 typo、README 小修、测试快照更新、显然局部的一行 bug fix。
+- 即便跳过计划文档，仍要在最终回复说明验证证据；如果改动影响现有架构文档，仍必须同步 docs。
+
+**计划文档位置**：
+- 默认写到 `docs/plans/YYYY-MM-DD-<short-slug>.md`。
+- 如果已有专题文档更合适，可以直接更新对应 `docs/*.md`，但必须包含计划、范围、验证和文档影响。
+
+**计划文档至少包含**：
+- 背景和目标：用户要解决什么问题，当前系统哪里相关。
+- 范围和非目标：明确本次不做什么，避免任务膨胀。
+- 现有架构证据：关键文件、数据流、配置或命令入口。
+- 实施计划：分步骤列出要改哪些模块、为什么这样改。
+- 验证计划：需要跑哪些测试、type check、cron test、Discord/Playwright E2E 或人工检查。
+- 风险和回滚：可能破坏什么，失败时如何止损。
+- 文档同步清单：完成后要更新哪些 README / docs / CHANGELOG。
+
+**执行纪律**：
+1. 先探索代码和现有 docs，确认 root cause 与改动边界。
+2. 写或更新计划文档，并在对话里指出文档路径。
+3. 再开始改业务代码。
+4. 实现过程中如果设计变化，先更新计划文档，再继续改代码。
+5. 结束前把计划文档状态改为 completed / superseded，并同步 `CHANGELOG.md` 与相关架构文档。
+
 ## 用户级扩展（`~/.miniclaw/`）
 
 | 目录 | 用途 |
@@ -165,12 +199,13 @@ log.debug("调试信息");                         // 默认不输出
 2. 读 `CHANGELOG.md` 顶部的 [Unreleased] 段了解当前在做什么
 3. 跑 `pnpm test` 验证当前 main 是绿的（红的话先修再动手）
 4. **如果是不熟悉的领域改动**（cron / Supervisor / thread continuation 等），先看 `docs/architecture.md` + `docs/bot-routing.md` 对齐心智模型，避免读源码盲改
+5. **非平凡开发必须先写 docs 计划**：按 `Docs-First Development Planning` 创建或更新 `docs/plans/YYYY-MM-DD-<short-slug>.md`，明确背景、范围、实施步骤、验证计划、风险和文档同步清单；计划文档落盘后再开始改业务代码
 
 **每次代码改动后**：
-4. 跑 `pnpm exec tsc --noEmit` 确保类型通过
-5. 改了被测函数 → 跑相关测试 `pnpm test src/<dir>/`
-6. 加了新函数/新行为 → 补单测（不要让测试覆盖率倒退）
-7. **改了下列任一 → 必须同步更新 `docs/architecture.md` 或 `docs/bot-routing.md` 或 `docs/stage.md` 或 `docs/prompts.md`**：
+6. 跑 `pnpm exec tsc --noEmit` 确保类型通过
+7. 改了被测函数 → 跑相关测试 `pnpm test src/<dir>/`
+8. 加了新函数/新行为 → 补单测（不要让测试覆盖率倒退）
+9. **改了下列任一 → 必须同步更新 `docs/architecture.md` 或 `docs/bot-routing.md` 或 `docs/stage.md` 或 `docs/prompts.md`**：
    - `src/bot.ts` 路由逻辑（事件监听 / 守卫 / Path 分支）→ `bot-routing.md`
    - `src/agent/{chat,task,subagents,mcp}.ts` 任一架构改动 → `architecture.md` 图 1+2+3
    - `src/cron/*` 调度引擎或新 type / runner 模式 → `architecture.md` 图 4
@@ -179,10 +214,11 @@ log.debug("调试信息");                         // 默认不输出
    - `src/stage/*` 路由 / orchestrator / persona / 命令 / TUI 改动 → `docs/stage.md`
    - `prompts/*.md` 任一改动 → 跑 `pnpm test prompt-snapshot`，确认 diff 有意后 `vitest -u` 更新 hash；新增 prompt 文件还要更 `docs/prompts.md` 的清单
    不更新 docs 等于"代码漂移"，下次 session 开局看到的图就是错的，会基于错信息做决策
+10. 如果本次有计划文档，结束前把实际执行结果、验证证据、偏离原计划的原因写回该文档
 
 **Session 结束前**：
-8. 显著架构变更或踩坑 → 追加一条到 `## Retrospective`（格式：`[YYYY-MM-DD] 问题简述` → 根因 → 修复 → 教训）
-9. 完成完整 feature → 在 `CHANGELOG.md` 的 [Unreleased] 段加一条
+11. 显著架构变更或踩坑 → 追加一条到 `## Retrospective`（格式：`[YYYY-MM-DD] 问题简述` → 根因 → 修复 → 教训）
+12. 完成完整 feature → 在 `CHANGELOG.md` 的 [Unreleased] 段加一条
 
 ## Git Quality Gates
 
