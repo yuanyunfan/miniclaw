@@ -20,12 +20,14 @@
     "wechat-mp:login": "tsx scripts/wechat-mp-login.ts",
     "wechat-mp:check": "tsx scripts/wechat-mp-check.ts",
     "wechat-mp:collect": "tsx scripts/wechat-mp-collect.ts",
+    "mcp:futu-stock": "tsx src/mcp/futu-stock/server.ts",
     "stage": "tsx src/stage/index.tsx",
     "stage:repl": "tsx src/stage/repl.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.119",
     "@anthropic-ai/sdk": "^0.39.0",
+    "@modelcontextprotocol/sdk": "1.29.0",
     "@openai/codex-sdk": "^0.125.0",
     "better-sqlite3": "^11.8.1",
     "discord.js": "^14.18.0",
@@ -40,7 +42,8 @@
     "react": "^19.2.5",
     "undici": "^8.1.0",
     "uuid": "^11.1.0",
-    "ws": "^8.20.0"
+    "ws": "^8.20.0",
+    "zod": "4.3.6"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

@@ -81,6 +81,7 @@ codex:
 mcp:
   # Claude provider task mode can reuse MCP servers from Claude Code config.
   config: "~/.claude.json"
+  # Add futu-stock explicitly only after you have configured its local read-only MCP server.
   allowlist: [exa, context7] # use ["*"] to expose every server
 
 storage:

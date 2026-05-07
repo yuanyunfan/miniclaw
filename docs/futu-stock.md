@@ -24,6 +24,48 @@
 - 不让 LLM 直接接触富途账号密码、交易密码、token、cookie。
 - 不使用 Playwright 控制富途网页或 App。
 
+## 当前实现状态
+
+已落地的代码：
+
+```text
+src/mcp/futu-stock/
+  server.ts        # stdio MCP server，注册只读 tools
+  config.ts        # 读取 ~/.miniclaw/providers/futu-stock/config.yaml
+  futu-client.ts   # 通过 Python bridge 调用官方 futu-api/moomoo 包连接 OpenD
+  mapper.ts        # Futu 返回字段 -> 统一快照模型
+  redact.ts        # Discord/LLM 输出脱敏
+  safety.ts        # 只读 tool 名称与 forbidden API 约束
+  state.ts         # 本地 snapshot 读写工具
+  types.ts         # 类型定义
+```
+
+已提供命令：
+
+```bash
+pnpm mcp:futu-stock
+```
+
+当前能力：
+
+- MCP server 可启动。
+- `futu_health_check` 可检查 OpenD TCP 连接和 Python `futu-api` / `moomoo` 包是否可用。
+- `futu_get_account_snapshot` 可返回脱敏账户快照。
+- `futu_get_positions_summary` 可返回脱敏持仓贡献摘要。
+- `futu_get_daily_pnl_report` 可返回面向 Discord 日报的脱敏文本。
+
+运行前置：
+
+- 本机已启动 Futu OpenD。
+- OpenD 只监听 `127.0.0.1`。
+- Python 环境安装官方富途 OpenAPI 包：
+
+```bash
+python3 -m pip install futu-api
+```
+
+如果使用 moomoo 环境，Python bridge 也会尝试 fallback 到 `moomoo` 包。
+
 ## 技术路径
 
 ### 富途 OpenAPI 与 OpenD
@@ -267,6 +309,10 @@ profiles:
     currency: "HKD"
     redaction: "summary"
     snapshot_dir: "~/.miniclaw/providers/futu-stock/snapshots"
+    python_bin: "python3"
+    trd_market: "HK"
+    security_firm: "FUTUSECURITIES"
+    acc_index: 0
 ```
 
 配置中允许：
@@ -277,6 +323,10 @@ profiles:
 - 币种偏好。
 - snapshot 目录。
 - 脱敏级别。
+- Python 解释器路径。
+- 富途交易市场枚举，例如 `HK`。
+- 富途券商枚举，例如 `FUTUSECURITIES`。
+- `acc_index`，用于选择账户列表中的第几个账户。
 
 配置中禁止：
 
@@ -309,6 +359,24 @@ MiniClaw 当前支持加载 MCP server。实现 `futu-stock` MCP 后，需要把
 }
 ```
 
+开发态也可以直接用 tsx：
+
+```json
+{
+  "mcpServers": {
+    "futu-stock": {
+      "type": "stdio",
+      "command": "pnpm",
+      "args": [
+        "--dir",
+        "/Users/yuan/ProjectRepo/miniclaw",
+        "mcp:futu-stock"
+      ]
+    }
+  }
+}
+```
+
 MiniClaw 配置中：
 
 ```yaml
@@ -316,6 +384,17 @@ mcp:
   allowlist:
     - futu-stock
 ```
+
+Claude provider 说明：
+
+- MiniClaw 在检测到 `futu-stock` MCP 已加载后，会只把 `futu_health_check`、`futu_get_account_snapshot`、`futu_get_positions_summary`、`futu_get_daily_pnl_report` 加入 Claude task 的 allowed tools。
+- 交易相关工具不会被注册，也不会进入 allowed tools。
+
+Codex provider 说明：
+
+- Codex task 是否能看到 `futu-stock` MCP，取决于 Codex CLI 的 MCP 配置继承。
+- 如果 MiniClaw 的 Codex 配置使用 `inherit`，需要把 `futu-stock` 同样配置到 `~/.codex/config.toml` 的 MCP servers 中。
+- 不要把富途密码、交易密码或账号 token 写入 Codex 配置。
 
 ### Cron 任务示例
 
@@ -344,7 +423,7 @@ prompt: |
 
 ## 推荐目录结构
 
-建议新增：
+当前目录结构：
 
 ```text
 src/mcp/futu-stock/
@@ -445,6 +524,8 @@ cancel_order
 - forbidden API 测试通过。
 - tool registry 测试通过。
 
+状态：已实现。
+
 ### Phase 3：富途查询实现
 
 目标：接入 Futu SDK 和本机 OpenD，只读查询账户数据。
@@ -456,6 +537,8 @@ cancel_order
 - 能生成脱敏日报输入文本。
 - 不配置交易密码。
 - 不调用交易解锁。
+
+状态：已实现 Python bridge 调用路径；需要用户本机安装 `futu-api` 并启动 OpenD 后做真实账户联调。
 
 ### Phase 4：Cron + Discord 日报
 

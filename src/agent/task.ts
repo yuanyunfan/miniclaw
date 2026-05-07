@@ -10,6 +10,7 @@ import { chunkMessage } from "../discord/chunks.js";
 import { buildMemoryPrompt } from "../memory/inject.js";
 import { loadSubagents, listSubagentNames } from "./subagents.js";
 import { loadMcpServers } from "./mcp.js";
+import { FUTU_STOCK_TOOL_NAMES } from "../mcp/futu-stock/safety.js";
 import { IDENTITY_LINE_TASK } from "./identity.js";
 import { loadPrompt } from "./prompts.js";
 import { createLogger } from "../lib/log.js";
@@ -47,6 +48,12 @@ function toolShortName(name: string): string {
   if (name === "Agent" || name === "Task") return "agent";
   if (name.startsWith("mcp__")) return name.slice(5).replace(/__/g, ":");
   return name.toLowerCase();
+}
+
+function allowedFutuStockMcpTools(mcpServers: Record<string, unknown>): string[] {
+  return mcpServers["futu-stock"]
+    ? FUTU_STOCK_TOOL_NAMES.map((name) => `mcp__futu-stock__${name}`)
+    : [];
 }
 
 function formatToolDetail(name: string, input: Record<string, unknown>): string {
@@ -499,6 +506,7 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
           "mcp__exa__get_code_context_exa",
           "mcp__context7__resolve-library-id",
           "mcp__context7__query-docs",
+          ...allowedFutuStockMcpTools(mcpServers),
         ],
         agents: subagents,
         ...(Object.keys(mcpServers).length ? { mcpServers } : {}),
