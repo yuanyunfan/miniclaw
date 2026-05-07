@@ -344,11 +344,13 @@ flowchart LR
     LD --> Reg[node-cron.schedule<br/>每个 enabled job 注册一个 ScheduledTask]
 
     subgraph Tick["定时触发 (每分钟检查)"]
-        Reg --> Disp[dispatch by job.type]
-        Disp --> RT[runner-task.ts<br/>type=task]
-        Disp --> RS[runner-script.ts<br/>type=script]
-        Disp --> RK[runner-task.ts<br/>type=skill]
-        Disp --> RM[runner-message.ts<br/>type=message]
+        Reg --> Disp[dispatch<br/>同名 job 运行中则跳过]
+        Disp --> Retry[retry wrapper<br/>最多 5 次 attempt<br/>10m → 20m → 40m → 80m]
+        Retry --> Run[run by job.type]
+        Run --> RT[runner-task.ts<br/>type=task]
+        Run --> RS[runner-script.ts<br/>type=script]
+        Run --> RK[runner-task.ts<br/>type=skill]
+        Run --> RM[runner-message.ts<br/>type=message]
     end
 
     RT -->|"可选 pre_script"| Spawn[spawn 脚本 → stdout 拼到 prompt 顶部]
@@ -373,10 +375,12 @@ flowchart LR
     classDef runner fill:#f9f0ff,stroke:#722ed1
     classDef state fill:#f6ffed,stroke:#52c41a
     class Boot,SS boot
-    class LD,Reg,Disp,Tick sched
+    class LD,Reg,Disp,Retry,Run,Tick sched
     class RT,RS,RK,RM,Spawn,PP,Spawn2,Parse,ET1,ET2,RT2 runner
     class State,Send1,Send2 state
 ```
+
+失败重试策略在 `scheduler.ts` 的调度层统一执行：定时触发的 job 首次失败后 10 分钟重试，之后每次间隔翻倍，最多总尝试 5 次；每次 attempt 都会写入 `~/.miniclaw/cron/state.json`。`pnpm cron:test <name>` 保持单次试跑，不进入长时间 retry 等待。
 
 **4 种 type 用法**
 

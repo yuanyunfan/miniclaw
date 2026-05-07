@@ -24,6 +24,23 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
   return { promise, resolve };
 }
 
+function clientWithFailingSends(failuresBeforeSuccess: number): { client: Client; sendCount: () => number } {
+  let sends = 0;
+  const client = {
+    channels: {
+      fetch: async () => ({
+        isSendable: () => true,
+        send: async () => {
+          sends++;
+          if (sends <= failuresBeforeSuccess) throw new Error(`boom-${sends}`);
+          return {};
+        },
+      }),
+    },
+  } as unknown as Client;
+  return { client, sendCount: () => sends };
+}
+
 beforeEach(() => {
   const dir = mkdtempSync(join(tmpdir(), "miniclaw-scheduler-state-"));
   process.env.MINICLAW_CRON_STATE = join(dir, "state.json");
@@ -57,5 +74,51 @@ describe("cron scheduler dispatch", () => {
 
     gate.resolve();
     await firstRun;
+  });
+
+  it("失败后按 10m 起步指数退避重试，最多总尝试 5 次", async () => {
+    const delays: number[] = [];
+    const { client, sendCount } = clientWithFailingSends(4);
+    const policy = {
+      ...__testables.DEFAULT_RETRY_POLICY,
+      sleep: async (ms: number) => { delays.push(ms); },
+    };
+
+    await __testables.dispatch(messageJob(), client, policy);
+
+    expect(sendCount()).toBe(5);
+    expect(delays).toEqual([
+      10 * 60 * 1000,
+      20 * 60 * 1000,
+      40 * 60 * 1000,
+      80 * 60 * 1000,
+    ]);
+    const state = getJobState("slow-message");
+    expect(state?.last_status).toBe("ok");
+    expect(state?.completed).toBe(5);
+  });
+
+  it("第 5 次仍失败时停止重试并记录 retries exhausted", async () => {
+    const delays: number[] = [];
+    const { client, sendCount } = clientWithFailingSends(Number.POSITIVE_INFINITY);
+    const policy = {
+      ...__testables.DEFAULT_RETRY_POLICY,
+      sleep: async (ms: number) => { delays.push(ms); },
+    };
+
+    await __testables.dispatch(messageJob(), client, policy);
+
+    expect(sendCount()).toBe(5);
+    expect(delays).toEqual([
+      10 * 60 * 1000,
+      20 * 60 * 1000,
+      40 * 60 * 1000,
+      80 * 60 * 1000,
+    ]);
+    const state = getJobState("slow-message");
+    expect(state?.last_status).toBe("error");
+    expect(state?.last_error).toContain("attempt 5/5");
+    expect(state?.last_error).toContain("retries exhausted");
+    expect(state?.completed).toBe(5);
   });
 });
