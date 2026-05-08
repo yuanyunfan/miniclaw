@@ -63,6 +63,7 @@ thresholds:
     expect(config.active_window.end).toBe("01:00");
     expect(config.markets.us?.timezone).toBe("America/New_York");
     expect(config.universe.max_symbols).toBe(40);
+    expect(config.universe.include_sources).toBe(false);
     expect(config.universe.symbols[0]?.symbol).toBe("AAPL");
     expect(config.universe.sources[0]?.scr_id).toBe("day_gainers");
     expect(config.quote.concurrency).toBe(4);

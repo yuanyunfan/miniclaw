@@ -9,7 +9,7 @@
 - P0：扫描我的持仓和 watchlist。
 - P1：只在市场交易时段和北京时间个人活动窗口内执行有效扫描。
 - P2：用历史 intraday baseline 判断“涨跌频率超过预期”，不是只看固定涨跌幅。
-- P3：支持可配置的 universe source，先从市场 top movers 拉候选，再对候选跑同一套 bar 级异常检测。
+- P3：可选支持 universe source，先从市场 top movers 拉候选，再对候选跑同一套 bar 级异常检测；默认关闭，避免把非持仓股票混入个人持仓异动报告。
 
 ## 运行链路
 
@@ -18,7 +18,7 @@ cron task
   -> pre_provider: stock-pulse
     -> 判断 active_window + market sessions
     -> 调 stock-portfolio 采集持仓候选
-    -> 合并 watchlist 和 universe sources
+    -> 合并 watchlist；仅在 include_sources=true 时合并 universe sources
     -> Yahoo chart 5m/60d bars
     -> deterministic anomaly scoring
   -> LLM 只解释 alerts[]
@@ -54,7 +54,8 @@ pre_provider_config: us-hourly
 - `markets`: 每个市场的 timezone、交易 session 和可选 `holidays`。
 - `universe.include_portfolio`: 是否扫描持仓候选。
 - `universe.symbols`: 手动 watchlist。
-- `universe.sources`: P3 市场候选源，例如 Yahoo predefined screener 或 Eastmoney clist。
+- `universe.include_sources`: 是否启用 P3 市场候选源，默认 `false`。
+- `universe.sources`: P3 市场候选源，例如 Yahoo predefined screener 或 Eastmoney clist；只有 `include_sources=true` 才会生效。
 - `quote`: 当前实现使用 Yahoo chart API 拉 5m bars。
 - `thresholds`: 按 `stock`、`etf`、`leveraged_etf` 分开设置阈值。
 
@@ -91,12 +92,12 @@ pre_provider_config: us-hourly
 
 ## P3 Universe Scan
 
-P3 不是直接让 LLM 全市场搜索。当前实现先用市场 top movers 生成候选，再对候选拉 5m bar 进行同一套异常检测：
+P3 不是直接让 LLM 全市场搜索。开启 `universe.include_sources=true` 后，provider 会先用市场 top movers 生成候选，再对候选拉 5m bar 进行同一套异常检测：
 
 - US：Yahoo predefined `day_gainers` / `day_losers`。
 - CN/HK：Eastmoney `clist` 候选。
 
-这样可以控制成本和噪音。`universe.max_symbols` 限制每次最多扫描的 symbol 数，默认本机配置为 80。
+这适合做“市场异动雷达”，但不适合默认混入个人持仓报告。`universe.max_symbols` 限制每次最多扫描的 symbol 数。
 
 ## 输出约束
 

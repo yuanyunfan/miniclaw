@@ -204,7 +204,7 @@ function parseUniverse(raw: unknown): StockPulseUniverseConfig {
     enabled: boolValue(obj.enabled, true),
     include_portfolio: boolValue(obj.include_portfolio, true),
     include_watchlist: boolValue(obj.include_watchlist, true),
-    include_sources: boolValue(obj.include_sources, true),
+    include_sources: boolValue(obj.include_sources, false),
     max_symbols: nonNegativeInt(obj.max_symbols, 80, 300, "universe.max_symbols"),
     symbols: Array.isArray(obj.symbols) ? obj.symbols.map(parseSymbol) : [],
     sources: Array.isArray(obj.sources) ? obj.sources.map(parseUniverseSource).filter((source) => source.enabled) : [],
