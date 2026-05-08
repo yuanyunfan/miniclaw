@@ -67,18 +67,14 @@ export interface StockPortfolioCnyPosition {
   code: string;
   name: string;
   instrument_type: "stock" | "etf";
-  currency: string;
-  pnl: number;
+  source_currency: string;
   pnl_cny: number;
   fx_rate_to_cny: number;
   pnl_ratio?: number;
 }
 
 export interface StockPortfolioCurrencyPnlSummary {
-  currency: string;
-  gross_profit: number;
-  gross_loss: number;
-  net_pnl: number;
+  source_currency: string;
   gross_profit_cny: number;
   gross_loss_cny: number;
   net_pnl_cny: number;
@@ -107,10 +103,11 @@ export interface StockPortfolioCnySummary {
   warnings: string[];
 }
 
-export interface StockPortfolioAssetHolding extends AssetAllocationHolding {
+export interface StockPortfolioAssetHolding extends Omit<AssetAllocationHolding, "currency" | "market_value"> {
   provider: StockPortfolioSourceName;
   config: string;
   source_label?: string;
+  source_currency: string;
   market_value_cny: number;
   fx_rate_to_cny: number;
 }
@@ -120,13 +117,10 @@ export interface StockPortfolioAssetAccountSummary {
   config: string;
   label?: string;
   account_alias?: string;
-  currency: string;
+  source_currency: string;
   fx_rate_to_cny: number;
-  total_assets?: number;
   total_assets_cny?: number;
-  market_value?: number;
   market_value_cny?: number;
-  cash?: number;
   cash_cny?: number;
 }
 

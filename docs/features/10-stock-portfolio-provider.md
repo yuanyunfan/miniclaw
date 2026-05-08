@@ -156,11 +156,11 @@ pre_provider_config: cn-stock
 }
 ```
 
-`payload` 是各 provider 输出的结构化上下文。默认 `summary` 配置会隐藏完整总资产和持仓市值；仅 private 汇总任务使用 `exact` 配置输出精确总资产、现金和持仓市值。无论 `summary` 还是 `exact`，聚合层都会再次对 error 和嵌套字符串做 token/cookie/account 类字段脱敏，provider 不应输出完整资金账号、手机号、cookie、validatekey、token、交易密码、客户号或股东号。
+`payload` 是各 provider 输出的结构化上下文。默认 `summary` 配置会隐藏完整总资产和持仓市值；仅 private 汇总任务使用 `exact` 配置采集精确总资产、现金和持仓市值。无论 `summary` 还是 `exact`，聚合层都会再次对 error 和嵌套字符串做 token/cookie/account 类字段脱敏，provider 不应输出完整资金账号、手机号、cookie、validatekey、token、交易密码、客户号或股东号。
 
-`cny_summary` 的盈亏来自各 provider 的 `positions_summary.pnl_summary` 和 `top_gainers/top_losers`，在 LLM 调用前完成折算。LLM 报告应优先使用该字段，不应自行编造或重算缺失字段。
+`cny_summary` 的盈亏来自各 provider 的 `positions_summary.pnl_summary` 和 `top_gainers/top_losers`，在 LLM 调用前完成折算。该字段只保留可报告的人民币金额字段，例如 `gross_profit_cny`、`gross_loss_cny`、`net_pnl_cny`、`pnl_cny`。`source_currency` 和 `fx_rate_to_cny` 仅用于审计汇率来源，不应作为报告金额单位输出。LLM 报告应优先使用该字段，不应自行编造或重算缺失字段。
 
-`asset_summary` 只应在 private channel 的 exact 配置中启用。该字段会在 LLM 调用前按持仓市值和现金余额生成分类汇总，当前分类包括：
+`asset_summary` 只应在 private channel 的 exact 配置中启用。该字段会在 LLM 调用前按持仓市值和现金余额生成分类汇总，并且可报告金额全部是人民币字段，例如 `total_assets_cny`、`market_value_cny`、`cash_cny`。聚合输出不会把 source provider 的原币种 `total_assets`、`market_value`、`cash`、`pnl` 等金额字段继续传给 LLM；`sources[].payload` 在资产汇总模式下只保留账户别名、来源币种、汇率和 CNY 后的账户级 P&L 摘要。当前分类包括：
 
 - `bond`: 债券
 - `foreign_index`: 国外指数
@@ -210,7 +210,7 @@ Discord 输出约定：
 
 - 盘前报告：标题后先展示“我的持仓 / ETF 盘前观察清单”，再展示市场温度、新闻和今日关注点。
 - 盘后报告：标题后先展示“我的账户盈亏统计”，再展示 Top5 盈利/亏损、基本面和新闻复盘、今日关注点。
-- 每日资产汇总：发送到 private `#daily-stock-summary`，允许展示总资产、现金、证券市值、具体持仓金额和分类占比；仍禁止输出账号 ID、手机号、cookie、validatekey、token、交易密码、客户号或股东号。
+- 每日资产汇总：发送到 private `#daily-stock-summary`，允许展示总资产、现金、证券市值、具体持仓金额和分类占比，但所有金额单位统一使用 CNY/人民币；仍禁止输出账号 ID、手机号、cookie、validatekey、token、交易密码、客户号或股东号。
 
 ## 验证
 

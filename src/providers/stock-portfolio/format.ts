@@ -57,6 +57,18 @@ function positionPnl(position: Record<string, unknown>): number | undefined {
   return num(position.daily_pnl) ?? num(position.pnl_value) ?? num(position.floating_pnl);
 }
 
+interface SourceTopPosition {
+  provider: StockPortfolioSourceOk["provider"];
+  config: string;
+  label?: string;
+  code: string;
+  name: string;
+  instrument_type: "stock" | "etf";
+  source_currency: string;
+  pnl: number;
+  pnl_ratio?: number;
+}
+
 function fxRateFor(currency: string, config: StockPortfolioProviderConfig, warnings: Set<string>): number | undefined {
   const normalized = currency.trim().toUpperCase() || config.base_currency;
   const rate = normalized === config.base_currency ? 1 : config.fx_rates[normalized];
@@ -77,7 +89,7 @@ function sourcePnlSummary(source: StockPortfolioSourceOk): Record<string, unknow
   return summary.pnl_summary;
 }
 
-function sourceTopPositions(source: StockPortfolioSourceOk, key: "top_gainers" | "top_losers"): StockPortfolioCnyPosition[] {
+function sourceTopPositions(source: StockPortfolioSourceOk, key: "top_gainers" | "top_losers"): SourceTopPosition[] {
   const summary = source.payload.positions_summary;
   if (!isRecord(summary) || !Array.isArray(summary[key])) return [];
   return summary[key]
@@ -88,22 +100,20 @@ function sourceTopPositions(source: StockPortfolioSourceOk, key: "top_gainers" |
       const currency = str(position.currency, "CNY").toUpperCase();
       const pnl = positionPnl(position);
       if (pnl === undefined) return undefined;
-      const candidate: StockPortfolioCnyPosition = {
+      const candidate: SourceTopPosition = {
         provider: source.provider,
         config: source.config,
         label: source.label,
         code,
         name,
         instrument_type: inferInstrumentType(code, name, position.instrument_type),
-        currency,
+        source_currency: currency,
         pnl,
-        pnl_cny: pnl,
-        fx_rate_to_cny: 1,
         pnl_ratio: num(position.pnl_ratio),
       };
       return candidate;
     })
-    .filter((position): position is StockPortfolioCnyPosition => position !== undefined);
+    .filter((position): position is SourceTopPosition => position !== undefined);
 }
 
 function categoryValue(value: unknown): AssetAllocationCategory | undefined {
@@ -128,6 +138,76 @@ function sourceAssetSummary(source: StockPortfolioSourceOk): Record<string, unkn
 function sourceAccountAlias(source: StockPortfolioSourceOk): string | undefined {
   const snapshot = isRecord(source.payload.snapshot) ? source.payload.snapshot : undefined;
   return str(snapshot?.account_alias, source.label ?? "");
+}
+
+function nestedSourceCurrency(payload: Record<string, unknown>): string | undefined {
+  const assetSummary = isRecord(payload.asset_summary) ? payload.asset_summary : undefined;
+  const positionsSummary = isRecord(payload.positions_summary) ? payload.positions_summary : undefined;
+  const pnlSummary = isRecord(positionsSummary?.pnl_summary) ? positionsSummary.pnl_summary : undefined;
+  const snapshot = isRecord(payload.snapshot) ? payload.snapshot : undefined;
+  const currency = str(assetSummary?.currency, str(pnlSummary?.currency, str(snapshot?.currency)));
+  return currency ? currency.toUpperCase() : undefined;
+}
+
+function sourcePnlSummaryCnyForReport(
+  source: StockPortfolioSourceOk,
+  config: StockPortfolioProviderConfig,
+): Record<string, unknown> | undefined {
+  const summary = sourcePnlSummary(source);
+  if (!summary) return undefined;
+  const currency = str(summary.currency, nestedSourceCurrency(source.payload) ?? "CNY").toUpperCase();
+  const rate = fxRateFor(currency, config, new Set<string>());
+  if (rate === undefined) return undefined;
+  const grossProfit = num(summary.gross_profit) ?? 0;
+  const grossLoss = num(summary.gross_loss) ?? 0;
+  const netPnl = num(summary.net_pnl) ?? grossProfit + grossLoss;
+  return {
+    source_currency: currency,
+    fx_rate_to_cny: rate,
+    gross_profit_cny: roundMoney(grossProfit * rate),
+    gross_loss_cny: roundMoney(grossLoss * rate),
+    net_pnl_cny: roundMoney(netPnl * rate),
+    winners_count: num(summary.winners_count) ?? 0,
+    losers_count: num(summary.losers_count) ?? 0,
+    flat_count: num(summary.flat_count) ?? 0,
+    positions_with_pnl_count: num(summary.positions_with_pnl_count) ?? 0,
+  };
+}
+
+function compactSourcePayloadForCnyReport(
+  source: StockPortfolioSourceOk,
+  config: StockPortfolioProviderConfig,
+): Record<string, unknown> {
+  const positionsSummary = isRecord(source.payload.positions_summary) ? source.payload.positions_summary : undefined;
+  const warnings = Array.isArray(source.payload.warnings)
+    ? source.payload.warnings.filter((item): item is string => typeof item === "string").map(sanitizeStockPortfolioError)
+    : undefined;
+
+  return {
+    source: str(source.payload.source),
+    profile: str(source.payload.profile),
+    account_alias: sourceAccountAlias(source),
+    market_session: str(source.payload.market_session),
+    redaction: str(source.payload.redaction),
+    source_currency: nestedSourceCurrency(source.payload),
+    positions_count: num(positionsSummary?.positions_count),
+    pnl_summary_cny: sourcePnlSummaryCnyForReport(source, config),
+    warnings,
+    usage_notes: [
+      "Nested source monetary fields are intentionally omitted from stock-portfolio asset summaries.",
+      "Use aggregate cny_summary and asset_summary fields only; all reportable money amounts are CNY.",
+    ],
+  };
+}
+
+function outputSourcesForConfig(
+  sources: StockPortfolioSourceResult[],
+  config: StockPortfolioProviderConfig,
+): StockPortfolioSourceResult[] {
+  if (!config.include_asset_summary) return sources;
+  return sources.map((source) => source.status === "ok"
+    ? { ...source, payload: compactSourcePayloadForCnyReport(source, config) }
+    : source);
 }
 
 function buildAssetSummary(
@@ -174,13 +254,10 @@ function buildAssetSummary(
       config: source.config,
       label: source.label,
       account_alias: sourceAccountAlias(source),
-      currency,
+      source_currency: currency,
       fx_rate_to_cny: rate,
-      total_assets: totalAssets,
       total_assets_cny: totalAssets === undefined ? undefined : roundMoney(totalAssets * rate),
-      market_value: marketValue,
       market_value_cny: marketValue === undefined ? undefined : roundMoney(marketValue * rate),
-      cash,
       cash_cny: cash === undefined ? undefined : roundMoney(cash * rate),
     });
 
@@ -209,10 +286,9 @@ function buildAssetSummary(
           source_label: source.label,
           code: str(rawHolding.code, "UNKNOWN"),
           name: str(rawHolding.name, "UNKNOWN"),
-          currency: str(rawHolding.currency, currency).toUpperCase(),
+          source_currency: str(rawHolding.currency, currency).toUpperCase(),
           category: holdingCategory,
           label: str(rawHolding.label, assetCategoryLabel(holdingCategory)),
-          market_value: roundMoney(holdingValue),
           market_value_cny: roundMoney(holdingValue * rate),
           fx_rate_to_cny: rate,
           instrument_type: str(rawHolding.instrument_type) || undefined,
@@ -291,10 +367,7 @@ function buildCnySummary(
     const grossLoss = num(summary.gross_loss) ?? 0;
     const netPnl = num(summary.net_pnl) ?? grossProfit + grossLoss;
     const current = byCurrency.get(currency) ?? {
-      currency,
-      gross_profit: 0,
-      gross_loss: 0,
-      net_pnl: 0,
+      source_currency: currency,
       gross_profit_cny: 0,
       gross_loss_cny: 0,
       net_pnl_cny: 0,
@@ -304,9 +377,6 @@ function buildCnySummary(
       positions_with_pnl_count: 0,
       fx_rate_to_cny: rate,
     };
-    current.gross_profit += grossProfit;
-    current.gross_loss += grossLoss;
-    current.net_pnl += netPnl;
     current.gross_profit_cny += grossProfit * rate;
     current.gross_loss_cny += grossLoss * rate;
     current.net_pnl_cny += netPnl * rate;
@@ -317,12 +387,19 @@ function buildCnySummary(
     byCurrency.set(currency, current);
 
     for (const position of [...sourceTopPositions(source, "top_gainers"), ...sourceTopPositions(source, "top_losers")]) {
-      const positionRate = fxRateFor(position.currency, config, warnings);
+      const positionRate = fxRateFor(position.source_currency, config, warnings);
       if (positionRate === undefined) continue;
-      const converted = {
-        ...position,
+      const converted: StockPortfolioCnyPosition = {
+        provider: position.provider,
+        config: position.config,
+        label: position.label,
+        code: position.code,
+        name: position.name,
+        instrument_type: position.instrument_type,
+        source_currency: position.source_currency,
         fx_rate_to_cny: positionRate,
         pnl_cny: roundMoney(position.pnl * positionRate),
+        pnl_ratio: position.pnl_ratio,
       };
       if (converted.pnl_cny > 0) topGainers.push(converted);
       else if (converted.pnl_cny < 0) topLosers.push(converted);
@@ -332,14 +409,11 @@ function buildCnySummary(
   const roundedByCurrency = [...byCurrency.values()]
     .map((item) => ({
       ...item,
-      gross_profit: roundMoney(item.gross_profit),
-      gross_loss: roundMoney(item.gross_loss),
-      net_pnl: roundMoney(item.net_pnl),
       gross_profit_cny: roundMoney(item.gross_profit_cny),
       gross_loss_cny: roundMoney(item.gross_loss_cny),
       net_pnl_cny: roundMoney(item.net_pnl_cny),
     }))
-    .sort((a, b) => a.currency.localeCompare(b.currency));
+    .sort((a, b) => a.source_currency.localeCompare(b.source_currency));
 
   const grossProfitCny = roundedByCurrency.reduce((sum, item) => sum + item.gross_profit_cny, 0);
   const grossLossCny = roundedByCurrency.reduce((sum, item) => sum + item.gross_loss_cny, 0);
@@ -388,7 +462,7 @@ export function buildStockPortfolioPayload(params: {
     market_scope: params.config.market_scope,
     ok_count: params.sources.length - failed.length,
     failed_count: failed.length,
-    sources: params.sources,
+    sources: outputSourcesForConfig(params.sources, params.config),
     cny_summary: cnySummary,
     asset_summary: assetSummary,
     warnings: [
@@ -399,7 +473,7 @@ export function buildStockPortfolioPayload(params: {
     usage_notes: [
       "This payload aggregates read-only broker providers for MiniClaw stock reports.",
       params.config.include_asset_summary
-        ? "Exact asset and holding market values may be intentionally included for trusted private channels; still do not output account ids, cookies, validate keys, passwords, or trade passwords."
+        ? "This asset summary is CNY-only for reportable money values. Do not render source-currency amounts; source_currency and fx_rate_to_cny are audit metadata only."
         : "Each nested provider payload is already redacted; do not output account ids, exact total assets, cookies, validate keys, passwords, or trade passwords.",
       "CNY P&L summary is calculated from configured FX rates before the LLM runs; mention fx_rates_as_of/source when reporting converted numbers.",
       "Asset allocation buckets are calculated before the LLM runs from broker position market values and cash balances.",

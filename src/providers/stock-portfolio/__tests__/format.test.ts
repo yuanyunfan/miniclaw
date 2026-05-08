@@ -114,11 +114,20 @@ describe("stock-portfolio formatter", () => {
       losers_count: 2,
     });
     expect(payload.cny_summary?.by_currency).toHaveLength(2);
+    expect(payload.cny_summary?.by_currency).toEqual(expect.arrayContaining([
+      expect.objectContaining({ source_currency: "HKD", gross_profit_cny: 92, gross_loss_cny: -27.6 }),
+      expect.objectContaining({ source_currency: "CNY", gross_profit_cny: 50, gross_loss_cny: -10 }),
+    ]));
+    expect(payload.cny_summary?.by_currency[0]).not.toHaveProperty("gross_profit");
+    expect(payload.cny_summary?.by_currency[0]).not.toHaveProperty("currency");
     expect(payload.cny_summary?.top_gainers[0]).toMatchObject({
       code: "HK.00700",
+      source_currency: "HKD",
       pnl_cny: 92,
       instrument_type: "stock",
     });
+    expect(payload.cny_summary?.top_gainers[0]).not.toHaveProperty("pnl");
+    expect(payload.cny_summary?.top_gainers[0]).not.toHaveProperty("currency");
     expect(payload.cny_summary?.top_losers[0]).toMatchObject({
       code: "HK.02800",
       pnl_cny: -27.6,
@@ -139,6 +148,19 @@ describe("stock-portfolio formatter", () => {
           status: "ok",
           payload: {
             snapshot: { account_alias: "Futu HK" },
+            positions_summary: {
+              positions_count: 1,
+              pnl_summary: {
+                currency: "HKD",
+                gross_profit: 10,
+                gross_loss: -2,
+                net_pnl: 8,
+                winners_count: 1,
+                losers_count: 1,
+                flat_count: 0,
+                positions_with_pnl_count: 2,
+              },
+            },
             asset_summary: {
               currency: "HKD",
               total_assets: 1000,
@@ -204,5 +226,23 @@ describe("stock-portfolio formatter", () => {
       expect.objectContaining({ category: "gold", market_value_cny: 1500 }),
       expect.objectContaining({ category: "cash", market_value_cny: 684 }),
     ]));
+    expect(payload.asset_summary?.by_account[0]).not.toHaveProperty("total_assets");
+    expect(payload.asset_summary?.by_account[0]).not.toHaveProperty("market_value");
+    expect(payload.asset_summary?.by_account[0]).not.toHaveProperty("cash");
+    expect(payload.asset_summary?.by_category[0].holdings[0]).not.toHaveProperty("market_value");
+    expect(payload.asset_summary?.by_category[0].holdings[0]).not.toHaveProperty("currency");
+
+    const formatted = formatStockPortfolioPayload(payload);
+    const parsed = JSON.parse(formatted);
+    expect(parsed.sources[0].payload).toMatchObject({
+      source_currency: "HKD",
+      pnl_summary_cny: {
+        source_currency: "HKD",
+        gross_profit_cny: 9.2,
+        gross_loss_cny: -1.84,
+        net_pnl_cny: 7.36,
+      },
+    });
+    expect(formatted).not.toMatch(/"(total_assets|market_value|cash|pnl|gross_profit|gross_loss|net_pnl)"\s*:/);
   });
 });
