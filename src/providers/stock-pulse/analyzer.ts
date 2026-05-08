@@ -2,6 +2,7 @@ import { zonedDateKey } from "./market.js";
 import type {
   StockPulseAlert,
   StockPulseBaseline,
+  StockPulsePositionSnapshot,
   StockPulseQuoteBar,
   StockPulseQuoteSeries,
   StockPulseSymbol,
@@ -92,6 +93,35 @@ function latestMarketDayOpen(bars: StockPulseQuoteBar[], timezone: string): numb
   if (!latest) return undefined;
   const latestDay = zonedDateKey(new Date(latest.timestamp), timezone);
   return bars.find((bar) => zonedDateKey(new Date(bar.timestamp), timezone) === latestDay)?.close;
+}
+
+export function buildStockPulsePositionSnapshot(params: {
+  symbol: StockPulseSymbol;
+  series: StockPulseQuoteSeries;
+  marketTimezone: string;
+}): StockPulsePositionSnapshot | undefined {
+  const bars = params.series.bars
+    .filter((bar) => Number.isFinite(bar.close))
+    .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
+  const latest = bars.at(-1);
+  if (!latest) return undefined;
+  const hourStart = bars.length > HOUR_WINDOW_BARS ? bars.at(-HOUR_WINDOW_BARS - 1) : bars.at(0);
+  const dayOpen = latestMarketDayOpen(bars, params.marketTimezone) ?? params.series.previous_close;
+  return {
+    symbol: params.symbol.symbol,
+    yahoo_symbol: params.symbol.yahoo_symbol,
+    name: params.symbol.name,
+    market: params.symbol.market,
+    instrument_type: params.symbol.instrument_type,
+    sources: params.symbol.sources,
+    latest_price: latest.close,
+    price_currency: params.series.currency,
+    latest_at: latest.timestamp,
+    previous_close: params.series.previous_close,
+    hour_return_pct: hourStart && hourStart.timestamp !== latest.timestamp ? round(pct(hourStart.close, latest.close)) : undefined,
+    day_return_pct: dayOpen === undefined ? undefined : round(pct(dayOpen, latest.close)),
+    portfolio: params.symbol.portfolio,
+  };
 }
 
 export function analyzeStockPulseSeries(params: {

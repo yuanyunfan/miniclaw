@@ -15,6 +15,24 @@ function str(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+function num(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function sourceFxRates(payload: unknown): Record<string, number> {
+  if (!isRecord(payload) || !isRecord(payload.cny_summary) || !isRecord(payload.cny_summary.fx_rates)) return {};
+  const out: Record<string, number> = {};
+  for (const [currency, raw] of Object.entries(payload.cny_summary.fx_rates)) {
+    const rate = num(raw);
+    if (rate !== undefined && rate > 0) out[currency.toUpperCase()] = rate;
+  }
+  return out;
+}
+
 function inferMarketFromCode(code: string, scope: StockPulseMarketScope): StockPulseMarket {
   const normalized = code.trim().toUpperCase();
   if (normalized.startsWith("US.")) return "us";
@@ -37,7 +55,7 @@ export function toYahooSymbol(code: string, market: StockPulseMarket): string {
   const normalized = code.trim().toUpperCase();
   if (!normalized) return normalized;
   if (normalized.endsWith(".SS") || normalized.endsWith(".SZ") || normalized.endsWith(".HK")) return normalized;
-  if (normalized.startsWith("US.")) return normalized.slice(3);
+  if (normalized.startsWith("US.")) return normalized.slice(3).replace(/\./g, "-");
   if (normalized.startsWith("HK.")) return `${normalized.slice(3).padStart(4, "0")}.HK`;
   if (normalized.startsWith("SH.")) return `${normalized.slice(3)}.SS`;
   if (normalized.startsWith("SZ.")) return `${normalized.slice(3)}.SZ`;
@@ -46,7 +64,7 @@ export function toYahooSymbol(code: string, market: StockPulseMarket): string {
     if (/^[56]/.test(normalized)) return `${normalized}.SS`;
     return `${normalized}.SZ`;
   }
-  return normalized;
+  return market === "us" ? normalized.replace(/\./g, "-") : normalized;
 }
 
 function normalizeSymbol(
@@ -77,9 +95,37 @@ function mergeSymbol(target: Map<string, StockPulseSymbol>, symbol: StockPulseSy
     if (!existing.sources.includes(source)) existing.sources.push(source);
   }
   if (!existing.name && symbol.name) existing.name = symbol.name;
+  if (!existing.portfolio && symbol.portfolio) existing.portfolio = symbol.portfolio;
   if (existing.instrument_type === "stock" && symbol.instrument_type !== "stock") {
     existing.instrument_type = symbol.instrument_type;
   }
+}
+
+function rowPortfolioPnl(row: Record<string, unknown>, sourceLabel: string, fxRates: Record<string, number>): StockPulseSymbol["portfolio"] {
+  const sourceCurrency = str(row.currency)?.toUpperCase();
+  const fxRate = sourceCurrency ? fxRates[sourceCurrency] : undefined;
+  const dailyPnl = num(row.daily_pnl);
+  const unrealizedPnl = num(row.unrealized_pnl) ?? num(row.pnl_value) ?? num(row.floating_pnl);
+  const realizedPnl = num(row.realized_pnl);
+  const pnlRatio = num(row.pnl_ratio) ?? num(row.daily_pnl_ratio);
+  if (
+    sourceCurrency === undefined
+    && dailyPnl === undefined
+    && unrealizedPnl === undefined
+    && realizedPnl === undefined
+    && pnlRatio === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    source_label: sourceLabel,
+    source_currency: sourceCurrency,
+    fx_rate_to_cny: fxRate,
+    daily_pnl_cny: dailyPnl !== undefined && fxRate !== undefined ? roundMoney(dailyPnl * fxRate) : undefined,
+    unrealized_pnl_cny: unrealizedPnl !== undefined && fxRate !== undefined ? roundMoney(unrealizedPnl * fxRate) : undefined,
+    realized_pnl_cny: realizedPnl !== undefined && fxRate !== undefined ? roundMoney(realizedPnl * fxRate) : undefined,
+    pnl_ratio: pnlRatio,
+  };
 }
 
 function collectPositionsArray(payload: Record<string, unknown>, key: string): Record<string, unknown>[] {
@@ -91,6 +137,7 @@ function collectPositionsArray(payload: Record<string, unknown>, key: string): R
 export function extractPortfolioSymbols(portfolioPayload: unknown, scope: StockPulseMarketScope): StockPulseSymbol[] {
   if (!isRecord(portfolioPayload) || !Array.isArray(portfolioPayload.sources)) return [];
   const out = new Map<string, StockPulseSymbol>();
+  const fxRates = sourceFxRates(portfolioPayload);
   for (const source of portfolioPayload.sources.filter(isRecord)) {
     if (source.status !== "ok" || !isRecord(source.payload)) continue;
     const sourceName = str(source.label) ?? str(source.provider) ?? "portfolio";
@@ -108,6 +155,7 @@ export function extractPortfolioSymbols(portfolioPayload: unknown, scope: StockP
         instrument_type: str(row.instrument_type) as StockPulseInstrumentType | undefined,
         source: `portfolio:${sourceName}`,
       }, scope);
+      if (normalized) normalized.portfolio = rowPortfolioPnl(row, sourceName, fxRates);
       if (normalized) mergeSymbol(out, normalized);
     }
   }

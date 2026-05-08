@@ -21,7 +21,8 @@ cron task
     -> 合并 watchlist；仅在 include_sources=true 时合并 universe sources
     -> Yahoo chart 5m/60d bars
     -> deterministic anomaly scoring
-  -> LLM 只解释 alerts[]
+    -> positions[] 当前盘中持仓快照
+  -> LLM 输出 positions[] 快照，只把 alerts[] 当异常列表解释
   -> Discord #daily-us-stock / #daily-cn-stock
 ```
 
@@ -63,6 +64,8 @@ pre_provider_config: us-hourly
 
 每只股票会计算：
 
+- `positions[]`: 所有成功报价的扫描股票，包含当前价、价格币种、60m/日内涨跌幅，以及 portfolio 提供的 CNY 盈亏字段。
+- `position_groups`: 按 `portfolio.unrealized_pnl_cny` 分成 `profitable`、`losing`、`flat_or_unknown`；盈利组按浮动盈利从大到小，亏损组按亏损绝对值从大到小。
 - `hour_return_pct`: 最近约 60 分钟涨跌幅。
 - `day_return_pct`: 当日涨跌幅。
 - `abnormal_bar_count`: 最近 60 分钟内异常 5m bar 数量。
@@ -101,7 +104,7 @@ P3 不是直接让 LLM 全市场搜索。开启 `universe.include_sources=true` 
 
 ## 输出约束
 
-LLM 只能分析 `alerts[]` 中的股票。若 `run_context.skipped=true`，只输出跳过原因；若 `alerts=[]`，只输出无异常的简短状态，避免每小时制造长噪音。
+LLM 只能把 `alerts[]` 当作异常列表。若 `run_context.skipped=true`，只输出跳过原因；若 `alerts=[]`，仍应输出 `position_groups` 中当前盘中持仓快照，说明每只股票当前价、涨跌幅和 CNY 盈亏，但不要编造异常原因。
 
 所有报告都是分析用途，不生成自动交易指令，不接触交易 endpoint。
 

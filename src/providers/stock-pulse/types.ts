@@ -94,6 +94,7 @@ export interface StockPulseSymbol {
   yahoo_symbol: string;
   instrument_type: StockPulseInstrumentType;
   sources: string[];
+  portfolio?: StockPulsePortfolioPnl;
 }
 
 export interface StockPulseUniverseSymbol {
@@ -136,6 +137,38 @@ export interface StockPulseBaseline {
   sample_hour_window_count: number;
 }
 
+export interface StockPulsePortfolioPnl {
+  source_label?: string;
+  source_currency?: string;
+  fx_rate_to_cny?: number;
+  daily_pnl_cny?: number;
+  unrealized_pnl_cny?: number;
+  realized_pnl_cny?: number;
+  pnl_ratio?: number;
+}
+
+export interface StockPulsePositionSnapshot {
+  symbol: string;
+  yahoo_symbol: string;
+  name?: string;
+  market: StockPulseMarket;
+  instrument_type: StockPulseInstrumentType;
+  sources: string[];
+  latest_price: number;
+  price_currency?: string;
+  latest_at: string;
+  previous_close?: number;
+  hour_return_pct?: number;
+  day_return_pct?: number;
+  portfolio?: StockPulsePortfolioPnl;
+}
+
+export interface StockPulsePositionGroups {
+  profitable: StockPulsePositionSnapshot[];
+  losing: StockPulsePositionSnapshot[];
+  flat_or_unknown: StockPulsePositionSnapshot[];
+}
+
 export interface StockPulseAlert {
   symbol: string;
   yahoo_symbol: string;
@@ -158,6 +191,15 @@ export interface StockPulseAlert {
   baseline: StockPulseBaseline;
 }
 
+export interface StockPulseQuoteFailure {
+  symbol: string;
+  yahoo_symbol: string;
+  name?: string;
+  market: StockPulseMarket;
+  sources: string[];
+  error: string;
+}
+
 export interface StockPulsePayload {
   generated_at: string;
   source: "stock-pulse";
@@ -176,7 +218,10 @@ export interface StockPulsePayload {
     scanned_symbols: number;
     failed_symbols: number;
   };
+  positions: StockPulsePositionSnapshot[];
+  position_groups: StockPulsePositionGroups;
   alerts: StockPulseAlert[];
+  failures: StockPulseQuoteFailure[];
   warnings: string[];
   usage_notes: string[];
 }

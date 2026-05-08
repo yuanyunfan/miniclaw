@@ -80,6 +80,9 @@ describe("runStockPulseProvider", () => {
       quoteClient,
       portfolioRunner: async () => ({
         text: JSON.stringify({
+          cny_summary: {
+            fx_rates: { USD: 7.1 },
+          },
           sources: [
             {
               status: "ok",
@@ -87,7 +90,7 @@ describe("runStockPulseProvider", () => {
               label: "Futu US",
               payload: {
                 positions_summary: {
-                  top_positions: [{ code: "AAPL", name: "Apple", instrument_type: "stock" }],
+                  top_positions: [{ code: "AAPL", name: "Apple", currency: "USD", instrument_type: "stock", daily_pnl: 10, pnl_value: 50, pnl_ratio: 1.25 }],
                   top_gainers: [],
                   top_losers: [],
                 },
@@ -104,6 +107,25 @@ describe("runStockPulseProvider", () => {
     expect(parsed.universe.portfolio_symbols).toBe(1);
     expect(parsed.universe.universe_source_symbols).toBe(1);
     expect(parsed.universe.scanned_symbols).toBe(3);
+    expect(parsed.positions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        symbol: "AAPL",
+        yahoo_symbol: "AAPL",
+        latest_price: expect.any(Number),
+        day_return_pct: expect.any(Number),
+        portfolio: expect.objectContaining({
+          source_currency: "USD",
+          daily_pnl_cny: 71,
+          unrealized_pnl_cny: 355,
+          pnl_ratio: 1.25,
+        }),
+      }),
+    ]));
+    expect(parsed.position_groups.profitable[0]).toMatchObject({
+      symbol: "AAPL",
+      portfolio: expect.objectContaining({ unrealized_pnl_cny: 355 }),
+    });
+    expect(parsed.position_groups.losing).toEqual([]);
     expect(parsed.alerts.map((alert: { symbol: string }) => alert.symbol)).toContain("AAPL");
     await result.commit?.();
     expect(committed).toBe(true);
