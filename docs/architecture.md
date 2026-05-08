@@ -28,6 +28,8 @@ flowchart LR
             CRON["cron/scheduler.ts<br/>node-cron 调度"]
             MCP["agent/mcp.ts<br/>从 ~/.claude.json 复用 Claude MCP"]
             RCFG["agent/runtime-config.ts<br/>/agent-config 继承摘要"]
+            MON["monitoring/connectivity-monitor.ts<br/>Discord/HTTPS/SMTP 链路探测"]
+            NOTIFY["notifications/smtp-email.ts<br/>Email fallback 告警"]
         end
 
         subgraph Stage["Stage 子系统进程 (pnpm stage)"]
@@ -51,6 +53,7 @@ flowchart LR
             UC9["logs/miniclaw-{out,error}.log<br/>pm2 日志落盘"]
             UC10["providers/wechat-mp/*.yaml<br/>公众号采集配置 + state"]
             UC11["secrets/wechat-mp-session.json<br/>公众号后台登录态"]
+            UC12["runtime/connectivity.json<br/>链路探测状态"]
             DB[("data.db<br/>SQLite WAL<br/>tasks · chat_history · scenes · scene_messages")]
         end
 
@@ -64,6 +67,7 @@ flowchart LR
         OPENAI["OpenAI Codex<br/>Codex SDK / CLI config"]
         EXA["exa MCP<br/>(web search)"]
         CTX7["context7 MCP<br/>(library docs)"]
+        SMTP["SMTP 服务<br/>QQ 邮箱等 Email fallback"]
     end
 
     User -->|"@bot / 在白名单频道发消息"| DC
@@ -78,6 +82,9 @@ flowchart LR
     BOT -->|"/task"| HANDLERS
     HANDLERS --> TASK
     CRON -->|"到点 dispatch"| TASK
+    MON -->|"Discord REST / gateway 探测"| DC
+    MON -->|"Discord 不通但 SMTP 可用"| NOTIFY
+    NOTIFY -->|"SMTP"| SMTP
     CRON -->|"type=script"| UC3
 
     CHAT -->|"Claude: messages.stream"| Raven
@@ -403,7 +410,15 @@ flowchart LR
 
 ---
 
-## 5. 用户级目录布局（`~/.miniclaw/`）
+## 5. Connectivity Monitor
+
+`connectivity-monitor.ts` 在 Discord `ClientReady` 后启动，默认每 60 秒检查一次 Discord gateway、Discord REST、普通 HTTPS 网络和 SMTP reachability。结果写入 `~/.miniclaw/runtime/connectivity.json`。连续失败达到 `connectivity.failure_threshold` 后，如果普通网络和 SMTP 可用但 Discord 不可用，会通过 `notifications/smtp-email.ts` 发送 Email fallback；Discord 恢复后再发送一次恢复邮件。
+
+这个 monitor 是进程内能力，只能发现 “MiniClaw 活着但 Discord 链路异常” 的问题。它不替代外部 watchdog；如果 Node 进程、pm2、Mac 或整机网络都不可用，仍然需要 launchd/外部机器兜底。
+
+---
+
+## 6. 用户级目录布局（`~/.miniclaw/`）
 
 ```
 ~/.miniclaw/
@@ -448,6 +463,8 @@ flowchart LR
 │   └── *.md                 # Stage 用户级 persona (覆盖 repo personas/)
 ├── scenes/
 │   └── *.md                 # Stage `/save <name>` 输出的 transcript
+├── runtime/
+│   └── connectivity.json    # Discord / HTTPS / SMTP 链路探测状态（无 secret）
 ├── logs/
 │   └── miniclaw-{out,error}.log  # pm2 模式日志（配置在 ecosystem.config.cjs）
 └── channel-map.json         # setup-miniclaw-channels.ts 输出
@@ -457,7 +474,7 @@ flowchart LR
 
 ---
 
-## 6. 附件流（多模态）
+## 7. 附件流（多模态）
 
 源文件：`src/discord/attachments.ts`。`bot.ts` MessageCreate 和 `handlers.ts` `/task` 都在调它。
 

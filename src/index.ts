@@ -3,11 +3,13 @@ import { initDb } from "./store/db.js";
 import { registerCommands } from "./commands/register.js";
 import { createBot } from "./bot.js";
 import { startScheduler, stopScheduler } from "./cron/scheduler.js";
+import { startConnectivityMonitor, type ConnectivityMonitorHandle } from "./monitoring/connectivity-monitor.js";
 import { createLogger } from "./lib/log.js";
 import { Events } from "discord.js";
 
 const log = createLogger("main");
 let bot: ReturnType<typeof createBot> | null = null;
+let connectivityMonitor: ConnectivityMonitorHandle | null = null;
 
 async function main(): Promise<void> {
   log.info("Starting...");
@@ -29,6 +31,7 @@ async function main(): Promise<void> {
 
   bot = createBot();
   bot.once(Events.ClientReady, (client) => {
+    connectivityMonitor = startConnectivityMonitor(client);
     if (config.e2e.disableScheduler) {
       log.info("Cron scheduler disabled by MINICLAW_DISABLE_SCHEDULER");
       return;
@@ -39,6 +42,7 @@ async function main(): Promise<void> {
 
   const shutdown = () => {
     log.info("Shutting down...");
+    connectivityMonitor?.stop();
     stopScheduler();
     void bot?.destroy();
     process.exit(0);
@@ -50,6 +54,7 @@ async function main(): Promise<void> {
 
 main().catch((err) => {
   log.error("Fatal error:", err);
+  connectivityMonitor?.stop();
   void bot?.destroy();
   process.exit(1);
 });

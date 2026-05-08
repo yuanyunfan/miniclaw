@@ -19,6 +19,8 @@
 - Discord 文案生成。
 - 发送、删除、移动、标记已读、回复或转发邮件。
 
+MiniClaw 现在另有一个通用 **SMTP notifier**：`src/notifications/smtp-email.ts`。它只用于系统告警，例如 Connectivity Monitor 在 Discord 链路中断时发送 Email fallback。这个 notifier 不属于 `src/capabilities/email`，不会改变 Email capability 的只读边界。
+
 ## 当前支持
 
 第一版只实现 IMAP adapter：

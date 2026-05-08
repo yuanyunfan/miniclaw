@@ -62,6 +62,20 @@ const ENV_KEYS = [
   "MINICLAW_E2E_FAKE_AGENT",
   "MINICLAW_MAX_ATTACHMENT_MB",
   "MINICLAW_MAX_ATTACHMENTS",
+  "MINICLAW_CONNECTIVITY_MONITOR_ENABLED",
+  "MINICLAW_CONNECTIVITY_INTERVAL_MS",
+  "MINICLAW_CONNECTIVITY_FAILURE_THRESHOLD",
+  "MINICLAW_CONNECTIVITY_REQUEST_TIMEOUT_MS",
+  "MINICLAW_CONNECTIVITY_GENERAL_TEST_URL",
+  "MINICLAW_CONNECTIVITY_STATE_PATH",
+  "MINICLAW_NOTIFY_EMAIL_ENABLED",
+  "MINICLAW_NOTIFY_EMAIL_SMTP_HOST",
+  "MINICLAW_NOTIFY_EMAIL_SMTP_PORT",
+  "MINICLAW_NOTIFY_EMAIL_USE_SSL",
+  "MINICLAW_NOTIFY_EMAIL_USERNAME",
+  "MINICLAW_NOTIFY_EMAIL_PASSWORD",
+  "MINICLAW_NOTIFY_EMAIL_FROM",
+  "MINICLAW_NOTIFY_EMAIL_TO",
 ] as const;
 
 let tmpDir: string;
@@ -159,6 +173,23 @@ storage:
 attachments:
   max_mb: 16
   max_count: 3
+connectivity:
+  enabled: true
+  interval_ms: 30000
+  failure_threshold: 2
+  request_timeout_ms: 5000
+  general_test_url: "https://example.com/health"
+  state_path: "${join(tmpDir, "connectivity.json")}"
+notifications:
+  email:
+    enabled: true
+    smtp_host: "smtp.example.com"
+    smtp_port: 465
+    use_ssl: true
+    username: "notify@example.com"
+    password: "pw"
+    from: "notify@example.com"
+    to: "owner@example.com"
 `);
     process.env.MINICLAW_CONFIG = cfg;
     process.env.DISCORD_TOKEN = "token-env";
@@ -195,7 +226,62 @@ attachments:
       context: { includeRecentWhenReferenced: true, recentTurns: 4, maxChars: 4000 },
       decisionLog: { enabled: true, store: "sqlite", promptPreviewChars: 120, storeFullPrompt: false },
     });
+    expect(config.connectivity).toEqual({
+      enabled: true,
+      intervalMs: 30000,
+      failureThreshold: 2,
+      requestTimeoutMs: 5000,
+      generalTestUrl: "https://example.com/health",
+      statePath: join(tmpDir, "connectivity.json"),
+    });
+    expect(config.notifications.email).toMatchObject({
+      enabled: true,
+      smtpHost: "smtp.example.com",
+      smtpPort: 465,
+      useSsl: true,
+      username: "notify@example.com",
+      password: "pw",
+      from: "notify@example.com",
+      to: "owner@example.com",
+    });
     expect(config.maxAttachments).toBe(3);
+  });
+
+  it("supports legacy top-level email SMTP config for notifications", async () => {
+    const cfg = join(tmpDir, "config.yaml");
+    writeFileSync(cfg, `
+discord:
+  client_id: "client-yaml"
+  guild_id: "guild-yaml"
+  allowed_user_id: "user-yaml"
+agent:
+  provider: codex
+  default_cwd: "${tmpDir}"
+storage:
+  db_path: "${join(tmpDir, "data.db")}"
+  memory_path: "${join(tmpDir, "MEMORY.md")}"
+email:
+  smtp_host: "smtp.qq.com"
+  smtp_port: 465
+  use_ssl: true
+  username: "notify@qq.com"
+  password: "pw"
+  to: "notify@qq.com"
+`);
+    process.env.MINICLAW_CONFIG = cfg;
+    process.env.DISCORD_TOKEN = "token-env";
+
+    const { config } = await import("../config.js");
+
+    expect(config.notifications.email).toMatchObject({
+      enabled: true,
+      smtpHost: "smtp.qq.com",
+      smtpPort: 465,
+      useSsl: true,
+      username: "notify@qq.com",
+      password: "pw",
+      to: "notify@qq.com",
+    });
   });
 
   it("keeps legacy env keys as overrides and ignores blank env values", async () => {

@@ -1,0 +1,117 @@
+import type { Client } from "discord.js";
+import { config } from "../config.js";
+import { createLogger } from "../lib/log.js";
+import { sendSmtpEmail, verifySmtpReachability } from "../notifications/smtp-email.js";
+import { runConnectivityTick, type ProbeResult } from "./connectivity-core.js";
+
+const log = createLogger("connectivity");
+
+export interface ConnectivityMonitorHandle {
+  stop(): void;
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timeout`)), timeoutMs);
+        timer.unref?.();
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function measure(label: string, fn: () => Promise<void>): Promise<ProbeResult> {
+  const started = Date.now();
+  try {
+    await fn();
+    return { ok: true, latency_ms: Date.now() - started };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, latency_ms: Date.now() - started, error: `${label}: ${message}` };
+  }
+}
+
+function smtpConfigured(): boolean {
+  const email = config.notifications.email;
+  return Boolean(email.enabled && email.smtpHost);
+}
+
+function emailSendConfigured(): boolean {
+  const email = config.notifications.email;
+  return Boolean(email.enabled && email.smtpHost && email.to && email.username && email.password);
+}
+
+export function startConnectivityMonitor(client: Client): ConnectivityMonitorHandle {
+  if (!config.connectivity.enabled) {
+    log.info("connectivity monitor disabled");
+    return { stop: () => {} };
+  }
+
+  let running = false;
+  let stopped = false;
+  let lastStatus = "";
+
+  const runOnce = async () => {
+    if (running || stopped) return;
+    running = true;
+    try {
+      const snapshot = await runConnectivityTick({
+        statePath: config.connectivity.statePath,
+        failureThreshold: config.connectivity.failureThreshold,
+        checkers: {
+          discordGateway: async () => measure("discord gateway", async () => {
+            if (!client.isReady()) throw new Error("client is not ready");
+          }),
+          discordRest: async () => measure("discord rest", async () => {
+            await withTimeout(client.guilds.fetch(config.discord.guildId).then(() => undefined), config.connectivity.requestTimeoutMs, "discord rest");
+          }),
+          generalNetwork: async () => measure("general network", async () => {
+            const response = await fetch(config.connectivity.generalTestUrl, {
+              method: "GET",
+              signal: AbortSignal.timeout(config.connectivity.requestTimeoutMs),
+            });
+            await response.body?.cancel().catch(() => undefined);
+          }),
+          smtp: async () => {
+            if (!smtpConfigured()) {
+              return { ok: false, skipped: true, error: "email fallback is not configured" };
+            }
+            return measure("smtp", async () => {
+              await verifySmtpReachability(config.notifications.email, config.connectivity.requestTimeoutMs);
+            });
+          },
+        },
+        sendEmail: emailSendConfigured()
+          ? async (message) => {
+            await sendSmtpEmail(config.notifications.email, message, config.connectivity.requestTimeoutMs);
+          }
+          : undefined,
+      });
+      if (snapshot.status !== lastStatus) {
+        log.info(`connectivity status=${snapshot.status} consecutive=${snapshot.consecutive_failures}`);
+        lastStatus = snapshot.status;
+      }
+    } catch (err) {
+      log.error("connectivity monitor tick failed:", err);
+    } finally {
+      running = false;
+    }
+  };
+
+  void runOnce();
+  const timer = setInterval(() => void runOnce(), config.connectivity.intervalMs);
+  timer.unref?.();
+  log.info(`connectivity monitor started interval=${config.connectivity.intervalMs}ms state=${config.connectivity.statePath}`);
+
+  return {
+    stop() {
+      stopped = true;
+      clearInterval(timer);
+    },
+  };
+}

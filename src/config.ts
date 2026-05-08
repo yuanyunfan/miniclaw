@@ -15,6 +15,17 @@ export type CodexWebSearchMode = "disabled" | "cached" | "live";
 export type ClaudeSettingSource = "user" | "project" | "local";
 export type SmartRouterDefaultMode = "suggest" | "confirm" | "auto";
 
+export interface SmtpEmailNotificationConfig {
+  enabled: boolean;
+  smtpHost?: string;
+  smtpPort: number;
+  useSsl: boolean;
+  username?: string;
+  password?: string;
+  from?: string;
+  to?: string;
+}
+
 type ConfigObject = Record<string, unknown>;
 type ConfigPath = readonly string[];
 
@@ -235,7 +246,7 @@ function settingSources(paths: ConfigPath, envKeys: string | readonly string[], 
   return [...seen];
 }
 
-function positiveNumber(paths: ConfigPath, envKeys: string | readonly string[], fallback: number): number {
+function positiveNumber(paths: ConfigPath | readonly ConfigPath[], envKeys: string | readonly string[], fallback: number): number {
   const raw = readRaw(paths, envKeys, fallback);
   const name = optionName(paths, envKeys);
   const n = typeof raw === "number" ? raw : Number(scalarString(raw, name));
@@ -253,7 +264,7 @@ function confidenceNumber(paths: ConfigPath, envKeys: string | readonly string[]
   return n;
 }
 
-function positiveInt(paths: ConfigPath, envKeys: string | readonly string[], fallback: number): number {
+function positiveInt(paths: ConfigPath | readonly ConfigPath[], envKeys: string | readonly string[], fallback: number): number {
   const n = positiveNumber(paths, envKeys, fallback);
   if (!Number.isInteger(n)) throw new Error(`Invalid config ${optionName(paths, envKeys)}: expected positive integer`);
   return n;
@@ -320,6 +331,28 @@ const e2eFakeAgent = boolValue(["e2e", "fake_agent"], "MINICLAW_E2E_FAKE_AGENT",
 const defaultCwd = resolveHome(requiredString(["agent", "default_cwd"], "MINICLAW_DEFAULT_CWD", "~/Code"));
 const dbPath = resolveHome(requiredString(["storage", "db_path"], "MINICLAW_DB_PATH", "~/.miniclaw/data.db"));
 const memoryPath = resolveHome(requiredString(["storage", "memory_path"], "MINICLAW_MEMORY_PATH", "~/.miniclaw/memories/MEMORY.md"));
+const connectivityStatePath = resolveHome(requiredString(
+  ["connectivity", "state_path"],
+  "MINICLAW_CONNECTIVITY_STATE_PATH",
+  "~/.miniclaw/runtime/connectivity.json"
+));
+const notifyEmailHost = optionalString([
+  ["notifications", "email", "smtp_host"],
+  ["email", "smtp_host"],
+], "MINICLAW_NOTIFY_EMAIL_SMTP_HOST");
+const notifyEmailUsername = optionalString([
+  ["notifications", "email", "username"],
+  ["email", "username"],
+], "MINICLAW_NOTIFY_EMAIL_USERNAME");
+const notifyEmailPassword = optionalString([
+  ["notifications", "email", "password"],
+  ["email", "password"],
+], "MINICLAW_NOTIFY_EMAIL_PASSWORD");
+const notifyEmailTo = optionalString([
+  ["notifications", "email", "to"],
+  ["email", "to"],
+], "MINICLAW_NOTIFY_EMAIL_TO");
+const notifyEmailEnabledByConfig = Boolean(notifyEmailHost && notifyEmailUsername && notifyEmailPassword && notifyEmailTo);
 
 if (anthropicBaseUrl && !process.env.ANTHROPIC_BASE_URL) process.env.ANTHROPIC_BASE_URL = anthropicBaseUrl;
 if (openaiBaseUrl && !process.env.OPENAI_BASE_URL) process.env.OPENAI_BASE_URL = openaiBaseUrl;
@@ -545,6 +578,38 @@ export const config = {
     disableScheduler,
     fakeAgent: e2eFakeAgent,
     tempRoot: tmpdir(),
+  },
+  connectivity: {
+    enabled: boolValue(["connectivity", "enabled"], "MINICLAW_CONNECTIVITY_MONITOR_ENABLED", !e2eMode),
+    intervalMs: positiveNumber(["connectivity", "interval_ms"], "MINICLAW_CONNECTIVITY_INTERVAL_MS", 60_000),
+    failureThreshold: positiveInt(["connectivity", "failure_threshold"], "MINICLAW_CONNECTIVITY_FAILURE_THRESHOLD", 3),
+    requestTimeoutMs: positiveNumber(["connectivity", "request_timeout_ms"], "MINICLAW_CONNECTIVITY_REQUEST_TIMEOUT_MS", 10_000),
+    generalTestUrl: requiredString(["connectivity", "general_test_url"], "MINICLAW_CONNECTIVITY_GENERAL_TEST_URL", "https://www.qq.com"),
+    statePath: connectivityStatePath,
+  },
+  notifications: {
+    email: {
+      enabled: boolValue([
+        ["notifications", "email", "enabled"],
+        ["email", "enabled"],
+      ], "MINICLAW_NOTIFY_EMAIL_ENABLED", notifyEmailEnabledByConfig),
+      smtpHost: notifyEmailHost,
+      smtpPort: positiveInt([
+        ["notifications", "email", "smtp_port"],
+        ["email", "smtp_port"],
+      ], "MINICLAW_NOTIFY_EMAIL_SMTP_PORT", 465),
+      useSsl: boolValue([
+        ["notifications", "email", "use_ssl"],
+        ["email", "use_ssl"],
+      ], "MINICLAW_NOTIFY_EMAIL_USE_SSL", true),
+      username: notifyEmailUsername,
+      password: notifyEmailPassword,
+      from: optionalString([
+        ["notifications", "email", "from"],
+        ["email", "from"],
+      ], "MINICLAW_NOTIFY_EMAIL_FROM"),
+      to: notifyEmailTo,
+    } satisfies SmtpEmailNotificationConfig,
   },
   maxAttachmentMb: positiveNumber(["attachments", "max_mb"], "MINICLAW_MAX_ATTACHMENT_MB", 32),
   maxAttachments: positiveInt(["attachments", "max_count"], "MINICLAW_MAX_ATTACHMENTS", 10),
