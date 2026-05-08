@@ -83,6 +83,7 @@ export interface EastmoneyJywgPositionSummary {
   last_price?: number;
   market_value?: number;
   daily_pnl?: number;
+  daily_pnl_ratio?: number;
   floating_pnl?: number;
   pnl_ratio?: number;
 }
@@ -95,6 +96,8 @@ export interface EastmoneyJywgAccountSnapshot {
   market_session: string;
   total_assets?: number;
   market_value?: number;
+  expanded_market_value?: number;
+  unclassified_market_value?: number;
   cash_available?: number;
   balance?: number;
   daily_pnl?: number;

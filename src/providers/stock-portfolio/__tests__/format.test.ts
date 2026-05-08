@@ -250,6 +250,7 @@ describe("stock-portfolio formatter", () => {
       instructions: expect.arrayContaining([
         "After final classification, aggregate category totals and sort categories by market_value_cny descending.",
         "Within each category, list every ETF or stock holding on its own line sorted by market_value_cny descending.",
+        "Holdings with instrument_type=unclassified_asset_gap are reconciliation rows for broker market value that was not expanded into position details; show them separately and do not force them into the six investment categories.",
       ]),
     });
     expect(payload.asset_summary?.by_account[0]).not.toHaveProperty("total_assets");

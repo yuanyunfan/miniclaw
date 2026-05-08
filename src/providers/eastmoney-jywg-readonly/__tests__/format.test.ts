@@ -25,6 +25,8 @@ const snapshot: EastmoneyJywgAccountSnapshot = {
   market_session: "a_share_close",
   total_assets: 123456.78,
   market_value: 100000,
+  expanded_market_value: 14000,
+  unclassified_market_value: 86000,
   cash_available: 23456.78,
   daily_pnl: 1234.56,
   daily_pnl_pct: 1.01,
@@ -144,6 +146,7 @@ describe("eastmoney-jywg provider formatter", () => {
     expect(parsed.snapshot).toMatchObject({
       total_assets: 123456.78,
       market_value: 100000,
+      unclassified_market_value: 86000,
       cash_available: 23456.78,
     });
     expect(parsed.asset_summary).toMatchObject({
@@ -154,8 +157,16 @@ describe("eastmoney-jywg provider formatter", () => {
     expect(parsed.asset_summary.buckets).toEqual(expect.arrayContaining([
       expect.objectContaining({ category: "cash", market_value: 23456.78 }),
       expect.objectContaining({ category: "domestic_index", market_value: 4000 }),
+      expect.objectContaining({ category: "other", market_value: 86000 }),
       expect.objectContaining({ category: "stock", market_value: 10000 }),
     ]));
+    const otherBucket = parsed.asset_summary.buckets.find((bucket: { category: string }) => bucket.category === "other");
+    expect(otherBucket.holdings[0]).toMatchObject({
+      code: "UNCLASSIFIED",
+      name: "东方财富未展开证券市值",
+      market_value: 86000,
+      instrument_type: "unclassified_asset_gap",
+    });
     expect(indexBucket.holdings[0]).toMatchObject({
       code: "510300",
       market_value: 4000,

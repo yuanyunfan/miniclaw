@@ -67,6 +67,8 @@ export function redactedSnapshotJson(
     total_assets_range: exact ? undefined : formatAssetRange(snapshot.total_assets, snapshot.currency),
     market_value: exact ? snapshot.market_value : undefined,
     market_value_range: exact ? undefined : formatAssetRange(snapshot.market_value, snapshot.currency),
+    expanded_market_value: exact ? snapshot.expanded_market_value : undefined,
+    unclassified_market_value: exact ? snapshot.unclassified_market_value : undefined,
     cash_available: exact ? snapshot.cash_available : undefined,
     cash_available_range: exact ? undefined : formatAssetRange(snapshot.cash_available, snapshot.currency),
     positions_count: snapshot.positions.length,
@@ -77,7 +79,8 @@ export function redactedSnapshotJson(
 
 function positionLine(position: EastmoneyJywgPositionSummary, currency: string): string {
   const pnl = position.daily_pnl ?? position.floating_pnl;
-  const pct = position.pnl_ratio !== undefined ? ` (${formatPercent(position.pnl_ratio)})` : "";
+  const pctValue = position.daily_pnl !== undefined ? position.daily_pnl_ratio : position.pnl_ratio;
+  const pct = pctValue !== undefined ? ` (${formatPercent(pctValue)})` : "";
   return `- ${position.code} ${position.name}: ${formatMoney(pnl, currency)}${pct}`;
 }
 

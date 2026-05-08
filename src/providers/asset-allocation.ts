@@ -122,6 +122,8 @@ export function buildAssetAllocationSummary(params: {
   totalAssets?: number;
   marketValue?: number;
   cash?: number;
+  unclassifiedMarketValue?: number;
+  unclassifiedLabel?: string;
   positions: AssetAllocationInputPosition[];
   includeHoldings: boolean;
 }): AssetAllocationSummary {
@@ -154,6 +156,25 @@ export function buildAssetAllocationSummary(params: {
         category: "cash",
         label: assetCategoryLabel("cash"),
         market_value: roundMoney(params.cash),
+      });
+    }
+  }
+
+  if (finiteNumber(params.unclassifiedMarketValue) && params.unclassifiedMarketValue > 0.01) {
+    const bucket = getBucket("other");
+    bucket.market_value += params.unclassifiedMarketValue;
+    bucket.positions_count += 1;
+    const label = params.unclassifiedLabel ?? "未展开证券市值";
+    warnings.push(`${label} cannot be classified from position details; kept as an unclassified reconciliation row`);
+    if (params.includeHoldings) {
+      bucket.holdings?.push({
+        code: "UNCLASSIFIED",
+        name: label,
+        currency: params.currency,
+        category: "other",
+        label: assetCategoryLabel("other"),
+        market_value: roundMoney(params.unclassifiedMarketValue),
+        instrument_type: "unclassified_asset_gap",
       });
     }
   }

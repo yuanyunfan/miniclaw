@@ -29,6 +29,7 @@ function compactPosition(position: EastmoneyJywgProviderPositionInput): Eastmone
     currency: position.currency,
     instrument_type: inferInstrumentType(position.code, position.name),
     daily_pnl: position.daily_pnl,
+    daily_pnl_ratio: position.daily_pnl_ratio,
     floating_pnl: position.floating_pnl,
     pnl_ratio: position.pnl_ratio,
   };
@@ -178,6 +179,8 @@ export function buildEastmoneyJywgProviderPayload(
       totalAssets: snapshot.total_assets,
       marketValue: snapshot.market_value,
       cash: snapshot.cash_available,
+      unclassifiedMarketValue: snapshot.unclassified_market_value,
+      unclassifiedLabel: "东方财富未展开证券市值",
       positions: snapshot.positions.map((position) => ({
         code: position.code,
         name: position.name,

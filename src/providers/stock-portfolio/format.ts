@@ -183,6 +183,7 @@ const LLM_CLASSIFICATION_GUIDANCE: StockPortfolioClassificationGuidance = {
     "Use CNY fields only for reportable money values.",
     "After final classification, aggregate category totals and sort categories by market_value_cny descending.",
     "Within each category, list every ETF or stock holding on its own line sorted by market_value_cny descending.",
+    "Holdings with instrument_type=unclassified_asset_gap are reconciliation rows for broker market value that was not expanded into position details; show them separately and do not force them into the six investment categories.",
     "If a holding is ambiguous, choose the closest category and mention the uncertainty briefly.",
   ],
 };

@@ -24,6 +24,7 @@ export interface EastmoneyJywgProviderTopPosition {
   currency: string;
   instrument_type?: "stock" | "etf";
   daily_pnl?: number;
+  daily_pnl_ratio?: number;
   floating_pnl?: number;
   pnl_ratio?: number;
 }

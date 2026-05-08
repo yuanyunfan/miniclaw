@@ -187,6 +187,13 @@ pre_provider_config: cn-stock
 - 大类必须按重新归类后的持仓金额倒序排列，而不是按固定类别顺序排列。
 - 每个大类内部必须把每个 ETF / 股票作为单独一行展示，并按该持仓的金额倒序排列。
 - 空大类可以省略；现金仍然单独列示，不参与六类投资分类排序。
+- 东方财富 `queryAssetAndPositionV1` 可能存在账户参考市值大于可展开逐仓明细市值的情况。MiniClaw 会把这个差额作为 `instrument_type=unclassified_asset_gap` 的“未展开证券市值”对账行输出；日报应单独列示它，不要强行归入六类投资分类。
+
+东方财富字段口径：
+
+- `Search/GetStockList` 的逐仓字段在当前实测中只有 `Ljyk` 等累计/浮动盈亏字段，没有持仓级 `Dryk` 当日盈亏字段。
+- `Com/queryAssetAndPositionV1` 返回的账户行内嵌 `positions` 字段，逐仓包含 `Dryk` / `Drykbl`，可用于 Top5 今日盈利/亏损。
+- 账户级 `Dryk` 仍作为 fallback；只有逐仓 `Dryk` 缺失时才回退到账户级今日盈亏。
 
 ## 故障策略
 
