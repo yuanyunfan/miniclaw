@@ -218,6 +218,7 @@ MiniClaw 特有 lint 规则：
 应该包含：
 
 - `gitleaks`：扫描 staged changes 和 CI full tree。
+- GitHub Actions 中 `gitleaks/gitleaks-action` 依赖完整 git history 判断 push range；`actions/checkout` 必须设置 `fetch-depth: 0`，否则 shallow checkout 可能导致 secret scan 在进入 typecheck/lint/test 之前失败。
 - `pnpm audit --prod` 或 OSV scanner：扫描生产依赖。
 - 禁止提交 `.env`、`*.db`、`*.sqlite`、`~/.miniclaw` dump、Discord transcript 中的 token。
 - 对 JSON logs / E2E artifact 做 redaction 检查。
