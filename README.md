@@ -218,7 +218,11 @@ src/
 │   ├── wechat-mp/        # 微信公众号 pre-provider
 │   ├── email-query/      # 通用邮件查询 pre-provider
 │   ├── cmb-credit-card-email/ # 招商信用卡邮件消费解析 pre-provider
+│   ├── eastmoney-jywg-readonly/ # 东方财富 jywg.18.cn 只读股票日报 pre-provider
 │   └── futu-stock/       # 富途账户只读股票日报 pre-provider
+├── mcp/
+│   ├── eastmoney-jywg/   # 东方财富 jywg.18.cn 只读 MCP server
+│   └── futu-stock/       # 富途 OpenD 只读 MCP server
 ├── memory/               # markdown 长期记忆
 ├── stage/                # pnpm stage 多 agent TUI
 └── store/

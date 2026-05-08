@@ -20,6 +20,8 @@
     "wechat-mp:login": "tsx scripts/wechat-mp-login.ts",
     "wechat-mp:check": "tsx scripts/wechat-mp-check.ts",
     "wechat-mp:collect": "tsx scripts/wechat-mp-collect.ts",
+    "eastmoney-jywg:login": "tsx scripts/eastmoney-jywg-login.ts",
+    "mcp:eastmoney-jywg": "tsx src/mcp/eastmoney-jywg/server.ts",
     "mcp:futu-stock": "tsx src/mcp/futu-stock/server.ts",
     "stage": "tsx src/stage/index.tsx",
     "stage:repl": "tsx src/stage/repl.ts"

@@ -10,6 +10,7 @@ import { chunkMessage } from "../discord/chunks.js";
 import { buildMemoryPrompt } from "../memory/inject.js";
 import { loadSubagents, listSubagentNames } from "./subagents.js";
 import { loadMcpServers } from "./mcp.js";
+import { EASTMONEY_JYWG_TOOL_NAMES } from "../mcp/eastmoney-jywg/safety.js";
 import { FUTU_STOCK_TOOL_NAMES } from "../mcp/futu-stock/safety.js";
 import { IDENTITY_LINE_TASK } from "./identity.js";
 import { loadPrompt } from "./prompts.js";
@@ -53,6 +54,12 @@ function toolShortName(name: string): string {
 function allowedFutuStockMcpTools(mcpServers: Record<string, unknown>): string[] {
   return mcpServers["futu-stock"]
     ? FUTU_STOCK_TOOL_NAMES.map((name) => `mcp__futu-stock__${name}`)
+    : [];
+}
+
+function allowedEastmoneyJywgMcpTools(mcpServers: Record<string, unknown>): string[] {
+  return mcpServers["eastmoney-jywg"]
+    ? EASTMONEY_JYWG_TOOL_NAMES.map((name) => `mcp__eastmoney-jywg__${name}`)
     : [];
 }
 
@@ -506,6 +513,7 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
           "mcp__exa__get_code_context_exa",
           "mcp__context7__resolve-library-id",
           "mcp__context7__query-docs",
+          ...allowedEastmoneyJywgMcpTools(mcpServers),
           ...allowedFutuStockMcpTools(mcpServers),
         ],
         agents: subagents,

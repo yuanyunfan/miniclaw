@@ -417,6 +417,9 @@ flowchart LR
 │   │   └── *.yaml           # 通用邮件查询 provider 配置
 │   ├── cmb-credit-card-email/
 │   │   └── *.yaml           # 招商信用卡邮件解析 provider 配置
+│   ├── eastmoney-jywg-readonly/
+│   │   ├── config.yaml      # 东方财富 jywg.18.cn profile 配置（无密码、无交易密码）
+│   │   └── *.yaml           # 股票日报 provider 配置（脱敏级别、market_session）
 │   └── futu-stock/
 │       ├── config.yaml      # 富途 OpenD profile 配置（无密码、无 token）
 │       └── *.yaml           # 股票日报 provider 配置（脱敏级别、market_session）
@@ -426,6 +429,7 @@ flowchart LR
 │       └── *-state.json     # 邮件 UID/hash 去重 state
 ├── secrets/
 │   ├── wechat-mp-session.json # 公众号后台 token/cookies，敏感凭据
+│   ├── eastmoney-jywg-session.json # 东方财富 jywg.18.cn cookie，敏感凭据，权限 0600
 │   └── email/
 │       └── *.json           # 邮箱 app password / OAuth token，敏感凭据
 ├── skills/
