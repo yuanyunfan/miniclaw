@@ -14,8 +14,8 @@ const config: StockPortfolioProviderConfig = {
   include_cny_summary: true,
   include_asset_summary: false,
   sources: [
-    { provider: "futu-stock", config: "daily-stock-market", enabled: true, required: false },
-    { provider: "eastmoney-jywg-readonly", config: "daily-stock-market", enabled: true, required: false },
+    { provider: "futu-stock", config: "daily-stock-market", enabled: true, required: false, include_asset_totals: true },
+    { provider: "eastmoney-jywg-readonly", config: "daily-stock-market", enabled: true, required: false, include_asset_totals: true },
   ],
 };
 
@@ -266,5 +266,79 @@ describe("stock-portfolio formatter", () => {
       },
     });
     expect(formatted).not.toMatch(/"(total_assets|market_value|cash|pnl|gross_profit|gross_loss|net_pnl)"\s*:/);
+  });
+
+  it("keeps positions but skips account totals for positions-only market sources", () => {
+    const payload = buildStockPortfolioPayload({
+      generatedAt: new Date("2026-05-08T09:00:00.000Z"),
+      profile: "daily-stock-summary",
+      config: { ...config, include_asset_summary: true },
+      sources: [
+        {
+          provider: "futu-stock",
+          config: "daily-stock-summary-hk",
+          label: "Futu HK",
+          include_asset_totals: false,
+          status: "ok",
+          payload: {
+            snapshot: { account_alias: "Futu HK" },
+            asset_summary: {
+              currency: "HKD",
+              total_assets: 1100,
+              market_value: 900,
+              cash: 200,
+              buckets: [
+                { category: "cash", label: "现金", currency: "HKD", market_value: 200, positions_count: 0, holdings: [
+                  { code: "CASH", name: "Cash", currency: "HKD", category: "cash", label: "现金", market_value: 200 },
+                ] },
+                { category: "other", label: "其他", currency: "HKD", market_value: 900, positions_count: 2, holdings: [
+                  { code: "HK.02800", name: "Tracker Fund ETF", currency: "HKD", category: "other", label: "其他", market_value: 800 },
+                  { code: "513030", name: "德国ETF", currency: "HKD", category: "other", label: "其他", market_value: 100 },
+                ] },
+              ],
+            },
+          },
+        },
+        {
+          provider: "futu-stock",
+          config: "daily-stock-summary-us",
+          label: "Futu US",
+          asset_account_label: "Futu",
+          include_asset_totals: true,
+          status: "ok",
+          payload: {
+            snapshot: { account_alias: "Futu US" },
+            asset_summary: {
+              currency: "USD",
+              total_assets: 1115,
+              market_value: 915,
+              cash: 200,
+              buckets: [
+                { category: "cash", label: "现金", currency: "USD", market_value: 200, positions_count: 0, holdings: [
+                  { code: "CASH", name: "Cash", currency: "USD", category: "cash", label: "现金", market_value: 200 },
+                ] },
+                { category: "stock", label: "个股", currency: "USD", market_value: 800, positions_count: 1, holdings: [
+                  { code: "US.AAPL", name: "Apple", currency: "USD", category: "stock", label: "个股", market_value: 800 },
+                ] },
+              ],
+            },
+          },
+        },
+      ],
+    });
+
+    expect(payload.asset_summary?.by_account).toHaveLength(1);
+    expect(payload.asset_summary?.by_account[0]).toMatchObject({ label: "Futu", total_assets_cny: 8028 });
+    expect(payload.asset_summary?.cash_cny).toBe(1440);
+    expect(payload.asset_summary?.by_category).toEqual(expect.arrayContaining([
+      expect.objectContaining({ category: "other", market_value_cny: 828 }),
+      expect.objectContaining({ category: "stock", market_value_cny: 5760 }),
+      expect.objectContaining({ category: "cash", market_value_cny: 1440 }),
+    ]));
+    expect(payload.asset_summary?.holdings_for_classification).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "HK.02800", market_value_cny: 736 }),
+      expect.objectContaining({ code: "513030", market_value_cny: 92 }),
+      expect.objectContaining({ code: "US.AAPL", market_value_cny: 5760 }),
+    ]));
   });
 });

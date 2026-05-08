@@ -43,6 +43,8 @@ sources:
   - provider: futu-stock
     config: daily-stock-market
     label: Futu
+    asset_account_label: Futu Combined
+    include_asset_totals: false
   - provider: eastmoney-jywg-readonly
     config: daily-stock-market
     label: Eastmoney
@@ -62,8 +64,24 @@ sources:
     expect(config.include_cny_summary).toBe(true);
     expect(config.include_asset_summary).toBe(false);
     expect(config.sources).toEqual([
-      { provider: "futu-stock", config: "daily-stock-market", label: "Futu", enabled: true, required: false },
-      { provider: "eastmoney-jywg-readonly", config: "daily-stock-market", label: "Eastmoney", enabled: true, required: false },
+      {
+        provider: "futu-stock",
+        config: "daily-stock-market",
+        label: "Futu",
+        asset_account_label: "Futu Combined",
+        enabled: true,
+        required: false,
+        include_asset_totals: false,
+      },
+      {
+        provider: "eastmoney-jywg-readonly",
+        config: "daily-stock-market",
+        label: "Eastmoney",
+        asset_account_label: undefined,
+        enabled: true,
+        required: false,
+        include_asset_totals: true,
+      },
     ]);
   });
 

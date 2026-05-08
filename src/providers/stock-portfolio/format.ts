@@ -55,8 +55,8 @@ function inferInstrumentType(code: string, name: string, raw: unknown): "stock" 
   return /ETF|LOF|REIT|REITS|指数基金|交易型开放式/i.test(text) ? "etf" : "stock";
 }
 
-function positionPnl(position: Record<string, unknown>): number | undefined {
-  return num(position.daily_pnl) ?? num(position.pnl_value) ?? num(position.floating_pnl);
+function positionDailyPnl(position: Record<string, unknown>): number | undefined {
+  return num(position.daily_pnl);
 }
 
 interface SourceTopPosition {
@@ -100,7 +100,7 @@ function sourceTopPositions(source: StockPortfolioSourceOk, key: "top_gainers" |
       const code = str(position.code, "UNKNOWN");
       const name = str(position.name, "UNKNOWN");
       const currency = str(position.currency, "CNY").toUpperCase();
-      const pnl = positionPnl(position);
+      const pnl = positionDailyPnl(position);
       if (pnl === undefined) return undefined;
       const candidate: SourceTopPosition = {
         provider: source.provider,
@@ -209,6 +209,7 @@ function sourcePnlSummaryCnyForReport(
   return {
     source_currency: currency,
     fx_rate_to_cny: rate,
+    pnl_source: str(summary.pnl_source),
     gross_profit_cny: roundMoney(grossProfit * rate),
     gross_loss_cny: roundMoney(grossLoss * rate),
     net_pnl_cny: roundMoney(netPnl * rate),
@@ -295,17 +296,20 @@ function buildAssetSummary(
     const marketValue = num(summary.market_value);
     const cash = num(summary.cash);
 
-    byAccount.push({
-      provider: source.provider,
-      config: source.config,
-      label: source.label,
-      account_alias: sourceAccountAlias(source),
-      source_currency: currency,
-      fx_rate_to_cny: rate,
-      total_assets_cny: totalAssets === undefined ? undefined : roundMoney(totalAssets * rate),
-      market_value_cny: marketValue === undefined ? undefined : roundMoney(marketValue * rate),
-      cash_cny: cash === undefined ? undefined : roundMoney(cash * rate),
-    });
+    const includeAssetTotals = source.include_asset_totals !== false;
+    if (includeAssetTotals) {
+      byAccount.push({
+        provider: source.provider,
+        config: source.config,
+        label: source.asset_account_label ?? source.label,
+        account_alias: source.asset_account_label ?? sourceAccountAlias(source),
+        source_currency: currency,
+        fx_rate_to_cny: rate,
+        total_assets_cny: totalAssets === undefined ? undefined : roundMoney(totalAssets * rate),
+        market_value_cny: marketValue === undefined ? undefined : roundMoney(marketValue * rate),
+        cash_cny: cash === undefined ? undefined : roundMoney(cash * rate),
+      });
+    }
 
     const buckets = Array.isArray(summary.buckets) ? summary.buckets.filter(isRecord) : [];
     for (const rawBucket of buckets) {
@@ -314,6 +318,7 @@ function buildAssetSummary(
         warnings.add(`${source.provider}/${source.config} has unknown asset category: ${String(rawBucket.category)}`);
         continue;
       }
+      if (!includeAssetTotals && category === "cash") continue;
       const value = num(rawBucket.market_value);
       if (value === undefined) continue;
       const convertedValue = roundMoney(value * rate);
@@ -538,6 +543,7 @@ export function buildStockPortfolioPayload(params: {
         : "Each nested provider payload is already redacted; do not output account ids, exact total assets, cookies, validate keys, passwords, or trade passwords.",
       "CNY P&L summary is calculated from configured FX rates before the LLM runs; mention fx_rates_as_of/source when reporting converted numbers.",
       "Asset allocation by_category buckets are deterministic pre-buckets only. For final investment classification, group asset_summary.holdings_for_classification with asset_summary.classification_guidance and keep cash separate.",
+      "Use asset_summary.by_account for account totals. Some market-specific sources can be positions-only for asset totals to avoid double counting one broker account queried through multiple market profiles.",
       "If one broker source failed, use the remaining source data and explicitly mention the missing source without inventing holdings or P&L.",
     ],
   };

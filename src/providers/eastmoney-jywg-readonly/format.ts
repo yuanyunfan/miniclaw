@@ -40,7 +40,7 @@ function inferInstrumentType(code: string, name: string): "stock" | "etf" {
 }
 
 function positionDailyPnl(position: EastmoneyJywgProviderPositionInput): number | undefined {
-  const value = position.daily_pnl ?? position.floating_pnl;
+  const value = position.daily_pnl;
   return value !== undefined && Number.isFinite(value) ? value : undefined;
 }
 
@@ -95,6 +95,20 @@ function buildPnlSummary(snapshot: EastmoneyJywgProviderSnapshotInput): Eastmone
     }
   }
 
+  if (positionsWithPnlCount === 0 && snapshot.daily_pnl !== undefined && Number.isFinite(snapshot.daily_pnl)) {
+    return {
+      currency: snapshot.currency,
+      gross_profit: snapshot.daily_pnl > 0 ? snapshot.daily_pnl : 0,
+      gross_loss: snapshot.daily_pnl < 0 ? snapshot.daily_pnl : 0,
+      net_pnl: snapshot.daily_pnl,
+      winners_count: 0,
+      losers_count: 0,
+      flat_count: 0,
+      positions_with_pnl_count: 0,
+      pnl_source: "aggregate_pnl_fallback",
+    };
+  }
+
   return {
     currency: snapshot.currency,
     gross_profit: grossProfit,
@@ -104,6 +118,7 @@ function buildPnlSummary(snapshot: EastmoneyJywgProviderSnapshotInput): Eastmone
     losers_count: losersCount,
     flat_count: flatCount,
     positions_with_pnl_count: positionsWithPnlCount,
+    pnl_source: positionsWithPnlCount > 0 ? "positions_daily_pnl" : "unavailable",
   };
 }
 

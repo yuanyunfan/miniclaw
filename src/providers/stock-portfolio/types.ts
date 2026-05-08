@@ -8,8 +8,10 @@ export interface StockPortfolioSourceConfig {
   provider: StockPortfolioSourceName;
   config?: string;
   label?: string;
+  asset_account_label?: string;
   enabled: boolean;
   required: boolean;
+  include_asset_totals: boolean;
 }
 
 export interface StockPortfolioProviderConfig {
@@ -30,6 +32,8 @@ export interface StockPortfolioSourceOk {
   provider: StockPortfolioSourceName;
   config: string;
   label?: string;
+  asset_account_label?: string;
+  include_asset_totals?: boolean;
   status: "ok";
   payload: Record<string, unknown>;
 }
@@ -38,6 +42,8 @@ export interface StockPortfolioSourceError {
   provider: StockPortfolioSourceName;
   config: string;
   label?: string;
+  asset_account_label?: string;
+  include_asset_totals?: boolean;
   status: "error";
   error: string;
 }

@@ -89,6 +89,7 @@ describe("futu-stock provider formatter", () => {
       net_pnl: 333.33,
       winners_count: 1,
       losers_count: 1,
+      pnl_source: "positions_daily_pnl",
     });
     expect(parsed.positions_summary.top_gainers[0]).toMatchObject({
       code: "HK.00700",
@@ -100,6 +101,44 @@ describe("futu-stock provider formatter", () => {
       daily_pnl: -123.45,
       instrument_type: "etf",
     });
+  });
+
+  it("uses account-level daily P&L only as aggregate fallback", () => {
+    const payload = buildFutuStockProviderPayload({
+      ...snapshot,
+      daily_pnl: 88,
+      positions: [
+        {
+          code: "US.AAPL",
+          name: "Apple",
+          currency: "USD",
+          market_value: 1000,
+          pnl_value: 300,
+        },
+      ],
+    }, profile, {
+      generatedAt: new Date("2026-05-07T08:31:00.000Z"),
+      profileName: "default",
+      marketSession: "daily_summary_1700_bjt",
+      redaction: "summary",
+      topPositionsLimit: 5,
+      includeAccountSnapshot: true,
+      includeDailyReport: false,
+      includePositionsSummary: true,
+      includeAssetAllocation: false,
+    });
+
+    const parsed = JSON.parse(formatFutuStockProviderPayload(payload));
+    expect(parsed.positions_summary.pnl_summary).toMatchObject({
+      net_pnl: 88,
+      gross_profit: 88,
+      gross_loss: 0,
+      positions_with_pnl_count: 0,
+      pnl_source: "aggregate_pnl_fallback",
+    });
+    expect(parsed.positions_summary.top_positions).toEqual([]);
+    expect(parsed.positions_summary.top_gainers).toEqual([]);
+    expect(parsed.positions_summary.top_losers).toEqual([]);
   });
 
   it("includes exact asset allocation only when requested for private reports", () => {

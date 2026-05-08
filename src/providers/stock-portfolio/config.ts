@@ -67,8 +67,10 @@ function parseSource(raw: unknown): StockPortfolioSourceConfig {
     provider: sourceName(raw.provider),
     config: optionalString(raw.config),
     label: optionalString(raw.label),
+    asset_account_label: optionalString(raw.asset_account_label),
     enabled: boolValue(raw.enabled, true),
     required: boolValue(raw.required, false),
+    include_asset_totals: boolValue(raw.include_asset_totals, true),
   };
 }
 

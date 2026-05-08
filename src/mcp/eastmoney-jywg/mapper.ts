@@ -137,8 +137,8 @@ export function topEastmoneyJywgPositionsByPnl(
   limit: number,
 ): EastmoneyJywgPositionSummary[] {
   return [...snapshot.positions]
-    .filter((position) => position.daily_pnl !== undefined || position.floating_pnl !== undefined)
-    .sort((a, b) => Math.abs(b.daily_pnl ?? b.floating_pnl ?? 0) - Math.abs(a.daily_pnl ?? a.floating_pnl ?? 0))
+    .filter((position) => position.daily_pnl !== undefined)
+    .sort((a, b) => Math.abs(b.daily_pnl ?? 0) - Math.abs(a.daily_pnl ?? 0))
     .slice(0, Math.max(0, limit));
 }
 

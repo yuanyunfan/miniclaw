@@ -98,7 +98,7 @@ export function topFutuPositionsByDailyPnl(
   limit: number,
 ): FutuPositionSummary[] {
   return [...snapshot.positions]
-    .filter((position) => position.daily_pnl !== undefined || position.pnl_value !== undefined)
-    .sort((a, b) => Math.abs(b.daily_pnl ?? b.pnl_value ?? 0) - Math.abs(a.daily_pnl ?? a.pnl_value ?? 0))
+    .filter((position) => position.daily_pnl !== undefined)
+    .sort((a, b) => Math.abs(b.daily_pnl ?? 0) - Math.abs(a.daily_pnl ?? 0))
     .slice(0, Math.max(0, limit));
 }

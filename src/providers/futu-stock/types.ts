@@ -35,6 +35,7 @@ export interface FutuStockProviderPnlSummary {
   losers_count: number;
   flat_count: number;
   positions_with_pnl_count: number;
+  pnl_source: "positions_daily_pnl" | "aggregate_pnl_fallback" | "unavailable";
 }
 
 export interface FutuStockProviderFormatOptions {

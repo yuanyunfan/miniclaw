@@ -52,6 +52,8 @@ export async function runStockPortfolioProvider(
         provider: source.provider,
         config: sourceConfig,
         label: source.label,
+        asset_account_label: source.asset_account_label,
+        include_asset_totals: source.include_asset_totals,
         status: "ok",
         payload,
       });
@@ -65,6 +67,8 @@ export async function runStockPortfolioProvider(
         provider: source.provider,
         config: sourceConfig,
         label: source.label,
+        asset_account_label: source.asset_account_label,
+        include_asset_totals: source.include_asset_totals,
         status: "error",
         error,
       });

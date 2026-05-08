@@ -74,6 +74,8 @@ sources:
 - `top_movers_limit`: `cny_summary.top_gainers` / `top_losers` 的最大条数。
 - `include_cny_summary`: 关闭后只保留各券商原始脱敏 payload，不生成统一人民币口径汇总。
 - `include_asset_summary`: 仅用于可信 private channel。开启后聚合各券商 provider 的 exact `asset_summary`，生成人民币口径总资产、证券市值、现金和分类持仓金额。
+- `sources[].include_asset_totals`: 默认为 `true`。设为 `false` 时，该 source 只贡献持仓分类和 Top movers，不贡献账户总资产、证券市值或现金，用于避免同一个券商账户被多个市场 profile 重复计入。
+- `sources[].asset_account_label`: 账户汇总行显示名。用于把 `Futu US` 这种主 profile 的账户资产展示为 `Futu` 或 `Futu 合并账户`。
 
 股票日报 cron 使用：
 
@@ -158,9 +160,11 @@ pre_provider_config: cn-stock
 
 `payload` 是各 provider 输出的结构化上下文。默认 `summary` 配置会隐藏完整总资产和持仓市值；仅 private 汇总任务使用 `exact` 配置采集精确总资产、现金和持仓市值。无论 `summary` 还是 `exact`，聚合层都会再次对 error 和嵌套字符串做 token/cookie/account 类字段脱敏，provider 不应输出完整资金账号、手机号、cookie、validatekey、token、交易密码、客户号或股东号。
 
-`cny_summary` 的盈亏来自各 provider 的 `positions_summary.pnl_summary` 和 `top_gainers/top_losers`，在 LLM 调用前完成折算。该字段只保留可报告的人民币金额字段，例如 `gross_profit_cny`、`gross_loss_cny`、`net_pnl_cny`、`pnl_cny`。`source_currency` 和 `fx_rate_to_cny` 仅用于审计汇率来源，不应作为报告金额单位输出。LLM 报告应优先使用该字段，不应自行编造或重算缺失字段。
+`cny_summary` 的盈亏来自各 provider 的 `positions_summary.pnl_summary` 和 `top_gainers/top_losers`，在 LLM 调用前完成折算。该字段只保留可报告的人民币金额字段，例如 `gross_profit_cny`、`gross_loss_cny`、`net_pnl_cny`、`pnl_cny`。`source_currency` 和 `fx_rate_to_cny` 仅用于审计汇率来源，不应作为报告金额单位输出。LLM 报告应优先使用该字段，不应自行编造或重算缺失字段。`pnl_source` 标识盈亏来源：`positions_daily_pnl` 表示可按持仓拆分今日盈亏；`aggregate_pnl_fallback` 表示只拿到账户级今日盈亏，不能生成该账户的持仓级 Top5 今日盈亏。
 
 `asset_summary` 只应在 private channel 的 exact 配置中启用。该字段会在 LLM 调用前按持仓市值和现金余额生成汇总，并且可报告金额全部是人民币字段，例如 `total_assets_cny`、`market_value_cny`、`cash_cny`。聚合输出不会把 source provider 的原币种 `total_assets`、`market_value`、`cash`、`pnl` 等金额字段继续传给 LLM；`sources[].payload` 在资产汇总模式下只保留账户别名、来源币种、汇率和 CNY 后的账户级 P&L 摘要。
+
+同一个券商账户可能需要通过多个市场 profile 查询持仓。例如 Futu HK 和 Futu US 可以拿到不同市场持仓，但 `accinfo_query` 的账户资产可能是同一个综合账户按不同币种折算后的结果。此时只能选择一个 source 贡献账户总资产/现金，其他 source 应设置 `include_asset_totals: false`，否则 `total_assets_cny` 和 `cash_cny` 会重复计算。
 
 资产分类分两层：
 
@@ -210,7 +214,7 @@ pre_provider: stock-portfolio
 - `futu-stock/daily-stock-summary-us`
 - `eastmoney-jywg-readonly/daily-stock-summary`
 
-这些 source config 使用 `redaction: exact` 和 `include_asset_allocation: true`，只应发送到 private Discord channel `#daily-stock-summary`。
+这些 source config 使用 `redaction: exact` 和 `include_asset_allocation: true`，只应发送到 private Discord channel `#daily-stock-summary`。当前 Futu HK source 是 positions-only，不贡献账户总资产/现金；Futu US source 作为 Futu 合并账户资产口径，避免同一 Futu 账户重复计入。
 
 Discord 输出约定：
 

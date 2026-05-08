@@ -73,6 +73,7 @@ describe("eastmoney-jywg provider formatter", () => {
       net_pnl: 358.02,
       winners_count: 1,
       losers_count: 1,
+      pnl_source: "positions_daily_pnl",
     });
     expect(parsed.positions_summary.top_gainers[0]).toMatchObject({
       code: "600000",
@@ -84,6 +85,44 @@ describe("eastmoney-jywg provider formatter", () => {
       daily_pnl: -98.76,
       instrument_type: "etf",
     });
+  });
+
+  it("uses account-level daily P&L only as aggregate fallback", () => {
+    const payload = buildEastmoneyJywgProviderPayload({
+      ...snapshot,
+      daily_pnl: -66,
+      positions: [
+        {
+          code: "510300",
+          name: "沪深300ETF",
+          currency: "CNY",
+          market_value: 4000,
+          floating_pnl: 500,
+        },
+      ],
+    }, profile, {
+      generatedAt: new Date("2026-05-08T07:16:00.000Z"),
+      profileName: "default",
+      marketSession: "daily_summary_1700_bjt",
+      redaction: "summary",
+      topPositionsLimit: 5,
+      includeAccountSnapshot: true,
+      includeDailyReport: false,
+      includePositionsSummary: true,
+      includeAssetAllocation: false,
+    });
+
+    const parsed = JSON.parse(formatEastmoneyJywgProviderPayload(payload));
+    expect(parsed.positions_summary.pnl_summary).toMatchObject({
+      net_pnl: -66,
+      gross_profit: 0,
+      gross_loss: -66,
+      positions_with_pnl_count: 0,
+      pnl_source: "aggregate_pnl_fallback",
+    });
+    expect(parsed.positions_summary.top_positions).toEqual([]);
+    expect(parsed.positions_summary.top_gainers).toEqual([]);
+    expect(parsed.positions_summary.top_losers).toEqual([]);
   });
 
   it("includes exact asset allocation only when requested for private reports", () => {
