@@ -2,6 +2,8 @@ import type {
   StockPortfolioAssetCategorySummary,
   StockPortfolioAssetHolding,
   StockPortfolioAssetSummary,
+  StockPortfolioClassifiableHolding,
+  StockPortfolioClassificationGuidance,
   StockPortfolioCnyPosition,
   StockPortfolioCnySummary,
   StockPortfolioCurrencyPnlSummary,
@@ -140,6 +142,49 @@ function sourceAccountAlias(source: StockPortfolioSourceOk): string | undefined 
   return str(snapshot?.account_alias, source.label ?? "");
 }
 
+const LLM_CLASSIFICATION_GUIDANCE: StockPortfolioClassificationGuidance = {
+  mode: "llm",
+  categories: [
+    {
+      category: "domestic_index",
+      label: "国内指数",
+      description: "A股、港股、中国相关宽基/行业/主题指数 ETF 或指数基金；例如 HS300ETF、银行ETF、恒生/国企/中证/沪深相关 ETF。",
+    },
+    {
+      category: "foreign_stock",
+      label: "国外个股",
+      description: "非中国公司的单一股票或股票型持仓；例如美国、欧洲、日本等市场的公司股票。",
+    },
+    {
+      category: "foreign_index",
+      label: "国外指数",
+      description: "跟踪非中国市场、国家、地区或海外宽基/行业指数的 ETF 或指数基金；例如 德国ETF、法国ETF、纳指/标普/道指相关 ETF。",
+    },
+    {
+      category: "domestic_stock",
+      label: "国内个股",
+      description: "A股、港股、中国公司或中概相关的单一股票持仓。",
+    },
+    {
+      category: "bond",
+      label: "债券",
+      description: "债券、国债、政金债、信用债、可转债、债券 ETF 或固定收益类持仓。",
+    },
+    {
+      category: "gold",
+      label: "黄金",
+      description: "黄金、黄金 ETF、黄金基金或明确跟踪黄金价格的持仓。",
+    },
+  ],
+  cash_handling: "现金不进入上述六类投资分类，应单独展示为现金。",
+  instructions: [
+    "Classify holdings from asset_summary.holdings_for_classification by code and name.",
+    "Do not use asset_summary.by_category as the final classification; it is only a deterministic pre-bucket and may be wrong for cross-market ETFs.",
+    "Use CNY fields only for reportable money values.",
+    "If a holding is ambiguous, choose the closest category and mention the uncertainty briefly.",
+  ],
+};
+
 function nestedSourceCurrency(payload: Record<string, unknown>): string | undefined {
   const assetSummary = isRecord(payload.asset_summary) ? payload.asset_summary : undefined;
   const positionsSummary = isRecord(payload.positions_summary) ? payload.positions_summary : undefined;
@@ -219,6 +264,7 @@ function buildAssetSummary(
   const warnings = new Set<string>();
   const byAccount: StockPortfolioAssetSummary["by_account"] = [];
   const byCategory = new Map<AssetAllocationCategory, StockPortfolioAssetCategorySummary>();
+  const holdingsForClassification: StockPortfolioClassifiableHolding[] = [];
 
   function categoryBucket(category: AssetAllocationCategory): StockPortfolioAssetCategorySummary {
     const existing = byCategory.get(category);
@@ -294,6 +340,19 @@ function buildAssetSummary(
           instrument_type: str(rawHolding.instrument_type) || undefined,
         };
         bucket.holdings.push(holding);
+        if (holdingCategory !== "cash") {
+          holdingsForClassification.push({
+            provider: source.provider,
+            config: source.config,
+            source_label: source.label,
+            code: holding.code,
+            name: holding.name,
+            source_currency: holding.source_currency,
+            market_value_cny: holding.market_value_cny,
+            fx_rate_to_cny: holding.fx_rate_to_cny,
+            instrument_type: holding.instrument_type,
+          });
+        }
       }
     }
   }
@@ -337,6 +396,8 @@ function buildAssetSummary(
     cash_cny: cashCny,
     by_account: byAccount,
     by_category: byCategoryRows,
+    holdings_for_classification: holdingsForClassification.sort((a, b) => b.market_value_cny - a.market_value_cny),
+    classification_guidance: LLM_CLASSIFICATION_GUIDANCE,
     warnings: [...warnings],
   };
 }
@@ -476,7 +537,7 @@ export function buildStockPortfolioPayload(params: {
         ? "This asset summary is CNY-only for reportable money values. Do not render source-currency amounts; source_currency and fx_rate_to_cny are audit metadata only."
         : "Each nested provider payload is already redacted; do not output account ids, exact total assets, cookies, validate keys, passwords, or trade passwords.",
       "CNY P&L summary is calculated from configured FX rates before the LLM runs; mention fx_rates_as_of/source when reporting converted numbers.",
-      "Asset allocation buckets are calculated before the LLM runs from broker position market values and cash balances.",
+      "Asset allocation by_category buckets are deterministic pre-buckets only. For final investment classification, group asset_summary.holdings_for_classification with asset_summary.classification_guidance and keep cash separate.",
       "If one broker source failed, use the remaining source data and explicitly mention the missing source without inventing holdings or P&L.",
     ],
   };

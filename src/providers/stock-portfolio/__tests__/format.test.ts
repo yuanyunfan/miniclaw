@@ -163,8 +163,8 @@ describe("stock-portfolio formatter", () => {
             },
             asset_summary: {
               currency: "HKD",
-              total_assets: 1000,
-              market_value: 800,
+              total_assets: 1100,
+              market_value: 900,
               cash: 200,
               buckets: [
                 {
@@ -176,12 +176,15 @@ describe("stock-portfolio formatter", () => {
                   holdings: [{ code: "CASH", name: "Cash", currency: "HKD", category: "cash", label: "现金", market_value: 200 }],
                 },
                 {
-                  category: "domestic_index",
-                  label: "国内指数",
+                  category: "other",
+                  label: "其他",
                   currency: "HKD",
-                  market_value: 800,
-                  positions_count: 1,
-                  holdings: [{ code: "HK.02800", name: "Tracker Fund ETF", currency: "HKD", category: "domestic_index", label: "国内指数", market_value: 800 }],
+                  market_value: 900,
+                  positions_count: 2,
+                  holdings: [
+                    { code: "HK.02800", name: "Tracker Fund ETF", currency: "HKD", category: "other", label: "其他", market_value: 800 },
+                    { code: "513030", name: "德国ETF", currency: "HKD", category: "other", label: "其他", market_value: 100 },
+                  ],
                 },
               ],
             },
@@ -213,19 +216,38 @@ describe("stock-portfolio formatter", () => {
 
     expect(payload.asset_summary).toMatchObject({
       base_currency: "CNY",
-      total_assets_cny: 2920,
-      market_value_cny: 2236,
+      total_assets_cny: 3012,
+      market_value_cny: 2328,
       cash_cny: 684,
     });
     expect(payload.asset_summary?.by_account).toEqual(expect.arrayContaining([
-      expect.objectContaining({ label: "Futu HK", total_assets_cny: 920 }),
+      expect.objectContaining({ label: "Futu HK", total_assets_cny: 1012 }),
       expect.objectContaining({ label: "Eastmoney A", total_assets_cny: 2000 }),
     ]));
     expect(payload.asset_summary?.by_category).toEqual(expect.arrayContaining([
-      expect.objectContaining({ category: "domestic_index", market_value_cny: 736 }),
+      expect.objectContaining({ category: "other", market_value_cny: 828 }),
       expect.objectContaining({ category: "gold", market_value_cny: 1500 }),
       expect.objectContaining({ category: "cash", market_value_cny: 684 }),
     ]));
+    expect(payload.asset_summary?.holdings_for_classification).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "HK.02800", name: "Tracker Fund ETF", market_value_cny: 736 }),
+      expect.objectContaining({ code: "513030", name: "德国ETF", market_value_cny: 92 }),
+      expect.objectContaining({ code: "518880", name: "黄金ETF", market_value_cny: 1500 }),
+    ]));
+    expect(payload.asset_summary?.holdings_for_classification).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "CASH" }),
+    ]));
+    expect(payload.asset_summary?.classification_guidance).toMatchObject({
+      mode: "llm",
+      categories: expect.arrayContaining([
+        expect.objectContaining({ category: "domestic_index", label: "国内指数" }),
+        expect.objectContaining({ category: "foreign_stock", label: "国外个股" }),
+        expect.objectContaining({ category: "foreign_index", label: "国外指数" }),
+        expect.objectContaining({ category: "domestic_stock", label: "国内个股" }),
+        expect.objectContaining({ category: "bond", label: "债券" }),
+        expect.objectContaining({ category: "gold", label: "黄金" }),
+      ]),
+    });
     expect(payload.asset_summary?.by_account[0]).not.toHaveProperty("total_assets");
     expect(payload.asset_summary?.by_account[0]).not.toHaveProperty("market_value");
     expect(payload.asset_summary?.by_account[0]).not.toHaveProperty("cash");

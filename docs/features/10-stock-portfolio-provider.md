@@ -160,17 +160,23 @@ pre_provider_config: cn-stock
 
 `cny_summary` 的盈亏来自各 provider 的 `positions_summary.pnl_summary` 和 `top_gainers/top_losers`，在 LLM 调用前完成折算。该字段只保留可报告的人民币金额字段，例如 `gross_profit_cny`、`gross_loss_cny`、`net_pnl_cny`、`pnl_cny`。`source_currency` 和 `fx_rate_to_cny` 仅用于审计汇率来源，不应作为报告金额单位输出。LLM 报告应优先使用该字段，不应自行编造或重算缺失字段。
 
-`asset_summary` 只应在 private channel 的 exact 配置中启用。该字段会在 LLM 调用前按持仓市值和现金余额生成分类汇总，并且可报告金额全部是人民币字段，例如 `total_assets_cny`、`market_value_cny`、`cash_cny`。聚合输出不会把 source provider 的原币种 `total_assets`、`market_value`、`cash`、`pnl` 等金额字段继续传给 LLM；`sources[].payload` 在资产汇总模式下只保留账户别名、来源币种、汇率和 CNY 后的账户级 P&L 摘要。当前分类包括：
+`asset_summary` 只应在 private channel 的 exact 配置中启用。该字段会在 LLM 调用前按持仓市值和现金余额生成汇总，并且可报告金额全部是人民币字段，例如 `total_assets_cny`、`market_value_cny`、`cash_cny`。聚合输出不会把 source provider 的原币种 `total_assets`、`market_value`、`cash`、`pnl` 等金额字段继续传给 LLM；`sources[].payload` 在资产汇总模式下只保留账户别名、来源币种、汇率和 CNY 后的账户级 P&L 摘要。
 
-- `bond`: 债券
-- `foreign_index`: 国外指数
+资产分类分两层：
+
+- `by_category`：provider 的确定性规则初筛，保留用于回归和粗略校验，跨市场 ETF / 港股 / 美股分类可能不完全符合人工投资分类。
+- `holdings_for_classification`：给最终日报 LLM 使用的 CNY 扁平持仓清单，不包含现金，不包含 provider 的初筛类别。
+
+每日资产汇总报告应优先使用 `asset_summary.holdings_for_classification` 和 `asset_summary.classification_guidance` 由 LLM 重新归类，目标类别为：
+
 - `domestic_index`: 国内指数
+- `foreign_stock`: 国外个股
+- `foreign_index`: 国外指数
+- `domestic_stock`: 国内个股
+- `bond`: 债券
 - `gold`: 黄金
-- `cash`: 现金
-- `stock`: 个股
-- `other`: 其他
 
-资产分类依赖代码和名称规则，适合做日报汇总，不应被视为券商官方资产类别。
+现金不进入上述六类投资分类，应单独展示为现金。
 
 ## 故障策略
 

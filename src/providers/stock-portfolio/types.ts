@@ -112,6 +112,39 @@ export interface StockPortfolioAssetHolding extends Omit<AssetAllocationHolding,
   fx_rate_to_cny: number;
 }
 
+export type StockPortfolioLlmClassificationCategory =
+  | "domestic_index"
+  | "foreign_stock"
+  | "foreign_index"
+  | "domestic_stock"
+  | "bond"
+  | "gold";
+
+export interface StockPortfolioClassifiableHolding {
+  provider: StockPortfolioSourceName;
+  config: string;
+  source_label?: string;
+  code: string;
+  name: string;
+  source_currency: string;
+  market_value_cny: number;
+  fx_rate_to_cny: number;
+  instrument_type?: string;
+}
+
+export interface StockPortfolioClassificationCategoryGuide {
+  category: StockPortfolioLlmClassificationCategory;
+  label: string;
+  description: string;
+}
+
+export interface StockPortfolioClassificationGuidance {
+  mode: "llm";
+  categories: StockPortfolioClassificationCategoryGuide[];
+  cash_handling: string;
+  instructions: string[];
+}
+
 export interface StockPortfolioAssetAccountSummary {
   provider: StockPortfolioSourceName;
   config: string;
@@ -143,5 +176,7 @@ export interface StockPortfolioAssetSummary {
   cash_cny?: number;
   by_account: StockPortfolioAssetAccountSummary[];
   by_category: StockPortfolioAssetCategorySummary[];
+  holdings_for_classification: StockPortfolioClassifiableHolding[];
+  classification_guidance: StockPortfolioClassificationGuidance;
   warnings: string[];
 }
