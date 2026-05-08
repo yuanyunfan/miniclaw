@@ -47,6 +47,7 @@ describe("eastmoney-jywg provider formatter", () => {
       includeAccountSnapshot: true,
       includeDailyReport: true,
       includePositionsSummary: true,
+      includeAssetAllocation: false,
     });
 
     const text = formatEastmoneyJywgProviderPayload(payload);
@@ -82,6 +83,43 @@ describe("eastmoney-jywg provider formatter", () => {
       code: "510300",
       daily_pnl: -98.76,
       instrument_type: "etf",
+    });
+  });
+
+  it("includes exact asset allocation only when requested for private reports", () => {
+    const payload = buildEastmoneyJywgProviderPayload(snapshot, { ...profile, redaction: "exact", show_total_assets: true }, {
+      generatedAt: new Date("2026-05-08T07:16:00.000Z"),
+      profileName: "default",
+      marketSession: "daily_summary_1700_bjt",
+      redaction: "exact",
+      topPositionsLimit: 5,
+      includeAccountSnapshot: true,
+      includeDailyReport: true,
+      includePositionsSummary: true,
+      includeAssetAllocation: true,
+    });
+
+    const parsed = JSON.parse(formatEastmoneyJywgProviderPayload(payload));
+    const indexBucket = parsed.asset_summary.buckets.find((bucket: { category: string }) => bucket.category === "domestic_index");
+
+    expect(parsed.snapshot).toMatchObject({
+      total_assets: 123456.78,
+      market_value: 100000,
+      cash_available: 23456.78,
+    });
+    expect(parsed.asset_summary).toMatchObject({
+      currency: "CNY",
+      total_assets: 123456.78,
+      cash: 23456.78,
+    });
+    expect(parsed.asset_summary.buckets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ category: "cash", market_value: 23456.78 }),
+      expect.objectContaining({ category: "domestic_index", market_value: 4000 }),
+      expect.objectContaining({ category: "stock", market_value: 10000 }),
+    ]));
+    expect(indexBucket.holdings[0]).toMatchObject({
+      code: "510300",
+      market_value: 4000,
     });
   });
 });

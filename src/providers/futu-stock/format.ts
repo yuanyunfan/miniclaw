@@ -1,6 +1,7 @@
 import { formatFutuDailyPnlReport, redactedSnapshotJson, redactJsonStringValues } from "../../mcp/futu-stock/redact.js";
 import { topFutuPositionsByDailyPnl } from "../../mcp/futu-stock/mapper.js";
 import type { FutuStockProfileConfig } from "../../mcp/futu-stock/types.js";
+import { buildAssetAllocationSummary } from "../asset-allocation.js";
 import type {
   FutuStockProviderFormatOptions,
   FutuStockProviderPayload,
@@ -123,7 +124,9 @@ export function buildFutuStockProviderPayload(
     warnings: [...snapshot.warnings],
     usage_notes: [
       "This payload is generated from local Futu OpenD through a read-only provider.",
-      "Do not infer or output account id, exact total assets, phone number, token, cookie, or trade password.",
+      options.redaction === "exact"
+        ? "Exact account asset and holding market values are intentionally included for trusted private channels; still do not output account id, phone number, token, cookie, or trade password."
+        : "Do not infer or output account id, exact total assets, phone number, token, cookie, or trade password.",
       "Daily P&L is based on a broker snapshot and may differ from the final settlement statement because of cash flows, fees, dividends, and FX.",
     ],
   };
@@ -147,6 +150,23 @@ export function buildFutuStockProviderPayload(
       top_gainers: compactTopGainers(snapshot, options.topPositionsLimit),
       top_losers: compactTopLosers(snapshot, options.topPositionsLimit),
     };
+  }
+
+  if (options.includeAssetAllocation) {
+    payload.asset_summary = buildAssetAllocationSummary({
+      currency: snapshot.currency,
+      totalAssets: snapshot.total_assets,
+      marketValue: snapshot.market_value,
+      cash: snapshot.cash,
+      positions: snapshot.positions.map((position) => ({
+        code: position.code,
+        name: position.name,
+        currency: position.currency,
+        market_value: position.market_value,
+        instrument_type: inferInstrumentType(position.code, position.name),
+      })),
+      includeHoldings: options.redaction === "exact",
+    });
   }
 
   return payload;

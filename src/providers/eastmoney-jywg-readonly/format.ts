@@ -5,6 +5,7 @@ import {
 } from "../../mcp/eastmoney-jywg/redact.js";
 import { topEastmoneyJywgPositionsByPnl } from "../../mcp/eastmoney-jywg/mapper.js";
 import type { EastmoneyJywgProfileConfig } from "../../mcp/eastmoney-jywg/types.js";
+import { buildAssetAllocationSummary } from "../asset-allocation.js";
 import type {
   EastmoneyJywgProviderFormatOptions,
   EastmoneyJywgProviderPayload,
@@ -128,7 +129,9 @@ export function buildEastmoneyJywgProviderPayload(
     warnings: [...snapshot.warnings],
     usage_notes: [
       "This payload is generated from jywg.18.cn through a local read-only provider.",
-      "Do not infer or output account id, customer id, shareholder id, exact total assets, cookie, validatekey, password, or trade password.",
+      options.redaction === "exact"
+        ? "Exact account asset and holding market values are intentionally included for trusted private channels; still do not output account id, customer id, shareholder id, cookie, validatekey, password, or trade password."
+        : "Do not infer or output account id, customer id, shareholder id, exact total assets, cookie, validatekey, password, or trade password.",
       "Daily P&L is based on a broker web snapshot and may differ from final settlement statements because of cash flows, fees, dividends, and data timing.",
     ],
   };
@@ -152,6 +155,23 @@ export function buildEastmoneyJywgProviderPayload(
       top_gainers: compactTopGainers(snapshot, options.topPositionsLimit),
       top_losers: compactTopLosers(snapshot, options.topPositionsLimit),
     };
+  }
+
+  if (options.includeAssetAllocation) {
+    payload.asset_summary = buildAssetAllocationSummary({
+      currency: snapshot.currency,
+      totalAssets: snapshot.total_assets,
+      marketValue: snapshot.market_value,
+      cash: snapshot.cash_available,
+      positions: snapshot.positions.map((position) => ({
+        code: position.code,
+        name: position.name,
+        currency: position.currency,
+        market_value: position.market_value,
+        instrument_type: inferInstrumentType(position.code, position.name),
+      })),
+      includeHoldings: options.redaction === "exact",
+    });
   }
 
   return payload;

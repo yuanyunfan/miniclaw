@@ -9,6 +9,7 @@
 - 调用多个已实现的只读 provider。
 - 保留每个 provider 的脱敏 JSON 输出。
 - 基于配置汇率生成 `cny_summary`，包含人民币口径总盈利、总亏损、净盈亏、分币种汇总和 Top gainers/losers。
+- 可选生成 `asset_summary`，用于 private channel 中输出精确总资产、现金、持仓市值和资产分类汇总。
 - 保留持仓/ETF 的 `instrument_type`，用于报告里区分个股和 ETF。
 - 如果某个非必需来源失败，保留其他来源并写入 warning。
 - 所有来源都失败时 fail closed。
@@ -72,6 +73,7 @@ sources:
 - `fx_rates_as_of` / `fx_rates_source`: 报告中必须注明的汇率日期和来源。
 - `top_movers_limit`: `cny_summary.top_gainers` / `top_losers` 的最大条数。
 - `include_cny_summary`: 关闭后只保留各券商原始脱敏 payload，不生成统一人民币口径汇总。
+- `include_asset_summary`: 仅用于可信 private channel。开启后聚合各券商 provider 的 exact `asset_summary`，生成人民币口径总资产、证券市值、现金和分类持仓金额。
 
 股票日报 cron 使用：
 
@@ -154,9 +156,21 @@ pre_provider_config: cn-stock
 }
 ```
 
-`payload` 是各 provider 已经脱敏后的输出。聚合层会再次对 error 和嵌套字符串做 token/cookie/account 类字段脱敏。Provider 层不会输出完整资金账号、手机号、cookie、validatekey、token、交易密码、完整总资产、持仓数量或持仓市值。
+`payload` 是各 provider 输出的结构化上下文。默认 `summary` 配置会隐藏完整总资产和持仓市值；仅 private 汇总任务使用 `exact` 配置输出精确总资产、现金和持仓市值。无论 `summary` 还是 `exact`，聚合层都会再次对 error 和嵌套字符串做 token/cookie/account 类字段脱敏，provider 不应输出完整资金账号、手机号、cookie、validatekey、token、交易密码、客户号或股东号。
 
 `cny_summary` 的盈亏来自各 provider 的 `positions_summary.pnl_summary` 和 `top_gainers/top_losers`，在 LLM 调用前完成折算。LLM 报告应优先使用该字段，不应自行编造或重算缺失字段。
+
+`asset_summary` 只应在 private channel 的 exact 配置中启用。该字段会在 LLM 调用前按持仓市值和现金余额生成分类汇总，当前分类包括：
+
+- `bond`: 债券
+- `foreign_index`: 国外指数
+- `domestic_index`: 国内指数
+- `gold`: 黄金
+- `cash`: 现金
+- `stock`: 个股
+- `other`: 其他
+
+资产分类依赖代码和名称规则，适合做日报汇总，不应被视为券商官方资产类别。
 
 ## 故障策略
 
@@ -167,30 +181,36 @@ pre_provider_config: cn-stock
 
 ## 本地状态
 
-当前本机股票日报已拆分为四个任务：
+当前本机股票日报已拆分为六个任务：
 
 - `~/.miniclaw/cron/us-stock-pre-market.yaml`
 - `~/.miniclaw/cron/us-stock-post-market.yaml`
 - `~/.miniclaw/cron/cn-stock-pre-market.yaml`
+- `~/.miniclaw/cron/cn-stock-ing-market.yaml`
 - `~/.miniclaw/cron/cn-stock-post-market.yaml`
+- `~/.miniclaw/cron/daily-stock-summary.yaml`
 
-旧任务已保留但 disabled：
-
-- `~/.miniclaw/cron/stock-market-premarket.yaml`
-- `~/.miniclaw/cron/a-share-hk-postmarket.yaml`
-
-四个新任务都使用：
+所有股票任务都使用：
 
 ```yaml
 pre_provider: stock-portfolio
 ```
 
-美股任务使用 `pre_provider_config: us-stock`，A/H 任务使用 `pre_provider_config: cn-stock`。
+美股任务使用 `pre_provider_config: us-stock`，A/H 盘前、盘中、盘后任务使用 `pre_provider_config: cn-stock`。
+
+`daily-stock-summary` 使用 `pre_provider_config: daily-stock-summary`，会聚合：
+
+- `futu-stock/daily-stock-summary-hk`
+- `futu-stock/daily-stock-summary-us`
+- `eastmoney-jywg-readonly/daily-stock-summary`
+
+这些 source config 使用 `redaction: exact` 和 `include_asset_allocation: true`，只应发送到 private Discord channel `#daily-stock-summary`。
 
 Discord 输出约定：
 
 - 盘前报告：标题后先展示“我的持仓 / ETF 盘前观察清单”，再展示市场温度、新闻和今日关注点。
 - 盘后报告：标题后先展示“我的账户盈亏统计”，再展示 Top5 盈利/亏损、基本面和新闻复盘、今日关注点。
+- 每日资产汇总：发送到 private `#daily-stock-summary`，允许展示总资产、现金、证券市值、具体持仓金额和分类占比；仍禁止输出账号 ID、手机号、cookie、validatekey、token、交易密码、客户号或股东号。
 
 ## 验证
 

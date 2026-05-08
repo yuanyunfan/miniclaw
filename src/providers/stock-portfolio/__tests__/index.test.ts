@@ -10,6 +10,7 @@ const config: StockPortfolioProviderConfig = {
   fx_rates: { CNY: 1, HKD: 0.92 },
   top_movers_limit: 5,
   include_cny_summary: true,
+  include_asset_summary: false,
   sources: [
     { provider: "futu-stock", config: "daily-stock-market", label: "Futu", enabled: true, required: false },
     { provider: "eastmoney-jywg-readonly", config: "daily-stock-market", label: "Eastmoney", enabled: true, required: false },

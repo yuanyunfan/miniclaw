@@ -48,6 +48,7 @@ market_session_by_job:
       include_account_snapshot: true,
       include_daily_report: true,
       include_positions_summary: true,
+      include_asset_allocation: false,
     });
     expect(resolveFutuProviderMarketSession(config, "stock-market-premarket")).toBe("premarket_0915");
     expect(resolveFutuProviderMarketSession(config, "unknown-job")).toBe("unknown-job");

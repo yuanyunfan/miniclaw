@@ -54,6 +54,7 @@ export async function runEastmoneyJywgProvider(
       includeAccountSnapshot: providerConfig.include_account_snapshot,
       includeDailyReport: providerConfig.include_daily_report,
       includePositionsSummary: providerConfig.include_positions_summary,
+      includeAssetAllocation: providerConfig.include_asset_allocation,
     });
     return {
       text: formatEastmoneyJywgProviderPayload(payload),

@@ -12,6 +12,7 @@ const config: StockPortfolioProviderConfig = {
   fx_rates_source: "test",
   top_movers_limit: 5,
   include_cny_summary: true,
+  include_asset_summary: false,
   sources: [
     { provider: "futu-stock", config: "daily-stock-market", enabled: true, required: false },
     { provider: "eastmoney-jywg-readonly", config: "daily-stock-market", enabled: true, required: false },
@@ -123,5 +124,85 @@ describe("stock-portfolio formatter", () => {
       pnl_cny: -27.6,
       instrument_type: "etf",
     });
+  });
+
+  it("builds CNY asset allocation rollups from exact source summaries", () => {
+    const payload = buildStockPortfolioPayload({
+      generatedAt: new Date("2026-05-08T09:00:00.000Z"),
+      profile: "daily-stock-summary",
+      config: { ...config, include_asset_summary: true },
+      sources: [
+        {
+          provider: "futu-stock",
+          config: "daily-stock-summary-hk",
+          label: "Futu HK",
+          status: "ok",
+          payload: {
+            snapshot: { account_alias: "Futu HK" },
+            asset_summary: {
+              currency: "HKD",
+              total_assets: 1000,
+              market_value: 800,
+              cash: 200,
+              buckets: [
+                {
+                  category: "cash",
+                  label: "现金",
+                  currency: "HKD",
+                  market_value: 200,
+                  positions_count: 0,
+                  holdings: [{ code: "CASH", name: "Cash", currency: "HKD", category: "cash", label: "现金", market_value: 200 }],
+                },
+                {
+                  category: "domestic_index",
+                  label: "国内指数",
+                  currency: "HKD",
+                  market_value: 800,
+                  positions_count: 1,
+                  holdings: [{ code: "HK.02800", name: "Tracker Fund ETF", currency: "HKD", category: "domestic_index", label: "国内指数", market_value: 800 }],
+                },
+              ],
+            },
+          },
+        },
+        {
+          provider: "eastmoney-jywg-readonly",
+          config: "daily-stock-summary",
+          label: "Eastmoney A",
+          status: "ok",
+          payload: {
+            snapshot: { account_alias: "Eastmoney A" },
+            asset_summary: {
+              currency: "CNY",
+              total_assets: 2000,
+              market_value: 1500,
+              cash: 500,
+              buckets: [
+                { category: "cash", label: "现金", currency: "CNY", market_value: 500, positions_count: 0, holdings: [] },
+                { category: "gold", label: "黄金", currency: "CNY", market_value: 1500, positions_count: 1, holdings: [
+                  { code: "518880", name: "黄金ETF", currency: "CNY", category: "gold", label: "黄金", market_value: 1500 },
+                ] },
+              ],
+            },
+          },
+        },
+      ],
+    });
+
+    expect(payload.asset_summary).toMatchObject({
+      base_currency: "CNY",
+      total_assets_cny: 2920,
+      market_value_cny: 2236,
+      cash_cny: 684,
+    });
+    expect(payload.asset_summary?.by_account).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: "Futu HK", total_assets_cny: 920 }),
+      expect.objectContaining({ label: "Eastmoney A", total_assets_cny: 2000 }),
+    ]));
+    expect(payload.asset_summary?.by_category).toEqual(expect.arrayContaining([
+      expect.objectContaining({ category: "domestic_index", market_value_cny: 736 }),
+      expect.objectContaining({ category: "gold", market_value_cny: 1500 }),
+      expect.objectContaining({ category: "cash", market_value_cny: 684 }),
+    ]));
   });
 });

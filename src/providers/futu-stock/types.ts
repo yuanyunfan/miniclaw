@@ -1,4 +1,5 @@
 import type { FutuAccountSnapshot, FutuPositionSummary, FutuRedactionLevel } from "../../mcp/futu-stock/types.js";
+import type { AssetAllocationSummary } from "../asset-allocation.js";
 
 export interface FutuStockProviderConfig {
   profile: string;
@@ -10,6 +11,7 @@ export interface FutuStockProviderConfig {
   include_account_snapshot: boolean;
   include_daily_report: boolean;
   include_positions_summary: boolean;
+  include_asset_allocation: boolean;
 }
 
 export interface FutuStockProviderTopPosition {
@@ -44,6 +46,7 @@ export interface FutuStockProviderFormatOptions {
   includeAccountSnapshot: boolean;
   includeDailyReport: boolean;
   includePositionsSummary: boolean;
+  includeAssetAllocation: boolean;
 }
 
 export interface FutuStockProviderPayload {
@@ -62,6 +65,7 @@ export interface FutuStockProviderPayload {
     top_gainers: FutuStockProviderTopPosition[];
     top_losers: FutuStockProviderTopPosition[];
   };
+  asset_summary?: AssetAllocationSummary;
   warnings: string[];
   usage_notes: string[];
 }

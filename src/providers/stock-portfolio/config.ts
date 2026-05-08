@@ -109,5 +109,6 @@ export function loadStockPortfolioProviderConfig(name = "default"): StockPortfol
     fx_rates_source: optionalString(raw.fx_rates_source),
     top_movers_limit: nonNegativeInt(raw.top_movers_limit, 5, 20),
     include_cny_summary: boolValue(raw.include_cny_summary, true),
+    include_asset_summary: boolValue(raw.include_asset_summary, false),
   };
 }

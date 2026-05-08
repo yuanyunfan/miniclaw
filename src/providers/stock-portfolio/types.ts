@@ -1,4 +1,5 @@
 import type { PreProviderResult, PreProviderRunArgs } from "../types.js";
+import type { AssetAllocationCategory, AssetAllocationHolding } from "../asset-allocation.js";
 
 export type StockPortfolioSourceName = "futu-stock" | "eastmoney-jywg-readonly";
 export type StockPortfolioMarketScope = "all" | "us" | "cn";
@@ -22,6 +23,7 @@ export interface StockPortfolioProviderConfig {
   fx_rates_source?: string;
   top_movers_limit: number;
   include_cny_summary: boolean;
+  include_asset_summary: boolean;
 }
 
 export interface StockPortfolioSourceOk {
@@ -51,6 +53,7 @@ export interface StockPortfolioPayload {
   failed_count: number;
   sources: StockPortfolioSourceResult[];
   cny_summary?: StockPortfolioCnySummary;
+  asset_summary?: StockPortfolioAssetSummary;
   warnings: string[];
   usage_notes: string[];
 }
@@ -101,5 +104,50 @@ export interface StockPortfolioCnySummary {
   by_currency: StockPortfolioCurrencyPnlSummary[];
   top_gainers: StockPortfolioCnyPosition[];
   top_losers: StockPortfolioCnyPosition[];
+  warnings: string[];
+}
+
+export interface StockPortfolioAssetHolding extends AssetAllocationHolding {
+  provider: StockPortfolioSourceName;
+  config: string;
+  source_label?: string;
+  market_value_cny: number;
+  fx_rate_to_cny: number;
+}
+
+export interface StockPortfolioAssetAccountSummary {
+  provider: StockPortfolioSourceName;
+  config: string;
+  label?: string;
+  account_alias?: string;
+  currency: string;
+  fx_rate_to_cny: number;
+  total_assets?: number;
+  total_assets_cny?: number;
+  market_value?: number;
+  market_value_cny?: number;
+  cash?: number;
+  cash_cny?: number;
+}
+
+export interface StockPortfolioAssetCategorySummary {
+  category: AssetAllocationCategory;
+  label: string;
+  market_value_cny: number;
+  percentage_of_total_assets_cny?: number;
+  positions_count: number;
+  holdings: StockPortfolioAssetHolding[];
+}
+
+export interface StockPortfolioAssetSummary {
+  base_currency: string;
+  fx_rates: Record<string, number>;
+  fx_rates_as_of?: string;
+  fx_rates_source?: string;
+  total_assets_cny?: number;
+  market_value_cny?: number;
+  cash_cny?: number;
+  by_account: StockPortfolioAssetAccountSummary[];
+  by_category: StockPortfolioAssetCategorySummary[];
   warnings: string[];
 }

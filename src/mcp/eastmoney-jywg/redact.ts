@@ -65,8 +65,10 @@ export function redactedSnapshotJson(
     floating_pnl: snapshot.floating_pnl,
     total_assets: exact ? snapshot.total_assets : undefined,
     total_assets_range: exact ? undefined : formatAssetRange(snapshot.total_assets, snapshot.currency),
-    market_value_range: formatAssetRange(snapshot.market_value, snapshot.currency),
-    cash_available_range: formatAssetRange(snapshot.cash_available, snapshot.currency),
+    market_value: exact ? snapshot.market_value : undefined,
+    market_value_range: exact ? undefined : formatAssetRange(snapshot.market_value, snapshot.currency),
+    cash_available: exact ? snapshot.cash_available : undefined,
+    cash_available_range: exact ? undefined : formatAssetRange(snapshot.cash_available, snapshot.currency),
     positions_count: snapshot.positions.length,
     warnings: snapshot.warnings,
   };

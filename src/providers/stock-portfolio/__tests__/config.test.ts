@@ -60,6 +60,7 @@ sources:
     expect(config.fx_rates_source).toBe("manual-test");
     expect(config.top_movers_limit).toBe(5);
     expect(config.include_cny_summary).toBe(true);
+    expect(config.include_asset_summary).toBe(false);
     expect(config.sources).toEqual([
       { provider: "futu-stock", config: "daily-stock-market", label: "Futu", enabled: true, required: false },
       { provider: "eastmoney-jywg-readonly", config: "daily-stock-market", label: "Eastmoney", enabled: true, required: false },

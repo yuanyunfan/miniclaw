@@ -1,4 +1,7 @@
 import type {
+  StockPortfolioAssetCategorySummary,
+  StockPortfolioAssetHolding,
+  StockPortfolioAssetSummary,
   StockPortfolioCnyPosition,
   StockPortfolioCnySummary,
   StockPortfolioCurrencyPnlSummary,
@@ -7,6 +10,7 @@ import type {
   StockPortfolioSourceOk,
   StockPortfolioSourceResult,
 } from "./types.js";
+import { assetCategoryLabel, type AssetAllocationCategory } from "../asset-allocation.js";
 
 export function sanitizeStockPortfolioError(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err);
@@ -100,6 +104,165 @@ function sourceTopPositions(source: StockPortfolioSourceOk, key: "top_gainers" |
       return candidate;
     })
     .filter((position): position is StockPortfolioCnyPosition => position !== undefined);
+}
+
+function categoryValue(value: unknown): AssetAllocationCategory | undefined {
+  if (
+    value === "bond" ||
+    value === "foreign_index" ||
+    value === "domestic_index" ||
+    value === "gold" ||
+    value === "cash" ||
+    value === "stock" ||
+    value === "other"
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
+function sourceAssetSummary(source: StockPortfolioSourceOk): Record<string, unknown> | undefined {
+  return isRecord(source.payload.asset_summary) ? source.payload.asset_summary : undefined;
+}
+
+function sourceAccountAlias(source: StockPortfolioSourceOk): string | undefined {
+  const snapshot = isRecord(source.payload.snapshot) ? source.payload.snapshot : undefined;
+  return str(snapshot?.account_alias, source.label ?? "");
+}
+
+function buildAssetSummary(
+  sources: StockPortfolioSourceResult[],
+  config: StockPortfolioProviderConfig,
+): StockPortfolioAssetSummary | undefined {
+  if (!config.include_asset_summary) return undefined;
+
+  const warnings = new Set<string>();
+  const byAccount: StockPortfolioAssetSummary["by_account"] = [];
+  const byCategory = new Map<AssetAllocationCategory, StockPortfolioAssetCategorySummary>();
+
+  function categoryBucket(category: AssetAllocationCategory): StockPortfolioAssetCategorySummary {
+    const existing = byCategory.get(category);
+    if (existing) return existing;
+    const bucket: StockPortfolioAssetCategorySummary = {
+      category,
+      label: assetCategoryLabel(category),
+      market_value_cny: 0,
+      positions_count: 0,
+      holdings: [],
+    };
+    byCategory.set(category, bucket);
+    return bucket;
+  }
+
+  const okSources = sources.filter((source): source is StockPortfolioSourceOk => source.status === "ok");
+  for (const source of okSources) {
+    const summary = sourceAssetSummary(source);
+    if (!summary) {
+      warnings.add(`${source.provider}/${source.config} has no asset_summary; asset allocation may be incomplete`);
+      continue;
+    }
+    const currency = str(summary.currency, "CNY").toUpperCase();
+    const rate = fxRateFor(currency, config, warnings);
+    if (rate === undefined) continue;
+
+    const totalAssets = num(summary.total_assets);
+    const marketValue = num(summary.market_value);
+    const cash = num(summary.cash);
+
+    byAccount.push({
+      provider: source.provider,
+      config: source.config,
+      label: source.label,
+      account_alias: sourceAccountAlias(source),
+      currency,
+      fx_rate_to_cny: rate,
+      total_assets: totalAssets,
+      total_assets_cny: totalAssets === undefined ? undefined : roundMoney(totalAssets * rate),
+      market_value: marketValue,
+      market_value_cny: marketValue === undefined ? undefined : roundMoney(marketValue * rate),
+      cash,
+      cash_cny: cash === undefined ? undefined : roundMoney(cash * rate),
+    });
+
+    const buckets = Array.isArray(summary.buckets) ? summary.buckets.filter(isRecord) : [];
+    for (const rawBucket of buckets) {
+      const category = categoryValue(rawBucket.category);
+      if (!category) {
+        warnings.add(`${source.provider}/${source.config} has unknown asset category: ${String(rawBucket.category)}`);
+        continue;
+      }
+      const value = num(rawBucket.market_value);
+      if (value === undefined) continue;
+      const convertedValue = roundMoney(value * rate);
+      const bucket = categoryBucket(category);
+      bucket.market_value_cny = roundMoney(bucket.market_value_cny + convertedValue);
+      bucket.positions_count += num(rawBucket.positions_count) ?? 0;
+
+      const holdings = Array.isArray(rawBucket.holdings) ? rawBucket.holdings.filter(isRecord) : [];
+      for (const rawHolding of holdings) {
+        const holdingValue = num(rawHolding.market_value);
+        if (holdingValue === undefined) continue;
+        const holdingCategory = categoryValue(rawHolding.category) ?? category;
+        const holding: StockPortfolioAssetHolding = {
+          provider: source.provider,
+          config: source.config,
+          source_label: source.label,
+          code: str(rawHolding.code, "UNKNOWN"),
+          name: str(rawHolding.name, "UNKNOWN"),
+          currency: str(rawHolding.currency, currency).toUpperCase(),
+          category: holdingCategory,
+          label: str(rawHolding.label, assetCategoryLabel(holdingCategory)),
+          market_value: roundMoney(holdingValue),
+          market_value_cny: roundMoney(holdingValue * rate),
+          fx_rate_to_cny: rate,
+          instrument_type: str(rawHolding.instrument_type) || undefined,
+        };
+        bucket.holdings.push(holding);
+      }
+    }
+  }
+
+  const totalAssetsCnyValues = byAccount
+    .map((account) => account.total_assets_cny)
+    .filter((value): value is number => value !== undefined);
+  const totalAssetsCny = totalAssetsCnyValues.length
+    ? roundMoney(totalAssetsCnyValues.reduce((sum, value) => sum + value, 0))
+    : undefined;
+  const marketValueCnyValues = byAccount
+    .map((account) => account.market_value_cny)
+    .filter((value): value is number => value !== undefined);
+  const marketValueCny = marketValueCnyValues.length
+    ? roundMoney(marketValueCnyValues.reduce((sum, value) => sum + value, 0))
+    : undefined;
+  const cashCnyValues = byAccount
+    .map((account) => account.cash_cny)
+    .filter((value): value is number => value !== undefined);
+  const cashCny = cashCnyValues.length
+    ? roundMoney(cashCnyValues.reduce((sum, value) => sum + value, 0))
+    : undefined;
+
+  const byCategoryRows = [...byCategory.values()]
+    .map((bucket) => ({
+      ...bucket,
+      percentage_of_total_assets_cny: totalAssetsCny && totalAssetsCny !== 0
+        ? roundMoney((bucket.market_value_cny / totalAssetsCny) * 100)
+        : undefined,
+      holdings: bucket.holdings.sort((a, b) => b.market_value_cny - a.market_value_cny),
+    }))
+    .sort((a, b) => b.market_value_cny - a.market_value_cny);
+
+  return {
+    base_currency: config.base_currency,
+    fx_rates: Object.fromEntries(Object.entries(config.fx_rates).map(([currency, rate]) => [currency.toUpperCase(), rate])),
+    fx_rates_as_of: config.fx_rates_as_of,
+    fx_rates_source: config.fx_rates_source,
+    total_assets_cny: totalAssetsCny,
+    market_value_cny: marketValueCny,
+    cash_cny: cashCny,
+    by_account: byAccount,
+    by_category: byCategoryRows,
+    warnings: [...warnings],
+  };
 }
 
 function buildCnySummary(
@@ -217,6 +380,7 @@ export function buildStockPortfolioPayload(params: {
 }): StockPortfolioPayload {
   const failed = params.sources.filter((source) => source.status === "error");
   const cnySummary = buildCnySummary(params.sources, params.config);
+  const assetSummary = buildAssetSummary(params.sources, params.config);
   return {
     generated_at: params.generatedAt.toISOString(),
     source: "stock-portfolio",
@@ -226,14 +390,19 @@ export function buildStockPortfolioPayload(params: {
     failed_count: failed.length,
     sources: params.sources,
     cny_summary: cnySummary,
+    asset_summary: assetSummary,
     warnings: [
       ...failed.map((source) => `${source.provider}/${source.config}: ${source.error}`),
       ...(cnySummary?.warnings ?? []),
+      ...(assetSummary?.warnings ?? []),
     ],
     usage_notes: [
       "This payload aggregates read-only broker providers for MiniClaw stock reports.",
-      "Each nested provider payload is already redacted; do not output account ids, exact total assets, cookies, validate keys, passwords, or trade passwords.",
+      params.config.include_asset_summary
+        ? "Exact asset and holding market values may be intentionally included for trusted private channels; still do not output account ids, cookies, validate keys, passwords, or trade passwords."
+        : "Each nested provider payload is already redacted; do not output account ids, exact total assets, cookies, validate keys, passwords, or trade passwords.",
       "CNY P&L summary is calculated from configured FX rates before the LLM runs; mention fx_rates_as_of/source when reporting converted numbers.",
+      "Asset allocation buckets are calculated before the LLM runs from broker position market values and cash balances.",
       "If one broker source failed, use the remaining source data and explicitly mention the missing source without inventing holdings or P&L.",
     ],
   };

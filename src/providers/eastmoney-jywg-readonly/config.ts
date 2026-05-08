@@ -79,6 +79,7 @@ export function loadEastmoneyJywgProviderConfig(name = "default"): EastmoneyJywg
     include_account_snapshot: boolValue(raw.include_account_snapshot, true),
     include_daily_report: boolValue(raw.include_daily_report, true),
     include_positions_summary: boolValue(raw.include_positions_summary, true),
+    include_asset_allocation: boolValue(raw.include_asset_allocation, false),
   };
 }
 

@@ -32,6 +32,7 @@ const providerConfig: FutuStockProviderConfig = {
   include_account_snapshot: true,
   include_daily_report: true,
   include_positions_summary: true,
+  include_asset_allocation: false,
 };
 
 const raw: FutuRawBrokerData = {

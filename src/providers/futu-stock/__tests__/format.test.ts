@@ -63,6 +63,7 @@ describe("futu-stock provider formatter", () => {
       includeAccountSnapshot: true,
       includeDailyReport: true,
       includePositionsSummary: true,
+      includeAssetAllocation: false,
     });
 
     const text = formatFutuStockProviderPayload(payload);
@@ -98,6 +99,43 @@ describe("futu-stock provider formatter", () => {
       code: "HK.02800",
       daily_pnl: -123.45,
       instrument_type: "etf",
+    });
+  });
+
+  it("includes exact asset allocation only when requested for private reports", () => {
+    const payload = buildFutuStockProviderPayload(snapshot, { ...profile, redaction: "exact", show_total_assets: true }, {
+      generatedAt: new Date("2026-05-07T08:31:00.000Z"),
+      profileName: "default",
+      marketSession: "daily_summary_1700_bjt",
+      redaction: "exact",
+      topPositionsLimit: 5,
+      includeAccountSnapshot: true,
+      includeDailyReport: true,
+      includePositionsSummary: true,
+      includeAssetAllocation: true,
+    });
+
+    const parsed = JSON.parse(formatFutuStockProviderPayload(payload));
+    const stockBucket = parsed.asset_summary.buckets.find((bucket: { category: string }) => bucket.category === "stock");
+
+    expect(parsed.snapshot).toMatchObject({
+      total_assets: 123456.78,
+      market_value: 100000,
+      cash: 23456.78,
+    });
+    expect(parsed.asset_summary).toMatchObject({
+      currency: "HKD",
+      total_assets: 123456.78,
+      cash: 23456.78,
+    });
+    expect(parsed.asset_summary.buckets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ category: "cash", market_value: 23456.78 }),
+      expect.objectContaining({ category: "domestic_index", market_value: 20000 }),
+      expect.objectContaining({ category: "stock", market_value: 50000 }),
+    ]));
+    expect(stockBucket.holdings[0]).toMatchObject({
+      code: "HK.00700",
+      market_value: 50000,
     });
   });
 });

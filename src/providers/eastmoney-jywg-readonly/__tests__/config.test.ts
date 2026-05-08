@@ -52,6 +52,7 @@ market_session_by_job:
       include_account_snapshot: true,
       include_daily_report: true,
       include_positions_summary: true,
+      include_asset_allocation: false,
     });
     expect(resolveEastmoneyJywgProviderMarketSession(config, "stock-market-premarket")).toBe("premarket_0915");
     expect(resolveEastmoneyJywgProviderMarketSession(config, "unknown-job")).toBe("unknown-job");

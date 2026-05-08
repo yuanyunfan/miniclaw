@@ -3,13 +3,14 @@
 // 用法: pnpm tsx scripts/setup-miniclaw-channels.ts
 //
 // channel ID 映射写入 ~/.miniclaw/channel-map.json（用户级配置，不进 git repo）
-import { Client, GatewayIntentBits, ChannelType, type Guild } from "discord.js";
+import { Client, GatewayIntentBits, ChannelType, PermissionFlagsBits, type Guild, type OverwriteResolvable } from "discord.js";
 import { config } from "../src/config.js";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 const GUILD_ID = process.env.MINICLAW_GUILD_ID ?? config.discord.guildId;
+type ChannelSpec = string | { name: string; private?: boolean };
 
 const STRUCTURE = [
   {
@@ -22,7 +23,7 @@ const STRUCTURE = [
   },
   {
     category: "💹 STOCK",
-    channels: ["daily-stock-market"],
+    channels: ["daily-us-stock", "daily-cn-stock", { name: "daily-stock-summary", private: true }],
   },
   {
     category: "📰 NEWS",
@@ -45,7 +46,42 @@ async function ensureCategory(guild: Guild, name: string): Promise<string> {
   return created.id;
 }
 
-async function ensureTextChannel(guild: Guild, name: string, parentId: string): Promise<string> {
+function channelName(spec: ChannelSpec): string {
+  return typeof spec === "string" ? spec : spec.name;
+}
+
+function privateOverwrites(guild: Guild): OverwriteResolvable[] {
+  const allow = [
+    PermissionFlagsBits.ViewChannel,
+    PermissionFlagsBits.SendMessages,
+    PermissionFlagsBits.ReadMessageHistory,
+    PermissionFlagsBits.EmbedLinks,
+    PermissionFlagsBits.AttachFiles,
+  ];
+  return [
+    { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+    { id: config.discord.allowedUserId, allow },
+    { id: client.user!.id, allow },
+  ];
+}
+
+async function applyPrivateOverwrites(guild: Guild, channelId: string): Promise<void> {
+  const channel = await guild.channels.fetch(channelId);
+  if (!channel || channel.type !== ChannelType.GuildText) return;
+  for (const overwrite of privateOverwrites(guild)) {
+    await channel.permissionOverwrites.edit(overwrite.id, {
+      ViewChannel: overwrite.id === guild.roles.everyone.id ? false : true,
+      SendMessages: overwrite.id === guild.roles.everyone.id ? null : true,
+      ReadMessageHistory: overwrite.id === guild.roles.everyone.id ? null : true,
+      EmbedLinks: overwrite.id === guild.roles.everyone.id ? null : true,
+      AttachFiles: overwrite.id === guild.roles.everyone.id ? null : true,
+    });
+  }
+}
+
+async function ensureTextChannel(guild: Guild, spec: ChannelSpec, parentId: string): Promise<string> {
+  const name = channelName(spec);
+  const isPrivate = typeof spec !== "string" && spec.private === true;
   const existing = guild.channels.cache.find(
     (c) => c.type === ChannelType.GuildText && c.name === name
   );
@@ -56,12 +92,17 @@ async function ensureTextChannel(guild: Guild, name: string, parentId: string): 
     } else {
       console.log(`  [skip] channel 已存在: #${name} (${existing.id})`);
     }
+    if (isPrivate) {
+      await applyPrivateOverwrites(guild, existing.id);
+      console.log(`  [lock] private channel: #${name}`);
+    }
     return existing.id;
   }
   const created = await guild.channels.create({
     name,
     type: ChannelType.GuildText,
     parent: parentId,
+    permissionOverwrites: isPrivate ? privateOverwrites(guild) : undefined,
   });
   console.log(`  [new ] channel: #${name} (${created.id})`);
   return created.id;
@@ -78,9 +119,9 @@ client.once("ready", async (c) => {
   for (const group of STRUCTURE) {
     console.log(`\n[${group.category}]`);
     const categoryId = await ensureCategory(guild, group.category);
-    for (const chName of group.channels) {
-      const id = await ensureTextChannel(guild, chName, categoryId);
-      channelMap[chName] = id;
+    for (const ch of group.channels) {
+      const id = await ensureTextChannel(guild, ch, categoryId);
+      channelMap[channelName(ch)] = id;
     }
   }
 

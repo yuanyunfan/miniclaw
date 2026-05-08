@@ -3,6 +3,7 @@ import type {
   EastmoneyJywgPositionSummary,
   EastmoneyJywgRedactionLevel,
 } from "../../mcp/eastmoney-jywg/types.js";
+import type { AssetAllocationSummary } from "../asset-allocation.js";
 
 export interface EastmoneyJywgProviderConfig {
   profile: string;
@@ -14,6 +15,7 @@ export interface EastmoneyJywgProviderConfig {
   include_account_snapshot: boolean;
   include_daily_report: boolean;
   include_positions_summary: boolean;
+  include_asset_allocation: boolean;
 }
 
 export interface EastmoneyJywgProviderTopPosition {
@@ -46,6 +48,7 @@ export interface EastmoneyJywgProviderFormatOptions {
   includeAccountSnapshot: boolean;
   includeDailyReport: boolean;
   includePositionsSummary: boolean;
+  includeAssetAllocation: boolean;
 }
 
 export interface EastmoneyJywgProviderPayload {
@@ -64,6 +67,7 @@ export interface EastmoneyJywgProviderPayload {
     top_gainers: EastmoneyJywgProviderTopPosition[];
     top_losers: EastmoneyJywgProviderTopPosition[];
   };
+  asset_summary?: AssetAllocationSummary;
   warnings: string[];
   usage_notes: string[];
 }
