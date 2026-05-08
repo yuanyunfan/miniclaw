@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import { randomBytes } from "node:crypto";
+import { config } from "../config.js";
 
 const TYPES = ["user", "project", "feedback", "reference"] as const;
 type MemoryType = typeof TYPES[number];
@@ -34,7 +34,7 @@ export interface MemoryRow {
 }
 
 function memoryPath(): string {
-  return process.env.MINICLAW_MEMORY_PATH ?? join(homedir(), ".miniclaw/memories/MEMORY.md");
+  return config.memoryPath;
 }
 
 function ensureDir(path: string): void {

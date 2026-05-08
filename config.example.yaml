@@ -86,6 +86,15 @@ mcp:
 
 storage:
   db_path: "~/.miniclaw/data.db"
+  memory_path: "~/.miniclaw/memories/MEMORY.md"
+
+e2e:
+  # Test-only mode for Discord E2E harnesses. Production config should keep this false.
+  mode: false
+  # Dedicated sender bot/user IDs allowed to drive E2E messages when mode is true.
+  sender_user_ids: []
+  # Keep true in E2E mode so test runs cannot load or execute local cron jobs.
+  disable_scheduler: false
 
 attachments:
   max_mb: 32

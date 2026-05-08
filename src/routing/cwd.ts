@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { resolve } from "node:path";
-import { config } from "../config.js";
+import { assertE2eSafeRuntimePath, config } from "../config.js";
 
 export function resolveHomePath(path: string): string {
   const trimmed = path.trim();
@@ -10,7 +10,11 @@ export function resolveHomePath(path: string): string {
 }
 
 export function resolveTaskCwd(channelId: string | undefined, explicitCwd?: string | null): string {
-  if (explicitCwd?.trim()) return resolveHomePath(explicitCwd);
+  if (explicitCwd?.trim()) {
+    const cwd = resolveHomePath(explicitCwd);
+    assertE2eSafeRuntimePath("explicit task cwd", cwd);
+    return cwd;
+  }
   if (channelId) {
     const channelDefault = config.channelDefaults[channelId];
     if (channelDefault?.cwd) return channelDefault.cwd;

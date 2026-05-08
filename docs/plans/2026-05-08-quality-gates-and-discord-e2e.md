@@ -101,3 +101,16 @@ MiniClaw also handles Discord, cron, local `~/.miniclaw` config, secrets, broker
 - Coverage report from `quality:push`: all 68 test files passed, 354 tests passed, total statement coverage 58.2%. No threshold was added in this slice.
 - First G0 pass produced expected false positives for `.env.example` placeholders and `vitest.setup.ts` test token fallback; tightened assignment matching so placeholders and `process.env` fallbacks do not fail tree scans.
 - G0 tree mode now scans tracked plus untracked non-ignored files locally, so newly created scripts and workflows are checked before they are staged.
+- Continued with `P0-05` E2E safety configuration.
+- Added E2E runtime config:
+  - `MINICLAW_E2E_MODE` / `e2e.mode`.
+  - `MINICLAW_E2E_SENDER_USER_IDS` / `e2e.sender_user_ids`.
+  - `MINICLAW_DISABLE_SCHEDULER` / `e2e.disable_scheduler`.
+  - `MINICLAW_MEMORY_PATH` / `storage.memory_path`.
+- E2E mode now fails closed unless config, DB path, memory path, default cwd, and channel default cwd all resolve under the system temp directory.
+- E2E mode now refuses explicit `/task cwd` paths outside the temp directory at runtime.
+- Discord message author filtering now allows configured E2E sender bot IDs only when E2E mode is enabled; normal production bot messages remain ignored.
+- Scheduler startup is disabled when `MINICLAW_DISABLE_SCHEDULER=true`, preventing E2E runs from reading or executing local cron jobs.
+- Local P0-05 verification passed:
+  - `pnpm exec vitest run src/__tests__/config.test.ts src/e2e/__tests__/safety.test.ts src/memory/__tests__/memory-md.test.ts src/memory/__tests__/inject.test.ts`
+  - `pnpm run typecheck`

@@ -30,6 +30,7 @@ import { resolveTaskCwd } from "./routing/cwd.js";
 import { hashPrompt, promptPreview } from "./routing/decision-log.js";
 import { classifySmartRoute, resolveSmartRouterAction, type RouteDecision } from "./routing/intent.js";
 import { classifyRouteWithLlm } from "./routing/llm.js";
+import { isAllowedDiscordMessageAuthor } from "./e2e/safety.js";
 import {
   buildSmartRouterCustomId,
   consumePendingConfirmation,
@@ -273,8 +274,7 @@ export function createBot(): Client {
   const processed = new Map<string, number>();
 
   client.on(Events.MessageCreate, async (message: Message) => {
-    if (message.author.bot) return;
-    if (message.author.id !== config.allowedUserId) return;
+    if (!isAllowedDiscordMessageAuthor(message.author.id, message.author.bot)) return;
 
     // Thread continuation: 仅当消息发在 /task 创建过的真正 Discord thread 里才自动 resume
     // （防 cron 在普通 channel 跑过留下 discord_thread_id 记录被误命中）

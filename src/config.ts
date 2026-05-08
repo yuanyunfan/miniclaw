@@ -1,7 +1,7 @@
 import "./proxy.js";
 import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import yaml from "js-yaml";
 import { createLogger } from "./lib/log.js";
 
@@ -308,15 +308,54 @@ const agentProvider = oneOf<AgentProvider>(["agent", "provider"], "MINICLAW_AGEN
 const claudeModel = requiredString(["claude", "model"], ["MINICLAW_CLAUDE_MODEL", "MINICLAW_MODEL"], "claude-opus-4-7");
 const codexModel = stringOrInherit(["codex", "model"], "MINICLAW_CODEX_MODEL", "gpt-5.5");
 const autoReplyChannelIds = stringArray(["routing", "auto_reply_channels"], "MINICLAW_AUTO_REPLY_CHANNELS");
+const taskChannelIds = stringArray(["routing", "task_channels"], "MINICLAW_TASK_CHANNELS");
+const channelDefaultConfig = channelDefaults(["routing", "channel_defaults"], []);
 const anthropicBaseUrl = optionalString(["anthropic", "base_url"], "ANTHROPIC_BASE_URL");
 const openaiBaseUrl = optionalString(["openai", "base_url"], "OPENAI_BASE_URL");
 const smartRouterEnabled = boolValue(["routing", "smart_router", "enabled"], "MINICLAW_SMART_ROUTER_ENABLED", false);
+const e2eMode = boolValue(["e2e", "mode"], "MINICLAW_E2E_MODE", false);
+const e2eSenderUserIds = stringArray(["e2e", "sender_user_ids"], "MINICLAW_E2E_SENDER_USER_IDS");
+const disableScheduler = boolValue(["e2e", "disable_scheduler"], "MINICLAW_DISABLE_SCHEDULER", false);
+const defaultCwd = resolveHome(requiredString(["agent", "default_cwd"], "MINICLAW_DEFAULT_CWD", "~/Code"));
+const dbPath = resolveHome(requiredString(["storage", "db_path"], "MINICLAW_DB_PATH", "~/.miniclaw/data.db"));
+const memoryPath = resolveHome(requiredString(["storage", "memory_path"], "MINICLAW_MEMORY_PATH", "~/.miniclaw/memories/MEMORY.md"));
 
 if (anthropicBaseUrl && !process.env.ANTHROPIC_BASE_URL) process.env.ANTHROPIC_BASE_URL = anthropicBaseUrl;
 if (openaiBaseUrl && !process.env.OPENAI_BASE_URL) process.env.OPENAI_BASE_URL = openaiBaseUrl;
 
 if (!autoReplyChannelIds.length) {
   log.warn("auto_reply_channels 未配置，所有频道需 @mention 触发");
+}
+
+function isUnderDir(path: string, parent: string): boolean {
+  const rel = relative(resolve(parent), resolve(path));
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+function assertE2eTempPath(kind: string, path: string): void {
+  if (!e2eMode) return;
+  if (!isUnderDir(path, tmpdir())) {
+    throw new Error(`E2E mode requires ${kind} to be under system temp dir ${tmpdir()}: ${path}`);
+  }
+}
+
+if (e2eMode) {
+  if (!configuredConfigPath) {
+    throw new Error("E2E mode requires MINICLAW_CONFIG to point to a temp config file");
+  }
+  if (!e2eSenderUserIds.length) {
+    throw new Error("E2E mode requires MINICLAW_E2E_SENDER_USER_IDS");
+  }
+  if (!disableScheduler) {
+    throw new Error("E2E mode requires MINICLAW_DISABLE_SCHEDULER=true");
+  }
+  assertE2eTempPath("MINICLAW_CONFIG", configPath);
+  assertE2eTempPath("MINICLAW_DB_PATH", dbPath);
+  assertE2eTempPath("MINICLAW_MEMORY_PATH", memoryPath);
+  assertE2eTempPath("MINICLAW_DEFAULT_CWD", defaultCwd);
+  for (const [channelId, value] of Object.entries(channelDefaultConfig)) {
+    assertE2eTempPath(`routing.channel_defaults.${channelId}.cwd`, value.cwd);
+  }
 }
 
 export const config = {
@@ -338,7 +377,7 @@ export const config = {
   openaiApiKey: optionalString(["openai", "api_key"], "OPENAI_API_KEY"),
   openaiBaseUrl,
   allowedUserId: requiredString(["discord", "allowed_user_id"], "MINICLAW_ALLOWED_USER_ID"),
-  defaultCwd: resolveHome(requiredString(["agent", "default_cwd"], "MINICLAW_DEFAULT_CWD", "~/Code")),
+  defaultCwd,
   maxConcurrentTasks: positiveInt(["agent", "max_concurrent_tasks"], "MINICLAW_MAX_CONCURRENT_TASKS", 3),
   defaultBudgetUsd: numberOrUnlimited(["agent", "budget_usd"], "MINICLAW_DEFAULT_BUDGET_USD", 1.0),
   defaultMaxTurns: numberOrUnlimited(["agent", "max_turns"], "MINICLAW_DEFAULT_MAX_TURNS", 30),
@@ -401,8 +440,8 @@ export const config = {
     allowlist: stringArray(["mcp", "allowlist"], "MINICLAW_MCP_ALLOWLIST", ["exa", "context7"]),
   },
   autoReplyChannelIds,
-  taskChannelIds: stringArray(["routing", "task_channels"], "MINICLAW_TASK_CHANNELS"),
-  channelDefaults: channelDefaults(["routing", "channel_defaults"], []),
+  taskChannelIds,
+  channelDefaults: channelDefaultConfig,
   smartRouter: {
     enabled: smartRouterEnabled,
     defaultMode: oneOf<SmartRouterDefaultMode>(
@@ -495,7 +534,21 @@ export const config = {
       ),
     },
   },
-  dbPath: resolveHome(requiredString(["storage", "db_path"], "MINICLAW_DB_PATH", "~/.miniclaw/data.db")),
+  dbPath,
+  memoryPath,
+  e2e: {
+    mode: e2eMode,
+    senderUserIds: e2eSenderUserIds,
+    disableScheduler,
+    tempRoot: tmpdir(),
+  },
   maxAttachmentMb: positiveNumber(["attachments", "max_mb"], "MINICLAW_MAX_ATTACHMENT_MB", 32),
   maxAttachments: positiveInt(["attachments", "max_count"], "MINICLAW_MAX_ATTACHMENTS", 10),
 } as const;
+
+export function assertE2eSafeRuntimePath(kind: string, path: string): void {
+  if (!config.e2e.mode) return;
+  if (!isUnderDir(path, config.e2e.tempRoot)) {
+    throw new Error(`E2E mode refuses ${kind} outside system temp dir ${config.e2e.tempRoot}: ${path}`);
+  }
+}

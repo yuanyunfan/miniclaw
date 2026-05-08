@@ -1,13 +1,17 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { addMemory } from "../../store/memory-md.js";
-import { buildMemoryPrompt } from "../inject.js";
 
-beforeEach(() => {
+let addMemory: typeof import("../../store/memory-md.js").addMemory;
+let buildMemoryPrompt: typeof import("../inject.js").buildMemoryPrompt;
+
+beforeEach(async () => {
   const dir = mkdtempSync(join(tmpdir(), "miniclaw-memory-inject-"));
   process.env.MINICLAW_MEMORY_PATH = join(dir, "MEMORY.md");
+  vi.resetModules();
+  ({ addMemory } = await import("../../store/memory-md.js"));
+  ({ buildMemoryPrompt } = await import("../inject.js"));
 });
 
 describe("buildMemoryPrompt", () => {

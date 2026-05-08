@@ -29,6 +29,10 @@ async function main(): Promise<void> {
 
   bot = createBot();
   bot.once(Events.ClientReady, (client) => {
+    if (config.e2e.disableScheduler) {
+      log.info("Cron scheduler disabled by MINICLAW_DISABLE_SCHEDULER");
+      return;
+    }
     startScheduler(client);
   });
   await bot.login(config.discord.token);

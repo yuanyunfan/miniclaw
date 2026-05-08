@@ -55,6 +55,10 @@ const ENV_KEYS = [
   "MINICLAW_MCP_CONFIG",
   "MINICLAW_MCP_ALLOWLIST",
   "MINICLAW_DB_PATH",
+  "MINICLAW_MEMORY_PATH",
+  "MINICLAW_E2E_MODE",
+  "MINICLAW_E2E_SENDER_USER_IDS",
+  "MINICLAW_DISABLE_SCHEDULER",
   "MINICLAW_MAX_ATTACHMENT_MB",
   "MINICLAW_MAX_ATTACHMENTS",
 ] as const;
@@ -85,6 +89,7 @@ afterEach(() => {
 describe("config", () => {
   it("loads hierarchical yaml config", async () => {
     const mcpConfig = join(tmpDir, "claude.json");
+    const memoryPath = join(tmpDir, "MEMORY.md");
     const cfg = join(tmpDir, "config.yaml");
     writeFileSync(cfg, `
 discord:
@@ -149,6 +154,7 @@ mcp:
   allowlist: [exa, context7]
 storage:
   db_path: "${join(tmpDir, "data.db")}"
+  memory_path: "${memoryPath}"
 attachments:
   max_mb: 16
   max_count: 3
@@ -172,6 +178,8 @@ attachments:
     expect(config.codex.timeoutMs).toBe(3000);
     expect(config.codex.networkAccess).toBeUndefined();
     expect(config.mcp).toEqual({ configPath: mcpConfig, allowlist: ["exa", "context7"] });
+    expect(config.dbPath).toBe(join(tmpDir, "data.db"));
+    expect(config.memoryPath).toBe(memoryPath);
     expect(config.taskChannelIds).toEqual(["task-yaml"]);
     expect(config.channelDefaults["task-yaml"]).toEqual({ cwd: tmpDir });
     expect(config.smartRouter).toMatchObject({
@@ -209,6 +217,7 @@ mcp:
   allowlist: [exa]
 storage:
   db_path: "${join(tmpDir, "data.db")}"
+  memory_path: "${join(tmpDir, "MEMORY.md")}"
 `);
     process.env.MINICLAW_CONFIG = cfg;
     process.env.DISCORD_TOKEN = "token-env";
@@ -244,6 +253,7 @@ agent:
   max_turns: 8
 storage:
   db_path: "${join(tmpDir, "data.db")}"
+  memory_path: "${join(tmpDir, "MEMORY.md")}"
 `);
     process.env.MINICLAW_CONFIG = cfg;
     process.env.DISCORD_TOKEN = "token-env";
@@ -254,5 +264,113 @@ storage:
 
     expect(config.defaultBudgetUsd).toBeUndefined();
     expect(config.defaultMaxTurns).toBeUndefined();
+  });
+
+  it("enables E2E mode only with isolated temp config, storage, cwd, sender and scheduler settings", async () => {
+    const cfg = join(tmpDir, "config.yaml");
+    writeFileSync(cfg, `
+discord:
+  token: "token-yaml"
+  client_id: "client-yaml"
+  guild_id: "guild-yaml"
+  allowed_user_id: "user-yaml"
+routing:
+  channel_defaults:
+    "task-yaml":
+      cwd: "${join(tmpDir, "task-cwd")}"
+agent:
+  provider: codex
+  default_cwd: "${tmpDir}"
+storage:
+  db_path: "${join(tmpDir, "data.db")}"
+  memory_path: "${join(tmpDir, "MEMORY.md")}"
+`);
+    process.env.MINICLAW_CONFIG = cfg;
+    process.env.MINICLAW_E2E_MODE = "true";
+    process.env.MINICLAW_E2E_SENDER_USER_IDS = "sender-a,sender-b";
+    process.env.MINICLAW_DISABLE_SCHEDULER = "true";
+
+    const { assertE2eSafeRuntimePath, config } = await import("../config.js");
+
+    expect(config.e2e).toMatchObject({
+      mode: true,
+      senderUserIds: ["sender-a", "sender-b"],
+      disableScheduler: true,
+      tempRoot: tmpdir(),
+    });
+    expect(config.defaultCwd).toBe(tmpDir);
+    expect(config.dbPath).toBe(join(tmpDir, "data.db"));
+    expect(config.memoryPath).toBe(join(tmpDir, "MEMORY.md"));
+    expect(() => assertE2eSafeRuntimePath("safe temp path", join(tmpDir, "nested"))).not.toThrow();
+    expect(() => assertE2eSafeRuntimePath("unsafe runtime cwd", process.cwd())).toThrow(
+      /E2E mode refuses unsafe runtime cwd outside system temp dir/
+    );
+  });
+
+  it("fails closed when E2E mode has no sender allowlist", async () => {
+    const cfg = join(tmpDir, "config.yaml");
+    writeFileSync(cfg, `
+discord:
+  token: "token-yaml"
+  client_id: "client-yaml"
+  guild_id: "guild-yaml"
+  allowed_user_id: "user-yaml"
+agent:
+  provider: codex
+  default_cwd: "${tmpDir}"
+storage:
+  db_path: "${join(tmpDir, "data.db")}"
+  memory_path: "${join(tmpDir, "MEMORY.md")}"
+`);
+    process.env.MINICLAW_CONFIG = cfg;
+    process.env.MINICLAW_E2E_MODE = "true";
+    process.env.MINICLAW_DISABLE_SCHEDULER = "true";
+
+    await expect(import("../config.js")).rejects.toThrow(/MINICLAW_E2E_SENDER_USER_IDS/);
+  });
+
+  it("fails closed when E2E mode does not disable the scheduler", async () => {
+    const cfg = join(tmpDir, "config.yaml");
+    writeFileSync(cfg, `
+discord:
+  token: "token-yaml"
+  client_id: "client-yaml"
+  guild_id: "guild-yaml"
+  allowed_user_id: "user-yaml"
+agent:
+  provider: codex
+  default_cwd: "${tmpDir}"
+storage:
+  db_path: "${join(tmpDir, "data.db")}"
+  memory_path: "${join(tmpDir, "MEMORY.md")}"
+`);
+    process.env.MINICLAW_CONFIG = cfg;
+    process.env.MINICLAW_E2E_MODE = "true";
+    process.env.MINICLAW_E2E_SENDER_USER_IDS = "sender-a";
+
+    await expect(import("../config.js")).rejects.toThrow(/MINICLAW_DISABLE_SCHEDULER=true/);
+  });
+
+  it("fails closed when E2E mode points runtime cwd outside temp", async () => {
+    const cfg = join(tmpDir, "config.yaml");
+    writeFileSync(cfg, `
+discord:
+  token: "token-yaml"
+  client_id: "client-yaml"
+  guild_id: "guild-yaml"
+  allowed_user_id: "user-yaml"
+agent:
+  provider: codex
+  default_cwd: "${process.cwd()}"
+storage:
+  db_path: "${join(tmpDir, "data.db")}"
+  memory_path: "${join(tmpDir, "MEMORY.md")}"
+`);
+    process.env.MINICLAW_CONFIG = cfg;
+    process.env.MINICLAW_E2E_MODE = "true";
+    process.env.MINICLAW_E2E_SENDER_USER_IDS = "sender-a";
+    process.env.MINICLAW_DISABLE_SCHEDULER = "true";
+
+    await expect(import("../config.js")).rejects.toThrow(/MINICLAW_DEFAULT_CWD/);
   });
 });

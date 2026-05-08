@@ -1,19 +1,20 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-import {
-  addMemory,
-  deleteMemory,
-  getAllMemories,
-  getMemoriesByType,
-  searchMemories,
-} from "../../store/memory-md.js";
 
-beforeEach(() => {
+let addMemory: typeof import("../../store/memory-md.js").addMemory;
+let deleteMemory: typeof import("../../store/memory-md.js").deleteMemory;
+let getAllMemories: typeof import("../../store/memory-md.js").getAllMemories;
+let getMemoriesByType: typeof import("../../store/memory-md.js").getMemoriesByType;
+let searchMemories: typeof import("../../store/memory-md.js").searchMemories;
+
+beforeEach(async () => {
   // 每个测试隔离的 MEMORY.md
   const dir = mkdtempSync(join(tmpdir(), "miniclaw-mem-md-"));
   process.env.MINICLAW_MEMORY_PATH = join(dir, "MEMORY.md");
+  vi.resetModules();
+  ({ addMemory, deleteMemory, getAllMemories, getMemoriesByType, searchMemories } = await import("../../store/memory-md.js"));
 });
 
 describe("memory-md (markdown 存储)", () => {
