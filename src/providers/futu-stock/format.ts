@@ -4,6 +4,7 @@ import type { FutuStockProfileConfig } from "../../mcp/futu-stock/types.js";
 import type {
   FutuStockProviderFormatOptions,
   FutuStockProviderPayload,
+  FutuStockProviderPnlSummary,
   FutuStockProviderPositionInput,
   FutuStockProviderSnapshotInput,
   FutuStockProviderTopPosition,
@@ -18,11 +19,85 @@ function compactPosition(position: FutuStockProviderPositionInput): FutuStockPro
     code: position.code,
     name: position.name,
     currency: position.currency,
+    instrument_type: inferInstrumentType(position.code, position.name),
     daily_pnl: position.daily_pnl,
     pnl_value: position.pnl_value,
     pnl_ratio: position.pnl_ratio,
     unrealized_pnl: position.unrealized_pnl,
     realized_pnl: position.realized_pnl,
+  };
+}
+
+function inferInstrumentType(code: string, name: string): "stock" | "etf" {
+  const text = `${code} ${name}`;
+  return /ETF|LOF|REIT|REITS|指数基金|交易型开放式/i.test(text) ? "etf" : "stock";
+}
+
+function positionDailyPnl(position: FutuStockProviderPositionInput): number | undefined {
+  const value = position.daily_pnl ?? position.pnl_value;
+  return value !== undefined && Number.isFinite(value) ? value : undefined;
+}
+
+function compactTopGainers(
+  snapshot: FutuStockProviderSnapshotInput,
+  limit: number,
+): FutuStockProviderTopPosition[] {
+  return [...snapshot.positions]
+    .filter((position) => {
+      const pnl = positionDailyPnl(position);
+      return pnl !== undefined && pnl > 0;
+    })
+    .sort((a, b) => (positionDailyPnl(b) ?? 0) - (positionDailyPnl(a) ?? 0))
+    .slice(0, Math.max(0, limit))
+    .map(compactPosition);
+}
+
+function compactTopLosers(
+  snapshot: FutuStockProviderSnapshotInput,
+  limit: number,
+): FutuStockProviderTopPosition[] {
+  return [...snapshot.positions]
+    .filter((position) => {
+      const pnl = positionDailyPnl(position);
+      return pnl !== undefined && pnl < 0;
+    })
+    .sort((a, b) => (positionDailyPnl(a) ?? 0) - (positionDailyPnl(b) ?? 0))
+    .slice(0, Math.max(0, limit))
+    .map(compactPosition);
+}
+
+function buildPnlSummary(snapshot: FutuStockProviderSnapshotInput): FutuStockProviderPnlSummary {
+  let grossProfit = 0;
+  let grossLoss = 0;
+  let winnersCount = 0;
+  let losersCount = 0;
+  let flatCount = 0;
+  let positionsWithPnlCount = 0;
+
+  for (const position of snapshot.positions) {
+    const pnl = positionDailyPnl(position);
+    if (pnl === undefined) continue;
+    positionsWithPnlCount += 1;
+    if (pnl > 0) {
+      grossProfit += pnl;
+      winnersCount += 1;
+    } else if (pnl < 0) {
+      grossLoss += pnl;
+      losersCount += 1;
+    } else {
+      flatCount += 1;
+    }
+  }
+
+  return {
+    currency: snapshot.currency,
+    gross_profit: grossProfit,
+    gross_loss: grossLoss,
+    net_pnl: grossProfit + grossLoss,
+    winners_count: winnersCount,
+    losers_count: losersCount,
+    flat_count: flatCount,
+    positions_with_pnl_count: positionsWithPnlCount,
   };
 }
 
@@ -67,7 +142,10 @@ export function buildFutuStockProviderPayload(
   if (options.includePositionsSummary) {
     payload.positions_summary = {
       positions_count: snapshot.positions.length,
+      pnl_summary: buildPnlSummary(snapshot),
       top_positions: compactTopPositions(snapshot, options.topPositionsLimit),
+      top_gainers: compactTopGainers(snapshot, options.topPositionsLimit),
+      top_losers: compactTopLosers(snapshot, options.topPositionsLimit),
     };
   }
 

@@ -30,6 +30,15 @@ describe("loadStockPortfolioProviderConfig", () => {
   it("parses enabled read-only broker sources", () => {
     writeConfig("daily-stock-market", `
 continue_on_error: true
+market_scope: cn
+base_currency: CNY
+fx_rates:
+  CNY: 1
+  HKD: 0.92
+  USD: 7.2
+fx_rates_as_of: "2026-05-08"
+fx_rates_source: manual-test
+top_movers_limit: 5
 sources:
   - provider: futu-stock
     config: daily-stock-market
@@ -44,6 +53,13 @@ sources:
 
     expect(config.continue_on_error).toBe(true);
     expect(config.fail_if_all_sources_fail).toBe(true);
+    expect(config.market_scope).toBe("cn");
+    expect(config.base_currency).toBe("CNY");
+    expect(config.fx_rates).toEqual({ CNY: 1, HKD: 0.92, USD: 7.2 });
+    expect(config.fx_rates_as_of).toBe("2026-05-08");
+    expect(config.fx_rates_source).toBe("manual-test");
+    expect(config.top_movers_limit).toBe(5);
+    expect(config.include_cny_summary).toBe(true);
     expect(config.sources).toEqual([
       { provider: "futu-stock", config: "daily-stock-market", label: "Futu", enabled: true, required: false },
       { provider: "eastmoney-jywg-readonly", config: "daily-stock-market", label: "Eastmoney", enabled: true, required: false },

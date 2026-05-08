@@ -5,6 +5,11 @@ import type { StockPortfolioProviderConfig, StockPortfolioSourceRunner } from ".
 const config: StockPortfolioProviderConfig = {
   continue_on_error: true,
   fail_if_all_sources_fail: true,
+  market_scope: "all",
+  base_currency: "CNY",
+  fx_rates: { CNY: 1, HKD: 0.92 },
+  top_movers_limit: 5,
+  include_cny_summary: true,
   sources: [
     { provider: "futu-stock", config: "daily-stock-market", label: "Futu", enabled: true, required: false },
     { provider: "eastmoney-jywg-readonly", config: "daily-stock-market", label: "Eastmoney", enabled: true, required: false },

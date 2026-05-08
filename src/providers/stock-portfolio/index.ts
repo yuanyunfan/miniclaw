@@ -83,6 +83,7 @@ export async function runStockPortfolioProvider(
   const payload = buildStockPortfolioPayload({
     generatedAt: args.runAt,
     profile: configName,
+    config,
     sources: results,
   });
   return {

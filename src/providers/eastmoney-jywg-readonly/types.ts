@@ -20,9 +20,21 @@ export interface EastmoneyJywgProviderTopPosition {
   code: string;
   name: string;
   currency: string;
+  instrument_type?: "stock" | "etf";
   daily_pnl?: number;
   floating_pnl?: number;
   pnl_ratio?: number;
+}
+
+export interface EastmoneyJywgProviderPnlSummary {
+  currency: string;
+  gross_profit: number;
+  gross_loss: number;
+  net_pnl: number;
+  winners_count: number;
+  losers_count: number;
+  flat_count: number;
+  positions_with_pnl_count: number;
 }
 
 export interface EastmoneyJywgProviderFormatOptions {
@@ -47,7 +59,10 @@ export interface EastmoneyJywgProviderPayload {
   snapshot?: Record<string, unknown>;
   positions_summary?: {
     positions_count: number;
+    pnl_summary: EastmoneyJywgProviderPnlSummary;
     top_positions: EastmoneyJywgProviderTopPosition[];
+    top_gainers: EastmoneyJywgProviderTopPosition[];
+    top_losers: EastmoneyJywgProviderTopPosition[];
   };
   warnings: string[];
   usage_notes: string[];

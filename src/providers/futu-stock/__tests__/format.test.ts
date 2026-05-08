@@ -39,6 +39,15 @@ const snapshot: FutuAccountSnapshot = {
       daily_pnl: 456.78,
       pnl_ratio: 2.1,
     },
+    {
+      code: "HK.02800",
+      name: "Tracker Fund ETF",
+      currency: "HKD",
+      quantity: 1000,
+      market_value: 20000,
+      daily_pnl: -123.45,
+      pnl_ratio: -0.8,
+    },
   ],
   warnings: ["acc_id=123456789012 should be redacted"],
 };
@@ -72,5 +81,23 @@ describe("futu-stock provider formatter", () => {
     });
     expect(parsed.positions_summary.top_positions[0]).not.toHaveProperty("quantity");
     expect(parsed.positions_summary.top_positions[0]).not.toHaveProperty("market_value");
+    expect(parsed.positions_summary.pnl_summary).toMatchObject({
+      currency: "HKD",
+      gross_profit: 456.78,
+      gross_loss: -123.45,
+      net_pnl: 333.33,
+      winners_count: 1,
+      losers_count: 1,
+    });
+    expect(parsed.positions_summary.top_gainers[0]).toMatchObject({
+      code: "HK.00700",
+      daily_pnl: 456.78,
+      instrument_type: "stock",
+    });
+    expect(parsed.positions_summary.top_losers[0]).toMatchObject({
+      code: "HK.02800",
+      daily_pnl: -123.45,
+      instrument_type: "etf",
+    });
   });
 });

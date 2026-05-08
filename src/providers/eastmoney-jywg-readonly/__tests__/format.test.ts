@@ -29,7 +29,10 @@ const snapshot: EastmoneyJywgAccountSnapshot = {
   daily_pnl: 1234.56,
   daily_pnl_pct: 1.01,
   floating_pnl: 4567.89,
-  positions: [{ code: "600000", name: "浦发银行", currency: "CNY", quantity: 1000, market_value: 10000, daily_pnl: 456.78 }],
+  positions: [
+    { code: "600000", name: "浦发银行", currency: "CNY", quantity: 1000, market_value: 10000, daily_pnl: 456.78 },
+    { code: "510300", name: "沪深300ETF", currency: "CNY", quantity: 1000, market_value: 4000, daily_pnl: -98.76 },
+  ],
   warnings: ["account=123456789012 should be redacted"],
 };
 
@@ -62,5 +65,23 @@ describe("eastmoney-jywg provider formatter", () => {
     });
     expect(parsed.positions_summary.top_positions[0]).not.toHaveProperty("quantity");
     expect(parsed.positions_summary.top_positions[0]).not.toHaveProperty("market_value");
+    expect(parsed.positions_summary.pnl_summary).toMatchObject({
+      currency: "CNY",
+      gross_profit: 456.78,
+      gross_loss: -98.76,
+      net_pnl: 358.02,
+      winners_count: 1,
+      losers_count: 1,
+    });
+    expect(parsed.positions_summary.top_gainers[0]).toMatchObject({
+      code: "600000",
+      daily_pnl: 456.78,
+      instrument_type: "stock",
+    });
+    expect(parsed.positions_summary.top_losers[0]).toMatchObject({
+      code: "510300",
+      daily_pnl: -98.76,
+      instrument_type: "etf",
+    });
   });
 });

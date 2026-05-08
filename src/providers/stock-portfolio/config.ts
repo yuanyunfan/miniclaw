@@ -2,11 +2,17 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { load as yamlLoad } from "js-yaml";
-import type { StockPortfolioProviderConfig, StockPortfolioSourceConfig, StockPortfolioSourceName } from "./types.js";
+import type {
+  StockPortfolioMarketScope,
+  StockPortfolioProviderConfig,
+  StockPortfolioSourceConfig,
+  StockPortfolioSourceName,
+} from "./types.js";
 
 const CONFIG_DIR_DEFAULT = join(homedir(), ".miniclaw/providers/stock-portfolio");
 const RESERVED_PROVIDER_CONFIG_NAMES = new Set(["config"]);
 const SOURCE_NAMES = new Set<StockPortfolioSourceName>(["futu-stock", "eastmoney-jywg-readonly"]);
+const MARKET_SCOPES = new Set<StockPortfolioMarketScope>(["all", "us", "cn"]);
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -18,6 +24,34 @@ function optionalString(value: unknown): string | undefined {
 
 function boolValue(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
+}
+
+function positiveNumberMap(value: unknown): Record<string, number> {
+  if (!isPlainObject(value)) return { CNY: 1 };
+  const mapped: Record<string, number> = {};
+  for (const [key, raw] of Object.entries(value)) {
+    const currency = key.trim().toUpperCase();
+    if (!currency) continue;
+    const number = typeof raw === "number" ? raw : typeof raw === "string" && raw.trim() ? Number(raw) : undefined;
+    if (number === undefined || !Number.isFinite(number) || number <= 0) {
+      throw new Error(`stock-portfolio fx_rates.${currency} must be a positive number`);
+    }
+    mapped[currency] = number;
+  }
+  return Object.keys(mapped).length ? { CNY: 1, ...mapped } : { CNY: 1 };
+}
+
+function nonNegativeInt(value: unknown, fallback: number, max: number): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) return fallback;
+  return Math.min(value, max);
+}
+
+function marketScope(value: unknown): StockPortfolioMarketScope {
+  if (value === undefined || value === null || value === "") return "all";
+  if (typeof value !== "string" || !MARKET_SCOPES.has(value as StockPortfolioMarketScope)) {
+    throw new Error(`stock-portfolio market_scope must be one of: ${[...MARKET_SCOPES].join(", ")}`);
+  }
+  return value as StockPortfolioMarketScope;
 }
 
 function sourceName(value: unknown): StockPortfolioSourceName {
@@ -68,5 +102,12 @@ export function loadStockPortfolioProviderConfig(name = "default"): StockPortfol
     sources,
     continue_on_error: boolValue(raw.continue_on_error, true),
     fail_if_all_sources_fail: boolValue(raw.fail_if_all_sources_fail, true),
+    market_scope: marketScope(raw.market_scope),
+    base_currency: optionalString(raw.base_currency)?.toUpperCase() ?? "CNY",
+    fx_rates: positiveNumberMap(raw.fx_rates),
+    fx_rates_as_of: optionalString(raw.fx_rates_as_of),
+    fx_rates_source: optionalString(raw.fx_rates_source),
+    top_movers_limit: nonNegativeInt(raw.top_movers_limit, 5, 20),
+    include_cny_summary: boolValue(raw.include_cny_summary, true),
   };
 }
