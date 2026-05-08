@@ -1,14 +1,17 @@
 // Vitest globalSetup —— 在所有测试文件 import 之前跑一次。设置 env vars。
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 export default function setup() {
   const testDir = mkdtempSync(join(tmpdir(), "miniclaw-vitest-"));
+  const testCwd = join(tmpdir(), "miniclaw-vitest-cwd");
+  mkdirSync(testCwd, { recursive: true });
   const testDb = join(testDir, "test.db");
   const testMemory = join(testDir, "MEMORY.md");
   process.env.MINICLAW_DB_PATH = testDb;
   process.env.MINICLAW_MEMORY_PATH = testMemory;
+  process.env.MINICLAW_DEFAULT_CWD = process.env.MINICLAW_DEFAULT_CWD ?? testCwd;
   // Required env vars (config.ts throws if missing)
   process.env.DISCORD_TOKEN = process.env.DISCORD_TOKEN ?? "test-token";
   process.env.DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID ?? "test-client-id";

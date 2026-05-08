@@ -5,6 +5,7 @@ import { __testables as chatT } from "../agent/chat.js";
 import { __testables as extractT } from "../memory/extract.js";
 import { __testables as stageT } from "../stage/stage-manager.js";
 import { __testables as cronT } from "../cron/runner-task.js";
+import { config } from "../config.js";
 
 function hash(s: string): string {
   return createHash("sha256").update(s, "utf8").digest("hex").slice(0, 16);
@@ -25,7 +26,7 @@ describe("prompt snapshot baseline", () => {
   });
 
   it("chat.identityLine", () => {
-    expect(hash(chatT.IDENTITY_LINE)).toMatchInlineSnapshot(`"91c94273610575cf"`);
+    expect(hash(chatT.IDENTITY_LINE.replace(config.defaultCwd, "<cwd>"))).toMatchInlineSnapshot(`"0df4fb1a7cd054a8"`);
   });
 
   it("memory.extract.system", () => {
