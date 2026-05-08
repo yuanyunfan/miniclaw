@@ -420,9 +420,11 @@ flowchart LR
 │   ├── eastmoney-jywg-readonly/
 │   │   ├── config.yaml      # 东方财富 jywg.18.cn profile 配置（无密码、无交易密码）
 │   │   └── *.yaml           # 股票日报 provider 配置（脱敏级别、market_session）
-│   └── futu-stock/
-│       ├── config.yaml      # 富途 OpenD profile 配置（无密码、无 token）
-│       └── *.yaml           # 股票日报 provider 配置（脱敏级别、market_session）
+│   ├── futu-stock/
+│   │   ├── config.yaml      # 富途 OpenD profile 配置（无密码、无 token）
+│   │   └── *.yaml           # 股票日报 provider 配置（脱敏级别、market_session）
+│   └── stock-portfolio/
+│       └── *.yaml           # 聚合多个只读股票账户 provider
 ├── capabilities/
 │   └── email/               # 通用只读邮箱能力（IMAP adapter、MIME 解析、dedupe state）
 │       ├── config.yaml      # 邮箱 profile 配置（非 secret）

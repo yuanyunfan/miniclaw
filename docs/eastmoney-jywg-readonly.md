@@ -99,6 +99,13 @@ pre_provider: eastmoney-jywg-readonly
 pre_provider_config: daily-stock-market
 ```
 
+股票日报的推荐接入方式是通过 `stock-portfolio` 聚合 provider，同时合并富途和东方财富：
+
+```yaml
+pre_provider: stock-portfolio
+pre_provider_config: daily-stock-market
+```
+
 ## 登录态 Bootstrap
 
 首次使用或 session 失效时运行：
