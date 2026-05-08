@@ -347,6 +347,12 @@ flowchart LR
         Reg --> Disp[dispatch<br/>同名 job 运行中则跳过]
         Disp --> Retry[retry wrapper<br/>最多 5 次 attempt<br/>10m → 20m → 40m → 80m]
         Retry --> Run[run by job.type]
+        Retry -->|attempt failed| Alert[failure-notifier.ts<br/>send/edit 失败摘要<br/>立即重新执行按钮]
+        Alert --> Btn[Discord button<br/>requestCronRetryNow]
+        Btn -->|waiting backoff| Wake[wake 当前 retry sleep]
+        Btn -->|not running| Manual[单次立即重试<br/>NO_RETRY_POLICY]
+        Wake --> Retry
+        Manual --> Disp
         Run --> RT[runner-task.ts<br/>type=task]
         Run --> RS[runner-script.ts<br/>type=script]
         Run --> RK[runner-task.ts<br/>type=skill]
@@ -375,12 +381,14 @@ flowchart LR
     classDef runner fill:#f9f0ff,stroke:#722ed1
     classDef state fill:#f6ffed,stroke:#52c41a
     class Boot,SS boot
-    class LD,Reg,Disp,Retry,Run,Tick sched
+    class LD,Reg,Disp,Retry,Run,Tick,Alert,Btn,Wake,Manual sched
     class RT,RS,RK,RM,Spawn,PP,Spawn2,Parse,ET1,ET2,RT2 runner
     class State,Send1,Send2 state
 ```
 
-失败重试策略在 `scheduler.ts` 的调度层统一执行：定时触发的 job 首次失败后 10 分钟重试，之后每次间隔翻倍，最多总尝试 5 次；每次 attempt 都会写入 `~/.miniclaw/cron/state.json`。`pnpm cron:test <name>` 保持单次试跑，不进入长时间 retry 等待。
+失败重试策略在 `scheduler.ts` 的调度层统一执行：定时触发的 job 首次失败后 10 分钟重试，之后每次间隔翻倍，最多总尝试 5 次；每次 attempt 都会写入 `~/.miniclaw/cron/state.json`。失败 attempt 会通过 `failure-notifier.ts` 向该 cron 的 Discord channel 发送或编辑一条短摘要，并附带 `立即重新执行` 按钮。按钮 custom id 只包含随机 `failure_run_id`，点击后由 `requestCronRetryNow()` 从本地 cron YAML 重新解析 job；如果原 job 正在 backoff，则唤醒当前 retry sleep，如果已经耗尽且当前没有运行，则启动一次 `NO_RETRY_POLICY` 单次重试。`pnpm cron:test <name>` 保持单次试跑，不进入长时间 retry 等待，也不发送失败重试按钮。
+
+`state.json` 除 `last_run_at` / `last_status` / `last_error` / `last_duration_ms` / `completed` 外，还会记录故障追踪字段：`last_attempt`、`max_attempts`、`next_retry_at`、`failure_run_id`、`failure_alert_channel_id`、`failure_alert_message_id`。这些字段只用于健康检查、按钮解析和恢复展示，不保存 prompt、provider 配置、script args、cookie、token、账户号或原始 provider JSON。
 
 **4 种 type 用法**
 

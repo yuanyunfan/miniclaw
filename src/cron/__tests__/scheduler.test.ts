@@ -1,9 +1,9 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { Client } from "discord.js";
-import { __testables } from "../scheduler.js";
+import { __testables, requestCronRetryNow } from "../scheduler.js";
 import { getJobState, resetStateCache } from "../state.js";
 import type { CronJobMessage } from "../types.js";
 
@@ -22,6 +22,14 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
   let resolve!: () => void;
   const promise = new Promise<void>((r) => { resolve = r; });
   return { promise, resolve };
+}
+
+async function waitFor(assertion: () => boolean): Promise<void> {
+  for (let i = 0; i < 100; i++) {
+    if (assertion()) return;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  throw new Error("condition not met");
 }
 
 function clientWithFailingSends(failuresBeforeSuccess: number): { client: Client; sendCount: () => number } {
@@ -120,5 +128,170 @@ describe("cron scheduler dispatch", () => {
     expect(state?.last_error).toContain("attempt 5/5");
     expect(state?.last_error).toContain("retries exhausted");
     expect(state?.completed).toBe(5);
+  });
+
+  it("定时触发失败时发送一条带立即重试按钮的失败通知", async () => {
+    let jobSends = 0;
+    const alertMessage = {
+      id: "alert-1",
+      edit: vi.fn(async (_payload: unknown) => alertMessage),
+    };
+    const alertSends: unknown[] = [];
+    const client = {
+      channels: {
+        fetch: async () => ({
+          isSendable: () => true,
+          send: async (payload: unknown) => {
+            if (typeof payload === "string") {
+              jobSends++;
+              throw new Error("message failed token=secret-value");
+            }
+            alertSends.push(payload);
+            return alertMessage;
+          },
+        }),
+      },
+    } as unknown as Client;
+    const policy = {
+      ...__testables.DEFAULT_RETRY_POLICY,
+      maxAttempts: 1,
+    };
+
+    await __testables.dispatch(messageJob(), client, policy, { notifyFailures: true });
+
+    expect(jobSends).toBe(1);
+    expect(alertSends).toHaveLength(1);
+    expect(JSON.stringify(alertSends[0])).toContain("定时任务执行失败");
+    expect(JSON.stringify(alertSends[0])).toContain("立即重新执行");
+    expect(JSON.stringify(alertSends[0])).not.toContain("secret-value");
+    const state = getJobState("slow-message");
+    expect(state?.last_status).toBe("error");
+    expect(state?.failure_run_id).toBeTruthy();
+    expect(state?.failure_alert_message_id).toBe("alert-1");
+  });
+
+  it("同一次失败重试链路中后续失败会 edit 同一条失败通知", async () => {
+    let jobSends = 0;
+    const alertMessage = {
+      id: "alert-1",
+      edit: vi.fn(async (_payload: unknown) => alertMessage),
+    };
+    const alertSends: unknown[] = [];
+    const client = {
+      channels: {
+        fetch: async () => ({
+          isSendable: () => true,
+          send: async (payload: unknown) => {
+            if (typeof payload === "string") {
+              jobSends++;
+              throw new Error(`job-failed-${jobSends}`);
+            }
+            alertSends.push(payload);
+            return alertMessage;
+          },
+        }),
+      },
+    } as unknown as Client;
+    const policy = {
+      ...__testables.DEFAULT_RETRY_POLICY,
+      maxAttempts: 2,
+      sleep: async () => {},
+    };
+
+    await __testables.dispatch(messageJob(), client, policy, { notifyFailures: true });
+
+    expect(jobSends).toBe(2);
+    expect(alertSends).toHaveLength(1);
+    expect(alertMessage.edit).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(alertMessage.edit.mock.calls[0][0])).toContain("尝试次数: 2/2");
+  });
+
+  it("失败后自动重试成功会 edit 失败通知为已恢复并移除按钮", async () => {
+    let jobSends = 0;
+    const alertMessage = {
+      id: "alert-1",
+      edit: vi.fn(async (_payload: unknown) => alertMessage),
+    };
+    const client = {
+      channels: {
+        fetch: async () => ({
+          isSendable: () => true,
+          send: async (payload: unknown) => {
+            if (typeof payload === "string") {
+              jobSends++;
+              if (jobSends === 1) throw new Error("temporary boom");
+              return { id: "job-ok" };
+            }
+            return alertMessage;
+          },
+        }),
+      },
+    } as unknown as Client;
+    const policy = {
+      ...__testables.DEFAULT_RETRY_POLICY,
+      maxAttempts: 2,
+      sleep: async () => {},
+    };
+
+    await __testables.dispatch(messageJob(), client, policy, { notifyFailures: true });
+
+    expect(jobSends).toBe(2);
+    expect(alertMessage.edit).toHaveBeenCalledTimes(1);
+    const editPayload = alertMessage.edit.mock.calls[0][0] as { content: string; components: unknown[] };
+    expect(editPayload.content).toContain("定时任务已恢复成功");
+    expect(editPayload.components).toEqual([]);
+    expect(getJobState("slow-message")?.last_status).toBe("ok");
+  });
+
+  it("立即重试按钮可以唤醒等待中的 retry backoff", async () => {
+    let jobSends = 0;
+    let sleepStarted = false;
+    let beforeRunCalled = false;
+    let secondSendSawBeforeRun = false;
+    const alertMessage = {
+      id: "alert-1",
+      edit: vi.fn(async (_payload: unknown) => alertMessage),
+    };
+    const client = {
+      channels: {
+        fetch: async () => ({
+          isSendable: () => true,
+          send: async (payload: unknown) => {
+            if (typeof payload === "string") {
+              jobSends++;
+              if (jobSends === 1) throw new Error("temporary boom");
+              secondSendSawBeforeRun = beforeRunCalled;
+              return { id: "job-ok" };
+            }
+            return alertMessage;
+          },
+        }),
+      },
+    } as unknown as Client;
+    const policy = {
+      ...__testables.DEFAULT_RETRY_POLICY,
+      maxAttempts: 2,
+      sleep: async () => {
+        sleepStarted = true;
+        await new Promise<void>(() => {});
+      },
+    };
+
+    const run = __testables.dispatch(messageJob(), client, policy, { notifyFailures: true });
+    await waitFor(() => sleepStarted && Boolean(getJobState("slow-message")?.failure_run_id));
+
+    const runId = getJobState("slow-message")?.failure_run_id;
+    expect(runId).toBeTruthy();
+    const result = await requestCronRetryNow(runId!, client, {
+      beforeRun: async () => {
+        beforeRunCalled = true;
+      },
+    });
+
+    expect(result).toEqual({ ok: true, status: "woke", jobName: "slow-message" });
+    await run;
+    expect(jobSends).toBe(2);
+    expect(secondSendSawBeforeRun).toBe(true);
+    expect(getJobState("slow-message")?.last_status).toBe("ok");
   });
 });

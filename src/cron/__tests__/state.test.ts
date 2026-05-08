@@ -8,6 +8,7 @@ import {
   getJobState,
   getAllJobStates,
   resetStateCache,
+  updateJobState,
 } from "../state.js";
 
 beforeEach(() => {
@@ -80,5 +81,25 @@ describe("cron state 持久化", () => {
     const longErr = "x".repeat(1000);
     const s = recordRun("err-job", false, 1, longErr);
     expect(s.last_error?.length).toBe(500);
+  });
+
+  it("支持更新和清理 cron failure metadata 且不累加 completed", () => {
+    recordRun("job-a", false, 100, "boom", {
+      last_attempt: 1,
+      max_attempts: 5,
+      failure_run_id: "run-1",
+      next_retry_at: "2026-05-08T10:00:00.000Z",
+    });
+
+    const updated = updateJobState("job-a", {
+      failure_alert_channel_id: "channel-1",
+      failure_alert_message_id: "message-1",
+    }, ["next_retry_at"]);
+
+    expect(updated?.completed).toBe(1);
+    expect(updated?.failure_run_id).toBe("run-1");
+    expect(updated?.failure_alert_channel_id).toBe("channel-1");
+    expect(updated?.failure_alert_message_id).toBe("message-1");
+    expect(updated?.next_retry_at).toBeUndefined();
   });
 });

@@ -32,6 +32,7 @@ import { hashPrompt, promptPreview } from "./routing/decision-log.js";
 import { classifySmartRoute, resolveSmartRouterAction, type RouteDecision } from "./routing/intent.js";
 import { classifyRouteWithLlm } from "./routing/llm.js";
 import { isAllowedDiscordMessageAuthor } from "./e2e/safety.js";
+import { handleCronRetryButton } from "./cron/retry-interactions.js";
 import {
   buildSmartRouterCustomId,
   consumePendingConfirmation,
@@ -581,6 +582,8 @@ export function createBot(): Client {
   client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.isButton()) {
       try {
+        const cronRetryHandled = await handleCronRetryButton(interaction);
+        if (cronRetryHandled) return;
         const handled = await handleSmartRouterButton(interaction);
         if (handled) return;
       } catch (err) {

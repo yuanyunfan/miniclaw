@@ -40,6 +40,7 @@ flowchart TD
     SMART -->|task_auto| AUTOTASK[创建 task thread<br/>executeTask]
 
     IC --> IB{isButton?}
+    IB -->|cron retry button| CRT[处理 cron 立即重试<br/>wake backoff / single retry]
     IB -->|smart router button| BACT[处理确认按钮<br/>task/chat/cancel]
     IB -->|否| IS{isChatInputCommand?}
     IS -->|否| X5[忽略]
@@ -60,7 +61,7 @@ flowchart TD
     classDef route fill:#e6f7ff,stroke:#1890ff
     classDef drop fill:#fff1f0,stroke:#cf1322,color:#a8071a
     class F1,F2,F3,F4,P1,TCH,R0,R1,IS,SW filter
-    class CHAT,RES,TASKMSG,MEM,GREET,SMART,BTN,AUTOTASK,BACT,T,S,C,RS,RM,FG,MM,RECOV,SCHED route
+    class CHAT,RES,TASKMSG,MEM,GREET,SMART,BTN,AUTOTASK,CRT,BACT,T,S,C,RS,RM,FG,MM,RECOV,SCHED route
     class X1,X2,X3,X4,X5 drop
 ```
 
@@ -71,7 +72,7 @@ flowchart TD
 | 行号 | 事件 | 干什么 |
 |------|------|--------|
 | `bot.ts:32` | `MessageCreate` | 处理普通消息（thread 续话 / task intake 频道 / @mention / 自动 chat 频道 / 记忆指令） |
-| `bot.ts:158` | `InteractionCreate` | 先处理 smart router 按钮，再处理 9 个 slash commands |
+| `bot.ts:158` | `InteractionCreate` | 先处理 cron retry 按钮，再处理 smart router 按钮，最后处理 slash commands |
 | `bot.ts:203` | `ClientReady` | 启动 scheduler + 恢复中断任务 |
 
 ---
@@ -232,6 +233,17 @@ client.once(Events.ClientReady, (c) => {
 bot.once(Events.ClientReady, (client) => startScheduler(client));
 ```
 启动时载入 `~/.miniclaw/cron/*.yaml`，注册到 `node-cron`，到点自动 dispatch。SIGTERM 时 `stopScheduler()` 优雅退出。
+
+---
+
+## Button Interaction 分流
+
+`InteractionCreate` 的按钮分支现在有两类 custom id 前缀：
+
+- `miniclaw:cron:retry:<runId>`：cron 失败通知的立即重试按钮，由 `handleCronRetryButton()` 处理。
+- `miniclaw:smart:*`：smart router 的 task/chat/cancel 确认按钮，由 `handleSmartRouterButton()` 处理。
+
+cron retry 按钮先于 smart router 按钮处理，避免误落到普通 slash command 分支。它只接受 `config.allowedUserId` 操作；custom id 里只放随机 `runId`，不会放 cron name、prompt、provider 配置、script args 或任何账号数据。真正执行时由 `requestCronRetryNow()` 在本机读取 `~/.miniclaw/cron/*.yaml`，如果失败 run 仍在 backoff，就唤醒当前 retry sleep；如果已经不在运行，则启动一次单独的立即重试。
 
 ---
 

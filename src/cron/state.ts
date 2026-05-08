@@ -13,6 +13,12 @@ export interface JobState {
   last_error?: string;
   last_duration_ms: number;
   completed: number;
+  last_attempt?: number;
+  max_attempts?: number;
+  next_retry_at?: string;
+  failure_run_id?: string;
+  failure_alert_message_id?: string;
+  failure_alert_channel_id?: string;
 }
 
 export type StateFile = {
@@ -67,7 +73,8 @@ export function recordRun(
   name: string,
   ok: boolean,
   durationMs: number,
-  error?: string
+  error?: string,
+  metadata: Partial<JobState> = {}
 ): JobState {
   const state = loadState();
   const prev = state.jobs[name];
@@ -78,6 +85,34 @@ export function recordRun(
     last_duration_ms: durationMs,
     completed: (prev?.completed ?? 0) + 1,
   };
+  for (const [key, value] of Object.entries(metadata) as Array<[keyof JobState, JobState[keyof JobState]]>) {
+    if (value !== undefined) {
+      (next as Record<keyof JobState, JobState[keyof JobState]>)[key] = value;
+    }
+  }
+  state.jobs[name] = next;
+  persist();
+  return next;
+}
+
+export function updateJobState(
+  name: string,
+  patch: Partial<JobState>,
+  clear: Array<keyof JobState> = []
+): JobState | undefined {
+  const state = loadState();
+  const current = state.jobs[name];
+  if (!current) return undefined;
+
+  const next: JobState = { ...current };
+  for (const key of clear) {
+    delete next[key];
+  }
+  for (const [key, value] of Object.entries(patch) as Array<[keyof JobState, JobState[keyof JobState]]>) {
+    if (value !== undefined) {
+      (next as Record<keyof JobState, JobState[keyof JobState]>)[key] = value;
+    }
+  }
   state.jobs[name] = next;
   persist();
   return next;
