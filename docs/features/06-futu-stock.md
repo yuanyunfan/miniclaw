@@ -407,25 +407,41 @@ Codex provider 说明：
 
 推荐让 cron task 使用 `pre_provider: futu-stock`，由 MiniClaw 在调用 LLM 前固定执行只读查询。这样比让 LLM 主动调用 MCP 更可控：采集逻辑可测试，输出会统一脱敏，OpenD 不可用时也能在 cron 层明确失败。
 
-Provider 配置文件放在用户目录，不进入 git：
+Provider 配置文件放在用户目录，不进入 git。当前股票日报推荐按市场拆分：
 
 ```text
-~/.miniclaw/providers/futu-stock/daily-stock-market.yaml
+~/.miniclaw/providers/futu-stock/us-stock.yaml
+~/.miniclaw/providers/futu-stock/cn-stock.yaml
 ```
 
-示例：
+美股示例：
 
 ```yaml
-profile: default
-account_alias: Futu
+profile: us
+account_alias: Futu US
 redaction: summary
 top_positions_limit: 8
 include_account_snapshot: true
 include_daily_report: true
 include_positions_summary: true
 market_session_by_job:
-  stock-market-premarket: premarket_0915
-  a-share-hk-postmarket: a_hk_postmarket_1515
+  us-stock-pre-market: us_premarket_0900_et
+  us-stock-post-market: us_postmarket_1630_et
+```
+
+A/H 示例：
+
+```yaml
+profile: default
+account_alias: Futu HK
+redaction: summary
+top_positions_limit: 8
+include_account_snapshot: true
+include_daily_report: true
+include_positions_summary: true
+market_session_by_job:
+  cn-stock-pre-market: cn_hk_premarket_0900
+  cn-stock-post-market: cn_hk_postmarket_1640
 ```
 
 字段说明：
@@ -453,19 +469,29 @@ market_session_by_job:
   },
   "positions_summary": {
     "positions_count": 8,
-    "top_positions": []
+    "pnl_summary": {
+      "currency": "HKD",
+      "gross_profit": 456.78,
+      "gross_loss": -123.45,
+      "net_pnl": 333.33,
+      "winners_count": 1,
+      "losers_count": 1
+    },
+    "top_positions": [],
+    "top_gainers": [],
+    "top_losers": []
   },
   "warnings": []
 }
 ```
 
-Provider 默认不输出完整资金账号、手机号、token、cookie、交易密码、完整总资产，也不会输出持仓数量或持仓市值等可反推出仓位规模的字段。
+Provider 默认不输出完整资金账号、手机号、token、cookie、交易密码、完整总资产，也不会输出持仓数量或持仓市值等可反推出仓位规模的字段。`positions_summary` 会保留 Top 持仓、Top 盈利、Top 亏损和 gross/net P&L，供 `stock-portfolio` 进一步折算成人民币口径。
 
 ### Cron 任务示例
 
-港股/A 股盘后可以先用北京时间 16:30 或 17:00。美股账户如果需要覆盖美股收盘，应额外配置北京时间次日早上。
+现在推荐直接通过 `stock-portfolio` 聚合 provider 接入 Discord 股票日报，只有在单独调试富途 provider 时才直接使用 `pre_provider: futu-stock`。
 
-示例：
+单独调试示例：
 
 ```yaml
 name: daily-futu-stock-pnl
@@ -475,7 +501,7 @@ enabled: true
 type: task
 channel: "<discord-channel-id>"
 pre_provider: futu-stock
-pre_provider_config: daily-stock-market
+pre_provider_config: cn-stock
 prompt: |
   上方 pre_provider JSON 是我的富途账户脱敏持仓与盈亏摘要。
 
@@ -628,7 +654,7 @@ cancel_order
 - 报告包含今日盈亏、百分比、主要贡献和口径风险。
 - OpenD 不可用时 Discord 报错简洁且不泄漏敏感信息。
 
-状态：已实现 `futu-stock` cron `pre_provider`，并接入 `stock-market-premarket` 与 `a-share-hk-postmarket` 本地 cron。两个任务分别在北京时间 09:15 / 15:15 运行，任务 prompt 会结合脱敏持仓上下文做市场分析和持仓归因。
+状态：已实现 `futu-stock` cron `pre_provider`，并通过 `stock-portfolio` 聚合接入当前四个股票日报任务：`us-stock-pre-market`、`us-stock-post-market`、`cn-stock-pre-market`、`cn-stock-post-market`。富途 provider 负责输出脱敏持仓、gross/net P&L、Top gainers/losers；`stock-portfolio` 负责和其他券商数据合并并折算为统一人民币口径。
 
 ## 最终边界
 

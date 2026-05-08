@@ -79,7 +79,7 @@ profiles:
 cron provider 配置：
 
 ```yaml
-# ~/.miniclaw/providers/eastmoney-jywg-readonly/daily-stock-market.yaml
+# ~/.miniclaw/providers/eastmoney-jywg-readonly/cn-stock.yaml
 profile: default
 account_alias: "Eastmoney A"
 redaction: summary
@@ -88,22 +88,22 @@ include_account_snapshot: true
 include_daily_report: true
 include_positions_summary: true
 market_session_by_job:
-  stock-market-premarket: premarket_0915
-  a-share-hk-postmarket: a_hk_postmarket_1515
+  cn-stock-pre-market: cn_a_premarket_0900
+  cn-stock-post-market: cn_a_postmarket_1640
 ```
 
 cron 接入：
 
 ```yaml
 pre_provider: eastmoney-jywg-readonly
-pre_provider_config: daily-stock-market
+pre_provider_config: cn-stock
 ```
 
 股票日报的推荐接入方式是通过 `stock-portfolio` 聚合 provider，同时合并富途和东方财富：
 
 ```yaml
 pre_provider: stock-portfolio
-pre_provider_config: daily-stock-market
+pre_provider_config: cn-stock
 ```
 
 ## 登录态 Bootstrap
