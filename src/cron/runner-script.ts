@@ -53,7 +53,7 @@ function firstLine(text: string): string {
 // 1) JSON 行含 "png_path" / "image_path" / "media_path" 字段
 // 2) 行首 `MEDIA:<absolute path>` 语法（兼容 hermes）
 // 3) 行首 `DISCORD_MESSAGE:<absolute path>` 语法，用文件内容作为 Discord 正文
-function extractScriptDirectives(stdout: string): { paths: string[]; remaining: string; message?: string } {
+function extractScriptDirectives(stdout: string): { paths: string[]; remaining: string; messages: string[] } {
   const paths: string[] = [];
   const messages: string[] = [];
   const lines = stdout.split("\n");
@@ -110,7 +110,7 @@ function extractScriptDirectives(stdout: string): { paths: string[]; remaining: 
   return {
     paths,
     remaining: remainingLines.join("\n").trim(),
-    message: messages.length ? messages.join("\n\n").trim() : undefined,
+    messages,
   };
 }
 
@@ -193,9 +193,9 @@ export async function runScript(job: CronJobScript, client: Client): Promise<voi
       : `script exited with code ${exitCode}${failureDetail ? `: ${failureDetail}` : ""}`;
 
   // 解析附件（PNG / image / media）
-  const { paths: attachmentPaths, remaining, message } = success
+  const { paths: attachmentPaths, remaining, messages } = success
     ? extractScriptDirectives(stdout)
-    : { paths: [], remaining: stdout, message: undefined };
+    : { paths: [], remaining: stdout, messages: [] };
 
   if (!job.capture_output && success && attachmentPaths.length === 0) {
     await postToChannel(client, job.channel, `cron \`${job.name}\` ${status} (${durationS}s)`);
@@ -208,10 +208,13 @@ export async function runScript(job: CronJobScript, client: Client): Promise<voi
   const files = attachmentPaths.map((p) => new AttachmentBuilder(p));
 
   // 显式 Markdown 正文 → 原样作为 Discord content，不再套 cron status/code block。
-  if (success && message && !stderr) {
-    await ch.send(files.length
-      ? { content: trimDiscordContent(message), files }
-      : { content: trimDiscordContent(message) });
+  if (success && messages.length > 0 && !stderr) {
+    for (let i = 0; i < messages.length; i++) {
+      const isLast = i === messages.length - 1;
+      await ch.send(isLast && files.length
+        ? { content: trimDiscordContent(messages[i]), files }
+        : { content: trimDiscordContent(messages[i]) });
+    }
     return;
   }
 

@@ -114,4 +114,25 @@ echo "MEDIA:$PWD/snapshot.json"
     expect(payload.content).not.toContain("```");
     expect(payload.files).toHaveLength(1);
   });
+
+  it("多个 DISCORD_MESSAGE 会拆成多条消息，附件放在最后一条", async () => {
+    writeScript("script.sh", `#!/usr/bin/env bash
+set -euo pipefail
+printf 'part one\\n' > one.md
+printf 'part two\\n' > two.md
+printf '{"ok":true}\\n' > snapshot.json
+echo "DISCORD_MESSAGE:$PWD/one.md"
+echo "DISCORD_MESSAGE:$PWD/two.md"
+echo "MEDIA:$PWD/snapshot.json"
+`);
+    const sent: unknown[] = [];
+
+    await runScript(scriptJob({}), fakeClient(sent));
+
+    expect(sent).toHaveLength(2);
+    expect((sent[0] as { content: string }).content).toBe("part one");
+    const second = sent[1] as { content: string; files: unknown[] };
+    expect(second.content).toBe("part two");
+    expect(second.files).toHaveLength(1);
+  });
 });
