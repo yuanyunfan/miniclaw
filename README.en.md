@@ -2,9 +2,17 @@
 
 English | [Simplified Chinese](README.md)
 
-Minimal AI assistant for Discord. It can run tasks through Claude Code or Codex, and is designed for a single-user local Mac setup.
+Personal Discord-native AI automation hub for chat, tasks, scheduled jobs, provider data collection, and private daily reports. It can run through Claude Code or Codex.
 
-MiniClaw provides a Discord bot, scheduled cron tasks, markdown-based long-term memory, and a Stage multi-agent console.
+MiniClaw is designed for a single-user local Mac setup. Discord is the interaction and delivery layer; MiniClaw handles routing, task threads, cron scheduling, long-term memory, read-only data providers, private report generation, and a Stage multi-agent console.
+
+Core positioning:
+
+- **Discord-native**: chat, tasks, task intake channels, and cron outputs all live in Discord.
+- **Switchable agent runtime**: Claude Code and Codex are execution engines; MiniClaw normalizes sessions, progress, output, and local settings inheritance.
+- **Local-first automation**: user config, cron jobs, provider state, and secrets live under `~/.miniclaw/`; the repo stores reusable code only.
+- **Provider-driven reports**: WeChat, email, credit-card, and brokerage data are collected by read-only providers before LLM summarization.
+- **Private-data aware**: sensitive providers are read-only by default and avoid committing cookies, tokens, account IDs, or app passwords to Git.
 
 > For architecture details, see [docs/architecture.md](docs/architecture.md). It includes the system diagram, @mention sequence, /task supervisor flow, cron flow, and storage model. See [docs/README.md](docs/README.md) for the full docs index.
 
@@ -15,7 +23,9 @@ MiniClaw provides a Discord bot, scheduled cron tasks, markdown-based long-term 
 | Direct messages in the configured `#chat` channel | Claude or Codex from `config.yaml` | Search, read files, and run safe commands |
 | `@MiniClaw` in any channel | Claude or Codex from `config.yaml` | Same as above |
 | Smart Router confirmation buttons | Claude Code or Codex from `config.yaml` | Detect natural-language task prompts at chat entry points and upgrade them to `/task` threads after confirmation |
+| Plain messages in task intake channels | Claude Code or Codex from `config.yaml` | Create task threads without `@MiniClaw` and use the same output path as `/task` |
 | `/task <description>` | Claude Code or Codex from `config.yaml` | Create an isolated thread with a status card, live progress, and final Markdown output |
+| Cron jobs | Claude Code or Codex + pre-provider | Collect structured data, run analysis, and push reports to Discord on schedule |
 | `/status` | - | View active and recent tasks |
 | `/health` | - | Inspect process, task, and cron health |
 | `/agent-config` | - | Show provider, model, Codex/Claude settings, MCP, and skills inheritance |
@@ -33,6 +43,15 @@ Interaction details:
 - `/task` keeps one persistent progress message. It is edited while the task runs and becomes an `Execution Summary` after completion.
 - Tool progress is rendered in readable lines such as `github: search_repositories`, `Bash ls -la`, or `WebSearch ...`.
 - Proxy support covers both HTTP REST and WebSocket traffic.
+
+Built-in data capabilities:
+
+- `wechat-mp`: WeChat Official Account article collection and digest reports.
+- `email-query`: generic read-only mailbox query capability.
+- `cmb-credit-card-email`: CMB credit-card email parsing.
+- `futu-stock`: read-only Futu OpenD account snapshots and position P&L.
+- `eastmoney-jywg-readonly`: read-only Eastmoney `jywg.18.cn` account snapshots and position P&L.
+- `stock-portfolio`: multi-broker portfolio aggregation with CNY P&L rollups and top gainers/losers.
 
 ## Architecture
 
@@ -168,7 +187,7 @@ pm2 start ecosystem.config.cjs
 
 ### 5. Optional channel and cron setup
 
-To create the default "hermes-style" Discord channel layout and enable the built-in cron jobs:
+To create a baseline "hermes-style" Discord channel layout and enable the built-in cron jobs:
 
 ```bash
 # Create default categories and channels in your Discord guild.
@@ -186,10 +205,12 @@ Default channel layout:
 | --- | --- |
 | AI | daily-ai-news / daily-ai-frontier / daily-tech-radar / daily-github-trending / daily-app-trending |
 | PERSONAL | daily-token-dashboard |
-| STOCK | daily-stock-market |
+| STOCK | daily-stock-market for the base template; stock reports can be split into daily-us-stock / daily-cn-stock |
 | NEWS | news-domestic / news-international / trending / tldr / monitor-github-repo |
 
 The WeChat Official Account digest job `daily-wechat-mp` needs an additional Official Platform session and a target `daily-wechat-article` channel. See [docs/features/02-wechat-mp-provider.md](docs/features/02-wechat-mp-provider.md).
+
+For brokerage-backed stock reports, use the `stock-portfolio` aggregate provider and split delivery into `daily-us-stock` and `daily-cn-stock` channels. See [docs/features/10-stock-portfolio-provider.md](docs/features/10-stock-portfolio-provider.md).
 
 If you use your own channel layout, skip the setup scripts and edit the `channel` field in `~/.miniclaw/cron/*.yaml` manually.
 
@@ -222,7 +243,13 @@ src/
 |-- providers/
 |   |-- wechat-mp/        # WeChat Official Account pre-provider
 |   |-- email-query/      # Generic email query pre-provider
-|   `-- cmb-credit-card-email/ # CMB credit-card email parsing pre-provider
+|   |-- cmb-credit-card-email/ # CMB credit-card email parsing pre-provider
+|   |-- eastmoney-jywg-readonly/ # Eastmoney jywg.18.cn read-only stock-report pre-provider
+|   |-- futu-stock/       # Futu read-only stock-report pre-provider
+|   `-- stock-portfolio/  # Multi-broker aggregation with CNY P&L rollups
+|-- mcp/
+|   |-- eastmoney-jywg/   # Eastmoney jywg.18.cn read-only MCP server
+|   `-- futu-stock/       # Futu OpenD read-only MCP server
 |-- memory/               # Markdown long-term memory
 |-- stage/                # pnpm stage multi-agent TUI
 `-- store/

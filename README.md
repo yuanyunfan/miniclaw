@@ -2,9 +2,17 @@
 
 [English](README.en.md) | 简体中文
 
-极简 AI 助手 — 通过 Discord 沟通，可在 Claude Code / Codex 之间切换执行任务。
+个人 Discord-native AI 自动化 Hub — 统一 chat、task、cron、provider 数据采集和私有日报，可在 Claude Code / Codex 之间切换执行。
 
-个人单用户，本地 Mac 常驻运行，提供 Discord bot、cron 定时任务、长期记忆和 Stage 多 agent 控制台。
+MiniClaw 面向单用户、本地 Mac 常驻运行。Discord 是入口和交付层，MiniClaw 负责消息路由、任务线程、定时调度、长期记忆、只读数据 provider、私有数据日报和 Stage 多 agent 控制台。
+
+核心定位：
+
+- **Discord-native**：chat、task、task intake channel、cron 结果都在 Discord 中交互和留痕。
+- **Agent runtime 可切换**：Claude Code / Codex 是执行引擎，MiniClaw 负责统一 session、进度、输出和配置继承。
+- **Local-first automation**：个人配置、cron、provider state 和 secrets 都放在 `~/.miniclaw/`，repo 内只保留通用代码。
+- **Provider-driven reports**：微信公众号、邮件、信用卡、股票账户等数据先由只读 provider 结构化采集，再交给 LLM 总结。
+- **Private-data aware**：券商、邮箱、公众号等敏感能力默认只读、脱敏输出，不把个人 cookie、token、账号和授权码写入 Git。
 
 > 📖 **想直观了解架构？** 看 [`docs/architecture.md`](docs/architecture.md) — 系统架构图 + @mention 时序图 + /task Supervisor 时序图，10 分钟看懂全局。完整文档索引见 [`docs/README.md`](docs/README.md)。
 
@@ -15,7 +23,9 @@
 | `#chat` 频道直接发消息 | `config.yaml` 选择 Claude / Codex | 搜索、读取文件、执行安全命令 |
 | `@MiniClaw` 在任意频道 | `config.yaml` 选择 Claude / Codex | 同上 |
 | Smart Router 按钮确认 | `config.yaml` 选择 Claude Code / Codex | 在 chat 入口识别自然语言 task prompt，确认后升级为 `/task` 线程 |
+| task intake 频道普通消息 | `config.yaml` 选择 Claude Code / Codex | 无需 @mention，直接创建 task thread，走 `/task` 同一套输出链路 |
 | `/task <描述>` | `config.yaml` 选择 Claude Code / Codex | 创建独立线程，状态卡片 + 实时进度 + Markdown 最终结果 |
+| cron 定时任务 | Claude Code / Codex + pre_provider | 到点自动采集数据、执行分析并推送 Discord |
 | `/status` | — | 查看活跃/历史任务 |
 | `/health` | — | 查看 MiniClaw 进程、任务和 cron 健康状态 |
 | `/agent-config` | — | 查看当前 provider、模型、Codex/Claude settings、MCP、skills 继承摘要 |
@@ -31,6 +41,15 @@
 - `/task` 保留一条 persistent progress message，执行中持续 edit，完成后变成 Execution Summary，可回看最近工具调用
 - 中间步骤可读化：`🔌 github: search_repositories`、`⚡ Bash ls -la`、`🌐 WebSearch ...`
 - 支持代理（ClashX / VPN），HTTP + WebSocket 双通道
+
+**内置数据能力：**
+
+- `wechat-mp`: 微信公众号文章采集和日报推送。
+- `email-query`: 通用只读邮箱查询 capability。
+- `cmb-credit-card-email`: 招商信用卡邮件消费解析。
+- `futu-stock`: 富途 OpenD 只读账户快照和持仓盈亏。
+- `eastmoney-jywg-readonly`: 东方财富 `jywg.18.cn` 只读账户快照和持仓盈亏。
+- `stock-portfolio`: 聚合多券商持仓，生成统一人民币口径盈亏、Top gainers/losers 和股票日报上下文。
 
 ## 架构
 
@@ -164,7 +183,7 @@ pm2 start ecosystem.config.cjs
 
 ### 5. （可选）批量配置 Discord 频道与 Cron 任务
 
-如果你想直接复用我同款的"hermes-style"频道结构（4 分类 + 13 个核心频道，对应 15 个通用定时简报任务），跑下面 2 个**可选模板**脚本：
+如果你想快速创建一套基础 "hermes-style" 频道结构（4 分类 + 13 个核心频道，对应一批通用定时简报任务），跑下面 2 个**可选模板**脚本：
 
 ```bash
 # 1. 在你的 Discord guild 里创建 4 分类 + 13 频道（需要 bot 有 Manage Channels 权限）
@@ -181,10 +200,12 @@ python3 scripts/update-cron-channels.py
 |---|---|
 | 🤖 AI | daily-ai-news / daily-ai-frontier / daily-tech-radar / daily-github-trending / daily-app-trending |
 | 👤 PERSONAL | daily-token-dashboard |
-| 💹 STOCK | daily-stock-market |
+| 💹 STOCK | daily-stock-market（基础模板）；股票日报推荐按需拆为 daily-us-stock / daily-cn-stock |
 | 📰 NEWS | news-domestic / news-international / trending / tldr / monitor-github-repo |
 
 微信公众号日报 `daily-wechat-mp` 需要额外的公众号后台登录态和 `daily-wechat-article` 频道，默认不由模板脚本创建。配置方式见 [`docs/features/02-wechat-mp-provider.md`](docs/features/02-wechat-mp-provider.md)。
+
+股票日报如果接入富途/东方财富，推荐使用 `stock-portfolio` 聚合 provider，并拆成 `daily-us-stock`、`daily-cn-stock` 两个频道。配置方式见 [`docs/features/10-stock-portfolio-provider.md`](docs/features/10-stock-portfolio-provider.md)。
 
 如果你想用**自己的**频道结构（而不是 hermes-style），跳过这两个脚本，直接 `vim ~/.miniclaw/cron/*.yaml` 改各自的 `channel: "<id>"`。
 
@@ -220,7 +241,7 @@ src/
 │   ├── cmb-credit-card-email/ # 招商信用卡邮件消费解析 pre-provider
 │   ├── eastmoney-jywg-readonly/ # 东方财富 jywg.18.cn 只读股票日报 pre-provider
 │   ├── futu-stock/       # 富途账户只读股票日报 pre-provider
-│   └── stock-portfolio/  # 聚合多个只读股票账户 provider
+│   └── stock-portfolio/  # 聚合多个只读股票账户 provider，生成 CNY 盈亏汇总
 ├── mcp/
 │   ├── eastmoney-jywg/   # 东方财富 jywg.18.cn 只读 MCP server
 │   └── futu-stock/       # 富途 OpenD 只读 MCP server
