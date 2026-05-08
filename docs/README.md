@@ -21,6 +21,7 @@
 - [`features/08-cmb-credit-card-email-provider.md`](features/08-cmb-credit-card-email-provider.md): 招商信用卡邮件消费解析 provider。
 - [`features/09-eastmoney-jywg-readonly-provider.md`](features/09-eastmoney-jywg-readonly-provider.md): 东方财富 JYWG 只读查询 provider。
 - [`features/10-stock-portfolio-provider.md`](features/10-stock-portfolio-provider.md): 多券商股票账户聚合 provider。
+- [`features/11-stock-pulse-provider.md`](features/11-stock-pulse-provider.md): 股票盘中 hourly 异动扫描 provider。
 
 ## Plans
 
