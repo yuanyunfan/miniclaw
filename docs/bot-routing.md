@@ -247,7 +247,7 @@ bot.once(Events.ClientReady, (client) => startScheduler(client));
 
 ## Smart Task Router 文档
 
-详细设计见 `docs/smart-task-router.zh.md`（中文复查版）和 `docs/smart-task-router.md`（英文版）。当前实现遵循核心原则：**不提升 chat 权限，而是把 task-like prompt 转入现有 task 执行链路**。
+详细设计见 `docs/features/04-smart-task-router.md`（中文复查版）和 `docs/features/05-smart-task-router.en.md`（英文版）。当前实现遵循核心原则：**不提升 chat 权限，而是把 task-like prompt 转入现有 task 执行链路**。
 
 ---
 

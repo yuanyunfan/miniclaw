@@ -140,7 +140,7 @@ flowchart LR
 **关键设计点**
 
 - **四入口**：`@mention` / auto-reply 走 `chat.ts`（轻量对话）；`/task` 和 `routing.task_channels` 走 `task.ts`（Supervisor 模式 + subagent 编排）；`cron` 调度自动触发
-- **Stage 是对偶子系统**：`pnpm stage` 启另一进程（Ink TUI），多 agent 群聊编排，与 Discord bot 路径独立但共享 chat-tools / db / config / log（详见 `docs/stage.md`）
+- **Stage 是对偶子系统**：`pnpm stage` 启另一进程（Ink TUI），多 agent 群聊编排，与 Discord bot 路径独立但共享 chat-tools / db / config / log（详见 `docs/features/01-stage.md`）
 - **代码 vs 用户级数据严格分离**：
   - 代码在 git repo（`agents/*.md` / `src/`）
   - 用户级数据全在 `~/.miniclaw/`（config / cron / skills / scripts / memories / channel-map）
@@ -556,5 +556,5 @@ erDiagram
 2. **想改 chat 行为** → 看图 2，集中改 `src/agent/chat.ts`
 3. **想加新 subagent** → 看图 3 + Supervisor 表，新增 `agents/<name>.md`（repo） 或 `~/.miniclaw/skills/<name>.md`（user）
 4. **想加新 cron** → 看图 4，写 `~/.miniclaw/cron/<name>.yaml` 重启 bot
-5. **想改微信公众号日报** → 看 `docs/wechat-mp-provider.md`，重点是 provider config、固定窗口、登录态刷新和 dedupe state
+5. **想改微信公众号日报** → 看 `docs/features/02-wechat-mp-provider.md`，重点是 provider config、固定窗口、登录态刷新和 dedupe state
 6. **想加新 slash command** → `register.ts` 注册 + `handlers.ts` 处理 + `bot.ts` switch case

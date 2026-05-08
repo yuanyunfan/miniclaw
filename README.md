@@ -6,7 +6,7 @@
 
 个人单用户，本地 Mac 常驻运行，提供 Discord bot、cron 定时任务、长期记忆和 Stage 多 agent 控制台。
 
-> 📖 **想直观了解架构？** 看 [`docs/architecture.md`](docs/architecture.md) — 系统架构图 + @mention 时序图 + /task Supervisor 时序图，10 分钟看懂全局。
+> 📖 **想直观了解架构？** 看 [`docs/architecture.md`](docs/architecture.md) — 系统架构图 + @mention 时序图 + /task Supervisor 时序图，10 分钟看懂全局。完整文档索引见 [`docs/README.md`](docs/README.md)。
 
 ## 功能
 
@@ -184,7 +184,7 @@ python3 scripts/update-cron-channels.py
 | 💹 STOCK | daily-stock-market |
 | 📰 NEWS | news-domestic / news-international / trending / tldr / monitor-github-repo |
 
-微信公众号日报 `daily-wechat-mp` 需要额外的公众号后台登录态和 `daily-wechat-article` 频道，默认不由模板脚本创建。配置方式见 [`docs/wechat-mp-provider.md`](docs/wechat-mp-provider.md)。
+微信公众号日报 `daily-wechat-mp` 需要额外的公众号后台登录态和 `daily-wechat-article` 频道，默认不由模板脚本创建。配置方式见 [`docs/features/02-wechat-mp-provider.md`](docs/features/02-wechat-mp-provider.md)。
 
 如果你想用**自己的**频道结构（而不是 hermes-style），跳过这两个脚本，直接 `vim ~/.miniclaw/cron/*.yaml` 改各自的 `channel: "<id>"`。
 

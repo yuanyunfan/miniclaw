@@ -11,7 +11,7 @@ MiniClaw currently routes Discord messages by surface:
 - `routing.task_channels` turns every ordinary message in configured channels into a task.
 - `routing.auto_reply_channels` and mentions enter the lightweight chat path.
 
-This is predictable, but a task-like natural-language prompt sent to a chat-enabled channel enters the read-only chat path. The smart task router described in `docs/smart-task-router.md` should classify eligible messages before chat and either keep chat, suggest task mode, ask for task confirmation, or auto-create a task in trusted channels.
+This is predictable, but a task-like natural-language prompt sent to a chat-enabled channel enters the read-only chat path. The smart task router described in `docs/features/05-smart-task-router.en.md` should classify eligible messages before chat and either keep chat, suggest task mode, ask for task confirmation, or auto-create a task in trusted channels.
 
 ## Goals
 
@@ -97,7 +97,7 @@ Manual Discord E2E is intentionally deferred until after the code builds and tes
 
 ## Execution Notes
 
-- Implementation started after reviewing `docs/smart-task-router.md`, `src/bot.ts`, `src/commands/handlers.ts`, `src/config.ts`, and `src/store/db.ts`.
+- Implementation started after reviewing `docs/features/05-smart-task-router.en.md`, `src/bot.ts`, `src/commands/handlers.ts`, `src/config.ts`, and `src/store/db.ts`.
 - Added structured smart-router config, explicit channel cwd defaults, SQLite `smart_router_decisions`, deterministic routing, LLM classifier adapter, in-memory confirmation state, shared Discord task intake, and bot message/button integration.
 - Focused verification passed:
   - `pnpm build`

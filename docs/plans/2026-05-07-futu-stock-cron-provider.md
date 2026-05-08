@@ -57,7 +57,7 @@ The current stock cron jobs are pure LLM prompts. They do not pass account conte
    - add `pre_provider_config: daily-stock-market`;
    - align schedules to Beijing `09:15` and `15:15`;
    - adjust prompts to explicitly use the prepended redacted Futu JSON for portfolio-aware analysis.
-6. Update `docs/futu-stock.md`, `docs/architecture.md`, and README project structure as needed.
+6. Update `docs/features/06-futu-stock.md`, `docs/architecture.md`, and README project structure as needed.
 
 ## Verification Plan
 
@@ -82,7 +82,7 @@ The current stock cron jobs are pure LLM prompts. They do not pass account conte
 
 ## Documentation Sync
 
-- Update `docs/futu-stock.md` with the implemented pre-provider and cron wiring.
+- Update `docs/features/06-futu-stock.md` with the implemented pre-provider and cron wiring.
 - Update `docs/architecture.md` provider examples.
 - Update README project structure if a new provider directory is introduced.
 

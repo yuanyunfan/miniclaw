@@ -6,7 +6,7 @@ Minimal AI assistant for Discord. It can run tasks through Claude Code or Codex,
 
 MiniClaw provides a Discord bot, scheduled cron tasks, markdown-based long-term memory, and a Stage multi-agent console.
 
-> For architecture details, see [docs/architecture.md](docs/architecture.md). It includes the system diagram, @mention sequence, /task supervisor flow, cron flow, and storage model.
+> For architecture details, see [docs/architecture.md](docs/architecture.md). It includes the system diagram, @mention sequence, /task supervisor flow, cron flow, and storage model. See [docs/README.md](docs/README.md) for the full docs index.
 
 ## Features
 
@@ -189,7 +189,7 @@ Default channel layout:
 | STOCK | daily-stock-market |
 | NEWS | news-domestic / news-international / trending / tldr / monitor-github-repo |
 
-The WeChat Official Account digest job `daily-wechat-mp` needs an additional Official Platform session and a target `daily-wechat-article` channel. See [docs/wechat-mp-provider.md](docs/wechat-mp-provider.md).
+The WeChat Official Account digest job `daily-wechat-mp` needs an additional Official Platform session and a target `daily-wechat-article` channel. See [docs/features/02-wechat-mp-provider.md](docs/features/02-wechat-mp-provider.md).
 
 If you use your own channel layout, skip the setup scripts and edit the `channel` field in `~/.miniclaw/cron/*.yaml` manually.
 

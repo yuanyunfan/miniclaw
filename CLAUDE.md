@@ -101,7 +101,15 @@ MiniClaw 的长期维护依赖文档和代码同步。LLM 在开发时不能只�
 
 **计划文档位置**：
 - 默认写到 `docs/plans/YYYY-MM-DD-<short-slug>.md`。
-- 如果已有专题文档更合适，可以直接更新对应 `docs/*.md`，但必须包含计划、范围、验证和文档影响。
+- 如果已有专题文档更合适，可以直接更新对应 `docs/**/*.md`，但必须包含计划、范围、验证和文档影响。
+
+**`plans/` 与 `features/` 的定位**：
+- `docs/plans/` 是实施过程文档：记录为什么做、怎么做、范围/非目标、验证计划、风险、rollback 和 execution notes。它是 RFC + implementation log，不是长期唯一说明书。
+- `docs/features/` 是落地后的能力文档：记录这个 feature 当前是什么、如何工作、如何配置、如何验证、如何排障、安全边界是什么。
+- 新 feature 或非平凡变更必须先写/更新 `docs/plans/YYYY-MM-DD-<short-slug>.md`；实现完成后，把长期有效的信息沉淀到对应 `docs/features/NN-*.md`。
+- `docs/features/` 保持扁平目录，不建子目录；文件名使用两位阿拉伯数字前缀，按实现顺序从 `01-` 开始递增。
+- `docs/README.md` 是文档入口和放置规则。LLM 不确定文档应该放哪里时，先读 `docs/README.md`，不要凭直觉新建散乱路径。
+- 不要让 completed plan 成为唯一真相；后续维护应优先读 `docs/features/NN-*.md` 和全局 design 文档，再回看 plan 了解历史取舍。
 
 **计划文档至少包含**：
 - 背景和目标：用户要解决什么问题，当前系统哪里相关。
@@ -114,10 +122,11 @@ MiniClaw 的长期维护依赖文档和代码同步。LLM 在开发时不能只�
 
 **执行纪律**：
 1. 先探索代码和现有 docs，确认 root cause 与改动边界。
-2. 写或更新计划文档，并在对话里指出文档路径。
-3. 再开始改业务代码。
-4. 实现过程中如果设计变化，先更新计划文档，再继续改代码。
-5. 结束前把计划文档状态改为 completed / superseded，并同步 `CHANGELOG.md` 与相关架构文档。
+2. 先读 `docs/README.md` 判断文档归属；必要时再读 `docs/architecture.md`、`docs/bot-routing.md`、对应 `docs/features/NN-*.md`。
+3. 写或更新计划文档，并在对话里指出文档路径。
+4. 再开始改业务代码。
+5. 实现过程中如果设计变化，先更新计划文档，再继续改代码。
+6. 结束前把计划文档状态改为 completed / superseded，并同步 `CHANGELOG.md`、相关全局 design 文档和对应 feature 文档。
 
 ## 用户级扩展（`~/.miniclaw/`）
 
@@ -154,7 +163,7 @@ scheduler 在 miniclaw 启动时随 ClientReady 一起 start，SIGTERM 时 stop�
 - Persona 定义：`personas/<id>.md`（repo 默认）+ `~/.miniclaw/personas/<id>.md`（user 覆盖）
 - 持久化：`~/.miniclaw/scenes/<name>.md` 双轨 markdown + DB（`scenes` / `scene_messages` 表）
 - 反失控：env `MINICLAW_STAGE_BUDGET_USD`（默认 $2）/ `TURN_CAP`（默认 30）/ `SAME_SPEAKER_CAP`（默认 3）
-- 详细架构 + 命令清单见 `docs/stage.md`
+- 详细架构 + 命令清单见 `docs/features/01-stage.md`
 
 Stage 完全复用 `chat-tools` / `memory` / `log` / `db` / `config`，但路径独立 (`src/stage/`)，不与 `src/agent/` (Discord chat) 耦合。
 
@@ -198,27 +207,30 @@ log.debug("调试信息");                         // 默认不输出
 1. 读 `git log --oneline -10` 看最近改动
 2. 读 `CHANGELOG.md` 顶部的 [Unreleased] 段了解当前在做什么
 3. 跑 `pnpm test` 验证当前 main 是绿的（红的话先修再动手）
-4. **如果是不熟悉的领域改动**（cron / Supervisor / thread continuation 等），先看 `docs/architecture.md` + `docs/bot-routing.md` 对齐心智模型，避免读源码盲改
-5. **非平凡开发必须先写 docs 计划**：按 `Docs-First Development Planning` 创建或更新 `docs/plans/YYYY-MM-DD-<short-slug>.md`，明确背景、范围、实施步骤、验证计划、风险和文档同步清单；计划文档落盘后再开始改业务代码
+4. 读 `docs/README.md` 确认 docs 目录定位、`plans/` vs `features/` 规则和专题文档入口
+5. **如果是不熟悉的领域改动**（cron / Supervisor / thread continuation / provider / feature docs 等），先看 `docs/architecture.md` + `docs/bot-routing.md` + 对应 `docs/features/NN-*.md` 对齐心智模型，避免读源码盲改
+6. **非平凡开发必须先写 docs 计划**：按 `Docs-First Development Planning` 创建或更新 `docs/plans/YYYY-MM-DD-<short-slug>.md`，明确背景、范围、实施步骤、验证计划、风险和文档同步清单；计划文档落盘后再开始改业务代码
 
 **每次代码改动后**：
-6. 跑 `pnpm exec tsc --noEmit` 确保类型通过
-7. 改了被测函数 → 跑相关测试 `pnpm test src/<dir>/`
-8. 加了新函数/新行为 → 补单测（不要让测试覆盖率倒退）
-9. **改了下列任一 → 必须同步更新 `docs/architecture.md` 或 `docs/bot-routing.md` 或 `docs/stage.md` 或 `docs/prompts.md`**：
+7. 跑 `pnpm exec tsc --noEmit` 确保类型通过
+8. 改了被测函数 → 跑相关测试 `pnpm test src/<dir>/`
+9. 加了新函数/新行为 → 补单测（不要让测试覆盖率倒退）
+10. **改了下列任一 → 必须同步更新 `docs/architecture.md` 或 `docs/bot-routing.md` 或 `docs/features/NN-*.md` 或 `docs/prompts.md`**：
    - `src/bot.ts` 路由逻辑（事件监听 / 守卫 / Path 分支）→ `bot-routing.md`
    - `src/agent/{chat,task,subagents,mcp}.ts` 任一架构改动 → `architecture.md` 图 1+2+3
    - `src/cron/*` 调度引擎或新 type / runner 模式 → `architecture.md` 图 4
    - `src/store/db.ts` schema → `architecture.md` 末尾 ER 图
    - `~/.miniclaw/` 新增子目录 / 文件类型 → `architecture.md` 图 1+5
-   - `src/stage/*` 路由 / orchestrator / persona / 命令 / TUI 改动 → `docs/stage.md`
+   - `src/stage/*` 路由 / orchestrator / persona / 命令 / TUI 改动 → `docs/features/01-stage.md`
+   - `src/providers/*` 或 `src/capabilities/*` 行为改动 → 对应 `docs/features/NN-*.md`
    - `prompts/*.md` 任一改动 → 跑 `pnpm test prompt-snapshot`，确认 diff 有意后 `vitest -u` 更新 hash；新增 prompt 文件还要更 `docs/prompts.md` 的清单
    不更新 docs 等于"代码漂移"，下次 session 开局看到的图就是错的，会基于错信息做决策
-10. 如果本次有计划文档，结束前把实际执行结果、验证证据、偏离原计划的原因写回该文档
+11. 如果本次有计划文档，结束前把实际执行结果、验证证据、偏离原计划的原因写回该文档
+12. 如果本次实现或改变了长期功能行为，必须更新对应 `docs/features/NN-*.md`；不要只把最终状态留在 plan 里
 
 **Session 结束前**：
-11. 显著架构变更或踩坑 → 追加一条到 `## Retrospective`（格式：`[YYYY-MM-DD] 问题简述` → 根因 → 修复 → 教训）
-12. 完成完整 feature → 在 `CHANGELOG.md` 的 [Unreleased] 段加一条
+13. 显著架构变更或踩坑 → 追加一条到 `## Retrospective`（格式：`[YYYY-MM-DD] 问题简述` → 根因 → 修复 → 教训）
+14. 完成完整 feature → 在 `CHANGELOG.md` 的 [Unreleased] 段加一条
 
 ## Git Quality Gates
 
