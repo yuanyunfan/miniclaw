@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Client, SendableChannels } from "discord.js";
@@ -49,11 +49,13 @@ function firstLine(text: string): string {
   return text.trim().split(/\r?\n/)[0]?.slice(0, 300) ?? "";
 }
 
-// 解析 stdout 找出可发送的附件文件路径：
+// 解析 stdout 找出 runner 指令：
 // 1) JSON 行含 "png_path" / "image_path" / "media_path" 字段
 // 2) 行首 `MEDIA:<absolute path>` 语法（兼容 hermes）
-function extractAttachments(stdout: string): { paths: string[]; remaining: string } {
+// 3) 行首 `DISCORD_MESSAGE:<absolute path>` 语法，用文件内容作为 Discord 正文
+function extractScriptDirectives(stdout: string): { paths: string[]; remaining: string; message?: string } {
   const paths: string[] = [];
+  const messages: string[] = [];
   const lines = stdout.split("\n");
   const remainingLines: string[] = [];
 
@@ -65,6 +67,16 @@ function extractAttachments(stdout: string): { paths: string[]; remaining: strin
     if (mediaMatch) {
       const path = mediaMatch[1].trim();
       if (existsSync(path) && statSync(path).size > 0) paths.push(path);
+      continue;
+    }
+
+    // DISCORD_MESSAGE: 语法。正文走文件，避免 stdout 中的 Markdown 被外层 code block 包坏。
+    const messageMatch = trimmed.match(/^DISCORD_MESSAGE:(.+)$/);
+    if (messageMatch) {
+      const path = messageMatch[1].trim();
+      if (existsSync(path) && statSync(path).size > 0) {
+        messages.push(readFileSync(path, "utf8").trim());
+      }
       continue;
     }
 
@@ -95,7 +107,16 @@ function extractAttachments(stdout: string): { paths: string[]; remaining: strin
     remainingLines.push(line);
   }
 
-  return { paths, remaining: remainingLines.join("\n").trim() };
+  return {
+    paths,
+    remaining: remainingLines.join("\n").trim(),
+    message: messages.length ? messages.join("\n\n").trim() : undefined,
+  };
+}
+
+function trimDiscordContent(text: string): string {
+  if (text.length <= 2000) return text;
+  return text.slice(0, 1900).trimEnd() + "\n\n... (truncated)";
 }
 
 export async function runScript(job: CronJobScript, client: Client): Promise<void> {
@@ -172,7 +193,9 @@ export async function runScript(job: CronJobScript, client: Client): Promise<voi
       : `script exited with code ${exitCode}${failureDetail ? `: ${failureDetail}` : ""}`;
 
   // 解析附件（PNG / image / media）
-  const { paths: attachmentPaths, remaining } = success ? extractAttachments(stdout) : { paths: [], remaining: stdout };
+  const { paths: attachmentPaths, remaining, message } = success
+    ? extractScriptDirectives(stdout)
+    : { paths: [], remaining: stdout, message: undefined };
 
   if (!job.capture_output && success && attachmentPaths.length === 0) {
     await postToChannel(client, job.channel, `cron \`${job.name}\` ${status} (${durationS}s)`);
@@ -184,7 +207,15 @@ export async function runScript(job: CronJobScript, client: Client): Promise<voi
 
   const files = attachmentPaths.map((p) => new AttachmentBuilder(p));
 
-  // 仅图（无文字残余）→ 单独发图，不带啰嗦的状态行
+  // 显式 Markdown 正文 → 原样作为 Discord content，不再套 cron status/code block。
+  if (success && message && !stderr) {
+    await ch.send(files.length
+      ? { content: trimDiscordContent(message), files }
+      : { content: trimDiscordContent(message) });
+    return;
+  }
+
+  // 仅附件（无文字残余）→ 单独发附件，不带啰嗦的状态行
   if (success && files.length > 0 && !remaining && !stderr) {
     await ch.send({ files });
     return;

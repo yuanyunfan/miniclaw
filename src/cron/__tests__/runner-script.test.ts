@@ -93,4 +93,25 @@ wait
     expect(payload.content).toContain("timeout(1s)");
     expect(existsSync(marker)).toBe(false);
   });
+
+  it("DISCORD_MESSAGE 文件会作为正文发送，不再包外层 code block", async () => {
+    writeScript("script.sh", `#!/usr/bin/env bash
+set -euo pipefail
+printf '**Backup Snapshot**\\n- Apps: 58\\n' > summary.md
+printf '{"ok":true}\\n' > snapshot.json
+echo "DISCORD_MESSAGE:$PWD/summary.md"
+echo "MEDIA:$PWD/snapshot.json"
+`);
+    const sent: unknown[] = [];
+
+    await runScript(scriptJob({}), fakeClient(sent));
+
+    expect(sent).toHaveLength(1);
+    const payload = sent[0] as { content: string; files: unknown[] };
+    expect(payload.content).toContain("**Backup Snapshot**");
+    expect(payload.content).toContain("- Apps: 58");
+    expect(payload.content).not.toContain("cron `test-script`");
+    expect(payload.content).not.toContain("```");
+    expect(payload.files).toHaveLength(1);
+  });
 });
