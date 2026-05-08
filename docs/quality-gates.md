@@ -463,6 +463,14 @@ manual/nightly：
 - 区分代码回归和外部系统抖动。
 - 对 L3/L4 失败输出可诊断 artifact。
 
+## 当前实施状态
+
+截至 2026-05-08：
+
+- `P0-00` 到 `P0-04` 已落地：plan 文档、npm quality scripts、G0 safety check、pre-commit/pre-push、基础 GitHub Actions。
+- `P0-05` 到 `P0-08` 未开始：E2E 安全配置、fake agent、Discord E2E harness、最小 E2E cases。
+- `P1/P2` 未开始：ESLint、gitleaks、dependency scan、coverage ratchet、真实 Agent E2E。
+
 ## 实施 loop
 
 后续逐项修改时，按这个 loop 执行：

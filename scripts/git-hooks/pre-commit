@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Pre-commit gate：拒绝 ts 错误进入 history。
+# Pre-commit gate：G0 staged safety + G1 typecheck + L1 tests。
 # 安装：bash scripts/install-hooks.sh
 set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 
-echo "▶ tsc --noEmit"
-pnpm exec tsc --noEmit
+echo "▶ pnpm run quality:commit"
+pnpm run quality:commit
 
 echo "✓ pre-commit passed"
