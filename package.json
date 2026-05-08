@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "tsx --watch src/index.ts",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "build": "tsc",
     "start": "node dist/index.js",
@@ -18,9 +19,14 @@
     "test:cov": "vitest run --coverage",
     "quality:g0": "tsx scripts/quality-g0.ts --tree",
     "quality:g0:staged": "tsx scripts/quality-g0.ts --staged",
-    "quality:commit": "pnpm run quality:g0:staged && pnpm run typecheck && pnpm test",
-    "quality:push": "pnpm run build && pnpm run test:cov && pnpm run quality:g0",
+    "quality:secrets": "tsx scripts/quality-secrets.ts --tree",
+    "quality:secrets:staged": "tsx scripts/quality-secrets.ts --staged",
+    "quality:deps": "tsx scripts/quality-deps.ts",
+    "quality:coverage": "tsx scripts/quality-coverage-ratchet.ts",
+    "quality:commit": "pnpm run quality:g0:staged && pnpm run quality:secrets:staged && pnpm run lint && pnpm run typecheck && pnpm test",
+    "quality:push": "pnpm run build && pnpm run test:cov && pnpm run quality:coverage && pnpm run lint && pnpm run e2e:cron && pnpm run quality:g0 && pnpm run quality:secrets && pnpm run quality:deps",
     "e2e:discord": "tsx scripts/e2e-discord.ts",
+    "e2e:cron": "tsx scripts/e2e-cron-fixture.ts",
     "init": "bash init.sh",
     "cron:list": "tsx scripts/cron-list.ts",
     "cron:test": "tsx scripts/cron-test.ts",
@@ -57,6 +63,7 @@
     "zod": "4.3.6"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/better-sqlite3": "^7.6.13",
     "@types/js-yaml": "^4.0.9",
     "@types/mailparser": "^3.4.6",
@@ -66,9 +73,11 @@
     "@types/uuid": "^10.0.0",
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^3.0.0",
+    "eslint": "^10.3.0",
     "playwright": "^1.59.1",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3",
+    "typescript-eslint": "^8.59.2",
     "vitest": "^3.0.0"
   },
   "pnpm": {

@@ -27,6 +27,7 @@ import { assertProviderSession } from "./agent/session.js";
 import { createAndRunDiscordTask, taskCapacityError } from "./discord/task-intake.js";
 import { buildSmartTaskPrompt } from "./routing/context.js";
 import { resolveTaskCwd } from "./routing/cwd.js";
+import { resolveDiscordMessageRoute } from "./routing/message-route.js";
 import { hashPrompt, promptPreview } from "./routing/decision-log.js";
 import { classifySmartRoute, resolveSmartRouterAction, type RouteDecision } from "./routing/intent.js";
 import { classifyRouteWithLlm } from "./routing/llm.js";
@@ -274,13 +275,24 @@ export function createBot(): Client {
   const processed = new Map<string, number>();
 
   client.on(Events.MessageCreate, async (message: Message) => {
-    if (!isAllowedDiscordMessageAuthor(message.author.id, message.author.bot)) return;
-
     // Thread continuation: 仅当消息发在 /task 创建过的真正 Discord thread 里才自动 resume
     // （防 cron 在普通 channel 跑过留下 discord_thread_id 记录被误命中）
     const isInThread = "isThread" in message.channel && message.channel.isThread();
     const continuableTask = isInThread ? getTaskByThreadId(message.channel.id) : undefined;
-    if (continuableTask && continuableTask.session_id && continuableTask.discord_user_id !== "cron") {
+    const hasContinuableTask = Boolean(continuableTask?.session_id && continuableTask.discord_user_id !== "cron");
+    const route = resolveDiscordMessageRoute({
+      authorAllowed: isAllowedDiscordMessageAuthor(message.author.id, message.author.bot),
+      isThread: isInThread,
+      hasContinuableTask,
+      channelId: message.channel.id,
+      taskChannelIds: config.taskChannelIds,
+      autoReplyChannelIds: config.autoReplyChannelIds,
+      isMentioned: message.mentions.has(client.user!),
+    });
+
+    if (route === "ignore") return;
+
+    if (route === "thread_continuation" && continuableTask?.session_id) {
       try {
         assertProviderSession(continuableTask.session_id, config.agentProvider);
       } catch (err) {
@@ -340,8 +352,7 @@ export function createBot(): Client {
       return;
     }
 
-    const isTaskChannel = config.taskChannelIds.includes(message.channel.id);
-    if (isTaskChannel) {
+    if (route === "task_channel") {
       const now = Date.now();
       if (processed.has(message.id)) return;
       processed.set(message.id, now);
@@ -392,10 +403,6 @@ export function createBot(): Client {
       }
       return;
     }
-
-    const isAutoChannel = config.autoReplyChannelIds.includes(message.channel.id);
-    const isMentioned = message.mentions.has(client.user!);
-    if (!isAutoChannel && !isMentioned) return;
 
     const now = Date.now();
     if (processed.has(message.id)) return;
@@ -541,7 +548,7 @@ export function createBot(): Client {
             lastLine = display;
             steps.push(display);
             if (Date.now() - lastStepUpdate > 600) {
-              flushSteps();
+              void flushSteps();
             }
           },
           onText: (_text) => {},

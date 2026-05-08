@@ -17,6 +17,7 @@ const ENV_KEYS = [
   "MINICLAW_E2E_MODE",
   "MINICLAW_E2E_SENDER_USER_IDS",
   "MINICLAW_DISABLE_SCHEDULER",
+  "MINICLAW_E2E_FAKE_AGENT",
 ] as const;
 
 let tmpDir: string;

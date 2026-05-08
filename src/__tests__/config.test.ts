@@ -59,6 +59,7 @@ const ENV_KEYS = [
   "MINICLAW_E2E_MODE",
   "MINICLAW_E2E_SENDER_USER_IDS",
   "MINICLAW_DISABLE_SCHEDULER",
+  "MINICLAW_E2E_FAKE_AGENT",
   "MINICLAW_MAX_ATTACHMENT_MB",
   "MINICLAW_MAX_ATTACHMENTS",
 ] as const;
@@ -289,6 +290,7 @@ storage:
     process.env.MINICLAW_E2E_MODE = "true";
     process.env.MINICLAW_E2E_SENDER_USER_IDS = "sender-a,sender-b";
     process.env.MINICLAW_DISABLE_SCHEDULER = "true";
+    process.env.MINICLAW_E2E_FAKE_AGENT = "true";
 
     const { assertE2eSafeRuntimePath, config } = await import("../config.js");
 
@@ -296,6 +298,7 @@ storage:
       mode: true,
       senderUserIds: ["sender-a", "sender-b"],
       disableScheduler: true,
+      fakeAgent: true,
       tempRoot: tmpdir(),
     });
     expect(config.defaultCwd).toBe(tmpDir);
@@ -372,5 +375,26 @@ storage:
     process.env.MINICLAW_DISABLE_SCHEDULER = "true";
 
     await expect(import("../config.js")).rejects.toThrow(/MINICLAW_DEFAULT_CWD/);
+  });
+
+  it("fails closed when fake agent is enabled outside E2E mode", async () => {
+    const cfg = join(tmpDir, "config.yaml");
+    writeFileSync(cfg, `
+discord:
+  token: "token-yaml"
+  client_id: "client-yaml"
+  guild_id: "guild-yaml"
+  allowed_user_id: "user-yaml"
+agent:
+  provider: codex
+  default_cwd: "${tmpDir}"
+storage:
+  db_path: "${join(tmpDir, "data.db")}"
+  memory_path: "${join(tmpDir, "MEMORY.md")}"
+`);
+    process.env.MINICLAW_CONFIG = cfg;
+    process.env.MINICLAW_E2E_FAKE_AGENT = "true";
+
+    await expect(import("../config.js")).rejects.toThrow(/MINICLAW_E2E_FAKE_AGENT requires MINICLAW_E2E_MODE=true/);
   });
 });

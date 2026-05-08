@@ -316,6 +316,7 @@ const smartRouterEnabled = boolValue(["routing", "smart_router", "enabled"], "MI
 const e2eMode = boolValue(["e2e", "mode"], "MINICLAW_E2E_MODE", false);
 const e2eSenderUserIds = stringArray(["e2e", "sender_user_ids"], "MINICLAW_E2E_SENDER_USER_IDS");
 const disableScheduler = boolValue(["e2e", "disable_scheduler"], "MINICLAW_DISABLE_SCHEDULER", false);
+const e2eFakeAgent = boolValue(["e2e", "fake_agent"], "MINICLAW_E2E_FAKE_AGENT", false);
 const defaultCwd = resolveHome(requiredString(["agent", "default_cwd"], "MINICLAW_DEFAULT_CWD", "~/Code"));
 const dbPath = resolveHome(requiredString(["storage", "db_path"], "MINICLAW_DB_PATH", "~/.miniclaw/data.db"));
 const memoryPath = resolveHome(requiredString(["storage", "memory_path"], "MINICLAW_MEMORY_PATH", "~/.miniclaw/memories/MEMORY.md"));
@@ -356,6 +357,8 @@ if (e2eMode) {
   for (const [channelId, value] of Object.entries(channelDefaultConfig)) {
     assertE2eTempPath(`routing.channel_defaults.${channelId}.cwd`, value.cwd);
   }
+} else if (e2eFakeAgent) {
+  throw new Error("MINICLAW_E2E_FAKE_AGENT requires MINICLAW_E2E_MODE=true");
 }
 
 export const config = {
@@ -540,6 +543,7 @@ export const config = {
     mode: e2eMode,
     senderUserIds: e2eSenderUserIds,
     disableScheduler,
+    fakeAgent: e2eFakeAgent,
     tempRoot: tmpdir(),
   },
   maxAttachmentMb: positiveNumber(["attachments", "max_mb"], "MINICLAW_MAX_ATTACHMENT_MB", 32),

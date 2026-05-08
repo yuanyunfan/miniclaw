@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Pre-push gate：G1 build + coverage + G0 tree safety.
-# Discord E2E is opt-in until P0-07 is implemented:
+# Pre-push gate：build + coverage ratchet + lint + cron E2E + safety/security/deps.
+# Real Discord E2E stays opt-in because it needs test Discord secrets:
 #   MINICLAW_RUN_DISCORD_E2E=1 git push
 set -euo pipefail
 

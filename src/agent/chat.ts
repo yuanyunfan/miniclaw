@@ -14,6 +14,7 @@ import { CHAT_TOOLS, executeTool } from "./chat-tools.js";
 import type { CodexInputEntry } from "./codex.js";
 import { codexInput, codexThreadOptions, formatCodexItemLine, getCodexClient, withCodexTimeout } from "./codex.js";
 import { formatCodexUsage } from "./usage.js";
+import { buildFakeChatReply } from "../e2e/fake-agent.js";
 
 const log = createLogger("chat");
 
@@ -60,6 +61,14 @@ export async function chat(
   log.info(`▶ chat ch=${chShort} attach=${hasAttach ? attachmentBlocks!.length : 0} prompt="${prompt.slice(0, 60).replace(/\s+/g, " ")}"`);
 
   addChatMessage(channelId, userId, "user", prompt);
+
+  if (config.e2e.fakeAgent) {
+    const fake = buildFakeChatReply(prompt);
+    callbacks?.onText(fake.reply);
+    log.info(`✓ chat/e2e-fake ch=${chShort} ${fake.durationMs}ms reply.len=${fake.reply.length} ${fake.tokensSummary}`);
+    addChatMessage(channelId, userId, "assistant", fake.reply);
+    return fake.reply;
+  }
 
   // 构建 system：仅放身份和长期记忆策略；历史对话放 user context，避免旧消息提升为 system 指令。
   const memoryBlock = buildMemoryPrompt();

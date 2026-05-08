@@ -25,6 +25,7 @@ import {
 } from "./codex.js";
 import { assertProviderSession, formatSessionId } from "./session.js";
 import { fmtTokens, formatAnthropicUsage, formatCodexUsage } from "./usage.js";
+import { buildFakeTaskResult } from "../e2e/fake-agent.js";
 
 const log = createLogger("task");
 
@@ -249,6 +250,43 @@ async function sendEmbedTaskResult(
   await sendMarkdownTaskResult(params.channel, result);
 }
 
+async function executeFakeTask(
+  params: ExecuteTaskParams,
+  progress: ProgressReporter,
+  abortController: AbortController,
+  startedAt: number,
+  shortId: string,
+): Promise<TaskResult> {
+  const fake = buildFakeTaskResult(params.prompt, config.agentProvider);
+  const result: TaskResult = {
+    success: true,
+    sessionId: fake.sessionId,
+    costUsd: 0,
+    durationMs: Date.now() - startedAt + fake.durationMs,
+    turns: 1,
+    result: fake.reply,
+    tokensSummary: fake.tokensSummary,
+  };
+  updateTask(params.taskId, {
+    session_id: result.sessionId,
+    status: finalTaskStatus(params.taskId, abortController, result.success),
+    result_summary: result.result,
+    cost_usd: result.costUsd,
+    duration_ms: result.durationMs,
+    completed_at: new Date().toISOString(),
+  });
+  log.info(`✓ ${shortId} e2e-fake done turns=1 wall=${result.durationMs}ms ${result.tokensSummary}`);
+
+  if ((params.outputMode ?? "embed") === "raw") {
+    await progress.complete(params.channel);
+    await sendRawTaskResult(params.channel, params.taskId, result);
+    return result;
+  }
+
+  await sendEmbedTaskResult(params, progress, abortController, result, ["🧪 e2e fake agent"], 0, params.statusMessage);
+  return result;
+}
+
 interface ExecuteTaskParams {
   taskId: string;
   prompt: string;
@@ -452,6 +490,10 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
     }
     if (outputMode === "embed") {
       await progress.update(buildRealtimeProgress([], 0, 0), params.channel);
+    }
+
+    if (config.e2e.fakeAgent) {
+      return await executeFakeTask(params, progress, abortController, startedAt, shortId);
     }
 
     if (config.agentProvider === "codex") {

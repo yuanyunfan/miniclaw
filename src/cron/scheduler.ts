@@ -146,7 +146,7 @@ export function startScheduler(client: Client): { scheduled: number; errors: Arr
 
 export function stopScheduler(): void {
   for (const t of tasks.values()) {
-    try { t.stop(); } catch { /* ignore */ }
+    try { void t.stop(); } catch { /* ignore */ }
   }
   tasks.clear();
 }

@@ -1,0 +1,65 @@
+name: Discord E2E
+
+on:
+  workflow_dispatch:
+    inputs:
+      fake_agent:
+        description: "Use deterministic fake agent instead of real Codex/Claude"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      cases:
+        description: "Comma-separated cases: chat,task,followup,attachment,smart-router"
+        required: true
+        default: "chat,task,followup"
+  schedule:
+    - cron: "20 19 * * *"
+
+jobs:
+  discord-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name != 'schedule' || vars.MINICLAW_RUN_NIGHTLY_E2E == '1'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+          pnpm --version
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Discord E2E
+        env:
+          MINICLAW_E2E_BOT_TOKEN: ${{ secrets.MINICLAW_E2E_BOT_TOKEN }}
+          MINICLAW_E2E_CLIENT_ID: ${{ secrets.MINICLAW_E2E_CLIENT_ID }}
+          MINICLAW_E2E_SENDER_TOKEN: ${{ secrets.MINICLAW_E2E_SENDER_TOKEN }}
+          MINICLAW_E2E_GUILD_ID: ${{ secrets.MINICLAW_E2E_GUILD_ID }}
+          MINICLAW_E2E_CHAT_CHANNEL_ID: ${{ secrets.MINICLAW_E2E_CHAT_CHANNEL_ID }}
+          MINICLAW_E2E_TASK_CHANNEL_ID: ${{ secrets.MINICLAW_E2E_TASK_CHANNEL_ID }}
+          MINICLAW_E2E_FAKE_AGENT: ${{ github.event_name == 'schedule' && 'false' || inputs.fake_agent }}
+          MINICLAW_E2E_CASES: ${{ github.event_name == 'schedule' && 'chat,task,followup,attachment,smart-router' || inputs.cases }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: pnpm run e2e:discord
+
+      - name: Upload E2E artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: discord-e2e-artifacts
+          path: artifacts/e2e/
+          if-no-files-found: ignore

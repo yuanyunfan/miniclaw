@@ -114,3 +114,18 @@ MiniClaw also handles Discord, cron, local `~/.miniclaw` config, secrets, broker
 - Local P0-05 verification passed:
   - `pnpm exec vitest run src/__tests__/config.test.ts src/e2e/__tests__/safety.test.ts src/memory/__tests__/memory-md.test.ts src/memory/__tests__/inject.test.ts`
   - `pnpm run typecheck`
+- Continued through the remaining quality-gate tasks:
+  - `P0-06`: added deterministic E2E fake chat/task agent.
+  - `P0-07`: replaced the placeholder Discord E2E command with a real harness.
+  - `P0-08`: added chat, task, completed embed, and thread follow-up cases.
+  - `P1-01` to `P1-03`: added ESLint, secret scan, dependency scan.
+  - `P1-04`: extracted message route selection into a tested pure function.
+  - `P1-05` to `P1-07`: added E2E artifacts, manual Discord E2E workflow, and cron E2E fixture.
+  - `P2-01` to `P2-06`: added coverage ratchet, entry-risk tests, real-agent E2E switch, attachment/smart-router E2E cases, and flaky failure classification.
+- New quality entry points:
+  - `pnpm run lint`
+  - `pnpm run quality:secrets`
+  - `pnpm run quality:deps`
+  - `pnpm run quality:coverage`
+  - `pnpm run e2e:cron`
+  - `pnpm run e2e:discord`

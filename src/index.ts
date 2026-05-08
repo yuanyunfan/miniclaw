@@ -40,7 +40,7 @@ async function main(): Promise<void> {
   const shutdown = () => {
     log.info("Shutting down...");
     stopScheduler();
-    bot?.destroy();
+    void bot?.destroy();
     process.exit(0);
   };
 
@@ -50,6 +50,6 @@ async function main(): Promise<void> {
 
 main().catch((err) => {
   log.error("Fatal error:", err);
-  bot?.destroy();
+  void bot?.destroy();
   process.exit(1);
 });

@@ -34,11 +34,28 @@ jobs:
       - name: G0 safety
         run: pnpm run quality:g0
 
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Typecheck
         run: pnpm run typecheck
 
-      - name: Test
-        run: pnpm test
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Test with coverage
+        run: pnpm run test:cov
+
+      - name: Coverage ratchet
+        run: pnpm run quality:coverage
+
+      - name: Cron E2E fixture
+        run: pnpm run e2e:cron
+
+      - name: Dependency scan
+        run: pnpm run quality:deps
 
       - name: Build
         run: pnpm run build

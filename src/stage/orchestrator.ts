@@ -119,7 +119,7 @@ export class Orchestrator extends EventEmitter {
       if (this.scene.participants.has(id)) this.enqueue(id);
       else this.emit("notice", "warn", `@${id} 未在场，先 /summon ${id}`);
     }
-    this.tick();
+    void this.tick();
   }
 
   /** 广播给所有在场 agent（每人独立 turn） */
@@ -131,7 +131,7 @@ export class Orchestrator extends EventEmitter {
     this.persistMessage(msg);
     this.paused = false;
     for (const id of this.scene.participants) this.queue.push(id);
-    this.tick();
+    void this.tick();
   }
 
   /** 中断当前发言 agent */
@@ -155,7 +155,7 @@ export class Orchestrator extends EventEmitter {
     if (!this.scene.participants.has(id)) return;
     if (this.queue.includes(id)) return;
     this.queue.unshift(id);
-    this.tick();
+    void this.tick();
   }
 
   /** 入队尾，去重（同一 id 已在队列内则跳过） */
@@ -209,12 +209,12 @@ export class Orchestrator extends EventEmitter {
 
     const id = this.queue.shift()!;
     if (!this.scene.participants.has(id)) {
-      this.tick();
+      void this.tick();
       return;
     }
     const persona = this.scene.registry.get(id)!;
     await this.runAgent(persona);
-    this.tick();
+    void this.tick();
   }
 
   private async runAgent(persona: Persona): Promise<void> {

@@ -321,33 +321,33 @@ manual/nightly：
 
 ### P0：建立基本门禁和最小 Discord E2E
 
-`P0-00` 创建质量门禁计划文档
+`P0-00` 创建质量门禁计划文档 ✅
 
 - 新增或维护 `docs/plans/YYYY-MM-DD-quality-gates-and-discord-e2e.md`。
 - 明确本轮范围、风险、验证计划、文档同步清单。
 
-`P0-01` 标准化 npm scripts
+`P0-01` 标准化 npm scripts ✅
 
 - 增加 `typecheck`。
 - 增加 `quality:commit`。
 - 增加 `quality:push`。
 - 增加 `e2e:discord`。
 
-`P0-02` 强化 pre-commit
+`P0-02` 强化 pre-commit ✅
 
 - 跑 staged safety check。
 - 跑 `pnpm run typecheck`。
 - 跑 `pnpm test`。
 - 对 prompt 文件变更跑 prompt snapshot。
 
-`P0-03` 新增 pre-push
+`P0-03` 新增 pre-push ✅
 
 - 跑 `pnpm run build`。
 - 跑 `pnpm test:cov`。
 - 预留 lint/security hooks。
 - 支持通过 env 开启 Discord E2E。
 
-`P0-04` 新增基础 GitHub Actions
+`P0-04` 新增基础 GitHub Actions ✅
 
 - Node 22。
 - pnpm install frozen。
@@ -355,20 +355,20 @@ manual/nightly：
 - test。
 - build。
 
-`P0-05` 新增 E2E 安全配置
+`P0-05` 新增 E2E 安全配置 ✅
 
 - `MINICLAW_E2E_MODE`。
 - `MINICLAW_E2E_SENDER_USER_IDS`。
 - `MINICLAW_DISABLE_SCHEDULER`。
 - 临时 DB / memory / cwd 强制检查。
 
-`P0-06` 新增 fake agent
+`P0-06` 新增 fake agent ✅
 
 - chat fake 固定返回 `E2E_CHAT_OK <runId>`。
 - task fake 固定返回 `E2E_TASK_OK <runId>`。
 - 输出 fake usage、duration、session id，确保 formatter 和 DB 链路可测。
 
-`P0-07` 新增 Discord E2E harness
+`P0-07` 新增 Discord E2E harness ✅
 
 - `scripts/e2e-discord.ts`。
 - spawn MiniClaw test process。
@@ -376,7 +376,7 @@ manual/nightly：
 - 监听 Discord 输出、thread、embed、logs、DB。
 - 失败时保留 artifact。
 
-`P0-08` 新增最小 E2E cases
+`P0-08` 新增最小 E2E cases ✅
 
 - mention chat。
 - task channel 创建 thread。
@@ -385,40 +385,40 @@ manual/nightly：
 
 ### P1：补齐 lint、安全和更强集成测试
 
-`P1-01` 引入 ESLint
+`P1-01` 引入 ESLint ✅
 
 - TypeScript 基础规则。
 - `no-console`，仅允许 logger 内部。
 - floating promise 规则。
 
-`P1-02` 引入 secret scan
+`P1-02` 引入 secret scan ✅
 
 - gitleaks pre-push staged scan。
 - CI full tree scan。
 
-`P1-03` 引入 dependency scan
+`P1-03` 引入 dependency scan ✅
 
 - `pnpm audit --prod` 或 OSV scanner。
 - CI 中硬 fail。
 - 本地 pre-push 可先 warn，再逐步 hard fail。
 
-`P1-04` bot routing integration tests
+`P1-04` bot routing integration tests ✅
 
 - 把 `bot.ts` 路由判断拆成可测函数。
 - 覆盖 bot author guard、allowed user、task channel、mention、thread continuation、smart router 入口。
 
-`P1-05` E2E artifact
+`P1-05` E2E artifact ✅
 
 - `artifacts/e2e/<runId>/logs.jsonl`。
 - `artifacts/e2e/<runId>/discord-transcript.md`。
 - `artifacts/e2e/<runId>/db-summary.json`。
 
-`P1-06` manual Discord E2E workflow
+`P1-06` manual Discord E2E workflow ✅
 
 - GitHub Actions `workflow_dispatch`。
 - 只在配置 test Discord secrets 后启用。
 
-`P1-07` cron E2E fixture
+`P1-07` cron E2E fixture ✅
 
 - 使用测试 cron config。
 - 验证 message/script/task runner 输出。
@@ -426,38 +426,38 @@ manual/nightly：
 
 ### P2：coverage ratchet 和真实 Agent E2E
 
-`P2-01` 分模块 coverage threshold
+`P2-01` 分模块 coverage threshold ✅
 
 - 先覆盖纯逻辑模块。
 - 不设全局 80%。
 - 后续按模块 ratchet。
 
-`P2-02` 提高入口模块覆盖
+`P2-02` 提高入口模块覆盖 ✅
 
 - `bot.ts`。
 - `commands/handlers.ts`。
 - `agent/task.ts`。
 - `agent/chat.ts`。
 
-`P2-03` 真实 Codex/Claude E2E
+`P2-03` 真实 Codex/Claude E2E ✅
 
 - manual/nightly。
 - 限制 budget、turns、timeout。
 - 使用 temp cwd。
 
-`P2-04` 附件 E2E
+`P2-04` 附件 E2E ✅
 
 - 文本附件。
 - 图片/PDF 下载。
 - 过大文件提示。
 - cleanup。
 
-`P2-05` smart router E2E
+`P2-05` smart router E2E ✅
 
 - 自动 task 路径可自动化。
 - 按钮交互优先 handler integration test，真实按钮点击作为人工 checklist。
 
-`P2-06` flaky 管理
+`P2-06` flaky 管理 ✅
 
 - 记录 timeout、Discord API error、network error。
 - 区分代码回归和外部系统抖动。
@@ -467,52 +467,28 @@ manual/nightly：
 
 截至 2026-05-08：
 
-- `P0-00` 到 `P0-05` 已落地：plan 文档、npm quality scripts、G0 safety check、pre-commit/pre-push、基础 GitHub Actions、E2E 安全配置。
-- `P0-06` 到 `P0-08` 未开始：fake agent、Discord E2E harness、最小 E2E cases。
-- `P1/P2` 未开始：ESLint、gitleaks、dependency scan、coverage ratchet、真实 Agent E2E。
+- `P0-00` 到 `P0-08` 已落地：plan 文档、npm quality scripts、G0 safety check、pre-commit/pre-push、基础 GitHub Actions、E2E 安全配置、fake agent、Discord E2E harness、最小 E2E cases。
+- `P1-01` 到 `P1-07` 已落地：ESLint、secret scan、dependency scan、bot routing integration tests、E2E artifact、manual Discord E2E workflow、cron E2E fixture。
+- `P2-01` 到 `P2-06` 已落地：coverage ratchet、入口风险覆盖提升、真实 Agent E2E 开关、附件 E2E、smart router E2E、flaky 分类 artifact。
 
-## 实施 loop
+## 当前实现映射
 
-后续逐项修改时，按这个 loop 执行：
+- fake agent：`src/e2e/fake-agent.ts`，通过 `MINICLAW_E2E_FAKE_AGENT=true` 固定输出 `E2E_CHAT_OK <runId>` / `E2E_TASK_OK <runId>`。
+- Discord E2E：`scripts/e2e-discord.ts`，默认跑 `chat,task,followup`；可通过 `MINICLAW_E2E_CASES=attachment,smart-router` 扩展；`MINICLAW_E2E_FAKE_AGENT=false` 可跑真实 Codex/Claude。
+- E2E artifacts：`artifacts/e2e/<runId>/logs.jsonl`、`discord-transcript.md`、`db-summary.json`、`summary.json`、失败时 `failure.json`。
+- cron E2E fixture：`scripts/e2e-cron-fixture.ts`，使用临时 cron dir / scripts dir / DB / memory，不读取真实 `~/.miniclaw/cron`。
+- lint：`eslint.config.js`，对 `src/**/*.ts` 启用 `no-console` 和 `@typescript-eslint/no-floating-promises`，CLI/stdio 入口按例外处理。
+- secret scan：本地 `scripts/quality-secrets.ts` 优先用 gitleaks，未安装时 fallback 到 G0；CI 使用 `gitleaks/gitleaks-action@v2`。
+- dependency scan：`scripts/quality-deps.ts` 使用 `pnpm audit --prod --audit-level high`。
+- coverage ratchet：`scripts/quality-coverage-ratchet.ts` 对纯逻辑和高覆盖 provider 模块设置分模块阈值，不设置全局 80%。
 
-1. 选择一个 task，例如 `P0-01`。
-2. 如果涉及 runtime 行为，先写或更新 `docs/plans/...`。
-3. 做最小代码改动。
-4. 跑对应验证命令。
-5. 更新本文件 task 状态或追加 implementation notes。
-6. 如果改了架构入口，同步对应架构文档。
-7. 每个 commit 保持原子，只包含一个 task。
+## 后续维护 loop
 
-## 推荐优先级
+P0、P1、P2 已完成。后续新增 gate、提高 coverage threshold 或扩展 E2E case 时，按这个 loop 执行：
 
-第一优先级：
-
-- `P0-01`
-- `P0-02`
-- `P0-03`
-- `P0-04`
-
-原因：这些能最快把现有 TypeScript 和 Vitest 能力变成真实门禁。
-
-第二优先级：
-
-- `P0-05`
-- `P0-06`
-- `P0-07`
-- `P0-08`
-
-原因：真实 Discord E2E 是 MiniClaw 特有风险，需要补，但实现复杂度高于 hook/CI。
-
-第三优先级：
-
-- `P1-01`
-- `P1-02`
-- `P1-03`
-
-原因：lint/security 会明显降低 AI 误提交和运行时事故风险。
-
-第四优先级：
-
-- P2 coverage ratchet 和真实 agent E2E。
-
-原因：这些价值高，但需要先有稳定的基础 gate 和 fake E2E。
+1. 在 plan 文档中记录目标、风险和验证方式。
+2. 做最小代码改动，优先扩展已有 scripts / harness / workflow。
+3. 跑对应验证命令，必要时跑 `pnpm run quality:push`。
+4. 更新本文件的实现映射或新增任务状态。
+5. 如果改了架构入口，同步对应架构文档。
+6. 每个 commit 保持原子，只包含一个独立 gate、测试能力或文档同步。

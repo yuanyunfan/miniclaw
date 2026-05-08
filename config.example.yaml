@@ -95,6 +95,8 @@ e2e:
   sender_user_ids: []
   # Keep true in E2E mode so test runs cannot load or execute local cron jobs.
   disable_scheduler: false
+  # Use deterministic fake chat/task agent for Discord E2E without Claude/Codex calls.
+  fake_agent: false
 
 attachments:
   max_mb: 32
