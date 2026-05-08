@@ -247,6 +247,10 @@ describe("stock-portfolio formatter", () => {
         expect.objectContaining({ category: "bond", label: "债券" }),
         expect.objectContaining({ category: "gold", label: "黄金" }),
       ]),
+      instructions: expect.arrayContaining([
+        "After final classification, aggregate category totals and sort categories by market_value_cny descending.",
+        "Within each category, list every ETF or stock holding on its own line sorted by market_value_cny descending.",
+      ]),
     });
     expect(payload.asset_summary?.by_account[0]).not.toHaveProperty("total_assets");
     expect(payload.asset_summary?.by_account[0]).not.toHaveProperty("market_value");

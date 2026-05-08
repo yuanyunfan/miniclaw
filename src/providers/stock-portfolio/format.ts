@@ -181,6 +181,8 @@ const LLM_CLASSIFICATION_GUIDANCE: StockPortfolioClassificationGuidance = {
     "Classify holdings from asset_summary.holdings_for_classification by code and name.",
     "Do not use asset_summary.by_category as the final classification; it is only a deterministic pre-bucket and may be wrong for cross-market ETFs.",
     "Use CNY fields only for reportable money values.",
+    "After final classification, aggregate category totals and sort categories by market_value_cny descending.",
+    "Within each category, list every ETF or stock holding on its own line sorted by market_value_cny descending.",
     "If a holding is ambiguous, choose the closest category and mention the uncertainty briefly.",
   ],
 };
