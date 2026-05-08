@@ -531,7 +531,6 @@ export function buildStockPortfolioPayload(params: {
     market_scope: params.config.market_scope,
     ok_count: params.sources.length - failed.length,
     failed_count: failed.length,
-    sources: outputSourcesForConfig(params.sources, params.config),
     cny_summary: cnySummary,
     asset_summary: assetSummary,
     warnings: [
@@ -549,6 +548,7 @@ export function buildStockPortfolioPayload(params: {
       "Use asset_summary.by_account for account totals. Some market-specific sources can be positions-only for asset totals to avoid double counting one broker account queried through multiple market profiles.",
       "If one broker source failed, use the remaining source data and explicitly mention the missing source without inventing holdings or P&L.",
     ],
+    sources: outputSourcesForConfig(params.sources, params.config),
   };
 }
 

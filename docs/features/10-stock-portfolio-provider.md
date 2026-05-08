@@ -162,6 +162,8 @@ pre_provider_config: cn-stock
 
 `cny_summary` 的盈亏来自各 provider 的 `positions_summary.pnl_summary` 和 `top_gainers/top_losers`，在 LLM 调用前完成折算。该字段只保留可报告的人民币金额字段，例如 `gross_profit_cny`、`gross_loss_cny`、`net_pnl_cny`、`pnl_cny`。`source_currency` 和 `fx_rate_to_cny` 仅用于审计汇率来源，不应作为报告金额单位输出。LLM 报告应优先使用该字段，不应自行编造或重算缺失字段。`pnl_source` 标识盈亏来源：`positions_daily_pnl` 表示可按持仓拆分今日盈亏；`aggregate_pnl_fallback` 表示只拿到账户级今日盈亏，不能生成该账户的持仓级 Top5 今日盈亏。
 
+格式化输出会把顶层 `cny_summary` 和 `asset_summary` 放在 `sources` 明细之前。cron 任务会对过长的 `pre_provider` 上下文做长度保护，但 provider 上下文的上限高于普通 script stdout；汇总字段必须优先进入 LLM prompt，避免尾部 source 明细被截断时影响账户盈亏、Top5 和资产分类口径。
+
 `asset_summary` 只应在 private channel 的 exact 配置中启用。该字段会在 LLM 调用前按持仓市值和现金余额生成汇总，并且可报告金额全部是人民币字段，例如 `total_assets_cny`、`market_value_cny`、`cash_cny`。聚合输出不会把 source provider 的原币种 `total_assets`、`market_value`、`cash`、`pnl` 等金额字段继续传给 LLM；`sources[].payload` 在资产汇总模式下只保留账户别名、来源币种、汇率和 CNY 后的账户级 P&L 摘要。
 
 同一个券商账户可能需要通过多个市场 profile 查询持仓。例如 Futu HK 和 Futu US 可以拿到不同市场持仓，但 `accinfo_query` 的账户资产可能是同一个综合账户按不同币种折算后的结果。此时只能选择一个 source 贡献账户总资产/现金，其他 source 应设置 `include_asset_totals: false`，否则 `total_assets_cny` 和 `cash_cny` 会重复计算。

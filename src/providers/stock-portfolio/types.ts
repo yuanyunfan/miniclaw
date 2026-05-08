@@ -57,11 +57,11 @@ export interface StockPortfolioPayload {
   market_scope: StockPortfolioMarketScope;
   ok_count: number;
   failed_count: number;
-  sources: StockPortfolioSourceResult[];
   cny_summary?: StockPortfolioCnySummary;
   asset_summary?: StockPortfolioAssetSummary;
   warnings: string[];
   usage_notes: string[];
+  sources: StockPortfolioSourceResult[];
 }
 
 export type StockPortfolioSourceRunner = (args: PreProviderRunArgs) => Promise<PreProviderResult>;

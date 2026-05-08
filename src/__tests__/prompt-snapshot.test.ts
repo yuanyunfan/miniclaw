@@ -53,7 +53,14 @@ describe("prompt snapshot baseline", () => {
 
   it("cron.preProviderBlock.fixture", () => {
     const out = cronT.buildCronPreProviderBlock("wechat-mp", "{\"total_articles\":1}");
-    expect(hash(out)).toMatchInlineSnapshot(`"1cd743a0a7e3f33e"`);
+    expect(hash(out)).toMatchInlineSnapshot(`"df1692f85f93824e"`);
+  });
+
+  it("cron.preProviderBlock keeps structured provider context beyond script stdout cap", () => {
+    const longJson = `{"source":"stock-portfolio","asset_summary":"${"x".repeat(9000)}"}`;
+    const out = cronT.buildCronPreProviderBlock("stock-portfolio", longJson);
+    expect(out).toContain("asset_summary");
+    expect(out).toContain(`${longJson}\n\`\`\``);
   });
 
   it("cron.taskPrompt.fixture", () => {

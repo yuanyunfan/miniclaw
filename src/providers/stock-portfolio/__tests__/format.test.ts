@@ -135,6 +135,47 @@ describe("stock-portfolio formatter", () => {
     });
   });
 
+  it("formats summaries before verbose source payloads for cron prompt truncation", () => {
+    const payload = buildStockPortfolioPayload({
+      generatedAt: new Date("2026-05-08T01:15:00.000Z"),
+      profile: "cn-stock",
+      config,
+      sources: [
+        {
+          provider: "eastmoney-jywg-readonly",
+          config: "cn-stock",
+          label: "Eastmoney",
+          status: "ok",
+          payload: {
+            positions_summary: {
+              pnl_summary: {
+                currency: "CNY",
+                gross_profit: 50,
+                gross_loss: -10,
+                net_pnl: 40,
+                winners_count: 1,
+                losers_count: 1,
+                flat_count: 0,
+                positions_with_pnl_count: 2,
+              },
+              top_gainers: [{ code: "600000", name: "浦发银行", currency: "CNY", daily_pnl: 50 }],
+              top_losers: [{ code: "510300", name: "沪深300ETF", currency: "CNY", daily_pnl: -10 }],
+            },
+            verbose_tail: "x".repeat(12_000),
+          },
+        },
+      ],
+    });
+
+    const formatted = formatStockPortfolioPayload(payload);
+
+    expect(formatted.indexOf('"cny_summary"')).toBeGreaterThan(-1);
+    expect(formatted.indexOf('"sources"')).toBeGreaterThan(-1);
+    expect(formatted.indexOf('"cny_summary"')).toBeLessThan(formatted.indexOf('"sources"'));
+    expect(formatted.slice(0, 8000)).toContain('"cny_summary"');
+    expect(formatted.slice(0, 8000)).toContain('"top_gainers"');
+  });
+
   it("builds CNY asset allocation rollups from exact source summaries", () => {
     const payload = buildStockPortfolioPayload({
       generatedAt: new Date("2026-05-08T09:00:00.000Z"),

@@ -27,14 +27,18 @@ function resolveHome(p: string): string {
 }
 
 const SCRIPTS_DIR = process.env.MINICLAW_SCRIPTS_DIR ?? join(homedir(), ".miniclaw/scripts");
+const PRE_SCRIPT_CONTEXT_MAX_CHARS = 8000;
+const PRE_PROVIDER_CONTEXT_MAX_CHARS = 50000;
 
 function buildCronPreScriptBlock(scriptName: string, stdout: string): string {
-  const truncated = stdout.slice(0, 8000) + (stdout.length > 8000 ? "\n... (truncated)" : "");
+  const truncated = stdout.slice(0, PRE_SCRIPT_CONTEXT_MAX_CHARS)
+    + (stdout.length > PRE_SCRIPT_CONTEXT_MAX_CHARS ? "\n... (truncated)" : "");
   return loadPrompt("templates/cron-pre-script-block", { script_name: scriptName, output: truncated }) + "\n\n";
 }
 
 function buildCronPreProviderBlock(providerName: string, output: string): string {
-  const truncated = output.slice(0, 8000) + (output.length > 8000 ? "\n... (truncated)" : "");
+  const truncated = output.slice(0, PRE_PROVIDER_CONTEXT_MAX_CHARS)
+    + (output.length > PRE_PROVIDER_CONTEXT_MAX_CHARS ? "\n... (truncated)" : "");
   return loadPrompt("templates/cron-pre-provider-block", { provider_name: providerName, output: truncated }) + "\n\n";
 }
 
