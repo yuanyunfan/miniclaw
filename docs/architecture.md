@@ -348,7 +348,7 @@ sequenceDiagram
 flowchart LR
     Boot[ClientReady] --> SS[startScheduler]
     SS --> LD[loadCronJobs<br/>scan ~/.miniclaw/cron/*.yaml]
-    LD --> Reg[node-cron.schedule<br/>每个 enabled job 注册一个 ScheduledTask]
+    LD --> Reg[node-cron.schedule<br/>每个 enabled job 可注册一个或多个 ScheduledTask]
 
     subgraph Tick["定时触发 (每分钟检查)"]
         Reg --> Disp[dispatch<br/>同名 job 运行中则跳过]

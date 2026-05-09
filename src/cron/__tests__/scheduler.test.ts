@@ -56,6 +56,15 @@ beforeEach(() => {
 });
 
 describe("cron scheduler dispatch", () => {
+  it("normalizes single and multiple cron schedules", () => {
+    const job = messageJob();
+    expect(__testables.getCronSchedules(job)).toEqual(["* * * * *"]);
+    expect(__testables.getCronSchedules({
+      ...job,
+      schedule: ["30 21-23 * * 1-5", "30 0 * * 2-6"],
+    })).toEqual(["30 21-23 * * 1-5", "30 0 * * 2-6"]);
+  });
+
   it("同名 job 上一次未完成时跳过本次触发并记录 error", async () => {
     const gate = deferred();
     let sendStarted = false;

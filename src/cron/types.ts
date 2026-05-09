@@ -2,7 +2,7 @@ export type CronJobType = "task" | "script" | "skill" | "message";
 
 export interface CronJobBase {
   name: string;
-  schedule: string;
+  schedule: string | string[];
   timezone?: string;
   enabled: boolean;
   type: CronJobType;

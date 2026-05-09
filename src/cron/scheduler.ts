@@ -16,7 +16,7 @@ import { createLogger } from "../lib/log.js";
 
 const log = createLogger("cron");
 
-const tasks = new Map<string, ScheduledTask>();
+const tasks = new Map<string, ScheduledTask[]>();
 const runningJobs = new Set<string>();
 const retryWaiters = new Map<string, { runId: string; wake: () => void }>();
 
@@ -119,6 +119,10 @@ async function runJob(job: CronJob, client: Client): Promise<void> {
   else if (job.type === "script") await runScript(job, client);
   else if (job.type === "skill")  await runSkill(job, client);
   else if (job.type === "message") await runMessage(job, client);
+}
+
+function getCronSchedules(job: CronJob): string[] {
+  return Array.isArray(job.schedule) ? job.schedule : [job.schedule];
 }
 
 async function dispatch(
@@ -224,25 +228,28 @@ export function startScheduler(client: Client): { scheduled: number; errors: Arr
       continue;
     }
     try {
-      const t = cron.schedule(
-        job.schedule,
+      const scheduledTasks = getCronSchedules(job).map((schedule) => cron.schedule(
+        schedule,
         () => { void dispatch(job, client, DEFAULT_RETRY_POLICY, { notifyFailures: true }); },
         { timezone: job.timezone }
-      );
-      tasks.set(job.name, t);
-      scheduled++;
-      log.info(`✓ ${job.name} (${job.type}) "${job.schedule}"${job.timezone ? ` tz=${job.timezone}` : ""}`);
+      ));
+      tasks.set(job.name, scheduledTasks);
+      scheduled += scheduledTasks.length;
+      const scheduleLabel = getCronSchedules(job).map((schedule) => `"${schedule}"`).join(", ");
+      log.info(`✓ ${job.name} (${job.type}) ${scheduleLabel}${job.timezone ? ` tz=${job.timezone}` : ""}`);
     } catch (err) {
       log.error(`failed to schedule ${job.name}:`, err);
     }
   }
-  log.info(`scheduler started: ${scheduled} job(s) active, ${errors.length} load error(s)`);
+  log.info(`scheduler started: ${scheduled} schedule(s) active, ${errors.length} load error(s)`);
   return { scheduled, errors };
 }
 
 export function stopScheduler(): void {
-  for (const t of tasks.values()) {
-    try { void t.stop(); } catch { /* ignore */ }
+  for (const scheduledTasks of tasks.values()) {
+    for (const t of scheduledTasks) {
+      try { void t.stop(); } catch { /* ignore */ }
+    }
   }
   tasks.clear();
 }
@@ -322,4 +329,4 @@ export async function requestCronRetryNow(
   return { ok: true, status: "started", jobName };
 }
 
-export const __testables = { dispatch, DEFAULT_RETRY_POLICY, getRetryDelayMs, waitForRetryDelay };
+export const __testables = { dispatch, DEFAULT_RETRY_POLICY, getRetryDelayMs, waitForRetryDelay, getCronSchedules };

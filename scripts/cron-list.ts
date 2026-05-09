@@ -8,6 +8,10 @@ import { getAllJobStates } from "../src/cron/state.js";
 const { jobs, errors } = loadCronJobs();
 const states = getAllJobStates();
 
+function schedulesOf(schedule: string | string[]): string[] {
+  return Array.isArray(schedule) ? schedule : [schedule];
+}
+
 console.log(`\n📅 ~/.miniclaw/cron/ — ${jobs.length} job(s) loaded`);
 console.log("─".repeat(96));
 
@@ -22,7 +26,8 @@ if (jobs.length === 0) {
     else if (j.type === "script") tail = `script: ${j.script}`;
     else if (j.type === "skill") tail = `skill: ${j.skill}`;
     else if (j.type === "message") tail = `msg: ${j.content.slice(0, 40)}${j.content.length > 40 ? "..." : ""}`;
-    const valid = cron.validate(j.schedule);
+    const schedules = schedulesOf(j.schedule);
+    const valid = schedules.every((schedule) => cron.validate(schedule));
     const validTag = valid ? "" : " ⚠️ invalid schedule";
 
     const st = states[j.name];
@@ -30,7 +35,8 @@ if (jobs.length === 0) {
       ? `  [✓ ran ${st.completed}× · last ${st.last_status} ${st.last_run_at.slice(5, 16).replace("T", " ")} ${(st.last_duration_ms / 1000).toFixed(1)}s]${st.last_error ? ` ⚠️ ${st.last_error.slice(0, 40)}` : ""}`
       : "  [never run]";
 
-    console.log(`${status} ${j.name.padEnd(20)} ${j.type.padEnd(8)} "${j.schedule}"${tz}${validTag}`);
+    const scheduleLabel = schedules.map((schedule) => `"${schedule}"`).join(", ");
+    console.log(`${status} ${j.name.padEnd(20)} ${j.type.padEnd(8)} ${scheduleLabel}${tz}${validTag}`);
     console.log(`     #${j.channel}  ${tail}`);
     console.log(`     ${stateTail}`);
   }

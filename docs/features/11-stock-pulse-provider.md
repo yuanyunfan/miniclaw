@@ -38,6 +38,16 @@ pre_provider_config: us-hourly
 - `~/.miniclaw/cron/us-stock-hourly-pulse.yaml` -> `#daily-us-stock`
 - `~/.miniclaw/cron/cn-stock-hourly-pulse.yaml` -> `#daily-cn-stock`
 
+美股 hourly cron 使用两条北京时间表达式覆盖同一个 job：
+
+```yaml
+schedule:
+  - "30 21-23 * * 1-5" # 周一至周五晚间，对应美股常规交易早盘/午盘
+  - "30 0 * * 2-6"     # 周二至周六 00:30，对应前一美股交易日
+```
+
+这样保留北京时间周六 00:30 的周五美股扫描，同时避免北京时间周六晚间在美股闭市时触发无意义的 skip 消息。
+
 ## 配置
 
 用户级配置放在：

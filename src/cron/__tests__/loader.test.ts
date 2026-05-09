@@ -73,6 +73,23 @@ prompt: "总结微信公众号更新"
     }
   });
 
+  it("解析同一 job 的多条 schedule", () => {
+    write("market-pulse.yaml", `
+name: market-pulse
+schedule:
+  - "30 21-23 * * 1-5"
+  - "30 0 * * 2-6"
+enabled: true
+type: message
+channel: "${VALID_CHANNEL}"
+content: "pulse"
+`);
+    const r = loadCronJobs();
+    expect(r.errors).toEqual([]);
+    expect(r.jobs.length).toBe(1);
+    expect(r.jobs[0].schedule).toEqual(["30 21-23 * * 1-5", "30 0 * * 2-6"]);
+  });
+
   it("解析 type=message + 默认 enabled=true", () => {
     write("morning.yaml", `
 name: morning
@@ -131,6 +148,22 @@ skill_args:
     write("bad.yaml", `
 name: bad
 schedule: "not a cron"
+type: message
+channel: "${VALID_CHANNEL}"
+content: hi
+`);
+    const r = loadCronJobs();
+    expect(r.jobs).toEqual([]);
+    expect(r.errors.length).toBe(1);
+    expect(r.errors[0].error).toMatch(/invalid cron schedule/);
+  });
+
+  it("非法 schedule 数组成员 → 进 errors 不进 jobs", () => {
+    write("bad-array.yaml", `
+name: bad-array
+schedule:
+  - "0 9 * * *"
+  - "not a cron"
 type: message
 channel: "${VALID_CHANNEL}"
 content: hi

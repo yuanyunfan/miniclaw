@@ -12,10 +12,11 @@ const VALID_TYPES: CronJobType[] = ["task", "script", "skill", "message"];
 const EXAMPLE_YAML = `# 示例 cron job —— 默认 disabled，照抄改 name + enabled: true 即可
 # 文档: https://github.com/yuanyunfan/miniclaw#cron
 #
-# schedule 用 crontab 5 字段语法（分 时 日 月 周）
+# schedule 用 crontab 5 字段语法（分 时 日 月 周），也可以写成多条表达式数组
 #   "0 9 * * *"      每天 9:00
 #   "*/30 * * * *"   每 30 分钟
 #   "0 9 * * 1-5"    工作日 9:00
+#   ["30 21-23 * * 1-5", "30 0 * * 2-6"]  同一 job 多个触发窗口
 #
 # type 取值: task | script | skill | message
 name: example-disabled
@@ -44,13 +45,31 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
+function parseSchedule(value: unknown, file: string): string | string[] {
+  if (typeof value === "string" && value.trim()) {
+    if (!cron.validate(value)) throw new Error(`${file}: invalid cron schedule "${value}"`);
+    return value.trim();
+  }
+  if (Array.isArray(value) && value.length > 0) {
+    const schedules = value.map((item, index) => {
+      if (typeof item !== "string" || !item.trim()) {
+        throw new Error(`${file}: schedule[${index}] must be a crontab string`);
+      }
+      const schedule = item.trim();
+      if (!cron.validate(schedule)) throw new Error(`${file}: invalid cron schedule "${schedule}"`);
+      return schedule;
+    });
+    return schedules;
+  }
+  throw new Error(`${file}: 'schedule' is required (crontab string or non-empty string array)`);
+}
+
 function validateJob(raw: unknown, file: string): CronJob {
   if (!isPlainObject(raw)) throw new Error(`${file}: top-level must be a YAML object`);
   const r = raw as Record<string, unknown>;
 
   if (typeof r.name !== "string" || !r.name.trim()) throw new Error(`${file}: 'name' is required (string)`);
-  if (typeof r.schedule !== "string" || !r.schedule.trim()) throw new Error(`${file}: 'schedule' is required (crontab string)`);
-  if (!cron.validate(r.schedule)) throw new Error(`${file}: invalid cron schedule "${r.schedule}"`);
+  const schedule = parseSchedule(r.schedule, file);
 
   const type = r.type;
   if (typeof type !== "string" || !VALID_TYPES.includes(type as CronJobType)) {
@@ -64,7 +83,7 @@ function validateJob(raw: unknown, file: string): CronJob {
   const timezone = typeof r.timezone === "string" ? r.timezone : undefined;
   const baseCommon = {
     name: r.name.trim(),
-    schedule: r.schedule,
+    schedule,
     timezone,
     enabled,
     channel: r.channel,
