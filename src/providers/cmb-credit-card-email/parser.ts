@@ -61,6 +61,16 @@ function hasSummaryAmountContext(text: string): boolean {
   return /可用额度|信用额度|总额度|额度|应还|待还|最低还款|账单日|还款日|积分/.test(text);
 }
 
+function findDateToken(text: string): string | undefined {
+  const withYear = /(\d{4}[年/-]\d{1,2}[月/-]\d{1,2}日?)/.exec(text)?.[1];
+  if (withYear) return withYear;
+  return /(\d{1,2}月\d{1,2}日?)/.exec(text)?.[1];
+}
+
+function findTimeOnlyToken(text: string): string | undefined {
+  return /^(\d{1,2}:\d{2}(?::\d{2})?)$/.exec(text.trim())?.[1];
+}
+
 function parseDateWithYear(text: string): Date | undefined {
   const match = /(\d{4})[年/-](\d{1,2})[月/-](\d{1,2})日?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/.exec(text);
   if (!match) return undefined;
@@ -108,6 +118,30 @@ function attachmentTexts(message: EmailMessage): string[] {
     .filter((text): text is string => Boolean(text?.trim()));
 }
 
+function nearestDateToken(lines: string[], index: number): string | undefined {
+  const start = Math.max(0, index - 12);
+  for (let i = index; i >= start; i -= 1) {
+    const token = findDateToken(lines[i] ?? "");
+    if (token) return token;
+  }
+  return undefined;
+}
+
+function nearestTimeToken(lines: string[], index: number): string | undefined {
+  for (const offset of [-1, -2, 1, 2]) {
+    const token = findTimeOnlyToken(lines[index + offset] ?? "");
+    if (token) return token;
+  }
+  return undefined;
+}
+
+function withNearbyDateTime(lines: string[], index: number, block: string): string {
+  if (parseDateWithYear(block) || parseDateWithoutYear(block, new Date().toISOString())) return block;
+  const date = nearestDateToken(lines, index);
+  const time = nearestTimeToken(lines, index);
+  return date && time ? `${date} ${time} ${block}` : block;
+}
+
 function amountLineBlock(lines: string[], index: number): string | undefined {
   const line = lines[index] ?? "";
   const previous = lines[index - 1] ?? "";
@@ -115,25 +149,25 @@ function amountLineBlock(lines: string[], index: number): string | undefined {
   const next2 = lines[index + 2] ?? "";
   const immediate = [previous, line, next].filter(Boolean).join(" ");
   if (hasSummaryAmountContext(immediate)) return undefined;
-  if (isLikelyTransactionBlock(line)) return line;
+  if (isLikelyTransactionBlock(line)) return withNearbyDateTime(lines, index, line);
 
   const nextContext = [line, next].filter(Boolean).join(" ");
   if (hasTransactionSignal(nextContext) && !hasSummaryAmountContext(nextContext)) {
-    return nextContext;
+    return withNearbyDateTime(lines, index, nextContext);
   }
   const extendedNextContext = [line, next, next2].filter(Boolean).join(" ");
   if (!hasAmountSignal(next) && hasTransactionSignal(extendedNextContext) && !hasSummaryAmountContext(extendedNextContext)) {
-    return extendedNextContext;
+    return withNearbyDateTime(lines, index, extendedNextContext);
   }
 
   const previous2 = lines[index - 2] ?? "";
   const previousContext = [previous, line].filter(Boolean).join(" ");
   if (hasTransactionSignal(previousContext) && !hasSummaryAmountContext(previousContext)) {
-    return previousContext;
+    return withNearbyDateTime(lines, index, previousContext);
   }
   const extendedPreviousContext = [previous2, previous, line].filter(Boolean).join(" ");
   if (!hasAmountSignal(previous) && hasTransactionSignal(extendedPreviousContext) && !hasSummaryAmountContext(extendedPreviousContext)) {
-    return extendedPreviousContext;
+    return withNearbyDateTime(lines, index, extendedPreviousContext);
   }
   return undefined;
 }

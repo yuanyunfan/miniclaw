@@ -58,19 +58,25 @@ describe("parseCmbCreditCardTransactions", () => {
         "截至昨日最后一笔交易，您的额度和积分信息如下：",
         "￥71,919.20",
         "可用额度",
-        "2026/05/09&nbsp;您的消费明细如下：",
-        "CNY&nbsp;39.90",
+        "2026/05/08&nbsp;您的消费明细如下：",
+        "17:56:39",
+        "CNY&nbsp;38.80",
         "尾号1234&nbsp;消费&nbsp;支付宝-迪卡侬北京中关村店",
-        "CNY&nbsp;15.00",
+        "18:31:22",
+        "CNY&nbsp;47.12",
         "尾号1234&nbsp;消费&nbsp;支付宝-鲍师傅糕点",
       ].join("\n")),
       subject: "每日信用管家",
     }, { currency: "CNY" });
 
-    expect(transactions.map((transaction) => transaction.amount)).toEqual([39.9, 15]);
+    expect(transactions.map((transaction) => transaction.amount)).toEqual([38.8, 47.12]);
     expect(transactions.map((transaction) => transaction.merchant)).toEqual([
       "支付宝-迪卡侬北京中关村店",
       "支付宝-鲍师傅糕点",
+    ]);
+    expect(transactions.map((transaction) => transaction.occurred_at)).toEqual([
+      new Date(2026, 4, 8, 17, 56, 39).toISOString(),
+      new Date(2026, 4, 8, 18, 31, 22).toISOString(),
     ]);
     expect(transactions.some((transaction) => transaction.amount === 71919.2)).toBe(false);
   });
