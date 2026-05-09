@@ -48,6 +48,43 @@ describe("createTask + getTask", () => {
   it("returns undefined for unknown id", () => {
     expect(getTask("nonexistent-id")).toBeUndefined();
   });
+
+  it("persists optional source metadata and parent context", () => {
+    const id = uuid();
+    const source = {
+      provider: "discord",
+      route_type: "task_channel",
+      source_channel_id: "channel-1",
+      source_message_id: "message-1",
+    };
+    const parent = {
+      kind: "reply",
+      provider: "discord",
+      message_id: "parent-1",
+      content: "parent message",
+    };
+    createTask({
+      id,
+      discord_thread_id: "thread-context",
+      discord_user_id: "u-1",
+      prompt: "test prompt",
+      cwd: "/tmp",
+      source_route_type: "task_channel",
+      source_channel_id: "channel-1",
+      source_message_id: "message-1",
+      source_message_url: "https://discord.com/channels/guild/channel/message",
+      source_metadata_json: JSON.stringify(source),
+      parent_context_json: JSON.stringify(parent),
+    });
+
+    const row = getTask(id);
+    expect(row?.source_route_type).toBe("task_channel");
+    expect(row?.source_channel_id).toBe("channel-1");
+    expect(row?.source_message_id).toBe("message-1");
+    expect(row?.source_message_url).toContain("discord.com");
+    expect(JSON.parse(row?.source_metadata_json ?? "{}")).toMatchObject(source);
+    expect(JSON.parse(row?.parent_context_json ?? "{}")).toMatchObject(parent);
+  });
 });
 
 describe("schema migrations", () => {
@@ -62,6 +99,15 @@ describe("schema migrations", () => {
   it("ensures smart router decisions table exists", () => {
     expect(__testables.columnExists("smart_router_decisions", "prompt_hash")).toBe(true);
     expect(__testables.columnExists("smart_router_decisions", "action_result")).toBe(true);
+  });
+
+  it("ensures task source context columns exist", () => {
+    expect(__testables.columnExists("tasks", "source_route_type")).toBe(true);
+    expect(__testables.columnExists("tasks", "source_channel_id")).toBe(true);
+    expect(__testables.columnExists("tasks", "source_message_id")).toBe(true);
+    expect(__testables.columnExists("tasks", "source_message_url")).toBe(true);
+    expect(__testables.columnExists("tasks", "source_metadata_json")).toBe(true);
+    expect(__testables.columnExists("tasks", "parent_context_json")).toBe(true);
   });
 });
 

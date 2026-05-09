@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { Attachment } from "discord.js";
 import type { RouteDecision } from "./intent.js";
+import type { TaskContextEnvelope } from "./task-context.js";
 
 export type ConfirmationAction = "task" | "chat" | "cancel";
 export type ConfirmationStatus = "pending" | "accepted" | "continued_chat" | "cancelled" | "expired";
@@ -14,6 +15,7 @@ export interface PendingTaskConfirmation {
   displayPrompt: string;
   cwd: string;
   attachments: Attachment[];
+  taskContext?: TaskContextEnvelope;
   decision: RouteDecision;
   decisionLogId?: number;
   createdAt: number;
@@ -29,6 +31,7 @@ export interface CreateConfirmationInput {
   displayPrompt?: string;
   cwd: string;
   attachments?: Attachment[];
+  taskContext?: TaskContextEnvelope;
   decision: RouteDecision;
   decisionLogId?: number;
   ttlMs: number;
@@ -66,6 +69,7 @@ export function createPendingConfirmation(input: CreateConfirmationInput): Pendi
     displayPrompt: input.displayPrompt ?? input.prompt,
     cwd: input.cwd,
     attachments: input.attachments ?? [],
+    ...(input.taskContext ? { taskContext: input.taskContext } : {}),
     decision: input.decision,
     ...(input.decisionLogId !== undefined ? { decisionLogId: input.decisionLogId } : {}),
     createdAt: now,

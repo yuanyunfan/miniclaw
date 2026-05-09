@@ -6,6 +6,8 @@ import { createTask } from "../store/db.js";
 import { processAttachments } from "./attachments.js";
 import { taskStartEmbed } from "./formatter.js";
 import { createLogger } from "../lib/log.js";
+import { buildTaskPromptWithContext, type TaskContextEnvelope } from "../routing/task-context.js";
+import { withTaskThreadMetadata } from "./task-context.js";
 
 const log = createLogger("task-intake");
 
@@ -24,6 +26,7 @@ export interface DiscordTaskIntakeParams {
   cwd: string;
   userId: string;
   attachments?: Attachment[];
+  taskContext?: TaskContextEnvelope;
   createThread: (name: string) => Promise<CreatedThread>;
   onCreated?: (result: DiscordTaskIntakeResult) => Promise<void>;
 }
@@ -57,13 +60,25 @@ export async function createAndRunDiscordTask(params: DiscordTaskIntakeParams): 
   }
 
   const thread = await params.createThread(taskThreadName(displayPrompt));
+  const sourceMetadata = withTaskThreadMetadata(params.taskContext?.source, thread);
+  const taskContext = {
+    ...(sourceMetadata ? { source: sourceMetadata } : {}),
+    ...(params.taskContext?.parent ? { parent: params.taskContext.parent } : {}),
+  };
+  const executionPrompt = buildTaskPromptWithContext(params.prompt, taskContext);
 
   createTask({
     id: taskId,
     discord_thread_id: thread.id,
     discord_user_id: params.userId,
-    prompt: params.prompt,
+    prompt: displayPrompt,
     cwd: params.cwd,
+    ...(sourceMetadata?.route_type ? { source_route_type: sourceMetadata.route_type } : {}),
+    ...(sourceMetadata?.source_channel_id ? { source_channel_id: sourceMetadata.source_channel_id } : {}),
+    ...(sourceMetadata?.source_message_id ? { source_message_id: sourceMetadata.source_message_id } : {}),
+    ...(sourceMetadata?.source_message_url ? { source_message_url: sourceMetadata.source_message_url } : {}),
+    ...(sourceMetadata ? { source_metadata_json: JSON.stringify(sourceMetadata) } : {}),
+    ...(params.taskContext?.parent ? { parent_context_json: JSON.stringify(params.taskContext.parent) } : {}),
   });
 
   const statusMessage = await thread.send({
@@ -81,7 +96,7 @@ export async function createAndRunDiscordTask(params: DiscordTaskIntakeParams): 
 
   executeTask({
     taskId,
-    prompt: params.prompt,
+    prompt: executionPrompt,
     cwd: params.cwd,
     channel: thread,
     attachmentBlocks,

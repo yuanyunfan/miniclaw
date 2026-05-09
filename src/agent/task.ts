@@ -26,6 +26,7 @@ import {
 import { assertProviderSession, formatSessionId } from "./session.js";
 import { fmtTokens, formatAnthropicUsage, formatCodexUsage } from "./usage.js";
 import { buildFakeTaskResult } from "../e2e/fake-agent.js";
+import { formatTaskPromptForSystem } from "../routing/task-context.js";
 
 const log = createLogger("task");
 
@@ -347,7 +348,7 @@ async function executeCodexTask(
     supervisorBlock,
     memoryBlock,
     "你正在通过 Codex SDK 执行 MiniClaw 的 coding-agent 任务。请直接完成用户请求；需要修改文件时使用工作区内的工具，最后用中文给出结果和验证证据。",
-    `<user_task>\n${params.prompt}\n</user_task>`,
+    formatTaskPromptForSystem(params.prompt),
   ].filter(Boolean).join("\n\n");
 
   const codex = getCodexClient();

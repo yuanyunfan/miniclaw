@@ -4,7 +4,7 @@ import { dirname } from "path";
 import { config } from "../config.js";
 
 let db: Database.Database;
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export function getDb(): Database.Database {
   return db;
@@ -46,7 +46,13 @@ export function initDb(): void {
       duration_ms INTEGER,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       completed_at TEXT,
-      progress_message_id TEXT
+      progress_message_id TEXT,
+      source_route_type TEXT,
+      source_channel_id TEXT,
+      source_message_id TEXT,
+      source_message_url TEXT,
+      source_metadata_json TEXT,
+      parent_context_json TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
     CREATE TABLE IF NOT EXISTS memories (
@@ -160,6 +166,17 @@ function runMigrations(): void {
     setSchemaVersion(2);
   }
 
+  // v3: persist Discord source metadata and reply/parent context for task prompts.
+  if (current < 3) {
+    ensureColumn("tasks", "source_route_type", "TEXT");
+    ensureColumn("tasks", "source_channel_id", "TEXT");
+    ensureColumn("tasks", "source_message_id", "TEXT");
+    ensureColumn("tasks", "source_message_url", "TEXT");
+    ensureColumn("tasks", "source_metadata_json", "TEXT");
+    ensureColumn("tasks", "parent_context_json", "TEXT");
+    setSchemaVersion(3);
+  }
+
   const after = getSchemaVersion();
   if (after < SCHEMA_VERSION) {
     throw new Error(`Database schema migration incomplete: user_version=${after}, expected=${SCHEMA_VERSION}`);
@@ -182,6 +199,12 @@ export interface TaskRow {
   created_at: string;
   completed_at: string | null;
   progress_message_id: string | null;
+  source_route_type: string | null;
+  source_channel_id: string | null;
+  source_message_id: string | null;
+  source_message_url: string | null;
+  source_metadata_json: string | null;
+  parent_context_json: string | null;
 }
 
 export function createTask(task: {
@@ -190,11 +213,34 @@ export function createTask(task: {
   discord_user_id: string;
   prompt: string;
   cwd: string;
+  source_route_type?: string;
+  source_channel_id?: string;
+  source_message_id?: string;
+  source_message_url?: string;
+  source_metadata_json?: string;
+  parent_context_json?: string;
 }): void {
+  const row = {
+    ...task,
+    source_route_type: task.source_route_type ?? null,
+    source_channel_id: task.source_channel_id ?? null,
+    source_message_id: task.source_message_id ?? null,
+    source_message_url: task.source_message_url ?? null,
+    source_metadata_json: task.source_metadata_json ?? null,
+    parent_context_json: task.parent_context_json ?? null,
+  };
   db.prepare(
-    `INSERT INTO tasks (id, discord_thread_id, discord_user_id, prompt, cwd)
-     VALUES (@id, @discord_thread_id, @discord_user_id, @prompt, @cwd)`
-  ).run(task);
+    `INSERT INTO tasks (
+       id, discord_thread_id, discord_user_id, prompt, cwd,
+       source_route_type, source_channel_id, source_message_id, source_message_url,
+       source_metadata_json, parent_context_json
+     )
+     VALUES (
+       @id, @discord_thread_id, @discord_user_id, @prompt, @cwd,
+       @source_route_type, @source_channel_id, @source_message_id, @source_message_url,
+       @source_metadata_json, @parent_context_json
+     )`
+  ).run(row);
 }
 
 export function updateTask(

@@ -51,6 +51,32 @@ describe("pending confirmations", () => {
     if (consumed.ok) expect(consumed.confirmation.status).toBe("accepted");
   });
 
+  it("keeps task context with the pending confirmation", () => {
+    const row = createPendingConfirmation({
+      userId: "u-1",
+      channelId: "ch-1",
+      messageId: "msg-1",
+      prompt: "修改 README",
+      cwd: "/tmp",
+      decision,
+      taskContext: {
+        source: {
+          provider: "discord",
+          route_type: "smart_router_confirmed",
+          source_channel_id: "ch-1",
+        },
+      },
+      ttlMs: 600_000,
+      now: 1000,
+    });
+
+    const consumed = consumePendingConfirmation(row.id, "task", "u-1", 2000);
+    expect(consumed.ok).toBe(true);
+    if (consumed.ok) {
+      expect(consumed.confirmation.taskContext?.source?.route_type).toBe("smart_router_confirmed");
+    }
+  });
+
   it("expires after ttl", () => {
     const row = createPendingConfirmation({
       userId: "u-1",

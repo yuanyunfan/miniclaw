@@ -25,9 +25,15 @@ import { cleanupAttachmentScope, processAttachments } from "./discord/attachment
 import { createLogger } from "./lib/log.js";
 import { assertProviderSession } from "./agent/session.js";
 import { createAndRunDiscordTask, taskCapacityError } from "./discord/task-intake.js";
+import {
+  buildTaskSourceFromMessage,
+  resolveReplyParentContext,
+  withTaskThreadMetadata,
+} from "./discord/task-context.js";
 import { buildSmartTaskPrompt } from "./routing/context.js";
 import { resolveTaskCwd } from "./routing/cwd.js";
 import { resolveDiscordMessageRoute } from "./routing/message-route.js";
+import { buildTaskPromptWithContext, type TaskContextEnvelope } from "./routing/task-context.js";
 import { hashPrompt, promptPreview } from "./routing/decision-log.js";
 import { classifySmartRoute, resolveSmartRouterAction, type RouteDecision } from "./routing/intent.js";
 import { classifyRouteWithLlm } from "./routing/llm.js";
@@ -129,6 +135,14 @@ async function askForTaskUpgrade(
   attachments: Attachment[]
 ): Promise<void> {
   const logId = recordRouteDecisionForMessage(message, prompt, decision, "confirmation_pending");
+  const parentContext = await resolveReplyParentContext(message);
+  const taskContext: TaskContextEnvelope = {
+    source: buildTaskSourceFromMessage(message, "smart_router_confirmed", {
+      cwd,
+      wasMentioned: message.client.user ? message.mentions.has(message.client.user) : false,
+    }),
+    ...(parentContext ? { parent: parentContext } : {}),
+  };
   const pending = createPendingConfirmation({
     userId: message.author.id,
     channelId: message.channel.id,
@@ -137,6 +151,7 @@ async function askForTaskUpgrade(
     cwd,
     attachments,
     decision,
+    taskContext,
     ...(logId !== undefined ? { decisionLogId: logId } : {}),
     ttlMs: config.smartRouter.confirmation.timeoutSeconds * 1000,
   });
@@ -242,6 +257,7 @@ async function handleSmartRouterButton(interaction: ButtonInteraction): Promise<
       cwd: confirmation.cwd,
       userId: confirmation.userId,
       attachments: confirmation.attachments,
+      taskContext: confirmation.taskContext,
       createThread: (name) => interaction.message.startThread({
         name,
         autoArchiveDuration: 1440,
@@ -326,6 +342,21 @@ export function createBot(): Client {
         }
       }
       const effectivePrompt = followupContent || "请处理这些附件";
+      const parentContext = await resolveReplyParentContext(message);
+      const sourceMetadata = withTaskThreadMetadata(
+        buildTaskSourceFromMessage(message, "thread_continuation", {
+          cwd: continuableTask.cwd ?? config.defaultCwd,
+          wasMentioned: message.mentions.has(client.user!),
+        }),
+        {
+          id: message.channel.id,
+          name: "name" in message.channel && typeof message.channel.name === "string" ? message.channel.name : "",
+        }
+      );
+      const executionPrompt = buildTaskPromptWithContext(effectivePrompt, {
+        ...(sourceMetadata ? { source: sourceMetadata } : {}),
+        ...(parentContext ? { parent: parentContext } : {}),
+      });
 
       await message.react("🔄").catch(() => {});
       if (message.channel.isSendable()) {
@@ -335,10 +366,16 @@ export function createBot(): Client {
           discord_user_id: message.author.id,
           prompt: effectivePrompt,
           cwd: continuableTask.cwd ?? config.defaultCwd,
+          ...(sourceMetadata?.route_type ? { source_route_type: sourceMetadata.route_type } : {}),
+          ...(sourceMetadata?.source_channel_id ? { source_channel_id: sourceMetadata.source_channel_id } : {}),
+          ...(sourceMetadata?.source_message_id ? { source_message_id: sourceMetadata.source_message_id } : {}),
+          ...(sourceMetadata?.source_message_url ? { source_message_url: sourceMetadata.source_message_url } : {}),
+          ...(sourceMetadata ? { source_metadata_json: JSON.stringify(sourceMetadata) } : {}),
+          ...(parentContext ? { parent_context_json: JSON.stringify(parentContext) } : {}),
         });
         executeTask({
           taskId: newTaskId,
-          prompt: effectivePrompt,
+          prompt: executionPrompt,
           cwd: continuableTask.cwd ?? config.defaultCwd,
           channel: message.channel,
           resumeSessionId: continuableTask.session_id,
@@ -380,6 +417,7 @@ export function createBot(): Client {
 
       const cwd = resolveTaskCwd(message.channel.id);
       const effectivePrompt = content || "请处理这些附件";
+      const parentContext = await resolveReplyParentContext(message);
 
       await message.react("👀").catch(() => {});
       try {
@@ -388,6 +426,13 @@ export function createBot(): Client {
           cwd,
           userId: message.author.id,
           attachments: atts,
+          taskContext: {
+            source: buildTaskSourceFromMessage(message, "task_channel", {
+              cwd,
+              wasMentioned: message.mentions.has(client.user!),
+            }),
+            ...(parentContext ? { parent: parentContext } : {}),
+          },
           createThread: (name) => message.startThread({
             name,
             autoArchiveDuration: 1440,
@@ -462,12 +507,20 @@ export function createBot(): Client {
             await message.react("👀").catch(() => {});
             try {
               const executionPrompt = buildSmartTaskPromptForChannel(message.channel.id, taskPrompt);
+              const parentContext = await resolveReplyParentContext(message);
               const result = await createAndRunDiscordTask({
                 prompt: executionPrompt,
                 displayPrompt: taskPrompt,
                 cwd,
                 userId: message.author.id,
                 attachments: atts,
+                taskContext: {
+                  source: buildTaskSourceFromMessage(message, "smart_router_auto", {
+                    cwd,
+                    wasMentioned: message.mentions.has(client.user!),
+                  }),
+                  ...(parentContext ? { parent: parentContext } : {}),
+                },
                 createThread: (name) => message.startThread({
                   name,
                   autoArchiveDuration: 1440,

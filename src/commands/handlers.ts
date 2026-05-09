@@ -15,7 +15,9 @@ import { assertProviderSession } from "../agent/session.js";
 import { listScheduled } from "../cron/scheduler.js";
 import { formatAgentRuntimeSummary } from "../agent/runtime-config.js";
 import { createAndRunDiscordTask, taskCapacityError } from "../discord/task-intake.js";
+import { buildTaskSourceFromInteraction, withTaskThreadMetadata } from "../discord/task-context.js";
 import { resolveTaskCwd } from "../routing/cwd.js";
+import { buildTaskPromptWithContext } from "../routing/task-context.js";
 
 const log = createLogger("handlers");
 
@@ -60,6 +62,9 @@ export async function handleTask(interaction: ChatInputCommandInteraction): Prom
     cwd,
     userId: interaction.user.id,
     attachments: slotAtts,
+    taskContext: {
+      source: buildTaskSourceFromInteraction(interaction, "slash_command", { cwd }),
+    },
     createThread: (name) => parentChannel.threads.create({
       name,
       autoArchiveDuration: 1440,
@@ -210,12 +215,21 @@ export async function handleResume(interaction: ChatInputCommandInteraction): Pr
     autoArchiveDuration: 1440,
   });
 
+  const sourceMetadata = withTaskThreadMetadata(
+    buildTaskSourceFromInteraction(interaction, "slash_resume", { cwd }),
+    thread
+  );
   createTask({
     id: newTaskId,
     discord_thread_id: thread.id,
     discord_user_id: interaction.user.id,
     prompt: followup,
     cwd,
+    ...(sourceMetadata?.route_type ? { source_route_type: sourceMetadata.route_type } : {}),
+    ...(sourceMetadata?.source_channel_id ? { source_channel_id: sourceMetadata.source_channel_id } : {}),
+    ...(sourceMetadata?.source_message_id ? { source_message_id: sourceMetadata.source_message_id } : {}),
+    ...(sourceMetadata?.source_message_url ? { source_message_url: sourceMetadata.source_message_url } : {}),
+    ...(sourceMetadata ? { source_metadata_json: JSON.stringify(sourceMetadata) } : {}),
   });
 
   await interaction.editReply(`✅ 恢复任务，请查看线程 <#${thread.id}>`);
@@ -231,9 +245,13 @@ export async function handleResume(interaction: ChatInputCommandInteraction): Pr
     return;
   }
 
+  const resumePrompt = buildTaskPromptWithContext(followup, {
+    ...(sourceMetadata ? { source: sourceMetadata } : {}),
+  });
+
   executeTask({
     taskId: newTaskId,
-    prompt: followup,
+    prompt: resumePrompt,
     cwd,
     channel: thread,
     resumeSessionId: match.session_id,
