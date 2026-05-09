@@ -6,10 +6,75 @@ import { startScheduler, stopScheduler } from "./cron/scheduler.js";
 import { startConnectivityMonitor, type ConnectivityMonitorHandle } from "./monitoring/connectivity-monitor.js";
 import { createLogger } from "./lib/log.js";
 import { Events } from "discord.js";
+import {
+  beginDraining,
+  SHUTDOWN_DRAIN_TIMEOUT_SUMMARY,
+  SHUTDOWN_FORCE_SUMMARY,
+} from "./runtime/shutdown.js";
+import {
+  getActiveTaskCount,
+  interruptActiveTasks,
+  listActiveTaskIds,
+  waitForActiveTasksToDrain,
+} from "./agent/task.js";
 
 const log = createLogger("main");
 let bot: ReturnType<typeof createBot> | null = null;
 let connectivityMonitor: ConnectivityMonitorHandle | null = null;
+let shutdownPromise: Promise<void> | null = null;
+let signalCount = 0;
+
+async function beginGracefulShutdown(reason: string, force = false): Promise<void> {
+  signalCount++;
+
+  if (force || signalCount >= 3) {
+    const ids = interruptActiveTasks(SHUTDOWN_FORCE_SUMMARY);
+    log.error(`Forcing shutdown after ${signalCount} signal(s); interrupted=${ids.join(",") || "none"}`);
+    connectivityMonitor?.stop();
+    stopScheduler();
+    await bot?.destroy();
+    process.exit(1);
+  }
+
+  if (shutdownPromise) {
+    log.warn(`Shutdown already draining after ${signalCount} signal(s); send one more signal to force exit`);
+    return;
+  }
+
+  shutdownPromise = (async () => {
+    beginDraining(reason);
+    log.info("Shutting down: stopping connectivity monitor and cron scheduler");
+    connectivityMonitor?.stop();
+    stopScheduler();
+
+    const activeAtStart = listActiveTaskIds();
+    if (activeAtStart.length) {
+      log.info(
+        `Waiting for ${activeAtStart.length} active task(s) to drain ` +
+        `for up to ${config.shutdownDrainTimeoutMs}ms: ${activeAtStart.join(",")}`
+      );
+    }
+
+    const drained = await waitForActiveTasksToDrain(config.shutdownDrainTimeoutMs);
+    if (!drained && getActiveTaskCount() > 0) {
+      const interrupted = interruptActiveTasks(SHUTDOWN_DRAIN_TIMEOUT_SUMMARY);
+      log.warn(`Drain timeout reached; interrupted task(s): ${interrupted.join(",") || "none"}`);
+    }
+
+    await bot?.destroy();
+    log.info("Shutdown complete");
+    process.exit(0);
+  })().catch(async (err) => {
+    log.error("Graceful shutdown failed:", err);
+    interruptActiveTasks(SHUTDOWN_FORCE_SUMMARY);
+    connectivityMonitor?.stop();
+    stopScheduler();
+    await bot?.destroy();
+    process.exit(1);
+  });
+
+  await shutdownPromise;
+}
 
 async function main(): Promise<void> {
   log.info("Starting...");
@@ -40,12 +105,8 @@ async function main(): Promise<void> {
   });
   await bot.login(config.discord.token);
 
-  const shutdown = () => {
-    log.info("Shutting down...");
-    connectivityMonitor?.stop();
-    stopScheduler();
-    void bot?.destroy();
-    process.exit(0);
+  const shutdown = (signal: NodeJS.Signals) => {
+    void beginGracefulShutdown(signal);
   };
 
   process.on("SIGINT", shutdown);

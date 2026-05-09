@@ -6,6 +6,7 @@ import { createTask } from "../store/db.js";
 import { processAttachments } from "./attachments.js";
 import { taskStartEmbed } from "./formatter.js";
 import { createLogger } from "../lib/log.js";
+import { DRAINING_MESSAGE, isDraining } from "../runtime/shutdown.js";
 import { buildTaskPromptWithContext, type TaskContextEnvelope } from "../routing/task-context.js";
 import { withTaskThreadMetadata } from "./task-context.js";
 
@@ -32,6 +33,7 @@ export interface DiscordTaskIntakeParams {
 }
 
 export function taskCapacityError(): string | undefined {
+  if (isDraining()) return DRAINING_MESSAGE;
   if (getActiveTaskCount() < config.maxConcurrentTasks) return undefined;
   return `⚠️ 已达并发上限 (${config.maxConcurrentTasks})，请等待现有任务完成`;
 }
@@ -58,6 +60,9 @@ export async function createAndRunDiscordTask(params: DiscordTaskIntakeParams): 
     attachmentCodexInputs = processed.codexInputs;
     attachmentNotices = processed.notices;
   }
+
+  const lateCapacity = taskCapacityError();
+  if (lateCapacity) throw new Error(lateCapacity);
 
   const thread = await params.createThread(taskThreadName(displayPrompt));
   const sourceMetadata = withTaskThreadMetadata(params.taskContext?.source, thread);

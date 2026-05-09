@@ -20,6 +20,7 @@ const ENV_KEYS = [
   "MINICLAW_DEFAULT_MAX_TURNS",
   "MINICLAW_CHAT_TIMEOUT_MS",
   "MINICLAW_ATTACHMENT_TIMEOUT_MS",
+  "MINICLAW_SHUTDOWN_DRAIN_TIMEOUT_MS",
   "MINICLAW_REGISTER_COMMANDS_ON_START",
   "MINICLAW_CLAUDE_MODEL",
   "MINICLAW_MODEL",
@@ -149,6 +150,7 @@ agent:
   max_turns: 0
   chat_timeout_ms: 1000
   attachment_timeout_ms: 2000
+  shutdown_drain_timeout_ms: 300000
   register_commands_on_start: true
 claude:
   model: claude-test
@@ -208,6 +210,7 @@ notifications:
     expect(config.codex.taskSandbox).toBeUndefined();
     expect(config.codex.chatSandbox).toBe("read-only");
     expect(config.codex.timeoutMs).toBe(3000);
+    expect(config.shutdownDrainTimeoutMs).toBe(300000);
     expect(config.codex.networkAccess).toBeUndefined();
     expect(config.mcp).toEqual({ configPath: mcpConfig, allowlist: ["exa", "context7"] });
     expect(config.dbPath).toBe(join(tmpDir, "data.db"));
@@ -313,6 +316,7 @@ storage:
     process.env.MINICLAW_CODEX_MODEL = "env-model";
     process.env.MINICLAW_MCP_ALLOWLIST = "*";
     process.env.MINICLAW_TASK_CHANNELS = "";
+    process.env.MINICLAW_SHUTDOWN_DRAIN_TIMEOUT_MS = "600000";
 
     const { config } = await import("../config.js");
 
@@ -322,6 +326,7 @@ storage:
     expect(config.mcp.allowlist).toEqual(["*"]);
     expect(config.taskChannelIds).toEqual(["task-yaml"]);
     expect(config.codex.timeoutMs).toBe(1800000);
+    expect(config.shutdownDrainTimeoutMs).toBe(600000);
     expect(config.smartRouter.enabled).toBe(false);
     expect(config.smartRouter.llmClassifier.enabled).toBe(true);
   });

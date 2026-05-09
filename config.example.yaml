@@ -51,6 +51,7 @@ agent:
   max_turns: 30 # use unlimited for no cap
   chat_timeout_ms: 180000
   attachment_timeout_ms: 30000
+  shutdown_drain_timeout_ms: 1800000 # 30 minutes
   register_commands_on_start: false
 
 anthropic:

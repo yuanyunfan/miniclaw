@@ -104,6 +104,9 @@ export const __testables = {
   rawTaskMessages,
   buildExecutionSummary,
   buildRealtimeProgress,
+  addActiveTaskForTest,
+  deleteActiveTaskForTest,
+  resetTaskRuntimeForTest,
 };
 
 export function buildSupervisorBlock(subagentNames: string[]): string {
@@ -113,6 +116,13 @@ export function buildSupervisorBlock(subagentNames: string[]): string {
 
 const activeTasks = new Map<string, AbortController>();
 const cancelledTasks = new Set<string>();
+const interruptedTasks = new Map<string, string>();
+const drainWaiters = new Set<() => void>();
+
+function notifyActiveTaskChange(): void {
+  if (activeTasks.size !== 0) return;
+  for (const waiter of drainWaiters) waiter();
+}
 
 export function getActiveTaskCount(): number {
   return activeTasks.size;
@@ -122,22 +132,94 @@ export function listActiveTaskIds(): string[] {
   return Array.from(activeTasks.keys());
 }
 
+export async function waitForActiveTasksToDrain(timeoutMs: number): Promise<boolean> {
+  if (activeTasks.size === 0) return true;
+  if (timeoutMs <= 0) return false;
+
+  return await new Promise<boolean>((resolve) => {
+    let settled = false;
+    const finish = (drained: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      drainWaiters.delete(onDrain);
+      resolve(drained);
+    };
+    const onDrain = () => {
+      if (activeTasks.size === 0) finish(true);
+    };
+    const timer = setTimeout(() => finish(activeTasks.size === 0), timeoutMs);
+    timer.unref?.();
+    drainWaiters.add(onDrain);
+  });
+}
+
+export function interruptActiveTasks(reason: string): string[] {
+  const ids = listActiveTaskIds();
+  for (const taskId of ids) {
+    const ctrl = activeTasks.get(taskId);
+    if (!ctrl) continue;
+    interruptedTasks.set(taskId, reason);
+    ctrl.abort(new Error(reason));
+    updateTask(taskId, {
+      status: "interrupted",
+      result_summary: reason,
+      completed_at: new Date().toISOString(),
+    });
+    activeTasks.delete(taskId);
+  }
+  notifyActiveTaskChange();
+  return ids;
+}
+
 export function cancelTask(taskId: string): boolean {
   const ctrl = activeTasks.get(taskId);
   if (!ctrl) return false;
   cancelledTasks.add(taskId);
   ctrl.abort();
   activeTasks.delete(taskId);
+  notifyActiveTaskChange();
   return true;
 }
 
 function wasCancelled(taskId: string, abortController: AbortController): boolean {
-  return cancelledTasks.has(taskId) || abortController.signal.aborted;
+  return cancelledTasks.has(taskId) || (abortController.signal.aborted && !interruptedTasks.has(taskId));
 }
 
-function finalTaskStatus(taskId: string, abortController: AbortController, success: boolean): "completed" | "failed" | "cancelled" {
+function wasInterrupted(taskId: string): boolean {
+  return interruptedTasks.has(taskId);
+}
+
+function interruptedReason(taskId: string): string {
+  return interruptedTasks.get(taskId) ?? "任务因 MiniClaw 重启/关闭被中断";
+}
+
+function finalTaskStatus(
+  taskId: string,
+  abortController: AbortController,
+  success: boolean
+): "completed" | "failed" | "cancelled" | "interrupted" {
+  if (wasInterrupted(taskId)) return "interrupted";
   if (wasCancelled(taskId, abortController)) return "cancelled";
   return success ? "completed" : "failed";
+}
+
+function addActiveTaskForTest(taskId: string, abortController = new AbortController()): AbortController {
+  activeTasks.set(taskId, abortController);
+  return abortController;
+}
+
+function deleteActiveTaskForTest(taskId: string): void {
+  activeTasks.delete(taskId);
+  notifyActiveTaskChange();
+}
+
+function resetTaskRuntimeForTest(): void {
+  activeTasks.clear();
+  cancelledTasks.clear();
+  interruptedTasks.clear();
+  for (const waiter of drainWaiters) waiter();
+  drainWaiters.clear();
 }
 
 function rawTaskMessages(taskId: string, result: TaskResult): string[] {
@@ -166,7 +248,7 @@ function formatSeconds(ms: number): string {
 }
 
 function buildExecutionSummary(
-  status: "completed" | "failed" | "cancelled",
+  status: "completed" | "failed" | "cancelled" | "interrupted",
   result: TaskResult,
   toolCallLog: string[],
   toolCount: number,
@@ -373,7 +455,9 @@ async function executeCodexTask(
 
   for await (const event of events) {
     if (abortController.signal.aborted || timeoutCtrl.signal.aborted) {
-      failedMessage = abortController.signal.aborted ? "任务已被用户取消" : "Codex 执行超时";
+      failedMessage = wasInterrupted(params.taskId)
+        ? interruptedReason(params.taskId)
+        : abortController.signal.aborted ? "任务已被用户取消" : "Codex 执行超时";
       break;
     }
 
@@ -424,12 +508,14 @@ async function executeCodexTask(
   }
 
   const lastResult: TaskResult = {
-    success: !failedMessage && !wasCancelled(params.taskId, abortController),
+    success: !failedMessage && !wasCancelled(params.taskId, abortController) && !wasInterrupted(params.taskId),
     sessionId,
     costUsd: 0,
     durationMs: Date.now() - startedAt,
     turns: turns || 1,
-    result: wasCancelled(params.taskId, abortController)
+    result: wasInterrupted(params.taskId)
+      ? interruptedReason(params.taskId)
+      : wasCancelled(params.taskId, abortController)
       ? "任务已被用户取消"
       : failedMessage || finalResponse.trim() || "[无文字回复]",
     ...(tokensSummary ? { tokensSummary } : {}),
@@ -613,7 +699,7 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
           costUsd: 0,
           durationMs: 0,
           turns: 0,
-          result: "任务已被用户取消",
+          result: wasInterrupted(params.taskId) ? interruptedReason(params.taskId) : "任务已被用户取消",
         };
         break;
       }
@@ -693,7 +779,9 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
         costUsd: 0,
         durationMs: 0,
         turns: 0,
-        result: wasCancelled(params.taskId, abortController) ? "任务已被用户取消" : "任务被中断或无结果",
+        result: wasInterrupted(params.taskId)
+          ? interruptedReason(params.taskId)
+          : wasCancelled(params.taskId, abortController) ? "任务已被用户取消" : "任务被中断或无结果",
       };
     }
 
@@ -730,14 +818,16 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
 
     return lastResult;
   } catch (err) {
-    const errMsg = wasCancelled(params.taskId, abortController)
+    const errMsg = wasInterrupted(params.taskId)
+      ? interruptedReason(params.taskId)
+      : wasCancelled(params.taskId, abortController)
       ? "任务已被用户取消"
       : err instanceof Error ? err.message : String(err);
     log.error(`✗ ${shortId} threw after ${Date.now() - startedAt}ms: ${errMsg}`);
     await progress.complete(params.channel, { keepAsError: true });
 
     updateTask(params.taskId, {
-      status: wasCancelled(params.taskId, abortController) ? "cancelled" : "failed",
+      status: finalTaskStatus(params.taskId, abortController, false),
       result_summary: errMsg.slice(0, 10000),
       completed_at: new Date().toISOString(),
     });
@@ -754,7 +844,9 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
     };
   } finally {
     activeTasks.delete(params.taskId);
+    notifyActiveTaskChange();
     cancelledTasks.delete(params.taskId);
+    interruptedTasks.delete(params.taskId);
     // 清理 task 路径下落盘的附件
     try {
       rmSync(join(params.cwd, ".miniclaw-attachments", params.taskId), { recursive: true, force: true });

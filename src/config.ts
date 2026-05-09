@@ -329,6 +329,11 @@ const e2eSenderUserIds = stringArray(["e2e", "sender_user_ids"], "MINICLAW_E2E_S
 const disableScheduler = boolValue(["e2e", "disable_scheduler"], "MINICLAW_DISABLE_SCHEDULER", false);
 const e2eFakeAgent = boolValue(["e2e", "fake_agent"], "MINICLAW_E2E_FAKE_AGENT", false);
 const defaultCwd = resolveHome(requiredString(["agent", "default_cwd"], "MINICLAW_DEFAULT_CWD", "~/Code"));
+const shutdownDrainTimeoutMs = positiveNumber(
+  ["agent", "shutdown_drain_timeout_ms"],
+  "MINICLAW_SHUTDOWN_DRAIN_TIMEOUT_MS",
+  1_800_000
+);
 const dbPath = resolveHome(requiredString(["storage", "db_path"], "MINICLAW_DB_PATH", "~/.miniclaw/data.db"));
 const memoryPath = resolveHome(requiredString(["storage", "memory_path"], "MINICLAW_MEMORY_PATH", "~/.miniclaw/memories/MEMORY.md"));
 const connectivityStatePath = resolveHome(requiredString(
@@ -419,6 +424,7 @@ export const config = {
   defaultMaxTurns: numberOrUnlimited(["agent", "max_turns"], "MINICLAW_DEFAULT_MAX_TURNS", 30),
   chatTimeoutMs: positiveNumber(["agent", "chat_timeout_ms"], "MINICLAW_CHAT_TIMEOUT_MS", 180000),
   attachmentTimeoutMs: positiveNumber(["agent", "attachment_timeout_ms"], "MINICLAW_ATTACHMENT_TIMEOUT_MS", 30000),
+  shutdownDrainTimeoutMs,
   registerCommandsOnStart: boolValue(
     ["agent", "register_commands_on_start"],
     "MINICLAW_REGISTER_COMMANDS_ON_START",

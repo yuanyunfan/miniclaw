@@ -25,6 +25,7 @@ module.exports = {
       ],
       watch: false,
       max_memory_restart: "500M",
+      kill_timeout: 1860000,
       exp_backoff_restart_delay: 1000,
       max_restarts: 10,
       out_file: join(logDir, "miniclaw-out.log"),

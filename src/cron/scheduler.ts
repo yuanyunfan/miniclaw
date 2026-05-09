@@ -13,6 +13,7 @@ import {
   type CronFailureAlertRef,
 } from "./failure-notifier.js";
 import { createLogger } from "../lib/log.js";
+import { DRAINING_MESSAGE, isDraining } from "../runtime/shutdown.js";
 
 const log = createLogger("cron");
 
@@ -131,6 +132,13 @@ async function dispatch(
   retryPolicy: RetryPolicy = DEFAULT_RETRY_POLICY,
   options: DispatchOptions = {}
 ): Promise<void> {
+  if (isDraining()) {
+    const msg = `${job.name} skipped: ${DRAINING_MESSAGE}`;
+    log.warn(msg);
+    recordRun(job.name, false, 0, msg);
+    return;
+  }
+
   if (runningJobs.has(job.name)) {
     const msg = `${job.name} skipped: previous run still active`;
     log.warn(msg);

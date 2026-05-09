@@ -1,5 +1,12 @@
-import { describe, it, expect } from "vitest";
-import { __testables } from "../task.js";
+import { randomUUID } from "node:crypto";
+import { afterEach, describe, it, expect } from "vitest";
+import {
+  __testables,
+  getActiveTaskCount,
+  interruptActiveTasks,
+  waitForActiveTasksToDrain,
+} from "../task.js";
+import { createTask, getTask, initDb } from "../../store/db.js";
 
 const {
   fmtTokens,
@@ -8,7 +15,14 @@ const {
   rawTaskMessages,
   buildExecutionSummary,
   buildRealtimeProgress,
+  addActiveTaskForTest,
+  deleteActiveTaskForTest,
+  resetTaskRuntimeForTest,
 } = __testables;
+
+afterEach(() => {
+  resetTaskRuntimeForTest();
+});
 
 describe("fmtTokens", () => {
   it("returns '-' for undefined / null", () => {
@@ -72,6 +86,24 @@ describe("finalTaskStatus", () => {
     ctrl.abort();
     expect(finalTaskStatus("task-a", ctrl, false)).toBe("cancelled");
   });
+
+  it("maps shutdown-interrupted controller to interrupted", () => {
+    initDb();
+    const taskId = randomUUID();
+    createTask({
+      id: taskId,
+      discord_thread_id: "thread-drain-status",
+      discord_user_id: "u-1",
+      prompt: "long task",
+      cwd: "/tmp",
+    });
+    const ctrl = addActiveTaskForTest(taskId);
+
+    interruptActiveTasks("shutdown interrupt");
+
+    expect(ctrl.signal.aborted).toBe(true);
+    expect(finalTaskStatus(taskId, ctrl, false)).toBe("interrupted");
+  });
 });
 
 describe("rawTaskMessages", () => {
@@ -130,5 +162,45 @@ describe("buildRealtimeProgress", () => {
     expect(text).toContain("status: running");
     expect(text).toContain("tools: 0");
     expect(text).toContain("- waiting for SDK events");
+  });
+});
+
+describe("task drain helpers", () => {
+  it("waitForActiveTasksToDrain resolves true when active tasks finish", async () => {
+    addActiveTaskForTest("drain-task-1");
+
+    const drained = waitForActiveTasksToDrain(1000);
+    setTimeout(() => deleteActiveTaskForTest("drain-task-1"), 5);
+
+    await expect(drained).resolves.toBe(true);
+  });
+
+  it("waitForActiveTasksToDrain resolves false on timeout", async () => {
+    addActiveTaskForTest("drain-task-2");
+
+    await expect(waitForActiveTasksToDrain(5)).resolves.toBe(false);
+  });
+
+  it("interruptActiveTasks aborts controllers and marks running rows interrupted", () => {
+    initDb();
+    const taskId = randomUUID();
+    const reason = "Interrupted during MiniClaw shutdown drain timeout";
+    createTask({
+      id: taskId,
+      discord_thread_id: "thread-drain-interrupt",
+      discord_user_id: "u-1",
+      prompt: "long task",
+      cwd: "/tmp",
+    });
+    const ctrl = addActiveTaskForTest(taskId);
+
+    expect(interruptActiveTasks(reason)).toEqual([taskId]);
+
+    expect(ctrl.signal.aborted).toBe(true);
+    expect(getActiveTaskCount()).toBe(0);
+    expect(getTask(taskId)).toMatchObject({
+      status: "interrupted",
+      result_summary: reason,
+    });
   });
 });

@@ -15,7 +15,7 @@ import { config } from "./config.js";
 import { chat, type ChatCallbacks } from "./agent/chat.js";
 import { chunkMessage } from "./discord/chunks.js";
 import { handleTask, handleStatus, handleHealth, handleAgentConfig, handleCancel, handleResume, handleRemember, handleForget, handleMemories } from "./commands/handlers.js";
-import { executeTask, getActiveTaskCount } from "./agent/task.js";
+import { executeTask } from "./agent/task.js";
 import { recoverInterruptedTasks } from "./agent/recovery.js";
 import { createTask, getChatHistory, getTaskByThreadId, recordSmartRouterDecision, updateSmartRouterDecision } from "./store/db.js";
 import { v4 as uuid } from "uuid";
@@ -47,6 +47,7 @@ import {
   type ConfirmationAction,
   type PendingTaskConfirmation,
 } from "./routing/confirmations.js";
+import { DRAINING_MESSAGE, isDraining } from "./runtime/shutdown.js";
 
 const log = createLogger("bot");
 
@@ -291,6 +292,18 @@ export function createBot(): Client {
 
   const processed = new Map<string, number>();
 
+  const markProcessed = (messageId: string): boolean => {
+    const now = Date.now();
+    if (processed.has(messageId)) return false;
+    processed.set(messageId, now);
+    if (processed.size > 500) {
+      for (const [k, ts] of processed) {
+        if (now - ts > 300_000) processed.delete(k);
+      }
+    }
+    return true;
+  };
+
   client.on(Events.MessageCreate, async (message: Message) => {
     // Thread continuation: 仅当消息发在 /task 创建过的真正 Discord thread 里才自动 resume
     // （防 cron 在普通 channel 跑过留下 discord_thread_id 记录被误命中）
@@ -309,6 +322,14 @@ export function createBot(): Client {
 
     if (route === "ignore") return;
 
+    if (isDraining()) {
+      if (!markProcessed(message.id)) return;
+      await message.reply(DRAINING_MESSAGE).catch((err) => {
+        log.error("Failed to send draining reply:", err);
+      });
+      return;
+    }
+
     if (route === "thread_continuation" && continuableTask?.session_id) {
       try {
         assertProviderSession(continuableTask.session_id, config.agentProvider);
@@ -322,8 +343,9 @@ export function createBot(): Client {
       const followupAtts = Array.from(message.attachments.values());
       if (!followupContent && !followupAtts.length) return;
 
-      if (getActiveTaskCount() >= config.maxConcurrentTasks) {
-        await message.reply(`⚠️ 已达并发上限 (${config.maxConcurrentTasks})，请等待现有任务完成`);
+      const capacity = taskCapacityError();
+      if (capacity) {
+        await message.reply(capacity);
         return;
       }
 
@@ -360,6 +382,11 @@ export function createBot(): Client {
 
       await message.react("🔄").catch(() => {});
       if (message.channel.isSendable()) {
+        const lateCapacity = taskCapacityError();
+        if (lateCapacity) {
+          await message.reply(lateCapacity);
+          return;
+        }
         createTask({
           id: newTaskId,
           discord_thread_id: message.channel.id,

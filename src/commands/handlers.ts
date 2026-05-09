@@ -167,9 +167,10 @@ export async function handleResume(interaction: ChatInputCommandInteraction): Pr
     return;
   }
 
-  if (getActiveTaskCount() >= config.maxConcurrentTasks) {
+  const capacity = taskCapacityError();
+  if (capacity) {
     await interaction.reply({
-      content: `⚠️ 已达并发上限 (${config.maxConcurrentTasks})`,
+      content: capacity,
       ephemeral: true,
     });
     return;

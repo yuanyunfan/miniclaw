@@ -11,6 +11,7 @@ import { renderTemplate } from "./template.js";
 import { resolve, join } from "node:path";
 import { createLogger } from "../lib/log.js";
 import { runPreProvider } from "../providers/index.js";
+import { DRAINING_MESSAGE, isDraining } from "../runtime/shutdown.js";
 
 const log = createLogger("cron");
 import { homedir } from "node:os";
@@ -62,6 +63,13 @@ function buildCronSkillPrompt(jobName: string, skillName: string, skillArgs?: Re
 }
 
 export const __testables = { buildCronPreScriptBlock, buildCronPreProviderBlock, buildCronTaskPrompt, buildCronSkillPrompt };
+
+function assertNotDraining(jobName: string): void {
+  if (!isDraining()) return;
+  const msg = `${jobName} skipped: ${DRAINING_MESSAGE}`;
+  log.warn(msg);
+  throw new CronTaskRunError(msg);
+}
 
 async function runPreScript(
   scriptName: string,
@@ -119,6 +127,7 @@ async function fetchSendableChannel(client: Client, channelId: string): Promise<
 }
 
 export async function runTask(job: CronJobTask, client: Client): Promise<void> {
+  assertNotDraining(job.name);
   if (getActiveTaskCount() >= config.maxConcurrentTasks) {
     const msg = `${job.name} skipped: hit MINICLAW_MAX_CONCURRENT_TASKS=${config.maxConcurrentTasks}`;
     log.warn(msg);
@@ -167,6 +176,7 @@ export async function runTask(job: CronJobTask, client: Client): Promise<void> {
   const renderedPrompt = renderTemplate(job.prompt, { "cron.name": job.name });
   const prompt = buildCronTaskPrompt(job.name, prependedContext, renderedPrompt);
 
+  assertNotDraining(job.name);
   createTask({
     id: taskId,
     // cron 触发的 task 不属于任何 Discord thread，置空避免被 thread-continuation 误命中
@@ -182,6 +192,7 @@ export async function runTask(job: CronJobTask, client: Client): Promise<void> {
 }
 
 export async function runSkill(job: CronJobSkill, client: Client): Promise<void> {
+  assertNotDraining(job.name);
   if (getActiveTaskCount() >= config.maxConcurrentTasks) {
     const msg = `${job.name} skipped: hit MINICLAW_MAX_CONCURRENT_TASKS=${config.maxConcurrentTasks}`;
     log.warn(msg);
@@ -194,6 +205,7 @@ export async function runSkill(job: CronJobSkill, client: Client): Promise<void>
   // 把 skill 调用拼成一段明确的 supervisor prompt
   const prompt = buildCronSkillPrompt(job.name, job.skill, job.skill_args);
 
+  assertNotDraining(job.name);
   createTask({
     id: taskId,
     discord_thread_id: "",

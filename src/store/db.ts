@@ -292,11 +292,14 @@ export function getInterruptedTasks(limit = 5): TaskRow[] {
   );
 }
 
-export function markTaskInterrupted(id: string): void {
+export function markTaskInterrupted(id: string, resultSummary?: string): void {
   db.prepare(
-    `UPDATE tasks SET status = 'interrupted', completed_at = datetime('now')
-     WHERE id = ? AND status = 'running'`
-  ).run(id);
+    `UPDATE tasks
+     SET status = 'interrupted',
+         result_summary = COALESCE(@result_summary, result_summary),
+         completed_at = datetime('now')
+     WHERE id = @id AND status = 'running'`
+  ).run({ id, result_summary: resultSummary ?? null });
 }
 
 export function getRecentTasks(limit = 10): TaskRow[] {

@@ -148,8 +148,9 @@ describe("getTaskByThreadId", () => {
 describe("markTaskInterrupted + getInterruptedTasks", () => {
   it("flips status from running to interrupted", () => {
     const { id } = makeTask();
-    markTaskInterrupted(id);
+    markTaskInterrupted(id, "shutdown drain timeout");
     expect(getTask(id)?.status).toBe("interrupted");
+    expect(getTask(id)?.result_summary).toBe("shutdown drain timeout");
     const interrupted = getInterruptedTasks(20);
     expect(interrupted.some((t) => t.id === id)).toBe(true);
   });
