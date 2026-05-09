@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { EmailAddress, EmailMessage } from "./types.js";
+import type { EmailAddress, EmailAttachmentMeta, EmailMessage } from "./types.js";
 
 export function hashValue(value: string): string {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
@@ -65,6 +65,11 @@ export function subjectMatches(subject: string, includes: string[]): boolean {
   return includes.some((part) => part.trim() && normalized.includes(part.trim().toLowerCase()));
 }
 
+function stripAttachmentContent(attachment: EmailAttachmentMeta): Omit<EmailAttachmentMeta, "text"> {
+  const { text: _text, ...withoutText } = attachment;
+  return withoutText;
+}
+
 export function stripBodyForOutput(message: EmailMessage): Omit<EmailMessage, "text" | "html"> & { text_excerpt?: string } {
   const text = message.text?.replace(/\s+/g, " ").trim();
   const { text: _text, html: _html, ...withoutBody } = message;
@@ -72,6 +77,7 @@ export function stripBodyForOutput(message: EmailMessage): Omit<EmailMessage, "t
     ...withoutBody,
     from: redactEmailAddress(message.from),
     to: message.to.map(redactEmailAddress),
+    attachments: message.attachments.map(stripAttachmentContent),
     ...(text ? { text_excerpt: text.slice(0, 500) } : {}),
   };
 }

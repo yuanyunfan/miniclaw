@@ -24,8 +24,21 @@ describe("formatCmbCreditCardCollectResult", () => {
         currency: "CNY",
         merchant: "星巴克",
         card_tail_hash: "sha256:tail",
+        source_medium: "body",
         source: "cmb-credit-card-email",
       }],
+      diagnostics: {
+        matched_email_count: 1,
+        candidate_email_count: 1,
+        attachment_count: 0,
+        downloadable_attachment_count: 0,
+        parsed_from_body_count: 1,
+        parsed_from_attachment_count: 0,
+        unsupported_attachment_count: 0,
+        failed_attachment_count: 0,
+        skipped_reason_counts: {},
+        latest_candidates: [],
+      },
       warnings: [],
     });
 

@@ -62,6 +62,7 @@ function rawBodyRetentionValue(value: unknown): EmailRawBodyRetention {
 }
 
 function attachmentPolicyValue(value: unknown): EmailAttachmentPolicy {
+  if (value === "download_allowlist") return "download_allowlist";
   if (value === "metadata_only") return "metadata_only";
   return "none";
 }

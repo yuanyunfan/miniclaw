@@ -45,6 +45,18 @@ max_results: 50
 currency: CNY
 large_transaction_threshold: 1000
 dedupe: true
+include_attachments: true
+parse_attachment_text: true
+attachment_text_max_bytes: 128000
+allowed_attachment_extensions:
+  - .txt
+  - .csv
+  - .html
+  - .htm
+  - .json
+  - .xml
+  - .zip
+diagnostic_search: true
 state_path: "~/.miniclaw/providers/cmb-credit-card-email/default-state.json"
 ```
 
@@ -91,6 +103,7 @@ Provider 输出 JSON 包含：
 - `net_spend`
 - `large_transactions`
 - `transactions`
+- `diagnostics`
 - `warnings`
 
 单笔交易包含：
@@ -102,11 +115,24 @@ Provider 输出 JSON 包含：
 - `merchant`
 - `card_tail_hash`
 - `message_id_hash`
+- `source_medium`: `body` 或 `attachment`
+
+`diagnostics` 包含：
+
+- `matched_email_count`: 命中当前 subject/from/window 过滤条件的邮件数。
+- `candidate_email_count`: 主过滤无命中时，放宽 subject 后发现的招商发件域候选数。
+- `attachment_count`: 发现的附件数。
+- `downloadable_attachment_count`: 成功提取文本的附件数。
+- `parsed_from_body_count` / `parsed_from_attachment_count`: 正文和附件分别解析出的交易数。
+- `unsupported_attachment_count` / `failed_attachment_count`: 不支持或提取失败的附件数。
+- `skipped_reason_counts`: 附件跳过或失败原因聚合。
+- `latest_candidates`: 最近候选邮件的脱敏摘要，用于判断是过滤条件问题还是解析能力问题。
 
 不会输出：
 
 - 邮箱地址。
 - 原始邮件正文。
+- 原始附件正文。
 - 完整卡号。
 - 卡尾号明文。
 - 邮箱密码、token、cookie。
@@ -126,13 +152,14 @@ Provider 输出 JSON 包含：
 
 ## 当前解析策略
 
-第一版 parser 支持常见中文通知文本：
+parser 支持常见中文通知文本，也会读取受控附件文本内容：
 
 - 金额：`人民币68.50元`、`¥68.50`、`68.50元`
 - 时间：`2026年05月07日 19:31`、`05月07日 19:31`
 - 卡尾号：`尾号****` 这类末四位字段；实现中只保留 hash，不输出明文尾号。
 - 商户：`商户：星巴克`
 - 方向：命中 `退款/退货/冲正/返还/撤销/退回/收入` 视为 refund，否则视为 spend。
+- 附件：默认只尝试 `.txt/.csv/.html/.htm/.json/.xml/.zip`，ZIP 中只读取允许类型的文本条目；PDF、加密 ZIP、图片和未知二进制只做诊断，不输出原始内容。
 
 真实样例到位后，应通过单元测试持续补 parser。
 

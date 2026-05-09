@@ -42,4 +42,55 @@ describe("parseCmbCreditCardTransactions", () => {
 
     expect(transactions[0]).toMatchObject({ direction: "refund", amount: 12.3 });
   });
+
+  it("does not parse credit manager summary amounts as transactions", () => {
+    const transactions = parseCmbCreditCardTransactions({
+      ...message("截至05月09日 15:12，您的尾号1234信用卡可用额度人民币71,919.20元，5月权益活动一览。"),
+      subject: "每日信用管家",
+    }, { currency: "CNY" });
+
+    expect(transactions).toHaveLength(0);
+  });
+
+  it("parses daily credit manager transaction details without using the available credit amount", () => {
+    const transactions = parseCmbCreditCardTransactions({
+      ...message([
+        "截至昨日最后一笔交易，您的额度和积分信息如下：",
+        "￥71,919.20",
+        "可用额度",
+        "2026/05/09&nbsp;您的消费明细如下：",
+        "CNY&nbsp;39.90",
+        "尾号1234&nbsp;消费&nbsp;支付宝-迪卡侬北京中关村店",
+        "CNY&nbsp;15.00",
+        "尾号1234&nbsp;消费&nbsp;支付宝-鲍师傅糕点",
+      ].join("\n")),
+      subject: "每日信用管家",
+    }, { currency: "CNY" });
+
+    expect(transactions.map((transaction) => transaction.amount)).toEqual([39.9, 15]);
+    expect(transactions.map((transaction) => transaction.merchant)).toEqual([
+      "支付宝-迪卡侬北京中关村店",
+      "支付宝-鲍师傅糕点",
+    ]);
+    expect(transactions.some((transaction) => transaction.amount === 71919.2)).toBe(false);
+  });
+
+  it("parses extracted attachment text", () => {
+    const transactions = parseCmbCreditCardTransactions({
+      ...message("招商银行信用卡电子账单"),
+      attachments: [{
+        filename: "statement.csv",
+        content_type: "text/csv",
+        size: 120,
+        text: "交易时间,交易商户,金额\n2026年05月07日 19:31,餐厅,人民币268.00元",
+        extraction: { status: "extracted" },
+      }],
+    }, { currency: "CNY" });
+
+    expect(transactions).toHaveLength(1);
+    expect(transactions[0]).toMatchObject({
+      amount: 268,
+      source_medium: "attachment",
+    });
+  });
 });

@@ -1,7 +1,8 @@
 export type EmailProvider = "imap" | "gmail" | "graph";
 export type EmailRedactionLevel = "strict" | "summary";
 export type EmailRawBodyRetention = "none";
-export type EmailAttachmentPolicy = "none" | "metadata_only";
+export type EmailAttachmentPolicy = "none" | "metadata_only" | "download_allowlist";
+export type EmailAttachmentExtractStatus = "metadata_only" | "extracted" | "skipped" | "failed";
 
 export interface EmailImapProfileConfig {
   host: string;
@@ -52,6 +53,18 @@ export interface EmailAttachmentMeta {
   content_type?: string;
   size?: number;
   checksum?: string;
+  text?: string;
+  text_truncated?: boolean;
+  extraction?: {
+    status: EmailAttachmentExtractStatus;
+    reason?: string;
+    entries?: Array<{
+      filename: string;
+      size?: number;
+      text_bytes?: number;
+      text_truncated?: boolean;
+    }>;
+  };
 }
 
 export interface EmailMessageRef {
@@ -70,6 +83,9 @@ export interface EmailQuery {
   max_results?: number;
   include_body?: boolean;
   include_attachments?: boolean;
+  include_attachment_content?: boolean;
+  attachment_text_max_bytes?: number;
+  allowed_attachment_extensions?: string[];
 }
 
 export interface EmailMessage {

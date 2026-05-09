@@ -61,5 +61,10 @@ export function loadCmbCreditCardEmailConfig(name = "default"): CmbCreditCardEma
     currency: stringValue(raw.currency, "CNY"),
     large_transaction_threshold: positiveNumber(raw.large_transaction_threshold, 1000),
     dedupe: boolValue(raw.dedupe, true),
+    include_attachments: boolValue(raw.include_attachments, false),
+    parse_attachment_text: boolValue(raw.parse_attachment_text, false),
+    attachment_text_max_bytes: positiveInt(raw.attachment_text_max_bytes, 128_000),
+    allowed_attachment_extensions: stringArray(raw.allowed_attachment_extensions, [".txt", ".csv", ".html", ".htm", ".json", ".xml", ".zip"]),
+    diagnostic_search: boolValue(raw.diagnostic_search, true),
   };
 }

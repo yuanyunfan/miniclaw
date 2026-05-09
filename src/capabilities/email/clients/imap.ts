@@ -1,6 +1,7 @@
 import { ImapFlow, type FetchMessageObject, type ImapFlowOptions, type MessageAddressObject, type SearchObject } from "imapflow";
 import { simpleParser } from "mailparser";
 import type { EmailAddress, EmailClient, EmailHealth, EmailMessage, EmailQuery, EmailSearchResult, EmailSecret, EmailProfileConfig } from "../types.js";
+import { normalizeAllowedAttachmentExtensions, normalizeEmailAttachment } from "../attachments.js";
 import { hashValue, matchesAddressPattern, sanitizeEmailError, subjectMatches } from "../redaction.js";
 
 function toAddress(address?: MessageAddressObject): EmailAddress {
@@ -101,7 +102,11 @@ export class ImapEmailClient implements EmailClient {
     const senderPatterns = querySenderPatterns(query, this.profile);
     const subjectIncludes = querySubjectIncludes(query, this.profile);
     const includeBody = query.include_body === true;
-    const includeAttachments = query.include_attachments === true || this.profile.attachment_policy === "metadata_only";
+    const includeAttachmentContent = query.include_attachment_content === true
+      && this.profile.attachment_policy === "download_allowlist";
+    const includeAttachments = query.include_attachments === true
+      || includeAttachmentContent
+      || this.profile.attachment_policy === "metadata_only";
 
     try {
       await client.connect();
@@ -120,7 +125,7 @@ export class ImapEmailClient implements EmailClient {
           source: includeBody || includeAttachments ? { maxLength: this.profile.body_max_bytes } : false,
         }, { uid: true })) {
           if (messages.length >= limit) break;
-          const message = await this.toMessage(folder, item, { includeBody, includeAttachments });
+          const message = await this.toMessage(folder, item, { includeBody, includeAttachments, includeAttachmentContent, query });
           if (!matchesAddressPattern(message.from.address, senderPatterns)) continue;
           if (!subjectMatches(message.subject, subjectIncludes)) continue;
           if (query.received_before && new Date(message.received_at) >= new Date(query.received_before)) continue;
@@ -153,7 +158,7 @@ export class ImapEmailClient implements EmailClient {
   private async toMessage(
     folder: string,
     item: FetchMessageObject,
-    options: { includeBody: boolean; includeAttachments: boolean },
+    options: { includeBody: boolean; includeAttachments: boolean; includeAttachmentContent: boolean; query: EmailQuery },
   ): Promise<EmailMessage> {
     const envelope = item.envelope;
     const from = toAddress(envelope?.from?.[0]);
@@ -193,11 +198,10 @@ export class ImapEmailClient implements EmailClient {
       snippet: text?.slice(0, 300),
       ...(options.includeBody ? { text, html: normalizeText(parsed.html || undefined) } : {}),
       attachments: options.includeAttachments
-        ? parsed.attachments.map((attachment) => ({
-          filename: attachment.filename,
-          content_type: attachment.contentType,
-          size: attachment.size,
-          checksum: attachment.checksum,
+        ? parsed.attachments.map((attachment) => normalizeEmailAttachment(attachment, {
+          includeContent: options.includeAttachmentContent,
+          allowedExtensions: normalizeAllowedAttachmentExtensions(options.query.allowed_attachment_extensions),
+          maxTextBytes: options.query.attachment_text_max_bytes,
         }))
         : [],
     };

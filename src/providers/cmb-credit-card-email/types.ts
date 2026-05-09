@@ -11,6 +11,11 @@ export interface CmbCreditCardEmailConfig {
   currency: string;
   large_transaction_threshold: number;
   dedupe: boolean;
+  include_attachments: boolean;
+  parse_attachment_text: boolean;
+  attachment_text_max_bytes: number;
+  allowed_attachment_extensions: string[];
+  diagnostic_search: boolean;
 }
 
 export interface CmbCreditCardTransaction {
@@ -22,7 +27,30 @@ export interface CmbCreditCardTransaction {
   currency: string;
   merchant?: string;
   card_tail_hash?: string;
+  source_medium: "body" | "attachment";
   source: "cmb-credit-card-email";
+}
+
+export interface CmbCreditCardEmailCandidate {
+  received_at: string;
+  from_domain?: string;
+  subject_excerpt: string;
+  attachment_count: number;
+  attachment_types: string[];
+  attachment_extraction_statuses: string[];
+}
+
+export interface CmbCreditCardDiagnostics {
+  matched_email_count: number;
+  candidate_email_count: number;
+  attachment_count: number;
+  downloadable_attachment_count: number;
+  parsed_from_body_count: number;
+  parsed_from_attachment_count: number;
+  unsupported_attachment_count: number;
+  failed_attachment_count: number;
+  skipped_reason_counts: Record<string, number>;
+  latest_candidates: CmbCreditCardEmailCandidate[];
 }
 
 export interface CmbCreditCardStateEntry {
@@ -52,5 +80,6 @@ export interface CmbCreditCardCollectResult {
   large_transaction_threshold: number;
   large_transactions: CmbCreditCardTransaction[];
   transactions: CmbCreditCardTransaction[];
+  diagnostics: CmbCreditCardDiagnostics;
   warnings: string[];
 }

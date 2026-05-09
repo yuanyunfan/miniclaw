@@ -10,6 +10,7 @@ function compactTransaction(transaction: CmbCreditCardTransaction): Record<strin
     merchant: transaction.merchant,
     card_tail_hash: transaction.card_tail_hash,
     message_id_hash: transaction.message_id_hash,
+    source_medium: transaction.source_medium,
   };
 }
 
@@ -27,6 +28,7 @@ export function formatCmbCreditCardCollectResult(result: CmbCreditCardCollectRes
     large_transaction_threshold: result.large_transaction_threshold,
     large_transactions: result.large_transactions.map(compactTransaction),
     transactions: result.transactions.map(compactTransaction),
+    diagnostics: result.diagnostics,
     warnings: result.warnings,
   }, null, 2);
 }

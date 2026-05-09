@@ -63,9 +63,11 @@ profiles:
       - 账单
     max_lookback_days: 7
     max_results: 50
-    body_max_bytes: 512000
+    body_max_bytes: 5242880
     raw_body_retention: none
-    attachment_policy: none
+    # none: no attachment parsing; metadata_only: filename/type/size only;
+    # download_allowlist: allow providers to request text extraction from explicit allowlisted attachment types.
+    attachment_policy: download_allowlist
     redaction: strict
     state_path: "~/.miniclaw/capabilities/email/cmb-notify-state.json"
     imap:
@@ -115,6 +117,7 @@ window_hours: 24
 max_results: 20
 include_body: false
 include_attachments: false
+include_attachment_content: false
 dedupe: true
 state_path: "~/.miniclaw/providers/email-query/default-state.json"
 ```
