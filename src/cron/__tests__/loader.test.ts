@@ -96,6 +96,29 @@ prompt: "盘前市场分析"
     }
   });
 
+  it("解析 type=task + market-forecast-evaluation pre_provider", () => {
+    write("market-forecast-evaluation.yaml", `
+name: us-stock-post-market
+schedule: "30 16 * * 1-5"
+timezone: America/New_York
+enabled: true
+type: task
+channel: "${VALID_CHANNEL}"
+pre_provider: market-forecast-evaluation
+pre_provider_config: us-post-market
+prompt: "盘后预测校准"
+`);
+    const r = loadCronJobs();
+    expect(r.errors).toEqual([]);
+    expect(r.jobs.length).toBe(1);
+    const j = r.jobs[0];
+    expect(j.type).toBe("task");
+    if (j.type === "task") {
+      expect(j.pre_provider).toBe("market-forecast-evaluation");
+      expect(j.pre_provider_config).toBe("us-post-market");
+    }
+  });
+
   it("解析同一 job 的多条 schedule", () => {
     write("market-pulse.yaml", `
 name: market-pulse

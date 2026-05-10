@@ -334,6 +334,27 @@ export function listRecentMarketForecasts(limit = 10): MarketForecastRow[] {
     .all(limit) as MarketForecastRow[];
 }
 
+export function findLatestMarketForecast(params: {
+  marketScope: string;
+  tradeDate?: string;
+  session?: string;
+}): MarketForecastRow | undefined {
+  return getDb()
+    .prepare(
+      `SELECT * FROM market_forecasts
+       WHERE market_scope = @market_scope
+         AND session = @session
+         AND (@trade_date IS NULL OR trade_date = @trade_date)
+       ORDER BY generated_at DESC, created_at DESC
+       LIMIT 1`
+    )
+    .get({
+      market_scope: params.marketScope,
+      session: params.session ?? "pre_market",
+      trade_date: params.tradeDate ?? null,
+    }) as MarketForecastRow | undefined;
+}
+
 export function listMarketForecastItems(forecastId: string): MarketForecastItemRow[] {
   return getDb()
     .prepare("SELECT * FROM market_forecast_items WHERE forecast_id = ? ORDER BY created_at ASC, item_type ASC")
