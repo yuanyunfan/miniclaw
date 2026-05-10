@@ -120,10 +120,8 @@ export interface StockPortfolioAssetHolding extends Omit<AssetAllocationHolding,
 }
 
 export type StockPortfolioLlmClassificationCategory =
-  | "domestic_index"
-  | "foreign_stock"
-  | "foreign_index"
-  | "domestic_stock"
+  | "domestic_equity"
+  | "foreign_equity"
   | "bond"
   | "gold";
 

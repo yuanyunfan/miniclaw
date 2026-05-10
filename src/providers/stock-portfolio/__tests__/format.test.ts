@@ -282,17 +282,15 @@ describe("stock-portfolio formatter", () => {
     expect(payload.asset_summary?.classification_guidance).toMatchObject({
       mode: "llm",
       categories: expect.arrayContaining([
-        expect.objectContaining({ category: "domestic_index", label: "国内指数" }),
-        expect.objectContaining({ category: "foreign_stock", label: "国外个股" }),
-        expect.objectContaining({ category: "foreign_index", label: "国外指数" }),
-        expect.objectContaining({ category: "domestic_stock", label: "国内个股" }),
+        expect.objectContaining({ category: "domestic_equity", label: "国内股票" }),
+        expect.objectContaining({ category: "foreign_equity", label: "海外股票" }),
         expect.objectContaining({ category: "bond", label: "债券" }),
         expect.objectContaining({ category: "gold", label: "黄金" }),
       ]),
       instructions: expect.arrayContaining([
         "After final classification, aggregate category totals and sort categories by market_value_cny descending.",
         "Within each category, list every ETF or stock holding on its own line sorted by market_value_cny descending.",
-        "Holdings with instrument_type=unclassified_asset_gap are reconciliation rows for broker market value that was not expanded into position details; show them separately and do not force them into the six investment categories.",
+        "Holdings with instrument_type=unclassified_asset_gap are reconciliation rows for broker market value that was not expanded into position details; show them separately and do not force them into the four investment categories.",
       ]),
     });
     expect(payload.asset_summary?.by_account[0]).not.toHaveProperty("total_assets");

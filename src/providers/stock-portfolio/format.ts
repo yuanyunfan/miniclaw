@@ -146,24 +146,14 @@ const LLM_CLASSIFICATION_GUIDANCE: StockPortfolioClassificationGuidance = {
   mode: "llm",
   categories: [
     {
-      category: "domestic_index",
-      label: "国内指数",
-      description: "A股、港股、中国相关宽基/行业/主题指数 ETF 或指数基金；例如 HS300ETF、银行ETF、恒生/国企/中证/沪深相关 ETF。",
+      category: "domestic_equity",
+      label: "国内股票",
+      description: "A股、港股、中国公司、中概相关单一股票，以及中国相关宽基/行业/主题指数 ETF 或指数基金；例如 HS300ETF、银行ETF、恒生/国企/中证/沪深相关 ETF。",
     },
     {
-      category: "foreign_stock",
-      label: "国外个股",
-      description: "非中国公司的单一股票或股票型持仓；例如美国、欧洲、日本等市场的公司股票。",
-    },
-    {
-      category: "foreign_index",
-      label: "国外指数",
-      description: "跟踪非中国市场、国家、地区或海外宽基/行业指数的 ETF 或指数基金；例如 德国ETF、法国ETF、纳指/标普/道指相关 ETF。",
-    },
-    {
-      category: "domestic_stock",
-      label: "国内个股",
-      description: "A股、港股、中国公司或中概相关的单一股票持仓。",
+      category: "foreign_equity",
+      label: "海外股票",
+      description: "非中国公司单一股票，以及跟踪非中国市场、国家、地区或海外宽基/行业指数的 ETF 或指数基金；例如美国、欧洲、日本等市场股票，德国ETF、法国ETF、纳指/标普/道指相关 ETF。",
     },
     {
       category: "bond",
@@ -176,14 +166,14 @@ const LLM_CLASSIFICATION_GUIDANCE: StockPortfolioClassificationGuidance = {
       description: "黄金、黄金 ETF、黄金基金或明确跟踪黄金价格的持仓。",
     },
   ],
-  cash_handling: "现金不进入上述六类投资分类，应单独展示为现金。",
+  cash_handling: "现金不进入上述四类投资分类，应单独展示为现金。",
   instructions: [
     "Classify holdings from asset_summary.holdings_for_classification by code and name.",
     "Do not use asset_summary.by_category as the final classification; it is only a deterministic pre-bucket and may be wrong for cross-market ETFs.",
     "Use CNY fields only for reportable money values.",
     "After final classification, aggregate category totals and sort categories by market_value_cny descending.",
     "Within each category, list every ETF or stock holding on its own line sorted by market_value_cny descending.",
-    "Holdings with instrument_type=unclassified_asset_gap are reconciliation rows for broker market value that was not expanded into position details; show them separately and do not force them into the six investment categories.",
+    "Holdings with instrument_type=unclassified_asset_gap are reconciliation rows for broker market value that was not expanded into position details; show them separately and do not force them into the four investment categories.",
     "If a holding is ambiguous, choose the closest category and mention the uncertainty briefly.",
   ],
 };

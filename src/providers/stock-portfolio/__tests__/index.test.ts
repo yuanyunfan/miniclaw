@@ -185,7 +185,7 @@ describe("runStockPortfolioProvider", () => {
 
     expect(mocks.renderAssetPieChartPng).toHaveBeenCalledWith(expect.objectContaining({
       slices: expect.arrayContaining([
-        expect.objectContaining({ label: "国内指数" }),
+        expect.objectContaining({ label: "国内股票" }),
         expect.objectContaining({ label: "现金" }),
       ]),
     }), {

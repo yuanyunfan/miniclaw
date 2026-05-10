@@ -22,15 +22,11 @@ const LABEL_ORDER = [
   "信用债",
   "短债",
   "债券",
-  "国内指数",
-  "海外指数",
-  "国内个股",
-  "海外个股",
-  "股票",
+  "国内股票",
+  "海外股票",
   "黄金",
   "现金",
   "未展开资产",
-  "其他",
 ];
 
 const COLORS: Record<string, string> = {
@@ -39,15 +35,11 @@ const COLORS: Record<string, string> = {
   信用债: "#a8a8a8",
   短债: "#8f8f8f",
   债券: "#2f66b5",
-  国内指数: "#ffc000",
-  海外指数: "#49a2d8",
-  国内个股: "#c9a400",
-  海外个股: "#246da1",
-  股票: "#5b9bd5",
+  国内股票: "#d4aa00",
+  海外股票: "#49a2d8",
   黄金: "#55b431",
   现金: "#1f4e83",
   未展开资产: "#777777",
-  其他: "#7f7f7f",
 };
 
 function roundMoney(value: number): number {
@@ -60,6 +52,24 @@ function textOf(holding: StockPortfolioClassifiableHolding): string {
 
 function hasAny(text: string, patterns: RegExp[]): boolean {
   return patterns.some((pattern) => pattern.test(text));
+}
+
+function isOverseasEquityExposure(text: string): boolean {
+  return hasAny(text, [
+    /纳斯达克|纳指|NASDAQ|标普|S&P|SP500|道琼|DOW|MSCI|RUSSELL|罗素|日经|NIKKEI|德国|法国|欧洲|印度/,
+    /英伟达|微软|苹果|台积电|伯克希尔|NVIDIA|MICROSOFT|APPLE|TSM|BERKSHIRE/,
+    /\bUS\.|\bQQQ\b|\bSPY\b|\bVOO\b|\bIVV\b|\bDIA\b|\bVTI\b|\bVT\b|\bIWM\b|\bEFA\b|\bEEM\b/,
+    /\bAAPL\b|\bMSFT\b|\bNVDA\b|\bTSM\b|\bBRK\.B\b/,
+  ]);
+}
+
+function isDomesticEquityExposure(text: string): boolean {
+  return hasAny(text, [
+    /沪深|中证|上证|深证|创业板|科创|恒生|国企|A50|CSI|HSI|HSTECH|HANG SENG|盈富|TRACKER FUND/,
+    /银行|红利|机器人|港股|创新药|小米|HS300/,
+    /\b510300\b|\b510310\b|\b510500\b|\b512800\b|\b515080\b|\b159919\b|\b159915\b|\b159920\b|\b159338\b|\b159530\b|\b588000\b|\b588080\b/,
+    /\bHK\.02800\b|\bHK\.02828\b|\bHK\.03033\b|\bHK\.01810\b/,
+  ]);
 }
 
 export function classifyPieHolding(holding: StockPortfolioClassifiableHolding): string {
@@ -79,24 +89,15 @@ export function classifyPieHolding(holding: StockPortfolioClassifiableHolding): 
     return "债券";
   }
 
-  if (hasAny(text, [
-    /纳斯达克|纳指|NASDAQ|标普|S&P|SP500|道琼|DOW|MSCI|RUSSELL|罗素|日经|NIKKEI|德国|法国|欧洲/,
-    /\bQQQ\b|\bSPY\b|\bVOO\b|\bIVV\b|\bDIA\b|\bVTI\b|\bVT\b|\bIWM\b|\bEFA\b|\bEEM\b/,
-  ])) return "海外指数";
-
-  if (hasAny(text, [
-    /沪深|中证|上证|深证|创业板|科创|恒生|国企|A50|CSI|HSI|HSTECH|HANG SENG|盈富|TRACKER FUND/,
-    /\b510300\b|\b510500\b|\b159919\b|\b159915\b|\b588000\b|\b588080\b|\bHK\.02800\b|\bHK\.02828\b|\bHK\.03033\b/,
-  ])) return "国内指数";
+  if (isOverseasEquityExposure(text)) return "海外股票";
+  if (isDomesticEquityExposure(text)) return "国内股票";
 
   if (holding.instrument_type === "stock") {
-    return /\bUS\.|NASDAQ|NYSE|AMEX|APPLE|MICROSOFT|NVIDIA|TESLA|AMAZON|GOOGLE|META/.test(text)
-      ? "海外个股"
-      : "国内个股";
+    return isOverseasEquityExposure(text) ? "海外股票" : "国内股票";
   }
 
-  if (holding.instrument_type === "etf") return "其他";
-  return "股票";
+  if (holding.instrument_type === "etf") return isOverseasEquityExposure(text) ? "海外股票" : "国内股票";
+  return isOverseasEquityExposure(text) ? "海外股票" : "国内股票";
 }
 
 function labelRank(label: string): number {
@@ -132,7 +133,7 @@ export function buildAssetPieChartModel(
       label,
       value: roundMoney(value),
       percentage: Math.round((value / total) * 100),
-      color: COLORS[label] ?? COLORS["其他"],
+      color: COLORS[label] ?? COLORS["未展开资产"],
     }))
     .sort((a, b) => labelRank(a.label) - labelRank(b.label) || b.value - a.value);
 

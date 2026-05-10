@@ -25,8 +25,10 @@ describe("stock portfolio pie chart", () => {
     expect(classifyPieHolding(holding({ code: "511090", name: "30年国债ETF" }))).toBe("长债");
     expect(classifyPieHolding(holding({ code: "511520", name: "政金债券ETF" }))).toBe("政金债");
     expect(classifyPieHolding(holding({ code: "511030", name: "公司信用债ETF" }))).toBe("信用债");
-    expect(classifyPieHolding(holding({ code: "510300", name: "沪深300ETF" }))).toBe("国内指数");
-    expect(classifyPieHolding(holding({ code: "US.QQQ", name: "NASDAQ 100 ETF" }))).toBe("海外指数");
+    expect(classifyPieHolding(holding({ code: "510300", name: "沪深300ETF" }))).toBe("国内股票");
+    expect(classifyPieHolding(holding({ code: "US.QQQ", name: "NASDAQ 100 ETF" }))).toBe("海外股票");
+    expect(classifyPieHolding(holding({ code: "512800", name: "银行ETF", instrument_type: "etf" }))).toBe("国内股票");
+    expect(classifyPieHolding(holding({ code: "510310", name: "HS300ETF", instrument_type: "etf" }))).toBe("国内股票");
     expect(classifyPieHolding(holding({ code: "518880", name: "黄金ETF" }))).toBe("黄金");
   });
 
@@ -57,13 +59,13 @@ describe("stock portfolio pie chart", () => {
       ["长债", 21],
       ["政金债", 9],
       ["信用债", 5],
-      ["国内指数", 15],
-      ["海外指数", 35],
+      ["国内股票", 15],
+      ["海外股票", 35],
       ["黄金", 6],
       ["现金", 9],
     ]);
     const svg = renderAssetPieChartSvg(model!);
-    expect(svg).toContain("海外指数");
+    expect(svg).toContain("海外股票");
     expect(svg).toContain("35%");
   });
 });
