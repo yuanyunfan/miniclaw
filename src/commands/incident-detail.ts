@@ -30,6 +30,22 @@ function field(obj: Record<string, unknown>, key: string): string | undefined {
   return truncate(stringifyValue(value));
 }
 
+function arrayField(obj: Record<string, unknown>, key: string): unknown[] {
+  const value = obj[key];
+  return Array.isArray(value) ? value : [];
+}
+
+function traceLine(value: unknown): string | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const row = value as Record<string, unknown>;
+  const created = stringifyValue(row.created_at);
+  const task = stringifyValue(row.task_id).slice(0, 8);
+  const severity = stringifyValue(row.severity);
+  const type = stringifyValue(row.event_type);
+  const message = row.message ? ` ${truncate(stringifyValue(row.message), 120)}` : "";
+  return `- ${created} ${task} ${severity}/${type}${message}`;
+}
+
 function formatCommandLines(id: string, status: string): string[] {
   const lines = [
     `- View: /incident view id:${id.slice(0, 8)}`,
@@ -42,6 +58,13 @@ function formatCommandLines(id: string, status: string): string[] {
   if (["repair_ready", "shipped"].includes(status)) {
     lines.push(`- Ship preview: /incident ship-preview id:${id.slice(0, 8)}`);
   }
+  if (status === "repair_ready") {
+    lines.push(`- Approve ship: /incident approve-ship id:${id.slice(0, 8)} restart:false`);
+    lines.push(`- Approve ship + restart: /incident approve-ship id:${id.slice(0, 8)} restart:true`);
+  }
+  if (status === "shipped") {
+    lines.push(`- Request safe restart: /incident request-restart id:${id.slice(0, 8)}`);
+  }
   return lines;
 }
 
@@ -52,8 +75,10 @@ export function formatIncidentDetail(params: {
 }): string {
   const { incident, events, repairRuns } = params;
   const source = parseJsonObject(incident.source_json);
+  const evidence = parseJsonObject(incident.evidence_json);
   const diagnosis = parseJsonObject(incident.diagnosis_json);
   const latestRepair = repairRuns[0];
+  const traceLines = arrayField(evidence, "trace").map(traceLine).filter((line): line is string => Boolean(line)).slice(0, 5);
 
   const lines = [
     `MiniClaw Incident: ${incident.id}`,
@@ -77,6 +102,9 @@ export function formatIncidentDetail(params: {
     `- message_url: ${field(source, "message_url") ?? "-"}`,
     `- task_id: ${field(source, "task_id") ?? "-"}`,
     `- cron_name: ${field(source, "cron_name") ?? "-"}`,
+    "",
+    "Task Trace",
+    ...(traceLines.length ? traceLines : ["- (none)"]),
     "",
     "Latest Repair",
     ...(latestRepair ? [

@@ -14,6 +14,7 @@ import {
 } from "discord.js";
 import { config } from "./config.js";
 import { chat, type ChatCallbacks } from "./agent/chat.js";
+import { TaskReporter } from "./agent/task-reporter.js";
 import { chunkMessage } from "./discord/chunks.js";
 import { handleTask, handleStatus, handleHealth, handleDoctor, handleIncidents, handleIncident, handleAgentConfig, handleCancel, handleResume, handleRemember, handleForget, handleMemories } from "./commands/handlers.js";
 import { executeTask } from "./agent/task.js";
@@ -414,6 +415,22 @@ export function createBot(): Client {
           ...(sourceMetadata?.source_message_url ? { source_message_url: sourceMetadata.source_message_url } : {}),
           ...(sourceMetadata ? { source_metadata_json: JSON.stringify(sourceMetadata) } : {}),
           ...(parentContext ? { parent_context_json: JSON.stringify(parentContext) } : {}),
+        });
+        const reporter = new TaskReporter(newTaskId);
+        reporter.accepted({
+          route: sourceMetadata?.route_type ?? "thread_continuation",
+          cwd: continuableTask.cwd ?? config.defaultCwd,
+          user_id: message.author.id,
+          thread_id: message.channel.id,
+          resume_session_id: continuableTask.session_id,
+          attachments: followupAtts.length,
+        });
+        reporter.contextCaptured({
+          has_source_metadata: Boolean(sourceMetadata),
+          has_parent_context: Boolean(parentContext),
+          source_route_type: sourceMetadata?.route_type,
+          source_channel_id: sourceMetadata?.source_channel_id,
+          source_message_url: sourceMetadata?.source_message_url,
         });
         executeTask({
           taskId: newTaskId,

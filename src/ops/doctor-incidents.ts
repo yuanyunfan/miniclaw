@@ -6,6 +6,7 @@ import type {
   DoctorIncidentType,
   DoctorReport,
   DoctorSeverity,
+  DoctorTaskEventRow,
   DoctorTaskRow,
 } from "./doctor.js";
 import type { IncidentInput } from "../store/incidents.js";
@@ -30,6 +31,10 @@ function taskTitle(type: DoctorIncidentType, task: DoctorTaskRow): string {
 
 function taskSeverity(type: DoctorIncidentType): DoctorSeverity {
   return type === "task_running_too_long" ? "warning" : "warning";
+}
+
+function traceForTask(task: DoctorTaskRow, evidence: DoctorEvidence): DoctorTaskEventRow[] {
+  return evidence.taskEvents.filter((event) => event.task_id === task.id).slice(0, 12);
 }
 
 function cronDedupePart(cron: DoctorCronJobState): string {
@@ -80,6 +85,7 @@ function taskCandidate(task: DoctorTaskRow, evidence: DoctorEvidence, diagnosis:
     evidence: {
       task,
       generated_at: evidence.generatedAt,
+      trace: traceForTask(task, evidence),
       logs: evidence.logs.flatMap((log) => log.lines).slice(-8),
     },
     diagnosis: {

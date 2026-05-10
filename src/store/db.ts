@@ -4,7 +4,7 @@ import { dirname } from "path";
 import { config } from "../config.js";
 
 let db: Database.Database;
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export function getDb(): Database.Database {
   return db;
@@ -155,6 +155,18 @@ export function initDb(): void {
       FOREIGN KEY (incident_id) REFERENCES incidents(id)
     );
     CREATE INDEX IF NOT EXISTS idx_repair_runs_incident ON repair_runs(incident_id, created_at);
+    CREATE TABLE IF NOT EXISTS task_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      severity TEXT NOT NULL DEFAULT 'info',
+      message TEXT,
+      payload_json TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (task_id) REFERENCES tasks(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_task_events_task ON task_events(task_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_task_events_type ON task_events(event_type, created_at);
 	  `);
 
   runMigrations();
@@ -276,6 +288,25 @@ function runMigrations(): void {
   if (current < 5) {
     ensureColumn("smart_router_decisions", "capabilities_json", "TEXT");
     setSchemaVersion(5);
+  }
+
+  // v6: persist normalized task events for Auto Doctor trace diagnosis.
+  if (current < 6) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS task_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        severity TEXT NOT NULL DEFAULT 'info',
+        message TEXT,
+        payload_json TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (task_id) REFERENCES tasks(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_task_events_task ON task_events(task_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_task_events_type ON task_events(event_type, created_at);
+    `);
+    setSchemaVersion(6);
   }
 
   const after = getSchemaVersion();

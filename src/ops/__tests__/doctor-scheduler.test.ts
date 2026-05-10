@@ -29,6 +29,7 @@ function reportWithFailedTask(): DoctorReport {
         prompt: "fix bug",
         result_summary: "TypeError: boom",
       }],
+      taskEvents: [],
       cronErrors: [],
       pm2: { app: "miniclaw", found: true, status: "online", restartCount: 1 },
       git: { cwd: "/repo", branch: "main", sha: "abc1234", dirtyFiles: [] },

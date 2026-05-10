@@ -5,6 +5,7 @@ import type { Client, SendableChannels } from "discord.js";
 import { config } from "../config.js";
 import { createTask } from "../store/db.js";
 import { executeTask, getActiveTaskCount, type TaskResult } from "../agent/task.js";
+import { TaskReporter } from "../agent/task-reporter.js";
 import { loadPrompt } from "../agent/prompts.js";
 import type { CronJobTask, CronJobSkill } from "./types.js";
 import { renderTemplate } from "./template.js";
@@ -203,6 +204,20 @@ export async function runTask(job: CronJobTask, client: Client): Promise<void> {
     source_route_type: "cron_task",
     source_channel_id: job.channel,
   });
+  const reporter = new TaskReporter(taskId);
+  reporter.accepted({
+    route: "cron_task",
+    cron_name: job.name,
+    cwd,
+    channel_id: job.channel,
+    has_pre_script: Boolean(job.pre_script),
+    has_pre_provider: Boolean(job.pre_provider),
+  });
+  reporter.contextCaptured({
+    source_route_type: "cron_task",
+    source_channel_id: job.channel,
+    prepended_context_chars: prependedContext.length,
+  });
   const result = await executeTask({ taskId, prompt, cwd, channel, outputMode: "raw" });
   assertTaskResultOk(job.name, result);
   if (preProviderCommit) {
@@ -233,6 +248,19 @@ export async function runSkill(job: CronJobSkill, client: Client): Promise<void>
     cwd,
     source_route_type: "cron_skill",
     source_channel_id: job.channel,
+  });
+  const reporter = new TaskReporter(taskId);
+  reporter.accepted({
+    route: "cron_skill",
+    cron_name: job.name,
+    cwd,
+    channel_id: job.channel,
+    skill: job.skill,
+  });
+  reporter.contextCaptured({
+    source_route_type: "cron_skill",
+    source_channel_id: job.channel,
+    skill: job.skill,
   });
   const result = await executeTask({ taskId, prompt, cwd, channel, outputMode: "raw" });
   assertTaskResultOk(job.name, result);

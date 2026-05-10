@@ -18,6 +18,13 @@ vi.mock("../../agent/task.js", () => ({
   getActiveTaskCount: mocks.getActiveTaskCount,
 }));
 
+vi.mock("../../agent/task-reporter.js", () => ({
+  TaskReporter: class {
+    accepted(): undefined { return undefined; }
+    contextCaptured(): undefined { return undefined; }
+  },
+}));
+
 vi.mock("../../providers/index.js", () => ({
   runPreProvider: mocks.runPreProvider,
 }));

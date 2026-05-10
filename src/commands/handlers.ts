@@ -9,6 +9,7 @@ import { v4 as uuid } from "uuid";
 import { config } from "../config.js";
 import { createTask, getActiveTasks, getInterruptedTasks, getRecentTasks, getTask, updateTask } from "../store/db.js";
 import { executeTask, getActiveTaskCount, cancelTask, listActiveTaskIds } from "../agent/task.js";
+import { TaskReporter } from "../agent/task-reporter.js";
 import { taskStartEmbed, statusOverviewEmbed, taskErrorEmbed, healthEmbed } from "../discord/formatter.js";
 import { addMemory, deleteMemory, getAllMemories, getMemoriesByType } from "../store/memory.js";
 import { createLogger } from "../lib/log.js";
@@ -20,6 +21,7 @@ import { buildTaskSourceFromInteraction, withTaskThreadMetadata } from "../disco
 import { resolveTaskCwd } from "../routing/cwd.js";
 import { buildTaskPromptWithContext } from "../routing/task-context.js";
 import { formatDoctorReport, runDoctor, type DoctorMode } from "../ops/doctor.js";
+import { collectRepairMetrics, formatRepairMetrics } from "../ops/doctor-metrics.js";
 import { evaluateRepairPolicy } from "../ops/doctor-repair.js";
 import { formatDoctorShipResult, runDoctorShip } from "../ops/doctor-ship.js";
 import {
@@ -158,7 +160,13 @@ export async function handleIncidents(interaction: ChatInputCommandInteraction):
     : "(无 open incident)";
 
   await interaction.reply({
-    content: `MiniClaw open incidents (${incidents.length})\n\n${lines}`.slice(0, 1900),
+    content: [
+      `MiniClaw open incidents (${incidents.length})`,
+      "",
+      lines,
+      "",
+      formatRepairMetrics(collectRepairMetrics({ sinceDays: 14, limit: 100 })),
+    ].join("\n").slice(0, 1900),
     ephemeral: true,
   });
 }
@@ -178,6 +186,19 @@ function resolveIncident(input: string): { incident?: IncidentRow; error?: strin
     };
   }
   return { error: `找不到 incident \`${id}\`` };
+}
+
+async function sendIncidentOperationSummary(interaction: ChatInputCommandInteraction, content: string): Promise<void> {
+  const channelId = config.doctor.summaryChannelId;
+  if (!channelId) return;
+  try {
+    const channel = await interaction.client.channels.fetch(channelId);
+    if (channel && "isSendable" in channel && channel.isSendable()) {
+      await channel.send(content.slice(0, 1900));
+    }
+  } catch (err) {
+    log.error("Failed to send incident operation summary:", err);
+  }
 }
 
 export async function handleIncident(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -274,6 +295,35 @@ export async function handleIncident(interaction: ChatInputCommandInteraction): 
       status: result.status,
       branch: result.branch,
       commit_sha: result.commitSha,
+    });
+    const summary = formatDoctorShipResult(result).slice(0, 1900);
+    await interaction.editReply(summary);
+    await sendIncidentOperationSummary(interaction, summary);
+    return;
+  }
+
+  if (subcommand === "approve-ship" || subcommand === "request-restart") {
+    await interaction.deferReply({ ephemeral: true });
+    const restart = subcommand === "request-restart"
+      ? true
+      : interaction.options.getBoolean("restart") ?? false;
+    const result = await runDoctorShip({
+      incidentId: incident.id,
+      dryRun: false,
+      execute: true,
+      approveMain: true,
+      restart,
+      app: "miniclaw",
+      json: false,
+    });
+    appendIncidentEvent(incident.id, subcommand === "approve-ship" ? "ship_approved_from_discord" : "restart_requested_from_discord", {
+      user_id: interaction.user.id,
+      status: result.status,
+      branch: result.branch,
+      commit_sha: result.commitSha,
+      restart_requested: restart,
+      main_updated: result.mainUpdated,
+      restart_attempted: result.restartAttempted,
     });
     await interaction.editReply(formatDoctorShipResult(result).slice(0, 1900));
     return;
@@ -413,14 +463,35 @@ export async function handleResume(interaction: ChatInputCommandInteraction): Pr
     ...(sourceMetadata?.source_message_url ? { source_message_url: sourceMetadata.source_message_url } : {}),
     ...(sourceMetadata ? { source_metadata_json: JSON.stringify(sourceMetadata) } : {}),
   });
+  const reporter = new TaskReporter(newTaskId);
+  reporter.accepted({
+    route: sourceMetadata?.route_type ?? "slash_resume",
+    cwd,
+    user_id: interaction.user.id,
+    thread_id: thread.id,
+    resume_session_id: match.session_id,
+  });
+  reporter.contextCaptured({
+    has_source_metadata: Boolean(sourceMetadata),
+    has_parent_context: false,
+    source_route_type: sourceMetadata?.route_type,
+    source_channel_id: sourceMetadata?.source_channel_id,
+    source_message_url: sourceMetadata?.source_message_url,
+  });
 
   await interaction.editReply(`✅ 恢复任务，请查看线程 <#${thread.id}>`);
-  const statusMessage = await thread.send({
-    embeds: [taskStartEmbed(newTaskId, `[恢复] ${followup}`, cwd, {
-      provider: config.agentProvider,
-      model: config.model,
-    })],
-  });
+  let statusMessage;
+  try {
+    statusMessage = await thread.send({
+      embeds: [taskStartEmbed(newTaskId, `[恢复] ${followup}`, cwd, {
+        provider: config.agentProvider,
+        model: config.model,
+      })],
+    });
+  } catch (err) {
+    reporter.discordDeliveryFailed("slash_resume_status_send", err);
+    throw err;
+  }
 
   if (!thread.isTextBased() || thread.type !== ChannelType.PublicThread) {
     await interaction.editReply("❌ 线程创建异常");

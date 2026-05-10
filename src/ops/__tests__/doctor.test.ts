@@ -27,6 +27,13 @@ function createTaskDb(rows: Array<{
   prompt?: string;
   result_summary?: string | null;
   created_at?: string;
+  events?: Array<{
+    event_type: string;
+    severity?: string;
+    message?: string;
+    payload_json?: string;
+    created_at?: string;
+  }>;
 }>): string {
   const dbPath = join(tmp, "data.db");
   const db = new Database(dbPath);
@@ -52,6 +59,15 @@ function createTaskDb(rows: Array<{
       source_metadata_json TEXT,
       parent_context_json TEXT
     );
+    CREATE TABLE task_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      severity TEXT NOT NULL DEFAULT 'info',
+      message TEXT,
+      payload_json TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
   const insert = db.prepare(
     `INSERT INTO tasks (
@@ -62,6 +78,10 @@ function createTaskDb(rows: Array<{
        @id, @discord_thread_id, @discord_user_id, @prompt, @cwd, @session_id, @status,
        @result_summary, @duration_ms, @created_at, @completed_at, @source_route_type, @source_channel_id
      )`
+  );
+  const insertEvent = db.prepare(
+    `INSERT INTO task_events (task_id, event_type, severity, message, payload_json, created_at)
+     VALUES (@task_id, @event_type, @severity, @message, @payload_json, @created_at)`
   );
   for (const row of rows) {
     insert.run({
@@ -79,6 +99,16 @@ function createTaskDb(rows: Array<{
       source_route_type: "task_channel",
       source_channel_id: "channel-1",
     });
+    for (const event of row.events ?? []) {
+      insertEvent.run({
+        task_id: row.id,
+        event_type: event.event_type,
+        severity: event.severity ?? "info",
+        message: event.message ?? null,
+        payload_json: event.payload_json ?? null,
+        created_at: event.created_at ?? "2026-05-10T03:11:00.000Z",
+      });
+    }
   }
   db.close();
   return dbPath;
@@ -230,5 +260,40 @@ describe("runDoctor", () => {
 
     expect(report.diagnosis.repairAllowed).toBe(false);
     expect(report.diagnosis.recommendedAction).toContain("dirty files");
+  });
+
+  it("uses normalized task trace events before falling back to raw logs", async () => {
+    const dbPath = createTaskDb([{
+      id: "task-discord-trace",
+      status: "failed",
+      result_summary: "final message delivery failed",
+      events: [{
+        event_type: "discord_delivery_failed",
+        severity: "warning",
+        message: "Missing Access while editing final status",
+        payload_json: JSON.stringify({ operation: "final_markdown_send" }),
+      }],
+    }]);
+    const cronStatePath = writeJson(join(tmp, "cron-state.json"), { jobs: {} });
+    const connectivityStatePath = writeJson(join(tmp, "connectivity.json"), { status: "discord_ok", checks: {} });
+
+    const report = await runDoctor(
+      {
+        mode: "task",
+        taskIdPrefix: "task-discord",
+        json: false,
+        dbPath,
+        cronStatePath,
+        connectivityStatePath,
+        logDir: writeLogDir([]),
+        cwd: tmp,
+      },
+      { commandRunner: fakeRunner() }
+    );
+
+    expect(report.evidence.taskEvents).toHaveLength(1);
+    expect(report.diagnosis.category).toBe("discord");
+    expect(report.diagnosis.evidenceSummary.some((line) => line.includes("trace_errors="))).toBe(true);
+    expect(formatDoctorReport(report)).toContain("Recent task trace events");
   });
 });

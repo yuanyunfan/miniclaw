@@ -116,6 +116,12 @@ describe("schema migrations", () => {
     expect(__testables.columnExists("incident_events", "event_type")).toBe(true);
     expect(__testables.columnExists("repair_runs", "incident_id")).toBe(true);
   });
+
+  it("ensures normalized task event table exists", () => {
+    expect(__testables.columnExists("task_events", "task_id")).toBe(true);
+    expect(__testables.columnExists("task_events", "event_type")).toBe(true);
+    expect(__testables.columnExists("task_events", "payload_json")).toBe(true);
+  });
 });
 
 describe("updateTask", () => {

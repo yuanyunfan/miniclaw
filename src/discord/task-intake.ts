@@ -2,6 +2,7 @@ import type { AnyThreadChannel, Attachment, Message } from "discord.js";
 import { v4 as uuid } from "uuid";
 import { config } from "../config.js";
 import { executeTask, getActiveTaskCount } from "../agent/task.js";
+import { TaskReporter } from "../agent/task-reporter.js";
 import { createTask } from "../store/db.js";
 import { processAttachments } from "./attachments.js";
 import { taskStartEmbed } from "./formatter.js";
@@ -85,15 +86,38 @@ export async function createAndRunDiscordTask(params: DiscordTaskIntakeParams): 
     ...(sourceMetadata ? { source_metadata_json: JSON.stringify(sourceMetadata) } : {}),
     ...(params.taskContext?.parent ? { parent_context_json: JSON.stringify(params.taskContext.parent) } : {}),
   });
-
-  const statusMessage = await thread.send({
-    embeds: [taskStartEmbed(taskId, displayPrompt, params.cwd, {
-      provider: config.agentProvider,
-      model: config.model,
-    })],
+  const reporter = new TaskReporter(taskId);
+  reporter.accepted({
+    route: sourceMetadata?.route_type ?? "discord_task",
+    cwd: params.cwd,
+    user_id: params.userId,
+    thread_id: thread.id,
+    source_channel_id: sourceMetadata?.source_channel_id,
+    source_message_id: sourceMetadata?.source_message_id,
+    attachments: attachments.length,
   });
+  reporter.contextCaptured({
+    has_source_metadata: Boolean(sourceMetadata),
+    has_parent_context: Boolean(params.taskContext?.parent),
+    source_route_type: sourceMetadata?.route_type,
+    source_channel_id: sourceMetadata?.source_channel_id,
+    source_message_url: sourceMetadata?.source_message_url,
+  });
+
+  let statusMessage: Message;
+  try {
+    statusMessage = await thread.send({
+      embeds: [taskStartEmbed(taskId, displayPrompt, params.cwd, {
+        provider: config.agentProvider,
+        model: config.model,
+      })],
+    });
+  } catch (err) {
+    reporter.discordDeliveryFailed("intake_status_send", err);
+    throw err;
+  }
   for (const notice of attachmentNotices) {
-    await thread.send(notice).catch(() => {});
+    await thread.send(notice).catch((err) => reporter.discordDeliveryFailed("attachment_notice_send", err));
   }
 
   const result: DiscordTaskIntakeResult = { taskId, threadId: thread.id, thread, statusMessage };

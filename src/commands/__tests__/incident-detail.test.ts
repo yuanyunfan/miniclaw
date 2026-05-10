@@ -18,7 +18,15 @@ function incident(overrides: Partial<IncidentRow> = {}): IncidentRow {
       channel_id: "channel-1",
       message_url: "https://discord.com/channels/g/c/m",
     }),
-    evidence_json: null,
+    evidence_json: JSON.stringify({
+      trace: [{
+        task_id: "task-abc",
+        event_type: "provider_error",
+        severity: "error",
+        message: "TypeError: boom",
+        created_at: "2026-05-10T01:08:00.000Z",
+      }],
+    }),
     diagnosis_json: JSON.stringify({
       category: "miniclaw_bug",
       repairAllowed: true,
@@ -71,9 +79,12 @@ describe("incident detail formatting", () => {
     expect(text).toContain("severity/status: warning/repair_ready");
     expect(text).toContain("category: miniclaw_bug");
     expect(text).toContain("message_url: https://discord.com/channels/g/c/m");
+    expect(text).toContain("Task Trace");
+    expect(text).toContain("error/provider_error");
     expect(text).toContain("doctor-repair/incident-123456");
     expect(text).toContain("repair_ready");
     expect(text).toContain("/incident ship-preview id:incident");
+    expect(text).toContain("/incident approve-ship id:incident");
   });
 
   it("renders resolution summaries", () => {

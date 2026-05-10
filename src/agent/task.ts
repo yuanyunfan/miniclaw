@@ -27,6 +27,8 @@ import { assertProviderSession, formatSessionId } from "./session.js";
 import { fmtTokens, formatAnthropicUsage, formatCodexUsage } from "./usage.js";
 import { buildFakeTaskResult } from "../e2e/fake-agent.js";
 import { formatTaskPromptForSystem } from "../routing/task-context.js";
+import { appendTaskEvent, type TaskEventSeverity } from "../store/task-events.js";
+import { TaskReporter } from "./task-reporter.js";
 
 const log = createLogger("task");
 
@@ -160,6 +162,7 @@ export function interruptActiveTasks(reason: string): string[] {
     const ctrl = activeTasks.get(taskId);
     if (!ctrl) continue;
     interruptedTasks.set(taskId, reason);
+    recordTaskEvent(taskId, "task_interrupted", "warning", reason);
     ctrl.abort(new Error(reason));
     updateTask(taskId, {
       status: "interrupted",
@@ -176,6 +179,7 @@ export function cancelTask(taskId: string): boolean {
   const ctrl = activeTasks.get(taskId);
   if (!ctrl) return false;
   cancelledTasks.add(taskId);
+  recordTaskEvent(taskId, "task_cancel_requested", "warning", "cancel requested by operator");
   ctrl.abort();
   activeTasks.delete(taskId);
   notifyActiveTaskChange();
@@ -220,6 +224,14 @@ function resetTaskRuntimeForTest(): void {
   interruptedTasks.clear();
   for (const waiter of drainWaiters) waiter();
   drainWaiters.clear();
+}
+
+function recordTaskEvent(taskId: string, eventType: string, severity: TaskEventSeverity, message?: string, payload?: unknown): void {
+  try {
+    appendTaskEvent({ taskId, eventType, severity, message, payload });
+  } catch {
+    // Task events are observability-only; never break cancellation/drain paths.
+  }
 }
 
 function rawTaskMessages(taskId: string, result: TaskResult): string[] {
@@ -308,6 +320,7 @@ async function sendEmbedTaskResult(
   toolCallLog: string[],
   toolCount: number,
   statusMessage?: Message,
+  reporter?: TaskReporter,
 ): Promise<void> {
   const status = finalTaskStatus(params.taskId, abortController, result.success);
   await progress.complete(params.channel, {
@@ -329,8 +342,16 @@ async function sendEmbedTaskResult(
       })
     : taskErrorEmbed(params.taskId, result.result);
 
-  await updateStatusMessage(params.channel, statusMessage, embed);
-  await sendMarkdownTaskResult(params.channel, result);
+  try {
+    await updateStatusMessage(params.channel, statusMessage, embed);
+  } catch (err) {
+    reporter?.discordDeliveryFailed("status_message_update", err);
+  }
+  try {
+    await sendMarkdownTaskResult(params.channel, result);
+  } catch (err) {
+    reporter?.discordDeliveryFailed("final_markdown_send", err);
+  }
 }
 
 async function executeFakeTask(
@@ -339,6 +360,7 @@ async function executeFakeTask(
   abortController: AbortController,
   startedAt: number,
   shortId: string,
+  reporter: TaskReporter,
 ): Promise<TaskResult> {
   const fake = buildFakeTaskResult(params.prompt, config.agentProvider);
   const result: TaskResult = {
@@ -350,13 +372,22 @@ async function executeFakeTask(
     result: fake.reply,
     tokensSummary: fake.tokensSummary,
   };
+  const status = finalTaskStatus(params.taskId, abortController, result.success);
   updateTask(params.taskId, {
     session_id: result.sessionId,
-    status: finalTaskStatus(params.taskId, abortController, result.success),
+    status,
     result_summary: result.result,
     cost_usd: result.costUsd,
     duration_ms: result.durationMs,
     completed_at: new Date().toISOString(),
+  });
+  reporter.sessionStarted(result.sessionId, config.agentProvider);
+  reporter.finished(status, {
+    provider: config.agentProvider,
+    duration_ms: result.durationMs,
+    turns: result.turns,
+    cost_usd: result.costUsd,
+    session_id: result.sessionId,
   });
   log.info(`✓ ${shortId} e2e-fake done turns=1 wall=${result.durationMs}ms ${result.tokensSummary}`);
 
@@ -366,7 +397,7 @@ async function executeFakeTask(
     return result;
   }
 
-  await sendEmbedTaskResult(params, progress, abortController, result, ["🧪 e2e fake agent"], 0, params.statusMessage);
+  await sendEmbedTaskResult(params, progress, abortController, result, ["🧪 e2e fake agent"], 0, params.statusMessage, reporter);
   return result;
 }
 
@@ -418,6 +449,7 @@ async function executeCodexTask(
   abortController: AbortController,
   startedAt: number,
   shortId: string,
+  reporter: TaskReporter,
 ): Promise<TaskResult> {
   const memoryBlock = buildMemoryPrompt();
   const identityLine = IDENTITY_LINE_TASK;
@@ -465,22 +497,27 @@ async function executeCodexTask(
       case "thread.started": {
         sessionId = formatSessionId("codex", event.thread_id);
         updateTask(params.taskId, { session_id: sessionId });
+        reporter.sessionStarted(sessionId, "codex");
         break;
       }
       case "turn.started": {
         turns++;
+        reporter.turnStarted(turns, "codex");
         break;
       }
       case "turn.completed": {
         tokensSummary = formatCodexUsage(event.usage);
+        reporter.turnCompleted(turns, "codex", event.usage);
         break;
       }
       case "turn.failed": {
         failedMessage = event.error.message;
+        reporter.providerError("codex", failedMessage, { event_type: event.type });
         break;
       }
       case "error": {
         failedMessage = event.message;
+        reporter.providerError("codex", failedMessage, { event_type: event.type });
         break;
       }
       case "item.started":
@@ -493,6 +530,7 @@ async function executeCodexTask(
         const line = formatCodexItemLine(event.item);
         if (line && pushCompactedLine(toolCallLog, line)) {
           toolStep++;
+          reporter.toolEvent("codex", line, { item_type: event.item.type, stream_event: event.type });
           await updateProgressTail(progress, params.channel, toolCallLog, turns, toolStep);
         }
         break;
@@ -521,13 +559,22 @@ async function executeCodexTask(
     ...(tokensSummary ? { tokensSummary } : {}),
   };
 
+  const status = finalTaskStatus(params.taskId, abortController, lastResult.success);
   updateTask(params.taskId, {
     session_id: lastResult.sessionId,
-    status: finalTaskStatus(params.taskId, abortController, lastResult.success),
+    status,
     result_summary: lastResult.result.slice(0, 10000),
     cost_usd: lastResult.costUsd,
     duration_ms: lastResult.durationMs,
     completed_at: new Date().toISOString(),
+  });
+  reporter.finished(status, {
+    provider: "codex",
+    duration_ms: lastResult.durationMs,
+    turns: lastResult.turns,
+    cost_usd: lastResult.costUsd,
+    session_id: lastResult.sessionId,
+    tool_count: toolStep,
   });
 
   log.info(
@@ -543,7 +590,7 @@ async function executeCodexTask(
     return lastResult;
   }
 
-  await sendEmbedTaskResult(params, progress, abortController, lastResult, toolCallLog, toolStep, params.statusMessage);
+  await sendEmbedTaskResult(params, progress, abortController, lastResult, toolCallLog, toolStep, params.statusMessage, reporter);
 
   return lastResult;
 }
@@ -552,9 +599,20 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
   const abortController = new AbortController();
   activeTasks.set(params.taskId, abortController);
   const outputMode = params.outputMode ?? "embed";
-  const progress = new ProgressReporter(params.taskId, { minUpdateIntervalMs: 2000 });
+  const reporter = new TaskReporter(params.taskId);
+  const progress = new ProgressReporter(params.taskId, {
+    minUpdateIntervalMs: 2000,
+    onDeliveryError: (operation, err) => reporter.discordDeliveryFailed(`progress_${operation}`, err),
+  });
   const startedAt = Date.now();
   const shortId = params.taskId.slice(0, 8);
+  reporter.started({
+    provider: config.agentProvider,
+    model: config.model,
+    cwd: params.cwd,
+    output_mode: outputMode,
+    resume: Boolean(params.resumeSessionId),
+  });
   log.info(`▶ ${shortId} start cwd=${params.cwd}${params.resumeSessionId ? ` resume=${params.resumeSessionId.slice(0, 8)}` : ""} prompt="${params.prompt.slice(0, 80).replace(/\s+/g, " ")}"`);
 
   const resumeId = params.resumeSessionId;
@@ -571,7 +629,8 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
             model: config.model,
           })],
         });
-      } catch {
+      } catch (err) {
+        reporter.discordDeliveryFailed("start_status_send", err);
         // Status card is best-effort; task execution should continue.
       }
     }
@@ -580,11 +639,11 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
     }
 
     if (config.e2e.fakeAgent) {
-      return await executeFakeTask(params, progress, abortController, startedAt, shortId);
+      return await executeFakeTask(params, progress, abortController, startedAt, shortId, reporter);
     }
 
     if (config.agentProvider === "codex") {
-      return await executeCodexTask(params, progress, abortController, startedAt, shortId);
+      return await executeCodexTask(params, progress, abortController, startedAt, shortId, reporter);
     }
 
     const { query } = await import("@anthropic-ai/claude-agent-sdk");
@@ -709,6 +768,7 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
           if ("session_id" in msg && msg.session_id) {
             sessionId = formatSessionId("claude", msg.session_id);
             updateTask(params.taskId, { session_id: sessionId });
+            reporter.sessionStarted(sessionId, "claude");
           }
           break;
         }
@@ -740,6 +800,10 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
               }
             }
             toolCallLog.push(line);
+            reporter.toolEvent("claude", line, {
+              tool_name: block.name,
+              parent_tool_use_id: parentId,
+            });
           }
 
           if (toolCallLog.length) {
@@ -767,6 +831,9 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
             result,
             ...(tokensSummary ? { tokensSummary } : {}),
           };
+          if (!lastResult.success) {
+            reporter.providerError("claude", result, { subtype: msg.subtype });
+          }
           break;
         }
       }
@@ -785,13 +852,22 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
       };
     }
 
+    const status = finalTaskStatus(params.taskId, abortController, lastResult.success);
     updateTask(params.taskId, {
       session_id: lastResult.sessionId,
-      status: finalTaskStatus(params.taskId, abortController, lastResult.success),
+      status,
       result_summary: lastResult.result.slice(0, 10000),
       cost_usd: lastResult.costUsd,
       duration_ms: lastResult.durationMs,
       completed_at: new Date().toISOString(),
+    });
+    reporter.finished(status, {
+      provider: "claude",
+      duration_ms: lastResult.durationMs,
+      turns: lastResult.turns,
+      cost_usd: lastResult.costUsd,
+      session_id: lastResult.sessionId,
+      tool_count: toolStep,
     });
 
     const wallMs = Date.now() - startedAt;
@@ -814,7 +890,7 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
     }
 
     // outputMode === "embed"（/task 默认）
-    await sendEmbedTaskResult(params, progress, abortController, lastResult, toolCallLog, toolStep, params.statusMessage);
+    await sendEmbedTaskResult(params, progress, abortController, lastResult, toolCallLog, toolStep, params.statusMessage, reporter);
 
     return lastResult;
   } catch (err) {
@@ -825,16 +901,28 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
       ? "任务已被用户取消"
       : err instanceof Error ? err.message : String(err);
     log.error(`✗ ${shortId} threw after ${durationMs}ms: ${errMsg}`);
+    reporter.providerError(config.agentProvider, errMsg, { duration_ms: durationMs });
     await progress.complete(params.channel, { keepAsError: true });
 
+    const status = finalTaskStatus(params.taskId, abortController, false);
     updateTask(params.taskId, {
-      status: finalTaskStatus(params.taskId, abortController, false),
+      status,
       result_summary: errMsg.slice(0, 10000),
       duration_ms: durationMs,
       completed_at: new Date().toISOString(),
     });
+    reporter.finished(status, {
+      provider: config.agentProvider,
+      duration_ms: durationMs,
+      turns: 0,
+      cost_usd: 0,
+    });
 
-    await params.channel.send({ embeds: [taskErrorEmbed(params.taskId, errMsg)] });
+    try {
+      await params.channel.send({ embeds: [taskErrorEmbed(params.taskId, errMsg)] });
+    } catch (sendErr) {
+      reporter.discordDeliveryFailed("error_embed_send", sendErr);
+    }
 
     return {
       success: false,

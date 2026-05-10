@@ -98,6 +98,25 @@ const commands = [
         .addStringOption((opt) =>
           opt.setName("id").setDescription("incident id 或前缀").setRequired(true)
         )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("approve-ship")
+        .setDescription("显式批准 guarded ship 更新 main，可选请求 safe restart")
+        .addStringOption((opt) =>
+          opt.setName("id").setDescription("incident id 或前缀").setRequired(true)
+        )
+        .addBooleanOption((opt) =>
+          opt.setName("restart").setDescription("ship 后是否请求 safe restart（不 force）").setRequired(false)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("request-restart")
+        .setDescription("对已准备 ship 的 incident 请求 guarded ship + safe restart")
+        .addStringOption((opt) =>
+          opt.setName("id").setDescription("incident id 或前缀").setRequired(true)
+        )
     ),
 
   new SlashCommandBuilder()

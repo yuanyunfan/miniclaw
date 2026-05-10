@@ -1,12 +1,12 @@
 # Auto Doctor
 
-Status: phase-4b-guarded-ship
+Status: phase-5d-discord-operator-actions
 
 ## Summary
 
-Auto Doctor is MiniClaw's read-only runtime diagnosis path. It collects local evidence from task DB rows, cron state, PM2, logs, connectivity state, and Git state, then produces a concise diagnosis without modifying files, DB state, Git history, or PM2 runtime.
+Auto Doctor is MiniClaw's read-only runtime diagnosis path. It collects local evidence from task DB rows, normalized task trace events, cron state, PM2, logs, connectivity state, and Git state, then produces a concise diagnosis without modifying files, DB state, Git history, or PM2 runtime.
 
-This is the first slice of the broader self-repair plan. Phase 2 adds incident persistence and an optional hourly read-only diagnosis loop. Phase 3A adds a guarded repair worker that can run in an isolated worktree. Phase 3B commits verified repairs to the isolated repair branch. Phase 4A can optionally push that repair branch. Phase 4B adds an explicit operator-approved ship path that can fast-forward `main` from a pushed repair branch and optionally call safe restart.
+This is the first slice of the broader self-repair plan. Phase 2 adds incident persistence and an optional hourly read-only diagnosis loop. Phase 3A adds a guarded repair worker that can run in an isolated worktree. Phase 3B commits verified repairs to the isolated repair branch. Phase 4A can optionally push that repair branch. Phase 4B adds an explicit operator-approved ship path that can fast-forward `main` from a pushed repair branch and optionally call safe restart. Phase 5A adds incident operator commands, Phase 5B adds normalized task trace evidence, Phase 5C adds repair metrics and promotion blockers, and Phase 5D exposes guarded ship/restart operator shortcuts in Discord.
 
 ## Commands
 
@@ -39,6 +39,8 @@ Discord:
 /incident ignore id:<incident-id-or-prefix> reason:<optional-reason>
 /incident retry-repair id:<incident-id-or-prefix>
 /incident ship-preview id:<incident-id-or-prefix>
+/incident approve-ship id:<incident-id-or-prefix> restart:<true-or-false>
+/incident request-restart id:<incident-id-or-prefix>
 ```
 
 Automatic scan:
@@ -57,6 +59,7 @@ Automatic scan:
 - Logs: recent matching lines from `~/.miniclaw/logs/miniclaw-error.log` and `miniclaw-out.log`.
 - Connectivity state: Discord/network/SMTP probe state.
 - Git state: branch, commit SHA, remote, and dirty files.
+- Normalized task trace events: task acceptance/context capture, provider/tool progress, provider errors, Discord delivery failures, cancellation/interruption, and final state.
 
 ## Diagnosis Output
 
@@ -108,6 +111,7 @@ Incidents use deterministic dedupe keys, so repeated hourly scans update the sam
 - diagnosis category, repair-allowed flag, and recommended action
 - source metadata such as task id, cron name, channel id, and Discord message URL when present
 - latest repair run branch, commit SHA, workspace, and completion state
+- recent structured task trace events when the incident came from a Discord or cron task
 - recent incident events
 - suggested follow-up operator commands
 
@@ -119,6 +123,22 @@ Lifecycle commands keep the incident record auditable:
 - `/incident ship-preview` runs the guarded `doctor:ship` dry-run path and records a `ship_preview_requested` event.
 
 Resolved and ignored incidents are excluded from the default `/incidents` open list. Retry repair does not execute a long-running repair inside the Discord interaction and does not bypass `doctor.auto_repair_enabled`, category/type policy, path allowlists, dirty-worktree checks, or approval gates.
+
+`/incidents` also includes a compact repair metrics block over recent `repair_runs`: attempts, successful repairs, pushed branches, shipped repairs, possible post-ship regression incidents within 72 hours, blocked/verification-failed runs, status/type/category counts, average changed file count, average verification gate duration, and promotion-policy blockers. The promotion policy is intentionally conservative: approval relaxation remains ineligible until there is enough successful repair history, no recent repair failures or possible post-ship regression incidents, and live restart continues to use safe-restart without `--force`.
+
+## Task Trace Events
+
+MiniClaw stores compact structured task events in the SQLite `task_events` table. The table is observability-only: failures to persist a trace event are logged and must not break task execution, cancellation, or shutdown drain.
+
+The `TaskReporter` boundary records task lifecycle and runtime signals:
+
+- task accepted and context captured
+- session started, turn started/completed, and tool events
+- provider errors from Codex or Claude
+- Discord progress, status, and final-message delivery failures
+- cancellation, shutdown interruption, completion, failure, and recovery-relevant finish events
+
+Auto Doctor reads these events for selected or recent task candidates. Classification uses structured trace signals before falling back to raw process logs, so Discord delivery failures, provider auth/data/network failures, and MiniClaw runtime bugs can be separated more reliably. Persisted task incidents include the relevant trace slice in `evidence_json.trace`, and `/incident view` renders it under `Task Trace`.
 
 ## Guarded Repair Worker
 
@@ -178,6 +198,12 @@ pnpm run doctor:ship -- --incident <incident-id> --execute --approve-main --rest
 The restart path calls `pnpm safe-restart` through the same safe-restart implementation used by the standalone command. It never passes `--force`. If active tasks exist, restart is deferred, `live_restart_deferred` is recorded, and the patch remains shipped but not live-restarted.
 
 Repair summaries posted to `doctor.summary_channel_id` include the preview, ship, and ship-plus-restart commands when a repair branch has been pushed.
+
+Discord operator shortcuts reuse the same server-side ship path:
+
+- `/incident ship-preview` runs the dry-run preview and records a preview event.
+- `/incident approve-ship` runs `doctor:ship` execute mode with explicit main approval; `restart:true` additionally requests safe restart without `--force`.
+- `/incident request-restart` runs the guarded ship path with safe restart requested. It does not bypass clean-worktree, branch SHA, fast-forward, push, or safe-restart checks.
 
 ## Safety Boundary
 

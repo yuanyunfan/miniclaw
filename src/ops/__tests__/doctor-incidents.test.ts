@@ -11,6 +11,7 @@ function baseReport(): DoctorReport {
       cronStatePath: "/tmp/cron-state.json",
       connectivityStatePath: "/tmp/connectivity.json",
       taskCandidates: [],
+      taskEvents: [],
       cronErrors: [],
       pm2: { app: "miniclaw", found: true, status: "online", restartCount: 3 },
       git: { cwd: "/repo", branch: "main", sha: "abc1234", dirtyFiles: [] },
@@ -41,6 +42,15 @@ describe("deriveDoctorIncidentCandidates", () => {
       source_channel_id: "channel-1",
       source_message_url: "https://discord.com/channels/g/c/m",
     });
+    report.evidence.taskEvents.push({
+      id: 1,
+      task_id: "task-123456",
+      event_type: "provider_error",
+      severity: "error",
+      message: "TypeError: boom",
+      payload_json: null,
+      created_at: "2026-05-10T03:01:00.000Z",
+    });
     report.evidence.cronErrors.push({
       name: "daily-ai-news",
       last_status: "error",
@@ -60,6 +70,9 @@ describe("deriveDoctorIncidentCandidates", () => {
       subjectId: "task-123456",
       subjectType: "task",
       notify: true,
+      evidence: {
+        trace: [expect.objectContaining({ event_type: "provider_error" })],
+      },
     });
   });
 

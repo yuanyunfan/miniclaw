@@ -42,6 +42,16 @@ export interface DoctorTaskRow {
   duration_ms?: number | null;
 }
 
+export interface DoctorTaskEventRow {
+  id: number;
+  task_id: string;
+  event_type: string;
+  severity: string;
+  message?: string | null;
+  payload_json?: string | null;
+  created_at: string;
+}
+
 export interface DoctorCronJobState {
   name: string;
   last_run_at?: string;
@@ -98,6 +108,7 @@ export interface DoctorEvidence {
   connectivityStatePath: string;
   task?: DoctorTaskRow;
   taskCandidates: DoctorTaskRow[];
+  taskEvents: DoctorTaskEventRow[];
   cron?: DoctorCronJobState;
   cronErrors: DoctorCronJobState[];
   pm2: DoctorPm2State;
@@ -218,6 +229,13 @@ function hasTasksTable(db: Database.Database): boolean {
   return row?.name === "tasks";
 }
 
+function hasTaskEventsTable(db: Database.Database): boolean {
+  const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'task_events'").get() as
+    | { name?: string }
+    | undefined;
+  return row?.name === "task_events";
+}
+
 function collectTasks(dbPath: string, mode: DoctorMode, taskIdPrefix: string | undefined, now: Date): {
   task?: DoctorTaskRow;
   taskCandidates: DoctorTaskRow[];
@@ -251,6 +269,42 @@ function collectTasks(dbPath: string, mode: DoctorMode, taskIdPrefix: string | u
       return Number.isFinite(createdMs) && now.getTime() - createdMs > LONG_RUNNING_TASK_MS;
     });
     return { task: candidates[0], taskCandidates: candidates };
+  } finally {
+    db.close();
+  }
+}
+
+function taskEventRow(row: Record<string, unknown>): DoctorTaskEventRow {
+  return {
+    id: Number(row.id ?? 0),
+    task_id: String(row.task_id ?? ""),
+    event_type: String(row.event_type ?? ""),
+    severity: String(row.severity ?? "info"),
+    message: nullableCleanText(row.message, 800),
+    payload_json: nullableCleanText(row.payload_json, 1200),
+    created_at: String(row.created_at ?? ""),
+  };
+}
+
+function collectTaskEvents(dbPath: string, taskIds: string[]): DoctorTaskEventRow[] {
+  const uniqueIds = [...new Set(taskIds.filter(Boolean))].slice(0, 10);
+  if (!uniqueIds.length || !existsSync(dbPath)) return [];
+
+  const db = new Database(dbPath, { readonly: true, fileMustExist: true });
+  try {
+    if (!hasTaskEventsTable(db)) return [];
+    const stmt = db.prepare(
+      `SELECT * FROM task_events
+       WHERE task_id = ?
+       ORDER BY created_at DESC, id DESC
+       LIMIT ?`
+    );
+    const events = uniqueIds.flatMap((taskId) =>
+      (stmt.all(taskId, 12) as Record<string, unknown>[]).map(taskEventRow)
+    );
+    return events
+      .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id - a.id)
+      .slice(0, 80);
   } finally {
     db.close();
   }
@@ -405,11 +459,11 @@ function errorMessage(err: unknown): string {
 }
 
 function classifyCategory(text: string, connectivity: DoctorConnectivityState): DoctorCategory {
-  const lower = text.toLowerCase();
   if (connectivity.status && !["discord_ok", "recovered"].includes(connectivity.status)) {
     if (connectivity.status.includes("discord") || connectivity.status.includes("vpn")) return "discord";
     return "network";
   }
+  if (/(discord_delivery_failed|discord|missing access|unknown message|cannot send messages|message send|message edit)/i.test(text)) return "discord";
   if (/(cookie|auth|unauthori[sz]ed|forbidden|credential|session expired|login|登录|鉴权|认证)/i.test(text)) return "provider_auth";
   if (/(no new|not found|empty|没有|无新|0 条|0条|no data|data absence)/i.test(text)) return "provider_data";
   if (/(timeout|429|rate limit|econn|enotfound|http 5\d\d|upstream|third[- ]party)/i.test(text)) return "third_party";
@@ -424,10 +478,17 @@ function isRepairAllowed(type: DoctorIncidentType, category: DoctorCategory, git
 }
 
 function diagnose(evidence: DoctorEvidence): DoctorDiagnosis {
+  const traceText = evidence.taskEvents.map((event) => [
+    event.event_type,
+    event.severity,
+    event.message,
+    event.payload_json,
+  ].filter(Boolean).join(" ")).join("\n");
   const subjectText = [
     evidence.task?.status,
     evidence.task?.result_summary,
     evidence.task?.prompt,
+    traceText,
     evidence.cron?.last_error,
     evidence.cronErrors[0]?.last_error,
     evidence.logs.flatMap((log) => log.lines).slice(-20).join("\n"),
@@ -468,6 +529,16 @@ function diagnose(evidence: DoctorEvidence): DoctorDiagnosis {
     evidenceSummary.push(`task=${evidence.task.id.slice(0, 8)} status=${evidence.task.status}`);
     if (evidence.task.result_summary) evidenceSummary.push(`task_result=${evidence.task.result_summary.slice(0, 180)}`);
     if (evidence.task.source_route_type) evidenceSummary.push(`route=${evidence.task.source_route_type}`);
+  }
+  const traceErrors = evidence.taskEvents
+    .filter((event) => ["warning", "error"].includes(event.severity))
+    .slice(0, 3)
+    .map((event) => `${event.task_id.slice(0, 8)}:${event.event_type}${event.message ? `=${event.message.slice(0, 120)}` : ""}`);
+  if (traceErrors.length) {
+    evidenceSummary.push(`trace_errors=${traceErrors.join(" | ")}`);
+  } else if (evidence.taskEvents.length) {
+    const recentTrace = evidence.taskEvents.slice(0, 3).map((event) => `${event.task_id.slice(0, 8)}:${event.event_type}`);
+    evidenceSummary.push(`trace=${recentTrace.join(" | ")}`);
   }
   if (evidence.cron) {
     evidenceSummary.push(`cron=${evidence.cron.name} status=${evidence.cron.last_status ?? "unknown"}`);
@@ -538,6 +609,10 @@ export async function runDoctor(args: DoctorArgs, options: RunDoctorOptions = {}
   const connectivityPath = connectivityStatePath(env, args.connectivityStatePath);
   const subject = args.mode === "task" ? args.taskIdPrefix : args.mode === "cron" ? args.cronJobName : undefined;
   const taskResult = collectTasks(dbPath, args.mode, args.taskIdPrefix, now);
+  const taskEventIds = taskResult.taskCandidates.map((task) => task.id);
+  if (taskResult.task?.id && !taskEventIds.includes(taskResult.task.id)) {
+    taskEventIds.unshift(taskResult.task.id);
+  }
   const cronResult = collectCron(cronPath, args.mode, args.cronJobName);
   const evidence: DoctorEvidence = {
     generatedAt: now.toISOString(),
@@ -547,6 +622,7 @@ export async function runDoctor(args: DoctorArgs, options: RunDoctorOptions = {}
     cronStatePath: cronPath,
     connectivityStatePath: connectivityPath,
     ...taskResult,
+    taskEvents: collectTaskEvents(dbPath, taskEventIds),
     ...cronResult,
     pm2: collectPm2(args.pm2App ?? DEFAULT_PM2_APP, runner),
     git: collectGit(cwd, runner),
@@ -641,6 +717,16 @@ export function formatDoctorReport(report: DoctorReport): string {
   const logLines = e.logs.flatMap((log) => log.lines.map((line) => `${log.path}: ${line}`)).slice(-8);
   if (logLines.length) {
     lines.push("", "Recent matching log lines:", ...logLines.map((line) => `- ${line.slice(0, 260)}`));
+  }
+  if (e.taskEvents.length) {
+    lines.push(
+      "",
+      "Recent task trace events:",
+      ...e.taskEvents.slice(0, 8).map((event) => {
+        const msg = event.message ? ` ${event.message}` : "";
+        return `- ${event.created_at} ${event.task_id.slice(0, 8)} ${event.severity}/${event.event_type}${msg}`.slice(0, 260);
+      })
+    );
   }
 
   return lines.join("\n");

@@ -404,6 +404,20 @@ Recommended action:
   - Added `/incident resolve` and `/incident ignore`; both write incident events and remove the incident from the default open list.
   - Added `/incident retry-repair`, which reopens eligible incidents for the hourly scheduler without bypassing repair policy or approval gates.
   - Added `/incident ship-preview`, which runs the guarded `doctor:ship` dry-run path and records a preview event.
+- Phase 5B task trace first slice shipped:
+  - Added a normalized `task_events` table and `TaskReporter` boundary for lifecycle, provider/tool, Discord delivery, cancellation, interruption, and finish events.
+  - Discord task intake, slash resume, thread continuation, and cron task dispatch now record accepted/context trace events after task creation.
+  - Auto Doctor collects structured task trace events and uses them in category classification, evidence summaries, and formatted reports before falling back to raw logs.
+  - Persisted task incidents now include relevant trace events, and `/incident view` shows recent task trace rows when available.
+- Phase 5C repair quality metrics shipped:
+  - Added repair metrics over recent `repair_runs`, grouped by status, incident type, and diagnosis category.
+  - Metrics include successful/pushed/blocked/shipped counts, possible post-ship regression incidents within 72 hours, average changed file count, and average verification gate duration when stored on repair verification results.
+  - `/incidents` now includes a compact repair metrics and promotion-policy summary.
+  - Promotion remains explicitly not eligible until there is enough successful repair history, no recent repair failures or possible post-ship regression incidents, and safe-restart-only live updates.
+- Phase 5D Discord operator actions shipped:
+  - Added `/incident approve-ship` for explicit guarded main update approval, with optional safe restart.
+  - Added `/incident request-restart` as a Discord shortcut that still reuses the guarded `doctor:ship` server-side checks and safe-restart without `--force`.
+  - `/incident view` now lists the guarded ship and restart commands when the incident status allows them.
 
 ## Next Development Plan: Hourly Doctor And Self-Repair
 
@@ -688,10 +702,10 @@ Implement in this order:
 7. Auto commit to repair branch. Shipped.
 8. Optional branch push. Shipped.
 9. Safe restart approval flow. Shipped as guarded `doctor:ship`.
-10. `/incident id:<id>` detail view with repair/ship history.
-11. Incident lifecycle operations: resolve, ignore, retry repair, and ship preview.
-12. `TaskReporter` and normalized task trace events.
-13. Repair reliability metrics and promotion policy.
-14. Discord operator actions for the guarded repair/ship flow.
+10. `/incident id:<id>` detail view with repair/ship history. Shipped.
+11. Incident lifecycle operations: resolve, ignore, retry repair, and ship preview. Shipped.
+12. `TaskReporter` and normalized task trace events. Shipped.
+13. Repair reliability metrics and promotion policy. Shipped.
+14. Discord operator actions for the guarded repair/ship flow. Shipped.
 
-The next code change should start with Phase 5A, because it is low risk and makes the already shipped Auto Doctor data operationally useful. Do not move to more automatic `main` updates or live restarts until Phase 5B and Phase 5C provide enough trace quality and repair reliability evidence.
+The remaining optional follow-up is the incident board/dashboard. It should stay out of the next implementation slice unless Discord incident review or cross-incident search becomes painful enough to justify a UI.

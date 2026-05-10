@@ -1,6 +1,11 @@
 import type { Message, SendableChannels } from "discord.js";
 import { updateTask } from "../store/db.js";
 
+interface ProgressReporterOptions {
+  minUpdateIntervalMs?: number;
+  onDeliveryError?: (operation: "send" | "edit" | "delete", err: unknown) => void;
+}
+
 export class ProgressReporter {
   private statusMessage: Message | null = null;
   private lastUpdate = 0;
@@ -9,10 +14,12 @@ export class ProgressReporter {
   private taskId: string | null;
   private messageIdPersisted = false;
   private minUpdateIntervalMs: number;
+  private onDeliveryError?: ProgressReporterOptions["onDeliveryError"];
 
-  constructor(taskId?: string, options: { minUpdateIntervalMs?: number } = {}) {
+  constructor(taskId?: string, options: ProgressReporterOptions = {}) {
     this.taskId = taskId ?? null;
     this.minUpdateIntervalMs = options.minUpdateIntervalMs ?? 2000;
+    this.onDeliveryError = options.onDeliveryError;
   }
 
   async update(text: string, channel: SendableChannels): Promise<void> {
@@ -47,7 +54,8 @@ export class ProgressReporter {
           }
         }
       }
-    } catch {
+    } catch (err) {
+      this.onDeliveryError?.(this.statusMessage ? "edit" : "send", err);
       this.statusMessage = null;
     }
   }
@@ -66,7 +74,8 @@ export class ProgressReporter {
       } else {
         await this.statusMessage.delete();
       }
-    } catch {
+    } catch (err) {
+      this.onDeliveryError?.(opts?.finalText || opts?.keepAsError ? "edit" : "delete", err);
       // already deleted / unable to edit
     }
     this.statusMessage = null;

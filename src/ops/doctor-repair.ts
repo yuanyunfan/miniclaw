@@ -45,6 +45,7 @@ export interface VerificationResult {
   command: string;
   ok: boolean;
   output: string;
+  durationMs?: number;
 }
 
 export interface DoctorRepairResult {
@@ -346,12 +347,13 @@ function runVerification(path: string, changedFiles: string[], run: CommandRunne
   const results: VerificationResult[] = [];
   for (const [cmd, args] of repairVerificationCommands(changedFiles)) {
     const label = [cmd, ...args].join(" ");
+    const startedAt = Date.now();
     try {
       const output = run(cmd, args, path);
-      results.push({ command: label, ok: true, output: output.slice(-4000) });
+      results.push({ command: label, ok: true, output: output.slice(-4000), durationMs: Date.now() - startedAt });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      results.push({ command: label, ok: false, output: message.slice(-4000) });
+      results.push({ command: label, ok: false, output: message.slice(-4000), durationMs: Date.now() - startedAt });
       break;
     }
   }
