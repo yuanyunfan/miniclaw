@@ -25,7 +25,7 @@ routing:
     default_mode: confirm # suggest | confirm | auto
     min_confirm_confidence: 0.55
     min_auto_confidence: 0.9
-    # Empty confirm_channels means any eligible auto-reply or mention channel can show upgrade buttons.
+    # Use [] or ["*"] to allow any eligible auto-reply or mention channel to show upgrade buttons.
     confirm_channels: []
     # Auto task creation is trusted-channel only. Keep empty unless every message there should be executable work.
     auto_task_channels: []

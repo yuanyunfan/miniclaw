@@ -253,6 +253,26 @@ describe("resolveSmartRouterAction", () => {
     expect(resolved.intent).toBe("chat");
   });
 
+  it("allows confirmation in any eligible channel when confirm channels are empty", () => {
+    const decision = classifyMessageIntent({ content: "修改 README 并跑测试", channelId: "other" });
+    const resolved = resolveSmartRouterAction(
+      decision,
+      { ...policy, confirmChannelIds: [] },
+      "other"
+    );
+    expect(resolved.intent).toBe("task_confirm");
+  });
+
+  it("allows confirmation in any eligible channel when confirm channels contain wildcard", () => {
+    const decision = classifyMessageIntent({ content: "修改 README 并跑测试", channelId: "other" });
+    const resolved = resolveSmartRouterAction(
+      decision,
+      { ...policy, confirmChannelIds: ["*"] },
+      "other"
+    );
+    expect(resolved.intent).toBe("task_confirm");
+  });
+
   it("allows confirmation outside configured channels for explicit mentions", () => {
     const decision = classifyMessageIntent({ content: "为什么会任务失败呢? 给我分析一下", channelId: "other" });
     const resolved = resolveSmartRouterAction(decision, policy, "other", { wasMentioned: true });

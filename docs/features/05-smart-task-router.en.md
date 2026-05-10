@@ -284,6 +284,7 @@ routing:
     default_mode: confirm       # suggest | confirm | auto
     min_confirm_confidence: 0.55
     min_auto_confidence: 0.90
+    # [] or ["*"] allows every eligible auto-reply / @mention channel to confirm.
     confirm_channels:
       - "1497911682402619473"
     auto_task_channels:

@@ -318,6 +318,10 @@ function hasChatSignal(decision: RouteCapabilityDecision): boolean {
   return decision.matchedSignals.some((signal) => signal === "explain" || signal === "summary" || signal === "analysis" || signal === "knowledge");
 }
 
+function channelListMatches(channelIds: readonly string[], channelId: string): boolean {
+  return channelIds.length === 0 || channelIds.includes("*") || channelIds.includes(channelId);
+}
+
 function buildReason(decision: RouteCapabilityDecision): string {
   const highRisk = highRiskCapabilities(decision);
   if (highRisk.length) return `message requires task-only capabilities: ${highRisk.join(", ")}`;
@@ -535,8 +539,7 @@ export function resolveSmartRouterAction(
 
   const confirmAllowed =
     options.wasMentioned === true ||
-    policy.confirmChannelIds.length === 0 ||
-    policy.confirmChannelIds.includes(channelId);
+    channelListMatches(policy.confirmChannelIds, channelId);
   if (!confirmAllowed) {
     return {
       ...decision,

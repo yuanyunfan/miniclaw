@@ -174,6 +174,7 @@ if (!isAutoChannel && !isMentioned) return;
    - `chat`：继续原 chat 流程；
    - `task_suggest` / `task_confirm`：发送 `转为 task` / `继续 chat` / `取消` 按钮；
    - `task_auto`：仅在 `routing.smart_router.auto_task_channels` 中直接创建 task。
+   - `routing.smart_router.confirm_channels: []` 或 `["*"]` 表示所有 eligible auto-reply / @mention channel 都允许展示确认按钮；写具体频道 ID 时只限制这些频道。
 6. route decision 写入 SQLite `smart_router_decisions`，默认只存 prompt hash、capped preview、capability JSON 和 action result，不存完整 prompt。
 
 确认按钮状态是 10 分钟内存态。按钮 `custom_id` 只包含短 token，不携带 prompt；重启后旧按钮会过期，用户重新发送即可。
