@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { collectWechatMpArticles, resolveCollectionWindow } from "../collector.js";
 import type { WechatMpClient, WechatMpProviderConfig, WechatMpState } from "../types.js";
+import { WechatMpInvalidSessionError } from "../errors.js";
 
 const NOW = new Date("2026-05-06T16:00:00.000Z");
 const RECENT_TS = Math.floor(new Date("2026-05-06T13:36:40.000Z").getTime() / 1000);
@@ -133,6 +134,24 @@ describe("collectWechatMpArticles", () => {
 
     expect(collected.result.total_articles).toBe(0);
     expect(collected.result.skipped_duplicates).toBe(1);
+  });
+
+  it("fails fast on invalid session instead of returning an empty account result", async () => {
+    const st = state();
+    st.fakeids["机器之心"] = { fakeid: "fake-1", updated_at: "2026-05-06T00:00:00.000Z" };
+
+    const client: WechatMpClient = {
+      searchBiz: async () => { throw new Error("should use cache"); },
+      listPublishedArticles: async () => {
+        throw new WechatMpInvalidSessionError("appmsgpublish: invalid session (200003 invalid session)");
+      },
+      listAppMessages: async () => [],
+    };
+
+    await expect(collectWechatMpArticles(config(), client, {
+      now: NOW,
+      state: st,
+    })).rejects.toBeInstanceOf(WechatMpInvalidSessionError);
   });
 
   it("falls back to appmsg when appmsgpublish returns empty", async () => {

@@ -177,6 +177,9 @@ export async function runTask(job: CronJobTask, client: Client): Promise<void> {
           ? `${result.skipTask.reason}: ${result.skipTask.message}`
           : result.skipTask.reason;
         log.info(`${job.name} skipped by pre_provider ${job.pre_provider}: ${skipMessage}`);
+        if (result.skipTask.notifyMessage) {
+          await channel.send(result.skipTask.notifyMessage.slice(0, 1900));
+        }
         return;
       }
     } catch (err) {

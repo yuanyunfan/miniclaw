@@ -8,7 +8,7 @@ import type {
   WechatMpProviderConfig,
   WechatMpState,
 } from "./types.js";
-import { sanitizeWechatMpError } from "./errors.js";
+import { sanitizeWechatMpError, WechatMpInvalidSessionError } from "./errors.js";
 
 export interface CollectWechatMpOptions {
   now?: Date;
@@ -178,6 +178,9 @@ export async function collectWechatMpArticles(
         articles: deduped,
       });
     } catch (err) {
+      if (err instanceof WechatMpInvalidSessionError) {
+        throw err;
+      }
       accounts.push({
         name: account.name,
         alias: account.alias,

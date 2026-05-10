@@ -33,12 +33,12 @@ function taskJob(): CronJobTask {
   };
 }
 
-function client(): Client {
+function client(send = vi.fn(async () => ({ id: "message-1" }))): Client {
   return {
     channels: {
       fetch: async () => ({
         isSendable: () => true,
-        send: async () => ({ id: "message-1" }),
+        send,
       }),
     },
   } as unknown as Client;
@@ -108,6 +108,29 @@ describe("cron task runner", () => {
       jobName: "daily-ai-news",
       channelId: "1000000000000000000",
     }));
+    expect(mocks.createTask).not.toHaveBeenCalled();
+    expect(mocks.executeTask).not.toHaveBeenCalled();
+  });
+
+  it("sends a user-facing notice when a pre_provider skip asks for notification", async () => {
+    const { runTask } = await import("../runner-task.js");
+    const send = vi.fn(async () => ({ id: "message-1" }));
+    mocks.runPreProvider.mockResolvedValue({
+      text: "{\"status\":\"skipped\"}",
+      skipTask: {
+        reason: "wechat_mp_session_invalid",
+        message: "appmsgpublish: invalid session (200003 invalid session)",
+        notifyMessage: "需要重新登录微信公众号后台 session",
+      },
+    });
+
+    await expect(runTask({
+      ...taskJob(),
+      pre_provider: "wechat-mp",
+      pre_provider_config: "daily-ai-wechat",
+    }, client(send))).resolves.toBeUndefined();
+
+    expect(send).toHaveBeenCalledWith("需要重新登录微信公众号后台 session");
     expect(mocks.createTask).not.toHaveBeenCalled();
     expect(mocks.executeTask).not.toHaveBeenCalled();
   });

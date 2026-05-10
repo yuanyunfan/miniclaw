@@ -9,11 +9,16 @@ export interface PreProviderResult {
   text: string;
   /**
    * Optional guard for scheduled tasks: when present, the cron runner logs the
-   * reason and skips the downstream LLM task without sending a Discord message.
+   * reason and skips the downstream LLM task.
    */
   skipTask?: {
     reason: string;
     message?: string;
+    /**
+     * Optional user-facing Discord notice for actionable skips, such as an
+     * expired login session. Omit it for quiet "no new data" skips.
+     */
+    notifyMessage?: string;
   };
   /**
    * Called only after the downstream cron task has completed successfully.
