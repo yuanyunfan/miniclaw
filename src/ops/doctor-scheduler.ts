@@ -142,6 +142,8 @@ function formatRepairNotification(result: DoctorRepairResult): string {
     `Workspace: \`${result.workspacePath}\``,
     `Branch: \`${result.branch}\``,
     ...(result.commitSha ? [`Commit: \`${result.commitSha.slice(0, 12)}\``] : []),
+    ...(result.pushed ? [`Pushed: \`${result.pushTarget ?? "yes"}\``] : []),
+    ...(result.pushError ? [`Push error: ${result.pushError.slice(0, 240)}`] : []),
     `Message: ${result.message}`,
     "",
     "Changed files:",

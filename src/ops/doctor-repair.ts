@@ -57,6 +57,9 @@ export interface DoctorRepairResult {
   branch: string;
   baseSha?: string;
   commitSha?: string;
+  pushed?: boolean;
+  pushTarget?: string;
+  pushError?: string;
   prompt: string;
   changedFiles: string[];
   agent?: RepairAgentResult;
@@ -388,6 +391,12 @@ function commitVerifiedRepair(incident: IncidentRow, changedFiles: string[], pat
   return currentGitSha(path, run);
 }
 
+function pushRepairBranch(branch: string, path: string, run: CommandRunner): string {
+  const ref = `refs/heads/${branch}`;
+  run("git", ["push", "origin", `HEAD:${ref}`], path);
+  return `origin/${branch}`;
+}
+
 async function runCodexRepairAgent(prompt: string, cwd: string): Promise<RepairAgentResult> {
   const ctrl = new AbortController();
   const timeoutCtrl = withCodexTimeout(ctrl.signal, config.codex.timeoutMs);
@@ -453,6 +462,9 @@ export async function runDoctorRepair(args: DoctorRepairArgs, deps: DoctorRepair
   let verification: VerificationResult[] = [];
   let baseSha: string | undefined;
   let commitSha: string | undefined;
+  let pushed = false;
+  let pushTarget: string | undefined;
+  let pushError: string | undefined;
 
   if (args.dryRun) {
     return {
@@ -643,12 +655,60 @@ export async function runDoctorRepair(args: DoctorRepairArgs, deps: DoctorRepair
     }
   }
 
+  if (commitSha && config.doctor.autoPushEnabled) {
+    try {
+      pushTarget = pushRepairBranch(branch, workspacePath, commandRunner);
+      pushed = true;
+      appendIncidentEventFn(incident.id, "repair_branch_pushed", {
+        repair_run_id: repairRun.id,
+        commit_sha: commitSha,
+        branch,
+        target: pushTarget,
+      });
+    } catch (err) {
+      pushError = err instanceof Error ? err.message : String(err);
+      markIncidentStatusFn(incident.id, "repair_ready");
+      updateRepairRunFn(repairRun.id, {
+        status: "push_failed",
+        commitSha,
+        verification,
+        report: { agent, changedFiles, commitSha, pushError },
+        completedAt: new Date().toISOString(),
+      });
+      appendIncidentEventFn(incident.id, "repair_push_failed", {
+        repair_run_id: repairRun.id,
+        commit_sha: commitSha,
+        branch,
+        message: pushError,
+      });
+      return {
+        ok: false,
+        dryRun: false,
+        incident,
+        repairRun,
+        policy,
+        workspacePath,
+        branch,
+        baseSha,
+        commitSha,
+        pushed,
+        pushTarget,
+        pushError,
+        prompt,
+        changedFiles,
+        agent,
+        verification,
+        message: `repair branch push failed: ${pushError}`,
+      };
+    }
+  }
+
   markIncidentStatusFn(incident.id, "repair_ready");
   updateRepairRunFn(repairRun.id, {
-    status: "repair_ready",
+    status: pushed ? "repair_pushed" : "repair_ready",
     commitSha: commitSha ?? null,
     verification,
-    report: { agent, changedFiles, commitSha },
+    report: { agent, changedFiles, commitSha, pushed, pushTarget },
     completedAt: new Date().toISOString(),
   });
 
@@ -656,6 +716,8 @@ export async function runDoctorRepair(args: DoctorRepairArgs, deps: DoctorRepair
     repair_run_id: repairRun.id,
     changed_files: changedFiles,
     commit_sha: commitSha,
+    pushed,
+    push_target: pushTarget,
   });
 
   return {
@@ -668,13 +730,17 @@ export async function runDoctorRepair(args: DoctorRepairArgs, deps: DoctorRepair
     branch,
     baseSha,
     commitSha,
+    pushed,
+    pushTarget,
     prompt,
     changedFiles,
     agent,
     verification,
-    message: commitSha
-      ? "repair committed on isolated repair branch and is ready for review"
-      : "repair is ready for review in isolated worktree",
+    message: pushed
+      ? "repair committed and pushed to isolated repair branch"
+      : commitSha
+        ? "repair committed on isolated repair branch and is ready for review"
+        : "repair is ready for review in isolated worktree",
   };
 }
 
@@ -688,6 +754,8 @@ export function formatDoctorRepairResult(result: DoctorRepairResult): string {
     `Branch: ${result.branch}`,
     ...(result.baseSha ? [`Base SHA: ${result.baseSha}`] : []),
     ...(result.commitSha ? [`Commit SHA: ${result.commitSha}`] : []),
+    ...(result.pushed ? [`Pushed: ${result.pushTarget ?? "yes"}`] : []),
+    ...(result.pushError ? [`Push error: ${result.pushError}`] : []),
     `Message: ${result.message}`,
     "",
     "Policy:",

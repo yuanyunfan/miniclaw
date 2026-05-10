@@ -16,6 +16,7 @@ const ENV_KEYS = [
   "MINICLAW_MEMORY_PATH",
   "MINICLAW_DOCTOR_AUTO_REPAIR_ENABLED",
   "MINICLAW_DOCTOR_AUTO_COMMIT_ENABLED",
+  "MINICLAW_DOCTOR_AUTO_PUSH_ENABLED",
   "MINICLAW_DOCTOR_MAX_PATCH_FILES",
   "MINICLAW_DOCTOR_REPAIR_WORKTREE_ROOT",
   "MINICLAW_DOCTOR_REPAIR_COMMIT_AUTHOR_NAME",
@@ -47,7 +48,7 @@ afterEach(() => {
   vi.resetModules();
 });
 
-function writeConfig(options: { autoRepair?: boolean; autoCommit?: boolean; maxPatchFiles?: number } = {}): void {
+function writeConfig(options: { autoRepair?: boolean; autoCommit?: boolean; autoPush?: boolean; maxPatchFiles?: number } = {}): void {
   const cfg = join(tmp, "config.yaml");
   writeFileSync(cfg, `
 discord:
@@ -64,6 +65,7 @@ storage:
 doctor:
   auto_repair_enabled: ${options.autoRepair ?? false}
   auto_commit_enabled: ${options.autoCommit ?? true}
+  auto_push_enabled: ${options.autoPush ?? false}
   max_patch_files: ${options.maxPatchFiles ?? 8}
   repair_worktree_root: "${join(tmp, "repairs")}"
   repair_commit_author_name: "yuanyunfan"
@@ -307,6 +309,59 @@ describe("runDoctorRepair", () => {
     expect(appendIncidentEventFn).toHaveBeenCalledWith(row.id, "repair_ready", expect.objectContaining({ changed_files: ["src/routing/intent.ts"], commit_sha: "commit-sha" }));
     expect(commandRunner).toHaveBeenCalledWith("git", ["config", "user.name", "yuanyunfan"], result.workspacePath);
     expect(commandRunner).toHaveBeenCalledWith("git", ["config", "user.email", "59247355+yuanyunfan@users.noreply.github.com"], result.workspacePath);
+  });
+
+  it("pushes the repair branch when auto push is enabled", async () => {
+    writeConfig({ autoRepair: true, autoPush: true });
+    const { runDoctorRepair } = await import("../doctor-repair.js");
+    const row = incident();
+    const repair = repairRun(row);
+    const updateRepairRunFn = vi.fn();
+    const appendIncidentEventFn = vi.fn();
+    let statusCalls = 0;
+    let revParseCalls = 0;
+    const commandRunner = vi.fn((cmd: string, args: string[]) => {
+      if (cmd === "git" && args.join(" ") === "rev-parse HEAD") {
+        revParseCalls += 1;
+        return revParseCalls === 1 ? "base-sha\n" : "commit-sha\n";
+      }
+      if (cmd === "git" && args[0] === "worktree") return "";
+      if (cmd === "pnpm" && args.join(" ") === "install --frozen-lockfile") return "installed";
+      if (cmd === "git" && args.join(" ") === "status --porcelain") {
+        statusCalls += 1;
+        return statusCalls === 1 ? "" : " M src/routing/intent.ts\n";
+      }
+      if (cmd === "pnpm") return `${args.join(" ")} ok`;
+      if (cmd === "git" && args[0] === "config") return "";
+      if (cmd === "git" && args[0] === "add") return "";
+      if (cmd === "git" && args.join(" ") === "diff --cached --name-only") return "src/routing/intent.ts\n";
+      if (cmd === "git" && args[0] === "commit") return "[doctor-repair/incident-123456 commit-sha] fix";
+      if (cmd === "git" && args.join(" ") === "push origin HEAD:refs/heads/doctor-repair/incident-123456") return "pushed";
+      throw new Error(`unexpected command: ${cmd} ${args.join(" ")}`);
+    });
+
+    const result = await runDoctorRepair(
+      { incidentId: row.id, dryRun: false, execute: true, force: false, json: false },
+      {
+        getIncidentFn: () => row,
+        createRepairRunFn: vi.fn(() => repair),
+        updateRepairRunFn,
+        appendIncidentEventFn,
+        markIncidentStatusFn: vi.fn(),
+        commandRunner,
+        runAgentFn: vi.fn(async () => ({ success: true, response: "Patched.", toolLog: [] })),
+      }
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.pushed).toBe(true);
+    expect(result.pushTarget).toBe("origin/doctor-repair/incident-123456");
+    expect(result.message).toContain("pushed");
+    expect(updateRepairRunFn).toHaveBeenCalledWith(repair.id, expect.objectContaining({ status: "repair_pushed", commitSha: "commit-sha" }));
+    expect(appendIncidentEventFn).toHaveBeenCalledWith(row.id, "repair_branch_pushed", expect.objectContaining({
+      branch: "doctor-repair/incident-123456",
+      target: "origin/doctor-repair/incident-123456",
+    }));
   });
 
   it("blocks successful agent output when it touches forbidden paths", async () => {

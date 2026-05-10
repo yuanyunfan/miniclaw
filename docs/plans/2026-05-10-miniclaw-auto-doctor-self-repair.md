@@ -390,7 +390,10 @@ Recommended action:
   - Repair verification now runs G0, secrets, targeted Vitest where applicable, typecheck, lint, test, and build before commit.
   - Verified repairs are committed only on the isolated `doctor-repair/<incident-id>` branch.
   - Repair commits use the configured personal project author and include the Codex co-author trailer.
-  - Auto push and live self-update are still pending.
+- Phase 4A repair branch push shipped:
+  - When `doctor.auto_push_enabled=true`, verified repair commits are pushed only to the isolated `doctor-repair/<incident-id>` branch.
+  - Push success/failure is recorded in incident events and included in the Discord repair summary.
+  - Main branch update and live self-update are still pending.
 
 ## Next Development Plan: Hourly Doctor And Self-Repair
 
@@ -582,6 +585,7 @@ Implement in this order:
 5. Self-repair dry-run worker.
 6. Isolated worktree repair worker with verification.
 7. Auto commit to repair branch. Shipped.
-8. Optional branch push and safe restart approval flow.
+8. Optional branch push. Shipped.
+9. Safe restart approval flow.
 
 This keeps the next code change reviewable: the first PR/commit should stop at automatic hourly diagnosis and incident records. Self-repair should be a separate atomic change after the incident lifecycle is observable.
