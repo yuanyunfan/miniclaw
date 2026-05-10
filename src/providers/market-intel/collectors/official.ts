@@ -123,7 +123,7 @@ function section(
   notes: string[],
 ): MarketIntelEvidenceSection {
   const failures = sources.filter((item) => item.status === "failed" || item.status === "missing_config");
-  const implemented = sources.filter((item) => item.status !== "not_implemented" && item.status !== "skipped");
+  const implemented = sources.filter((item) => item.status !== "skipped");
   const status = items.length
     ? failures.length ? "partial" : "ok"
     : implemented.length

@@ -1246,7 +1246,7 @@ Fixture scenarios：
 - Phase 4 缺口补齐：
   - CN official filings 现在包含 SSE、SZSE 和 HKEX public announcement search，前提是对应公开 endpoint 可访问。
   - Generic 低质量 web/news search 仍然不进入默认路径；news 路径使用 official RSS / pages，并在 `data_quality` 中标注 source failure。
-  - Risk evidence 现在从 official macro / news / filing evidence 和 source failure signals 中确定性派生，不再返回 risk `not_implemented` section。
+  - Risk evidence 现在从 official macro / news / filing evidence 和 source failure signals 中确定性派生，不再返回占位 section。
 - Phase 7 缺口补齐：
   - `market-forecast-evaluation` 现在同时评分 index direction、sector opportunities 和 risk alerts。
   - Sector calls 会匹配配置里的 benchmark / proxy label；无法匹配的 sector calls 会记录为 `unknown`，并给出 unmapped warning。

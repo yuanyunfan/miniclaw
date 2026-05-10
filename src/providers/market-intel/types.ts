@@ -10,11 +10,11 @@ export type MarketIntelCalendarStatus = "closed" | "pre_market" | "open" | "brea
 export type MarketIntelLocalMarketStatus = "closed" | "pre_market" | "open" | "break" | "after_close";
 export type MarketIntelDataQualityStatus = "ok" | "partial" | "blocked";
 export type MarketIntelSourceTier = "official" | "local_readonly" | "optional" | "fallback" | "placeholder";
-export type MarketIntelSourceStatus = "ok" | "partial" | "missing_config" | "failed" | "not_implemented" | "skipped";
+export type MarketIntelSourceStatus = "ok" | "partial" | "missing_config" | "failed" | "skipped";
 export type MarketIntelDirection = "bullish" | "bearish" | "neutral" | "mixed" | "insufficient_data";
-export type MarketIntelSnapshotSectionStatus = "ok" | "partial" | "empty" | "not_implemented";
+export type MarketIntelSnapshotSectionStatus = "ok" | "partial" | "empty";
 export type MarketIntelQuoteWatchBucket = "indices" | "sectors" | "macro" | "cross_market" | "symbols";
-export type MarketIntelEvidenceSectionStatus = "ok" | "partial" | "empty" | "skipped" | "not_implemented";
+export type MarketIntelEvidenceSectionStatus = "ok" | "partial" | "empty" | "skipped";
 export type MarketIntelEvidenceImportance = "low" | "medium" | "high";
 export type MarketIntelEvidenceFreshness = "fresh" | "stale" | "unknown";
 
@@ -163,12 +163,6 @@ export interface MarketIntelDataQuality {
   status: MarketIntelDataQualityStatus;
   warnings: string[];
   sources: MarketIntelDataQualitySource[];
-}
-
-export interface MarketIntelPlaceholderSection {
-  status: "not_implemented";
-  items: unknown[];
-  notes: string[];
 }
 
 export interface MarketIntelEvidenceSection {

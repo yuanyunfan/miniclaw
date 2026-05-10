@@ -161,7 +161,7 @@ function buildDataQuality(
 ): MarketIntelDataQuality {
   const sources = buildSourceQuality(config, calendar, portfolioContext, marketSnapshot, evidenceCollection);
   const warnings = sources
-    .filter((source) => source.status === "not_implemented" || source.status === "failed" || source.status === "missing_config")
+    .filter((source) => source.status === "failed" || source.status === "missing_config")
     .map((source) => `${source.collector}: ${source.message ?? source.status}`);
   warnings.push(...quoteWarnings);
   warnings.push(...(evidenceCollection?.warnings ?? []));

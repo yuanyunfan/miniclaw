@@ -1243,7 +1243,7 @@ Follow-up implementation notes on 2026-05-10:
 - Phase 4 gap closure:
   - CN official filings now include SSE, SZSE, and HKEX public announcement searches where endpoints are reachable.
   - Generic low-quality web/news search remains intentionally excluded from defaults; the news path uses official RSS/pages and marks source failures in `data_quality`.
-  - Risk evidence is now deterministically derived from official macro/news/filing evidence and source-failure signals, instead of returning a risk `not_implemented` section.
+  - Risk evidence is now deterministically derived from official macro/news/filing evidence and source-failure signals, instead of returning a placeholder section.
 - Phase 7 gap closure:
   - `market-forecast-evaluation` now scores index direction, sector opportunities, and risk alerts.
   - Sector calls are matched to configured benchmark/proxy labels; unmapped sector calls are recorded as `unknown` with an explicit unmapped warning.
