@@ -818,17 +818,19 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
 
     return lastResult;
   } catch (err) {
+    const durationMs = Date.now() - startedAt;
     const errMsg = wasInterrupted(params.taskId)
       ? interruptedReason(params.taskId)
       : wasCancelled(params.taskId, abortController)
       ? "任务已被用户取消"
       : err instanceof Error ? err.message : String(err);
-    log.error(`✗ ${shortId} threw after ${Date.now() - startedAt}ms: ${errMsg}`);
+    log.error(`✗ ${shortId} threw after ${durationMs}ms: ${errMsg}`);
     await progress.complete(params.channel, { keepAsError: true });
 
     updateTask(params.taskId, {
       status: finalTaskStatus(params.taskId, abortController, false),
       result_summary: errMsg.slice(0, 10000),
+      duration_ms: durationMs,
       completed_at: new Date().toISOString(),
     });
 
@@ -838,7 +840,7 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
       success: false,
       sessionId: "",
       costUsd: 0,
-      durationMs: 0,
+      durationMs,
       turns: 0,
       result: errMsg,
     };

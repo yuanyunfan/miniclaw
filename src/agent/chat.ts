@@ -54,6 +54,7 @@ export async function chat(
   attachmentBlocks?: ContentBlockParam[],
   callbacks?: ChatCallbacks,
   attachmentCodexInputs?: CodexInputEntry[],
+  runtimeContext?: string,
 ): Promise<string> {
   const startedAt = Date.now();
   const chShort = channelId.slice(-6);
@@ -78,7 +79,7 @@ export async function chat(
   const system = systemParts.join("\n\n");
 
   if (config.agentProvider === "codex") {
-    const result = await chatWithCodex(system, prompt, historyContext, attachmentCodexInputs, callbacks);
+    const result = await chatWithCodex(system, prompt, historyContext, attachmentCodexInputs, callbacks, runtimeContext);
     log.info(
       `✓ chat/codex ch=${chShort} ${Date.now() - startedAt}ms ` +
       `tools=${result.toolCount} reply.len=${result.reply.length}` +
@@ -100,6 +101,7 @@ export async function chat(
 
   // 首轮 user message：附件 + 文字
   const userContent: ContentBlockParam[] = [
+    ...(runtimeContext ? [{ type: "text", text: runtimeContext } as TextBlockParam] : []),
     ...(historyContext ? [{ type: "text", text: historyContext } as TextBlockParam] : []),
     ...(attachmentBlocks ?? []),
     { type: "text", text: prompt } as TextBlockParam,
@@ -256,6 +258,7 @@ async function chatWithCodex(
   historyContext?: string,
   attachmentCodexInputs?: CodexInputEntry[],
   callbacks?: ChatCallbacks,
+  runtimeContext?: string,
 ): Promise<{ reply: string; tokensSummary?: string; toolCount: number }> {
   const codex = getCodexClient();
   const thread = codex.startThread(codexThreadOptions("chat", config.defaultCwd));
@@ -264,6 +267,7 @@ async function chatWithCodex(
   const fullPrompt = [
     system,
     "你正在处理 Discord 轻量聊天。默认直接回答；只有在需要确认本地文件、运行只读命令或搜索资料时才使用工具。用中文回复。",
+    runtimeContext,
     historyContext,
     `<user_message>\n${prompt}\n</user_message>`,
   ].filter(Boolean).join("\n\n");

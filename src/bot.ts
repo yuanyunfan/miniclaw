@@ -1,3 +1,4 @@
+import "./proxy.js";
 import {
   ActionRowBuilder,
   ButtonBuilder,
@@ -33,6 +34,7 @@ import {
 import { buildSmartTaskPrompt } from "./routing/context.js";
 import { resolveTaskCwd } from "./routing/cwd.js";
 import { resolveDiscordMessageRoute } from "./routing/message-route.js";
+import { buildChatRuntimeContext } from "./routing/chat-context.js";
 import { buildTaskPromptWithContext, type TaskContextEnvelope } from "./routing/task-context.js";
 import { hashPrompt, promptPreview } from "./routing/decision-log.js";
 import { classifySmartRoute, resolveSmartRouterAction, type RouteDecision } from "./routing/intent.js";
@@ -192,7 +194,8 @@ async function continueChatFromConfirmation(
       confirmation.prompt,
       attachmentBlocks,
       undefined,
-      attachmentCodexInputs
+      attachmentCodexInputs,
+      buildChatRuntimeContext(confirmation.taskContext)
     );
     for (const chunk of chunkMessage(reply)) {
       await channel.send(chunk);
@@ -274,6 +277,17 @@ async function handleSmartRouterButton(interaction: ButtonInteraction): Promise<
     await interaction.followUp({ content: `❌ 创建任务失败: ${err instanceof Error ? err.message : String(err)}`, ephemeral: true });
   }
   return true;
+}
+
+function formatChatErrorReply(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  if (/timeout|aborted/i.test(message)) {
+    return `❌ chat 回复超时（${Math.round(config.chatTimeoutMs / 1000)}s）。这类日志/DB 排查或修复更适合用 task 模式。`;
+  }
+  const clean = message.replace(/\s+/g, " ").trim();
+  return clean
+    ? `❌ 回复出错: ${clean.slice(0, 300)}`
+    : "❌ 回复出错，请稍后再试";
 }
 
 export function createBot(): Client {
@@ -521,7 +535,9 @@ export function createBot(): Client {
             config.smartRouter,
             classifyRouteWithLlm
           );
-          const decision = resolveSmartRouterAction(heuristicOrLlm, config.smartRouter, message.channel.id);
+          const decision = resolveSmartRouterAction(heuristicOrLlm, config.smartRouter, message.channel.id, {
+            wasMentioned: message.mentions.has(client.user!),
+          });
           log.info(
             `route decision ch=${message.channel.id.slice(-6)} intent=${decision.intent} ` +
             `confidence=${decision.confidence} signals=${decision.matchedSignals.join(",") || "none"}`
@@ -596,6 +612,15 @@ export function createBot(): Client {
       }
 
       await message.react("👀").catch(() => {});
+      const chatCwd = resolveTaskCwd(message.channel.id);
+      const chatParentContext = await resolveReplyParentContext(message);
+      const chatRuntimeContext = buildChatRuntimeContext({
+        source: buildTaskSourceFromMessage(message, "chat_message", {
+          cwd: chatCwd,
+          wasMentioned: message.mentions.has(client.user!),
+        }),
+        ...(chatParentContext ? { parent: chatParentContext } : {}),
+      });
 
       const typingInterval = message.channel.isSendable()
         ? setInterval(() => { message.channel.isSendable() && message.channel.sendTyping().catch(() => {}); }, 8000)
@@ -635,7 +660,15 @@ export function createBot(): Client {
           onText: (_text) => {},
         };
 
-        const reply = await chat(message.channel.id, message.author.id, effectivePrompt, attachmentBlocks, callbacks, attachmentCodexInputs);
+        const reply = await chat(
+          message.channel.id,
+          message.author.id,
+          effectivePrompt,
+          attachmentBlocks,
+          callbacks,
+          attachmentCodexInputs,
+          chatRuntimeContext
+        );
         if (typingInterval) clearInterval(typingInterval);
         await flushSteps();
 
@@ -650,7 +683,7 @@ export function createBot(): Client {
         log.error("Chat error:", err);
         await message.reactions.cache.get("👀")?.users.remove(client.user!.id).catch(() => {});
         await message.react("❌").catch(() => {});
-        await message.reply("❌ 回复出错，请稍后再试");
+        await message.reply(formatChatErrorReply(err));
       }
     } finally {
       if (attachmentScope) {

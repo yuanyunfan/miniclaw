@@ -1,3 +1,4 @@
+import "../proxy.js";
 import type { Client } from "discord.js";
 import { EmbedBuilder } from "discord.js";
 import { getActiveTasks, markTaskInterrupted, type TaskRow } from "../store/db.js";

@@ -1,3 +1,4 @@
+import "../proxy.js";
 import { EmbedBuilder } from "discord.js";
 import { displaySessionId } from "../agent/session.js";
 

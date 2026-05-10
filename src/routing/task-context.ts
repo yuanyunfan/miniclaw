@@ -1,4 +1,5 @@
 export type TaskRouteType =
+  | "chat_message"
   | "slash_command"
   | "slash_resume"
   | "task_channel"

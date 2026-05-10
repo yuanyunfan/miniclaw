@@ -4,7 +4,7 @@ import { existsSync, statSync } from "node:fs";
 import type { Client, SendableChannels } from "discord.js";
 import { config } from "../config.js";
 import { createTask } from "../store/db.js";
-import { executeTask, getActiveTaskCount } from "../agent/task.js";
+import { executeTask, getActiveTaskCount, type TaskResult } from "../agent/task.js";
 import { loadPrompt } from "../agent/prompts.js";
 import type { CronJobTask, CronJobSkill } from "./types.js";
 import { renderTemplate } from "./template.js";
@@ -21,6 +21,12 @@ class CronTaskRunError extends Error {
     super(message);
     this.name = "CronTaskRunError";
   }
+}
+
+function assertTaskResultOk(jobName: string, result: TaskResult): void {
+  if (result.success) return;
+  const summary = result.result.trim() || "task returned failure without details";
+  throw new CronTaskRunError(`${jobName} task failed: ${summary.slice(0, 1500)}`);
 }
 
 function resolveHome(p: string): string {
@@ -184,8 +190,11 @@ export async function runTask(job: CronJobTask, client: Client): Promise<void> {
     discord_user_id: "cron",
     prompt,
     cwd,
+    source_route_type: "cron_task",
+    source_channel_id: job.channel,
   });
-  await executeTask({ taskId, prompt, cwd, channel, outputMode: "raw" });
+  const result = await executeTask({ taskId, prompt, cwd, channel, outputMode: "raw" });
+  assertTaskResultOk(job.name, result);
   if (preProviderCommit) {
     await preProviderCommit();
   }
@@ -212,6 +221,9 @@ export async function runSkill(job: CronJobSkill, client: Client): Promise<void>
     discord_user_id: "cron",
     prompt,
     cwd,
+    source_route_type: "cron_skill",
+    source_channel_id: job.channel,
   });
-  await executeTask({ taskId, prompt, cwd, channel, outputMode: "raw" });
+  const result = await executeTask({ taskId, prompt, cwd, channel, outputMode: "raw" });
+  assertTaskResultOk(job.name, result);
 }

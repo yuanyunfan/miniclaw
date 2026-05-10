@@ -1,3 +1,4 @@
+import "../proxy.js";
 import { REST, Routes, SlashCommandBuilder } from "discord.js";
 import { config } from "../config.js";
 import { createLogger } from "../lib/log.js";

@@ -1,3 +1,4 @@
+import "./proxy.js";
 import { config } from "./config.js";
 import { initDb } from "./store/db.js";
 import { registerCommands } from "./commands/register.js";
@@ -5,7 +6,6 @@ import { createBot } from "./bot.js";
 import { startScheduler, stopScheduler } from "./cron/scheduler.js";
 import { startConnectivityMonitor, type ConnectivityMonitorHandle } from "./monitoring/connectivity-monitor.js";
 import { createLogger } from "./lib/log.js";
-import { Events } from "discord.js";
 import {
   beginDraining,
   SHUTDOWN_DRAIN_TIMEOUT_SUMMARY,
@@ -95,7 +95,7 @@ async function main(): Promise<void> {
   }
 
   bot = createBot();
-  bot.once(Events.ClientReady, (client) => {
+  bot.once("clientReady", (client) => {
     connectivityMonitor = startConnectivityMonitor(client);
     if (config.e2e.disableScheduler) {
       log.info("Cron scheduler disabled by MINICLAW_DISABLE_SCHEDULER");

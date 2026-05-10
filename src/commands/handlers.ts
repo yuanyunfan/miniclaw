@@ -1,3 +1,4 @@
+import "../proxy.js";
 import {
   ChatInputCommandInteraction,
   ChannelType,

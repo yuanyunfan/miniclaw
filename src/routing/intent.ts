@@ -42,6 +42,7 @@ interface SignalDef {
 }
 
 const TASK_SIGNALS: SignalDef[] = [
+  { label: "runtime_diagnostics", pattern: /(任务失败|失败原因|回复出错|报错|出错|异常|排查|定位.*问题|看看.*问题|看一下.*问题|为什么.*失败|debug|diagnos(?:e|is)|troubleshoot|failed task|why.*fail)/i, weight: 5, risk: "runtime_diagnostics" },
   { label: "modify", pattern: /(修复|修一下|改一下|修改|实现|重构|更新|加上|删除|迁移|改成|补上|落地|implement|fix|refactor|update|modify|add|delete|migrate)/i, weight: 3, risk: "writes_files" },
   { label: "docs_or_file", pattern: /(README|readme|docs?|文档|文件|写到|整理到|创建文件|生成.*(web|游戏|页面|文件|报告)|create .*file|write .*docs?)/i, weight: 2, risk: "creates_artifact" },
   { label: "capture_or_persist", pattern: /(抓取|爬取|采集|持续监控|监控.*(更新|发布|文章)|输出到|写入|落盘|导出|保存(成|到)?.*(文件|docs?|文档|报告|笔记|Obsidian|obsidian|markdown|md)|整理(成|到).*(文件|docs?|文档|报告|笔记|Obsidian|obsidian|markdown|md)|保存笔记|整理成笔记)/i, weight: 5, risk: "long_running_or_persistent_output" },
@@ -134,6 +135,16 @@ export function classifyMessageIntent(input: RouteClassifierInput): RouteDecisio
       confidence: 0.65,
       reason: "attachment-only message can be handled by chat unless action is specified",
       matchedSignals: ["attachments"],
+      riskFlags,
+    };
+  }
+
+  if (task.labels.includes("runtime_diagnostics")) {
+    return {
+      intent: "task_confirm",
+      confidence: 0.82,
+      reason: "message asks MiniClaw to inspect runtime failure using logs or DB",
+      matchedSignals,
       riskFlags,
     };
   }
@@ -271,7 +282,8 @@ export async function classifySmartRoute(
 export function resolveSmartRouterAction(
   decision: RouteDecision,
   policy: SmartRouterPolicy,
-  channelId: string
+  channelId: string,
+  options: { wasMentioned?: boolean } = {}
 ): RouteDecision {
   if (!policy.enabled) {
     return { ...decision, intent: "chat", reason: "smart router disabled" };
@@ -289,7 +301,10 @@ export function resolveSmartRouterAction(
     return { ...decision, intent: "task_auto", reason: `${decision.reason}; trusted auto-task channel` };
   }
 
-  const confirmAllowed = policy.confirmChannelIds.length === 0 || policy.confirmChannelIds.includes(channelId);
+  const confirmAllowed =
+    options.wasMentioned === true ||
+    policy.confirmChannelIds.length === 0 ||
+    policy.confirmChannelIds.includes(channelId);
   if (!confirmAllowed) {
     return {
       ...decision,

@@ -103,6 +103,13 @@ describe("classifyMessageIntent", () => {
     const d = classifyMessageIntent({ content: "帮我深入分析这个 repo", channelId: "chat-1" });
     expect(d.intent).toBe("task_suggest");
   });
+
+  it("classifies runtime failure diagnosis as task_confirm", () => {
+    const d = classifyMessageIntent({ content: "为什么会任务失败呢? 给我分析一下", channelId: "other" });
+    expect(d.intent).toBe("task_confirm");
+    expect(d.matchedSignals).toContain("runtime_diagnostics");
+    expect(d.riskFlags).toContain("runtime_diagnostics");
+  });
 });
 
 describe("LLM classifier decision points", () => {
@@ -185,6 +192,12 @@ describe("resolveSmartRouterAction", () => {
     const decision = classifyMessageIntent({ content: "修改 README 并跑测试", channelId: "other" });
     const resolved = resolveSmartRouterAction(decision, policy, "other");
     expect(resolved.intent).toBe("chat");
+  });
+
+  it("allows confirmation outside configured channels for explicit mentions", () => {
+    const decision = classifyMessageIntent({ content: "为什么会任务失败呢? 给我分析一下", channelId: "other" });
+    const resolved = resolveSmartRouterAction(decision, policy, "other", { wasMentioned: true });
+    expect(resolved.intent).toBe("task_confirm");
   });
 
   it("preserves confirmation in configured channel", () => {
