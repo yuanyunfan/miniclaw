@@ -73,6 +73,29 @@ prompt: "总结微信公众号更新"
     }
   });
 
+  it("解析 type=task + market-intel pre_provider", () => {
+    write("market-intel.yaml", `
+name: us-stock-pre-market
+schedule: "45 8 * * 1-5"
+timezone: America/New_York
+enabled: true
+type: task
+channel: "${VALID_CHANNEL}"
+pre_provider: market-intel
+pre_provider_config: us-pre-market
+prompt: "盘前市场分析"
+`);
+    const r = loadCronJobs();
+    expect(r.errors).toEqual([]);
+    expect(r.jobs.length).toBe(1);
+    const j = r.jobs[0];
+    expect(j.type).toBe("task");
+    if (j.type === "task") {
+      expect(j.pre_provider).toBe("market-intel");
+      expect(j.pre_provider_config).toBe("us-pre-market");
+    }
+  });
+
   it("解析同一 job 的多条 schedule", () => {
     write("market-pulse.yaml", `
 name: market-pulse
