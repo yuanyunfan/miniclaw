@@ -359,6 +359,11 @@ const doctorBlockedPathsFallback = [
   "**/*.sqlite",
   "**/*.log",
 ];
+const doctorRepairWorktreeRoot = resolveHome(requiredString(
+  ["doctor", "repair_worktree_root"],
+  "MINICLAW_DOCTOR_REPAIR_WORKTREE_ROOT",
+  "~/ProjectRepo/miniclaw-repairs"
+));
 const notifyEmailHost = optionalString([
   ["notifications", "email", "smtp_host"],
   ["email", "smtp_host"],
@@ -629,6 +634,7 @@ export const config = {
     autoRestartEnabled: boolValue(["doctor", "auto_restart_enabled"], "MINICLAW_DOCTOR_AUTO_RESTART_ENABLED", false),
     maxRepairsPerDay: positiveInt(["doctor", "max_repairs_per_day"], "MINICLAW_DOCTOR_MAX_REPAIRS_PER_DAY", 2),
     maxParallelRepairs: positiveInt(["doctor", "max_parallel_repairs"], "MINICLAW_DOCTOR_MAX_PARALLEL_REPAIRS", 1),
+    repairWorktreeRoot: doctorRepairWorktreeRoot,
     allowedPaths: stringArray(["doctor", "allowed_paths"], "MINICLAW_DOCTOR_ALLOWED_PATHS", doctorAllowedPathsFallback),
     blockedPaths: stringArray(["doctor", "blocked_paths"], "MINICLAW_DOCTOR_BLOCKED_PATHS", doctorBlockedPathsFallback),
   },

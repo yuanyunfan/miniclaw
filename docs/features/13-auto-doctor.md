@@ -1,12 +1,12 @@
 # Auto Doctor
 
-Status: phase-2-auto-diagnosis-in-progress
+Status: phase-3a-guarded-repair-worker
 
 ## Summary
 
 Auto Doctor is MiniClaw's read-only runtime diagnosis path. It collects local evidence from task DB rows, cron state, PM2, logs, connectivity state, and Git state, then produces a concise diagnosis without modifying files, DB state, Git history, or PM2 runtime.
 
-This is the first slice of the broader self-repair plan. Phase 2 adds incident persistence and an optional hourly read-only diagnosis loop. It still does not implement automatic code repair, automatic commit/push, or live self-update.
+This is the first slice of the broader self-repair plan. Phase 2 adds incident persistence and an optional hourly read-only diagnosis loop. Phase 3A adds a guarded repair worker that can run in an isolated worktree. It still does not implement automatic commit/push or live self-update.
 
 ## Commands
 
@@ -17,6 +17,10 @@ pnpm run doctor
 pnpm run doctor -- --task <task-id-prefix>
 pnpm run doctor -- --cron <job-name>
 pnpm run doctor -- --json
+pnpm run doctor:repair -- --incident <incident-id>
+pnpm run doctor:repair -- --incident <incident-id> --dry-run
+pnpm run doctor:repair -- --incident <incident-id> --execute
+pnpm run doctor:repair -- --incident <incident-id> --json
 ```
 
 Discord:
@@ -86,9 +90,23 @@ When automatic diagnosis is enabled, MiniClaw stores actionable symptoms as inci
 
 Incidents use deterministic dedupe keys, so repeated hourly scans update the same incident instead of posting duplicate alerts. `/health` includes the open incident count, and `/incidents` lists open incidents.
 
+## Guarded Repair Worker
+
+`doctor:repair` loads one persisted incident and evaluates the repair policy before doing any work. The default mode is dry-run, which prints the target isolated worktree, repair branch, policy result, and generated repair prompt without creating a worktree or running Codex.
+
+Execute mode is intentionally gated:
+
+- `doctor.auto_repair_enabled` must be `true`, unless `--force` is used for an explicit operator override.
+- provider auth, provider data, network, Discord, and third-party incidents are refused as non-repairable.
+- the worker creates or reuses an isolated worktree under `doctor.repair_worktree_root`.
+- changed files must match `doctor.allowed_paths` and must not match `doctor.blocked_paths`.
+- verification currently runs `pnpm run typecheck`, `pnpm run lint`, and `pnpm test`.
+
+Successful verification leaves the incident in `repair_ready` and stores the repair report in `repair_runs`. Failed agent execution, forbidden paths, or failed verification leave the incident in `repair_blocked` with the evidence stored for review.
+
 ## Safety Boundary
 
-Auto Doctor remains read-only by design:
+Auto diagnosis remains read-only by design:
 
 - It does not edit source files.
 - It does not commit or push.
@@ -96,7 +114,9 @@ Auto Doctor remains read-only by design:
 - It does not refresh credentials or provider sessions.
 - It redacts common token, cookie, password, secret, authorization, and high-entropy values from logs and errors.
 
-If a diagnosis says `repairAllowed: yes`, that means the evidence looks compatible with a future controlled repair workflow. It does not mean MiniClaw has already repaired anything.
+The repair worker can edit only the isolated repair worktree in execute mode. It does not commit, push, merge to `main`, restart MiniClaw, or modify the live main worktree.
+
+If a diagnosis says `repairAllowed: yes`, that means the evidence looks compatible with the controlled repair workflow. It does not mean MiniClaw has already repaired anything.
 
 ## Related Plan
 

@@ -16,6 +16,7 @@
     "safe-restart": "tsx scripts/safe-restart.ts",
     "restart": "pnpm safe-restart",
     "doctor": "tsx scripts/doctor.ts",
+    "doctor:repair": "tsx scripts/doctor-repair.ts",
     "register": "tsx src/commands/register.ts",
     "test": "vitest run",
     "test:watch": "vitest",

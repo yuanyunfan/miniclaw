@@ -78,6 +78,7 @@ const ENV_KEYS = [
   "MINICLAW_DOCTOR_AUTO_RESTART_ENABLED",
   "MINICLAW_DOCTOR_MAX_REPAIRS_PER_DAY",
   "MINICLAW_DOCTOR_MAX_PARALLEL_REPAIRS",
+  "MINICLAW_DOCTOR_REPAIR_WORKTREE_ROOT",
   "MINICLAW_DOCTOR_ALLOWED_PATHS",
   "MINICLAW_DOCTOR_BLOCKED_PATHS",
   "MINICLAW_NOTIFY_EMAIL_ENABLED",
@@ -203,6 +204,7 @@ doctor:
   auto_restart_enabled: false
   max_repairs_per_day: 1
   max_parallel_repairs: 1
+  repair_worktree_root: "${join(tmpDir, "repairs")}"
   allowed_paths: ["src/**/*.ts", "docs/**/*.md"]
   blocked_paths: [".env", "~/.miniclaw/**"]
 notifications:
@@ -270,6 +272,7 @@ notifications:
       autoRestartEnabled: false,
       maxRepairsPerDay: 1,
       maxParallelRepairs: 1,
+      repairWorktreeRoot: join(tmpDir, "repairs"),
       allowedPaths: ["src/**/*.ts", "docs/**/*.md"],
       blockedPaths: [".env", "~/.miniclaw/**"],
     });

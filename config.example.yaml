@@ -101,6 +101,7 @@ doctor:
   auto_restart_enabled: false
   max_repairs_per_day: 2
   max_parallel_repairs: 1
+  repair_worktree_root: "~/ProjectRepo/miniclaw-repairs"
   allowed_paths:
     - "src/**/*.ts"
     - "scripts/**/*.ts"

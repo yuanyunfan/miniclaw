@@ -375,6 +375,12 @@ Recommended action:
   - Added an hourly read-only Auto Doctor scheduler that can create/update incidents and notify only new or severity-escalated incidents.
   - Added `/incidents` and open incident count in `/health`.
   - Self-repair worker, auto commit/push, and live self-update are still pending.
+- Phase 3A code shipped:
+  - Added `pnpm run doctor:repair` for guarded incident repair dry-runs and execute mode.
+  - Added isolated repair worktree and branch creation under `doctor.repair_worktree_root`.
+  - Added repair policy gates, allowed/blocked path validation, and verification commands.
+  - Repair results are persisted in `repair_runs`; successful verification marks incidents `repair_ready`.
+  - Auto commit/push, automatic scheduler enqueueing, and live self-update are still pending.
 
 ## Next Development Plan: Hourly Doctor And Self-Repair
 
