@@ -55,6 +55,8 @@ export interface DoctorRepairResult {
   policy: RepairPolicyResult;
   workspacePath: string;
   branch: string;
+  baseSha?: string;
+  commitSha?: string;
   prompt: string;
   changedFiles: string[];
   agent?: RepairAgentResult;
@@ -75,13 +77,21 @@ interface DoctorRepairDeps {
 }
 
 function defaultCommandRunner(cmd: string, args: string[], cwd: string): string {
-  return execFileSync(cmd, args, {
-    cwd,
-    encoding: "utf8",
-    timeout: 10 * 60 * 1000,
-    stdio: ["ignore", "pipe", "pipe"],
-    maxBuffer: 20 * 1024 * 1024,
-  });
+  try {
+    return execFileSync(cmd, args, {
+      cwd,
+      encoding: "utf8",
+      timeout: 10 * 60 * 1000,
+      stdio: ["ignore", "pipe", "pipe"],
+      maxBuffer: 20 * 1024 * 1024,
+    });
+  } catch (err) {
+    const error = err as Error & { stdout?: Buffer | string; stderr?: Buffer | string };
+    const stdout = error.stdout ? String(error.stdout).trim() : "";
+    const stderr = error.stderr ? String(error.stderr).trim() : "";
+    const detail = [stdout, stderr].filter(Boolean).join("\n");
+    throw new Error(detail || error.message);
+  }
 }
 
 function sanitizeId(id: string): string {
@@ -281,6 +291,103 @@ export function validateChangedPaths(paths: string[]): string[] {
   return violations;
 }
 
+type VerificationCommand = [cmd: string, args: string[]];
+
+function normalizeRepoPath(path: string): string {
+  return path.replaceAll("\\", "/").replace(/^\.\//, "");
+}
+
+function hasTestSuffix(path: string): boolean {
+  return /(?:^|\/)__tests__\/.*\.(?:test|spec)\.ts$/.test(path) || /\.(?:test|spec)\.ts$/.test(path);
+}
+
+export function selectTargetedTestCommands(paths: string[]): VerificationCommand[] {
+  const normalizedPaths = paths.map(normalizeRepoPath);
+  const directTestFiles = normalizedPaths.filter(hasTestSuffix).sort();
+  if (directTestFiles.length) {
+    return [["pnpm", ["exec", "vitest", "run", ...directTestFiles]]];
+  }
+
+  const targets = new Set<string>();
+  for (const path of normalizedPaths) {
+    if (path.startsWith("src/routing/")) targets.add("src/routing/__tests__");
+    else if (path.startsWith("src/discord/")) targets.add("src/discord/__tests__");
+    else if (path.startsWith("src/cron/")) targets.add("src/cron/__tests__");
+    else if (path.startsWith("src/ops/")) targets.add("src/ops/__tests__");
+    else if (path.startsWith("src/store/")) targets.add("src/store/__tests__");
+    else if (path.startsWith("src/agent/")) targets.add("src/agent/__tests__");
+    else {
+      const provider = path.match(/^src\/providers\/([^/]+)\//)?.[1];
+      const mcp = path.match(/^src\/mcp\/([^/]+)\//)?.[1];
+      if (provider) targets.add(`src/providers/${provider}/__tests__`);
+      if (mcp) targets.add(`src/mcp/${mcp}/__tests__`);
+    }
+  }
+
+  return targets.size ? [["pnpm", ["exec", "vitest", "run", ...[...targets].sort()]]] : [];
+}
+
+function repairVerificationCommands(changedFiles: string[]): VerificationCommand[] {
+  return [
+    ["pnpm", ["run", "quality:g0"]],
+    ["pnpm", ["run", "quality:secrets"]],
+    ...selectTargetedTestCommands(changedFiles),
+    ["pnpm", ["run", "typecheck"]],
+    ["pnpm", ["run", "lint"]],
+    ["pnpm", ["test"]],
+    ["pnpm", ["run", "build"]],
+  ];
+}
+
+function runVerification(path: string, changedFiles: string[], run: CommandRunner): VerificationResult[] {
+  const results: VerificationResult[] = [];
+  for (const [cmd, args] of repairVerificationCommands(changedFiles)) {
+    const label = [cmd, ...args].join(" ");
+    try {
+      const output = run(cmd, args, path);
+      results.push({ command: label, ok: true, output: output.slice(-4000) });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      results.push({ command: label, ok: false, output: message.slice(-4000) });
+      break;
+    }
+  }
+  return results;
+}
+
+function ensureRepairDependencies(path: string, run: CommandRunner): void {
+  if (existsSync(join(path, "node_modules", ".bin", "tsx"))) return;
+  run("pnpm", ["install", "--frozen-lockfile"], path);
+}
+
+function currentGitSha(path: string, run: CommandRunner): string {
+  return run("git", ["rev-parse", "HEAD"], path).trim();
+}
+
+function commitMessage(incident: IncidentRow): { title: string; body: string } {
+  const shortId = sanitizeId(incident.id).slice(0, 8);
+  return {
+    title: `fix: repair MiniClaw incident ${shortId}`,
+    body: [
+      `Incident: ${incident.id}`,
+      `Title: ${incident.title}`,
+      "",
+      "Co-authored-by: Codex <codex@openai.com>",
+    ].join("\n"),
+  };
+}
+
+function commitVerifiedRepair(incident: IncidentRow, changedFiles: string[], path: string, run: CommandRunner): string {
+  run("git", ["config", "user.name", config.doctor.repairCommitAuthorName], path);
+  run("git", ["config", "user.email", config.doctor.repairCommitAuthorEmail], path);
+  run("git", ["add", "--", ...changedFiles], path);
+  const staged = run("git", ["diff", "--cached", "--name-only"], path).trim();
+  if (!staged) throw new Error("no staged repair changes after git add");
+  const message = commitMessage(incident);
+  run("git", ["commit", "-m", message.title, "-m", message.body], path);
+  return currentGitSha(path, run);
+}
+
 async function runCodexRepairAgent(prompt: string, cwd: string): Promise<RepairAgentResult> {
   const ctrl = new AbortController();
   const timeoutCtrl = withCodexTimeout(ctrl.signal, config.codex.timeoutMs);
@@ -325,27 +432,6 @@ async function runCodexRepairAgent(prompt: string, cwd: string): Promise<RepairA
   };
 }
 
-function runVerification(path: string, run: CommandRunner): VerificationResult[] {
-  const commands: Array<[string, string[]]> = [
-    ["pnpm", ["run", "typecheck"]],
-    ["pnpm", ["run", "lint"]],
-    ["pnpm", ["test"]],
-  ];
-  const results: VerificationResult[] = [];
-  for (const [cmd, args] of commands) {
-    const label = [cmd, ...args].join(" ");
-    try {
-      const output = run(cmd, args, path);
-      results.push({ command: label, ok: true, output: output.slice(-4000) });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      results.push({ command: label, ok: false, output: message.slice(-4000) });
-      break;
-    }
-  }
-  return results;
-}
-
 export async function runDoctorRepair(args: DoctorRepairArgs, deps: DoctorRepairDeps = {}): Promise<DoctorRepairResult> {
   const getIncidentFn = deps.getIncidentFn ?? getIncident;
   const createRepairRunFn = deps.createRepairRunFn ?? createRepairRun;
@@ -365,6 +451,8 @@ export async function runDoctorRepair(args: DoctorRepairArgs, deps: DoctorRepair
   let agent: RepairAgentResult | undefined;
   let changedFiles: string[] = [];
   let verification: VerificationResult[] = [];
+  let baseSha: string | undefined;
+  let commitSha: string | undefined;
 
   if (args.dryRun) {
     return {
@@ -381,11 +469,13 @@ export async function runDoctorRepair(args: DoctorRepairArgs, deps: DoctorRepair
     };
   }
 
+  if (policy.allowed) baseSha = currentGitSha(process.cwd(), commandRunner);
   repairRun = createRepairRunFn({
     incidentId: incident.id,
     status: policy.allowed ? "repairing" : "blocked",
     workspacePath,
     branch,
+    baseSha,
   });
 
   if (!policy.allowed) {
@@ -400,6 +490,7 @@ export async function runDoctorRepair(args: DoctorRepairArgs, deps: DoctorRepair
       policy,
       workspacePath,
       branch,
+      baseSha,
       prompt,
       changedFiles,
       verification,
@@ -409,15 +500,18 @@ export async function runDoctorRepair(args: DoctorRepairArgs, deps: DoctorRepair
 
   appendIncidentEventFn(incident.id, "repair_started", { repair_run_id: repairRun.id, execute: args.execute });
   prepareWorktree(workspacePath, branch, commandRunner);
-  agent = await runAgentFn(prompt, workspacePath);
-  changedFiles = parseChangedFiles(commandRunner("git", ["status", "--porcelain"], workspacePath));
-  const pathViolations = validateChangedPaths(changedFiles);
-
-  if (!agent.success || pathViolations.length) {
+  ensureRepairDependencies(workspacePath, commandRunner);
+  const dirtyBefore = parseChangedFiles(commandRunner("git", ["status", "--porcelain"], workspacePath));
+  if (dirtyBefore.length) {
     markIncidentStatusFn(incident.id, "repair_blocked");
+    appendIncidentEventFn(incident.id, "repair_blocked", {
+      repair_run_id: repairRun.id,
+      reason: "dirty_repair_worktree",
+      dirty_files: dirtyBefore,
+    });
     updateRepairRunFn(repairRun.id, {
       status: "blocked",
-      report: { agent, changedFiles, pathViolations },
+      report: { dirtyFiles: dirtyBefore },
       completedAt: new Date().toISOString(),
     });
     return {
@@ -428,42 +522,159 @@ export async function runDoctorRepair(args: DoctorRepairArgs, deps: DoctorRepair
       policy,
       workspacePath,
       branch,
+      baseSha,
+      prompt,
+      changedFiles: dirtyBefore,
+      verification,
+      message: `repair worktree is dirty before agent run: ${dirtyBefore.join(", ")}`,
+    };
+  }
+
+  agent = await runAgentFn(prompt, workspacePath);
+  changedFiles = parseChangedFiles(commandRunner("git", ["status", "--porcelain"], workspacePath));
+  const pathViolations = validateChangedPaths(changedFiles);
+  const repairBlockers = [
+    ...(!agent.success ? [`agent failed: ${agent.error ?? "unknown error"}`] : []),
+    ...(changedFiles.length === 0 ? ["repair produced no changes"] : []),
+    ...(changedFiles.length > config.doctor.maxPatchFiles
+      ? [`repair changed ${changedFiles.length} files; max_patch_files=${config.doctor.maxPatchFiles}`]
+      : []),
+    ...pathViolations,
+  ];
+
+  if (repairBlockers.length) {
+    markIncidentStatusFn(incident.id, "repair_blocked");
+    appendIncidentEventFn(incident.id, "repair_blocked", {
+      repair_run_id: repairRun.id,
+      blockers: repairBlockers,
+      changed_files: changedFiles,
+    });
+    updateRepairRunFn(repairRun.id, {
+      status: "blocked",
+      report: { agent, changedFiles, blockers: repairBlockers },
+      completedAt: new Date().toISOString(),
+    });
+    return {
+      ok: false,
+      dryRun: false,
+      incident,
+      repairRun,
+      policy,
+      workspacePath,
+      branch,
+      baseSha,
       prompt,
       changedFiles,
       agent,
       verification,
-      message: agent.success ? `repair changed forbidden paths: ${pathViolations.join("; ")}` : `repair agent failed: ${agent.error}`,
+      message: `repair blocked: ${repairBlockers.join("; ")}`,
     };
   }
 
-  verification = changedFiles.length ? runVerification(workspacePath, commandRunner) : [];
+  verification = runVerification(workspacePath, changedFiles, commandRunner);
   const verified = verification.every((result) => result.ok);
-  markIncidentStatusFn(incident.id, verified ? "repair_ready" : "repair_blocked");
+  if (!verified) {
+    markIncidentStatusFn(incident.id, "repair_blocked");
+    updateRepairRunFn(repairRun.id, {
+      status: "verification_failed",
+      verification,
+      report: { agent, changedFiles },
+      completedAt: new Date().toISOString(),
+    });
+
+    appendIncidentEventFn(incident.id, "repair_verification_failed", {
+      repair_run_id: repairRun.id,
+      changed_files: changedFiles,
+    });
+
+    return {
+      ok: false,
+      dryRun: false,
+      incident,
+      repairRun,
+      policy,
+      workspacePath,
+      branch,
+      baseSha,
+      prompt,
+      changedFiles,
+      agent,
+      verification,
+      message: "repair verification failed",
+    };
+  }
+
+  if (config.doctor.autoCommitEnabled) {
+    try {
+      commitSha = commitVerifiedRepair(incident, changedFiles, workspacePath, commandRunner);
+      appendIncidentEventFn(incident.id, "repair_committed", {
+        repair_run_id: repairRun.id,
+        commit_sha: commitSha,
+        branch,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      markIncidentStatusFn(incident.id, "repair_blocked");
+      updateRepairRunFn(repairRun.id, {
+        status: "commit_failed",
+        verification,
+        report: { agent, changedFiles, commitError: message },
+        completedAt: new Date().toISOString(),
+      });
+      appendIncidentEventFn(incident.id, "repair_commit_failed", {
+        repair_run_id: repairRun.id,
+        message,
+      });
+      return {
+        ok: false,
+        dryRun: false,
+        incident,
+        repairRun,
+        policy,
+        workspacePath,
+        branch,
+        baseSha,
+        prompt,
+        changedFiles,
+        agent,
+        verification,
+        message: `repair commit failed: ${message}`,
+      };
+    }
+  }
+
+  markIncidentStatusFn(incident.id, "repair_ready");
   updateRepairRunFn(repairRun.id, {
-    status: verified ? "repair_ready" : "verification_failed",
+    status: "repair_ready",
+    commitSha: commitSha ?? null,
     verification,
-    report: { agent, changedFiles },
+    report: { agent, changedFiles, commitSha },
     completedAt: new Date().toISOString(),
   });
 
-  appendIncidentEventFn(incident.id, verified ? "repair_ready" : "repair_verification_failed", {
+  appendIncidentEventFn(incident.id, "repair_ready", {
     repair_run_id: repairRun.id,
     changed_files: changedFiles,
+    commit_sha: commitSha,
   });
 
   return {
-    ok: verified,
+    ok: true,
     dryRun: false,
     incident,
     repairRun,
     policy,
     workspacePath,
     branch,
+    baseSha,
+    commitSha,
     prompt,
     changedFiles,
     agent,
     verification,
-    message: verified ? "repair is ready for review in isolated worktree" : "repair verification failed",
+    message: commitSha
+      ? "repair committed on isolated repair branch and is ready for review"
+      : "repair is ready for review in isolated worktree",
   };
 }
 
@@ -475,6 +686,8 @@ export function formatDoctorRepairResult(result: DoctorRepairResult): string {
     `Mode: ${result.dryRun ? "dry-run" : "execute"}`,
     `Workspace: ${result.workspacePath}`,
     `Branch: ${result.branch}`,
+    ...(result.baseSha ? [`Base SHA: ${result.baseSha}`] : []),
+    ...(result.commitSha ? [`Commit SHA: ${result.commitSha}`] : []),
     `Message: ${result.message}`,
     "",
     "Policy:",

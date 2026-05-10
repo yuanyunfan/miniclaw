@@ -97,11 +97,16 @@ doctor:
   # Example: #monitor-github channel id. Quote Discord IDs.
   summary_channel_id: ""
   auto_repair_enabled: false
+  auto_commit_enabled: true
   auto_push_enabled: false
   auto_restart_enabled: false
   max_repairs_per_day: 2
   max_parallel_repairs: 1
+  max_patch_files: 8
   repair_worktree_root: "~/ProjectRepo/miniclaw-repairs"
+  repair_commit_author_name: "yuanyunfan"
+  repair_commit_author_email: "59247355+yuanyunfan@users.noreply.github.com"
+  require_approval_for_main: true
   allowed_paths:
     - "src/**/*.ts"
     - "scripts/**/*.ts"

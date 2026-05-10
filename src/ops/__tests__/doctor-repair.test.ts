@@ -15,7 +15,11 @@ const ENV_KEYS = [
   "MINICLAW_DB_PATH",
   "MINICLAW_MEMORY_PATH",
   "MINICLAW_DOCTOR_AUTO_REPAIR_ENABLED",
+  "MINICLAW_DOCTOR_AUTO_COMMIT_ENABLED",
+  "MINICLAW_DOCTOR_MAX_PATCH_FILES",
   "MINICLAW_DOCTOR_REPAIR_WORKTREE_ROOT",
+  "MINICLAW_DOCTOR_REPAIR_COMMIT_AUTHOR_NAME",
+  "MINICLAW_DOCTOR_REPAIR_COMMIT_AUTHOR_EMAIL",
   "MINICLAW_DOCTOR_ALLOWED_PATHS",
   "MINICLAW_DOCTOR_BLOCKED_PATHS",
 ] as const;
@@ -43,7 +47,7 @@ afterEach(() => {
   vi.resetModules();
 });
 
-function writeConfig(options: { autoRepair?: boolean } = {}): void {
+function writeConfig(options: { autoRepair?: boolean; autoCommit?: boolean; maxPatchFiles?: number } = {}): void {
   const cfg = join(tmp, "config.yaml");
   writeFileSync(cfg, `
 discord:
@@ -59,7 +63,11 @@ storage:
   memory_path: "${join(tmp, "MEMORY.md")}"
 doctor:
   auto_repair_enabled: ${options.autoRepair ?? false}
+  auto_commit_enabled: ${options.autoCommit ?? true}
+  max_patch_files: ${options.maxPatchFiles ?? 8}
   repair_worktree_root: "${join(tmp, "repairs")}"
+  repair_commit_author_name: "yuanyunfan"
+  repair_commit_author_email: "59247355+yuanyunfan@users.noreply.github.com"
   allowed_paths:
     - "src/**/*.ts"
     - "docs/**/*.md"
@@ -160,6 +168,19 @@ describe("doctor repair policy", () => {
     expect(validateChangedPaths(["logs/miniclaw.log"])).toEqual(["logs/miniclaw.log: blocked path"]);
     expect(validateChangedPaths(["README.md"])).toEqual(["README.md: not in allowed_paths"]);
   });
+
+  it("selects targeted tests from changed files", async () => {
+    writeConfig();
+    const { selectTargetedTestCommands } = await import("../doctor-repair.js");
+
+    expect(selectTargetedTestCommands(["src/routing/intent.ts"])).toEqual([
+      ["pnpm", ["exec", "vitest", "run", "src/routing/__tests__"]],
+    ]);
+    expect(selectTargetedTestCommands(["src/routing/__tests__/intent.test.ts"])).toEqual([
+      ["pnpm", ["exec", "vitest", "run", "src/routing/__tests__/intent.test.ts"]],
+    ]);
+    expect(selectTargetedTestCommands(["docs/features/13-auto-doctor.md"])).toEqual([]);
+  });
 });
 
 describe("runDoctorRepair", () => {
@@ -224,13 +245,27 @@ describe("runDoctorRepair", () => {
     const updateRepairRunFn = vi.fn();
     const markIncidentStatusFn = vi.fn();
     const appendIncidentEventFn = vi.fn();
+    let statusCalls = 0;
+    let revParseCalls = 0;
     const commandRunner = vi.fn((cmd: string, args: string[], cwd: string) => {
+      if (cmd === "git" && args.join(" ") === "rev-parse HEAD") {
+        revParseCalls += 1;
+        return revParseCalls === 1 ? "base-sha\n" : "commit-sha\n";
+      }
       if (cmd === "git" && args[0] === "worktree") {
         expect(cwd).toBe(process.cwd());
         return "";
       }
-      if (cmd === "git" && args.join(" ") === "status --porcelain") return " M src/fixed.ts\n";
+      if (cmd === "pnpm" && args.join(" ") === "install --frozen-lockfile") return "installed";
+      if (cmd === "git" && args.join(" ") === "status --porcelain") {
+        statusCalls += 1;
+        return statusCalls === 1 ? "" : " M src/routing/intent.ts\n";
+      }
       if (cmd === "pnpm") return `${args.join(" ")} ok`;
+      if (cmd === "git" && args[0] === "config") return "";
+      if (cmd === "git" && args[0] === "add") return "";
+      if (cmd === "git" && args.join(" ") === "diff --cached --name-only") return "src/routing/intent.ts\n";
+      if (cmd === "git" && args[0] === "commit") return "[doctor-repair/incident-123456 commit-sha] fix";
       throw new Error(`unexpected command: ${cmd} ${args.join(" ")}`);
     });
     const runAgentFn = vi.fn(async () => ({
@@ -254,15 +289,24 @@ describe("runDoctorRepair", () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(result.changedFiles).toEqual(["src/fixed.ts"]);
+    expect(result.changedFiles).toEqual(["src/routing/intent.ts"]);
+    expect(result.baseSha).toBe("base-sha");
+    expect(result.commitSha).toBe("commit-sha");
     expect(result.verification.map((item) => item.command)).toEqual([
+      "pnpm run quality:g0",
+      "pnpm run quality:secrets",
+      "pnpm exec vitest run src/routing/__tests__",
       "pnpm run typecheck",
       "pnpm run lint",
       "pnpm test",
+      "pnpm run build",
     ]);
     expect(markIncidentStatusFn).toHaveBeenCalledWith(row.id, "repair_ready");
-    expect(updateRepairRunFn).toHaveBeenCalledWith(repair.id, expect.objectContaining({ status: "repair_ready" }));
-    expect(appendIncidentEventFn).toHaveBeenCalledWith(row.id, "repair_ready", expect.objectContaining({ changed_files: ["src/fixed.ts"] }));
+    expect(updateRepairRunFn).toHaveBeenCalledWith(repair.id, expect.objectContaining({ status: "repair_ready", commitSha: "commit-sha" }));
+    expect(appendIncidentEventFn).toHaveBeenCalledWith(row.id, "repair_committed", expect.objectContaining({ commit_sha: "commit-sha" }));
+    expect(appendIncidentEventFn).toHaveBeenCalledWith(row.id, "repair_ready", expect.objectContaining({ changed_files: ["src/routing/intent.ts"], commit_sha: "commit-sha" }));
+    expect(commandRunner).toHaveBeenCalledWith("git", ["config", "user.name", "yuanyunfan"], result.workspacePath);
+    expect(commandRunner).toHaveBeenCalledWith("git", ["config", "user.email", "59247355+yuanyunfan@users.noreply.github.com"], result.workspacePath);
   });
 
   it("blocks successful agent output when it touches forbidden paths", async () => {
@@ -272,9 +316,15 @@ describe("runDoctorRepair", () => {
     const repair = repairRun(row);
     const updateRepairRunFn = vi.fn();
     const markIncidentStatusFn = vi.fn();
+    let statusCalls = 0;
     const commandRunner = vi.fn((cmd: string, args: string[]) => {
+      if (cmd === "git" && args.join(" ") === "rev-parse HEAD") return "base-sha\n";
       if (cmd === "git" && args[0] === "worktree") return "";
-      if (cmd === "git" && args.join(" ") === "status --porcelain") return " M .env\n";
+      if (cmd === "pnpm" && args.join(" ") === "install --frozen-lockfile") return "installed";
+      if (cmd === "git" && args.join(" ") === "status --porcelain") {
+        statusCalls += 1;
+        return statusCalls === 1 ? "" : " M .env\n";
+      }
       throw new Error(`unexpected command: ${cmd} ${args.join(" ")}`);
     });
 
@@ -292,9 +342,53 @@ describe("runDoctorRepair", () => {
     );
 
     expect(result.ok).toBe(false);
-    expect(result.message).toContain("forbidden paths");
+    expect(result.message).toContain(".env: blocked path");
     expect(result.verification).toEqual([]);
     expect(markIncidentStatusFn).toHaveBeenCalledWith(row.id, "repair_blocked");
     expect(updateRepairRunFn).toHaveBeenCalledWith(repair.id, expect.objectContaining({ status: "blocked" }));
+  });
+
+  it("records verification failure and does not commit", async () => {
+    writeConfig({ autoRepair: true });
+    const { runDoctorRepair } = await import("../doctor-repair.js");
+    const row = incident();
+    const repair = repairRun(row);
+    const updateRepairRunFn = vi.fn();
+    const markIncidentStatusFn = vi.fn();
+    let statusCalls = 0;
+    const commandRunner = vi.fn((cmd: string, args: string[]) => {
+      if (cmd === "git" && args.join(" ") === "rev-parse HEAD") return "base-sha\n";
+      if (cmd === "git" && args[0] === "worktree") return "";
+      if (cmd === "pnpm" && args.join(" ") === "install --frozen-lockfile") return "installed";
+      if (cmd === "git" && args.join(" ") === "status --porcelain") {
+        statusCalls += 1;
+        return statusCalls === 1 ? "" : " M src/routing/intent.ts\n";
+      }
+      if (cmd === "pnpm" && args.join(" ") === "run quality:g0") return "g0 ok";
+      if (cmd === "pnpm" && args.join(" ") === "run quality:secrets") return "secrets ok";
+      if (cmd === "pnpm" && args.join(" ") === "exec vitest run src/routing/__tests__") return "targeted ok";
+      if (cmd === "pnpm" && args.join(" ") === "run typecheck") throw new Error("typecheck failed");
+      throw new Error(`unexpected command: ${cmd} ${args.join(" ")}`);
+    });
+
+    const result = await runDoctorRepair(
+      { incidentId: row.id, dryRun: false, execute: true, force: false, json: false },
+      {
+        getIncidentFn: () => row,
+        createRepairRunFn: vi.fn(() => repair),
+        updateRepairRunFn,
+        appendIncidentEventFn: vi.fn(),
+        markIncidentStatusFn,
+        commandRunner,
+        runAgentFn: vi.fn(async () => ({ success: true, response: "Patched.", toolLog: [] })),
+      }
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toBe("repair verification failed");
+    expect(result.verification.at(-1)).toMatchObject({ command: "pnpm run typecheck", ok: false });
+    expect(markIncidentStatusFn).toHaveBeenCalledWith(row.id, "repair_blocked");
+    expect(updateRepairRunFn).toHaveBeenCalledWith(repair.id, expect.objectContaining({ status: "verification_failed" }));
+    expect(commandRunner).not.toHaveBeenCalledWith("git", expect.arrayContaining(["commit"]), expect.any(String));
   });
 });

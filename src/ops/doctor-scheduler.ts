@@ -141,6 +141,7 @@ function formatRepairNotification(result: DoctorRepairResult): string {
     `Mode: ${result.dryRun ? "dry-run" : "execute"}`,
     `Workspace: \`${result.workspacePath}\``,
     `Branch: \`${result.branch}\``,
+    ...(result.commitSha ? [`Commit: \`${result.commitSha.slice(0, 12)}\``] : []),
     `Message: ${result.message}`,
     "",
     "Changed files:",

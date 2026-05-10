@@ -386,7 +386,11 @@ Recommended action:
   - Auto repair respects `doctor.max_parallel_repairs` and `doctor.max_repairs_per_day`.
   - Repair summaries are posted to `doctor.summary_channel_id`.
   - Later hourly scans preserve repair lifecycle states instead of downgrading them back to `diagnosed`.
-  - Auto commit/push and live self-update are still pending.
+- Phase 3B repair commit policy shipped:
+  - Repair verification now runs G0, secrets, targeted Vitest where applicable, typecheck, lint, test, and build before commit.
+  - Verified repairs are committed only on the isolated `doctor-repair/<incident-id>` branch.
+  - Repair commits use the configured personal project author and include the Codex co-author trailer.
+  - Auto push and live self-update are still pending.
 
 ## Next Development Plan: Hourly Doctor And Self-Repair
 
@@ -405,10 +409,15 @@ Add explicit doctor config instead of hardcoding the channel name:
 - `doctor.scan_interval_ms`: default `3600000`
 - `doctor.summary_channel_id`: Discord channel id for repair summaries; local config should point this to `#monitor-github`
 - `doctor.auto_repair_enabled`: default `false`
+- `doctor.auto_commit_enabled`: default `true`; only applies after `doctor.auto_repair_enabled` allows an execute repair
 - `doctor.auto_push_enabled`: default `false`
 - `doctor.auto_restart_enabled`: default `false`
 - `doctor.max_repairs_per_day`: default `2`
 - `doctor.max_parallel_repairs`: default `1`
+- `doctor.max_patch_files`: default `8`
+- `doctor.repair_commit_author_name`: default `yuanyunfan`
+- `doctor.repair_commit_author_email`: default `59247355+yuanyunfan@users.noreply.github.com`
+- `doctor.require_approval_for_main`: default `true`
 - `doctor.allowed_paths`: default allowlist for low-risk MiniClaw source/test/docs paths
 - `doctor.blocked_paths`: secrets, runtime state, local DB, logs, `.env`, user config, package manager auth files
 
@@ -572,7 +581,7 @@ Implement in this order:
 4. Discord notification for new or escalated incidents.
 5. Self-repair dry-run worker.
 6. Isolated worktree repair worker with verification.
-7. Auto commit to repair branch.
+7. Auto commit to repair branch. Shipped.
 8. Optional branch push and safe restart approval flow.
 
 This keeps the next code change reviewable: the first PR/commit should stop at automatic hourly diagnosis and incident records. Self-repair should be a separate atomic change after the incident lifecycle is observable.

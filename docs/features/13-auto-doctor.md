@@ -1,12 +1,12 @@
 # Auto Doctor
 
-Status: phase-3a-guarded-repair-worker
+Status: phase-3b-repair-branch-commit
 
 ## Summary
 
 Auto Doctor is MiniClaw's read-only runtime diagnosis path. It collects local evidence from task DB rows, cron state, PM2, logs, connectivity state, and Git state, then produces a concise diagnosis without modifying files, DB state, Git history, or PM2 runtime.
 
-This is the first slice of the broader self-repair plan. Phase 2 adds incident persistence and an optional hourly read-only diagnosis loop. Phase 3A adds a guarded repair worker that can run in an isolated worktree. It still does not implement automatic commit/push or live self-update.
+This is the first slice of the broader self-repair plan. Phase 2 adds incident persistence and an optional hourly read-only diagnosis loop. Phase 3A adds a guarded repair worker that can run in an isolated worktree. Phase 3B commits verified repairs to the isolated repair branch. It still does not implement automatic push to `main` or live self-update.
 
 ## Commands
 
@@ -100,10 +100,12 @@ Execute mode is intentionally gated:
 - `doctor.auto_repair_enabled` must be `true`, unless `--force` is used for an explicit operator override.
 - provider auth, provider data, network, Discord, and third-party incidents are refused as non-repairable.
 - the worker creates or reuses an isolated worktree under `doctor.repair_worktree_root`.
+- the worker refuses a dirty repair worktree before asking Codex to edit files.
 - changed files must match `doctor.allowed_paths` and must not match `doctor.blocked_paths`.
-- verification currently runs `pnpm run typecheck`, `pnpm run lint`, and `pnpm test`.
+- verification runs `pnpm run quality:g0`, `pnpm run quality:secrets`, targeted Vitest when changed files map cleanly to a test area, `pnpm run typecheck`, `pnpm run lint`, `pnpm test`, and `pnpm run build`.
+- when verification passes and `doctor.auto_commit_enabled` is true, the worker stages only the changed repair files and creates a commit on `doctor-repair/<incident-id>`.
 
-Successful verification leaves the incident in `repair_ready` and stores the repair report in `repair_runs`. Failed agent execution, forbidden paths, or failed verification leave the incident in `repair_blocked` with the evidence stored for review.
+Successful verification leaves the incident in `repair_ready` and stores the repair report in `repair_runs`. If auto commit is enabled, `repair_runs.commit_sha` records the repair branch commit. Failed agent execution, forbidden paths, failed verification, or commit failure leave the incident in `repair_blocked` with the evidence stored for review.
 
 When automatic repair is enabled, the hourly scheduler applies the same worker policy and rate limits before attempting repair:
 
@@ -122,7 +124,7 @@ Auto diagnosis remains read-only by design:
 - It does not refresh credentials or provider sessions.
 - It redacts common token, cookie, password, secret, authorization, and high-entropy values from logs and errors.
 
-The repair worker can edit only the isolated repair worktree in execute mode. It does not commit, push, merge to `main`, restart MiniClaw, or modify the live main worktree.
+The repair worker can edit only the isolated repair worktree in execute mode. It can commit verified patches to the isolated repair branch, but it does not push, merge to `main`, restart MiniClaw, or modify the live main worktree.
 
 If a diagnosis says `repairAllowed: yes`, that means the evidence looks compatible with the controlled repair workflow. It does not mean MiniClaw has already repaired anything.
 

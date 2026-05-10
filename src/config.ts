@@ -364,6 +364,16 @@ const doctorRepairWorktreeRoot = resolveHome(requiredString(
   "MINICLAW_DOCTOR_REPAIR_WORKTREE_ROOT",
   "~/ProjectRepo/miniclaw-repairs"
 ));
+const doctorRepairCommitAuthorName = requiredString(
+  ["doctor", "repair_commit_author_name"],
+  "MINICLAW_DOCTOR_REPAIR_COMMIT_AUTHOR_NAME",
+  "yuanyunfan"
+);
+const doctorRepairCommitAuthorEmail = requiredString(
+  ["doctor", "repair_commit_author_email"],
+  "MINICLAW_DOCTOR_REPAIR_COMMIT_AUTHOR_EMAIL",
+  "59247355+yuanyunfan@users.noreply.github.com"
+);
 const notifyEmailHost = optionalString([
   ["notifications", "email", "smtp_host"],
   ["email", "smtp_host"],
@@ -630,11 +640,16 @@ export const config = {
     ),
     summaryChannelId: optionalString(["doctor", "summary_channel_id"], "MINICLAW_DOCTOR_SUMMARY_CHANNEL_ID"),
     autoRepairEnabled: boolValue(["doctor", "auto_repair_enabled"], "MINICLAW_DOCTOR_AUTO_REPAIR_ENABLED", false),
+    autoCommitEnabled: boolValue(["doctor", "auto_commit_enabled"], "MINICLAW_DOCTOR_AUTO_COMMIT_ENABLED", true),
     autoPushEnabled: boolValue(["doctor", "auto_push_enabled"], "MINICLAW_DOCTOR_AUTO_PUSH_ENABLED", false),
     autoRestartEnabled: boolValue(["doctor", "auto_restart_enabled"], "MINICLAW_DOCTOR_AUTO_RESTART_ENABLED", false),
     maxRepairsPerDay: positiveInt(["doctor", "max_repairs_per_day"], "MINICLAW_DOCTOR_MAX_REPAIRS_PER_DAY", 2),
     maxParallelRepairs: positiveInt(["doctor", "max_parallel_repairs"], "MINICLAW_DOCTOR_MAX_PARALLEL_REPAIRS", 1),
+    maxPatchFiles: positiveInt(["doctor", "max_patch_files"], "MINICLAW_DOCTOR_MAX_PATCH_FILES", 8),
     repairWorktreeRoot: doctorRepairWorktreeRoot,
+    repairCommitAuthorName: doctorRepairCommitAuthorName,
+    repairCommitAuthorEmail: doctorRepairCommitAuthorEmail,
+    requireApprovalForMain: boolValue(["doctor", "require_approval_for_main"], "MINICLAW_DOCTOR_REQUIRE_APPROVAL_FOR_MAIN", true),
     allowedPaths: stringArray(["doctor", "allowed_paths"], "MINICLAW_DOCTOR_ALLOWED_PATHS", doctorAllowedPathsFallback),
     blockedPaths: stringArray(["doctor", "blocked_paths"], "MINICLAW_DOCTOR_BLOCKED_PATHS", doctorBlockedPathsFallback),
   },

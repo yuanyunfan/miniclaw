@@ -74,11 +74,16 @@ const ENV_KEYS = [
   "MINICLAW_DOCTOR_SCAN_INTERVAL_MS",
   "MINICLAW_DOCTOR_SUMMARY_CHANNEL_ID",
   "MINICLAW_DOCTOR_AUTO_REPAIR_ENABLED",
+  "MINICLAW_DOCTOR_AUTO_COMMIT_ENABLED",
   "MINICLAW_DOCTOR_AUTO_PUSH_ENABLED",
   "MINICLAW_DOCTOR_AUTO_RESTART_ENABLED",
   "MINICLAW_DOCTOR_MAX_REPAIRS_PER_DAY",
   "MINICLAW_DOCTOR_MAX_PARALLEL_REPAIRS",
+  "MINICLAW_DOCTOR_MAX_PATCH_FILES",
   "MINICLAW_DOCTOR_REPAIR_WORKTREE_ROOT",
+  "MINICLAW_DOCTOR_REPAIR_COMMIT_AUTHOR_NAME",
+  "MINICLAW_DOCTOR_REPAIR_COMMIT_AUTHOR_EMAIL",
+  "MINICLAW_DOCTOR_REQUIRE_APPROVAL_FOR_MAIN",
   "MINICLAW_DOCTOR_ALLOWED_PATHS",
   "MINICLAW_DOCTOR_BLOCKED_PATHS",
   "MINICLAW_NOTIFY_EMAIL_ENABLED",
@@ -200,11 +205,16 @@ doctor:
   scan_interval_ms: 60000
   summary_channel_id: "1498885395025494086"
   auto_repair_enabled: false
+  auto_commit_enabled: true
   auto_push_enabled: false
   auto_restart_enabled: false
   max_repairs_per_day: 1
   max_parallel_repairs: 1
+  max_patch_files: 4
   repair_worktree_root: "${join(tmpDir, "repairs")}"
+  repair_commit_author_name: "yuanyunfan"
+  repair_commit_author_email: "59247355+yuanyunfan@users.noreply.github.com"
+  require_approval_for_main: true
   allowed_paths: ["src/**/*.ts", "docs/**/*.md"]
   blocked_paths: [".env", "~/.miniclaw/**"]
 notifications:
@@ -268,11 +278,16 @@ notifications:
       scanIntervalMs: 60000,
       summaryChannelId: "1498885395025494086",
       autoRepairEnabled: false,
+      autoCommitEnabled: true,
       autoPushEnabled: false,
       autoRestartEnabled: false,
       maxRepairsPerDay: 1,
       maxParallelRepairs: 1,
+      maxPatchFiles: 4,
       repairWorktreeRoot: join(tmpDir, "repairs"),
+      repairCommitAuthorName: "yuanyunfan",
+      repairCommitAuthorEmail: "59247355+yuanyunfan@users.noreply.github.com",
+      requireApprovalForMain: true,
       allowedPaths: ["src/**/*.ts", "docs/**/*.md"],
       blockedPaths: [".env", "~/.miniclaw/**"],
     });
