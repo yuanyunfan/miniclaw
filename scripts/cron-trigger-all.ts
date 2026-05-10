@@ -3,13 +3,13 @@
 // 用法: pnpm tsx scripts/cron-trigger-all.ts
 import { config } from "../src/config.js";
 import { initDb } from "../src/store/db.js";
-import { createBot } from "../src/bot.js";
+import { createCronRunnerClient } from "../src/discord/cron-client.js";
 import { Events } from "discord.js";
 import { runJobNow } from "../src/cron/scheduler.js";
 import { loadCronJobs } from "../src/cron/loader.js";
 
 initDb();
-const bot = createBot();
+const bot = createCronRunnerClient();
 
 bot.once(Events.ClientReady, async (client) => {
   const { jobs } = loadCronJobs();

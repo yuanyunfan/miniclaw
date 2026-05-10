@@ -16,6 +16,7 @@ export interface CmbCreditCardEmailConfig {
   attachment_text_max_bytes: number;
   allowed_attachment_extensions: string[];
   diagnostic_search: boolean;
+  skip_when_no_new_transactions: boolean;
 }
 
 export interface CmbCreditCardTransaction {

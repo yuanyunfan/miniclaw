@@ -19,6 +19,7 @@ const config: CmbCreditCardEmailConfig = {
   attachment_text_max_bytes: 128_000,
   allowed_attachment_extensions: [".txt", ".csv", ".html", ".htm", ".json", ".xml", ".zip"],
   diagnostic_search: true,
+  skip_when_no_new_transactions: false,
 };
 
 describe("collectCmbCreditCardEmailTransactions", () => {

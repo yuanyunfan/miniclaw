@@ -172,6 +172,13 @@ export async function runTask(job: CronJobTask, client: Client): Promise<void> {
       });
       prependedContext += buildCronPreProviderBlock(job.pre_provider, result.text);
       preProviderCommit = result.commit;
+      if (result.skipTask) {
+        const skipMessage = result.skipTask.message
+          ? `${result.skipTask.reason}: ${result.skipTask.message}`
+          : result.skipTask.reason;
+        log.info(`${job.name} skipped by pre_provider ${job.pre_provider}: ${skipMessage}`);
+        return;
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       await channel.send(`⏰ cron \`${job.name}\` ❌ pre_provider 失败: ${msg.slice(0, 1500)}`);

@@ -57,6 +57,7 @@ allowed_attachment_extensions:
   - .xml
   - .zip
 diagnostic_search: true
+skip_when_no_new_transactions: true
 state_path: "~/.miniclaw/providers/cmb-credit-card-email/default-state.json"
 ```
 
@@ -76,7 +77,7 @@ state_path: "~/.miniclaw/providers/cmb-credit-card-email/default-state.json"
 
 ```yaml
 name: daily-cmb-credit-card
-schedule: "30 22 * * *"
+schedule: "*/30 11-23 * * *"
 timezone: Asia/Shanghai
 enabled: true
 type: task
@@ -92,6 +93,8 @@ prompt: |
   - 列出大额消费和可能异常项。
   - 说明结果基于邮件通知解析，最终以银行账单为准。
 ```
+
+如果配置了 `skip_when_no_new_transactions: true`，provider 在没有新解析交易时会让 cron 直接跳过下游 LLM task，不向 Discord 发送“0 消费”简报。这样可以把 cron 改成白天/晚上轮询：邮件未到时静默跳过，邮件到达并解析出新交易后再推送，后续重复轮询会被 dedupe state 跳过。
 
 ## 输出字段
 

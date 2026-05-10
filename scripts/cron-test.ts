@@ -3,7 +3,7 @@
 // 用法: pnpm cron:test <job-name>
 import { config } from "../src/config.js";
 import { initDb } from "../src/store/db.js";
-import { createBot } from "../src/bot.js";
+import { createCronRunnerClient } from "../src/discord/cron-client.js";
 import { Events } from "discord.js";
 import { runJobNow } from "../src/cron/scheduler.js";
 
@@ -14,7 +14,7 @@ if (!name) {
 }
 
 initDb();
-const bot = createBot();
+const bot = createCronRunnerClient();
 
 bot.once(Events.ClientReady, async (client) => {
   console.log(`\n🔧 立刻触发 cron job: ${name}\n`);

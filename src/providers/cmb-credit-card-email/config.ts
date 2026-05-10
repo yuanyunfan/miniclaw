@@ -66,5 +66,6 @@ export function loadCmbCreditCardEmailConfig(name = "default"): CmbCreditCardEma
     attachment_text_max_bytes: positiveInt(raw.attachment_text_max_bytes, 128_000),
     allowed_attachment_extensions: stringArray(raw.allowed_attachment_extensions, [".txt", ".csv", ".html", ".htm", ".json", ".xml", ".zip"]),
     diagnostic_search: boolValue(raw.diagnostic_search, true),
+    skip_when_no_new_transactions: boolValue(raw.skip_when_no_new_transactions, false),
   };
 }

@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   createTask: vi.fn(),
   executeTask: vi.fn(),
   getActiveTaskCount: vi.fn(() => 0),
+  runPreProvider: vi.fn(),
 }));
 
 vi.mock("../../store/db.js", () => ({
@@ -15,6 +16,10 @@ vi.mock("../../store/db.js", () => ({
 vi.mock("../../agent/task.js", () => ({
   executeTask: mocks.executeTask,
   getActiveTaskCount: mocks.getActiveTaskCount,
+}));
+
+vi.mock("../../providers/index.js", () => ({
+  runPreProvider: mocks.runPreProvider,
 }));
 
 function taskJob(): CronJobTask {
@@ -44,6 +49,7 @@ beforeEach(() => {
   mocks.executeTask.mockReset();
   mocks.getActiveTaskCount.mockReset();
   mocks.getActiveTaskCount.mockReturnValue(0);
+  mocks.runPreProvider.mockReset();
 });
 
 describe("cron task runner", () => {
@@ -79,5 +85,30 @@ describe("cron task runner", () => {
     });
 
     await expect(runTask(taskJob(), client())).resolves.toBeUndefined();
+  });
+
+  it("skips the downstream task when a pre_provider returns skipTask", async () => {
+    const { runTask } = await import("../runner-task.js");
+    mocks.runPreProvider.mockResolvedValue({
+      text: "{\"transaction_count\":0}",
+      skipTask: {
+        reason: "no_matching_cmb_credit_card_email",
+        message: "transactions=0",
+      },
+    });
+
+    await expect(runTask({
+      ...taskJob(),
+      pre_provider: "cmb-credit-card-email",
+      pre_provider_config: "default",
+    }, client())).resolves.toBeUndefined();
+
+    expect(mocks.runPreProvider).toHaveBeenCalledWith("cmb-credit-card-email", expect.objectContaining({
+      configName: "default",
+      jobName: "daily-ai-news",
+      channelId: "1000000000000000000",
+    }));
+    expect(mocks.createTask).not.toHaveBeenCalled();
+    expect(mocks.executeTask).not.toHaveBeenCalled();
   });
 });
