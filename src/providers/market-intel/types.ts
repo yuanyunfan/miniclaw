@@ -1,4 +1,5 @@
 import type { PreProviderResult, PreProviderRunArgs } from "../types.js";
+import type { StockPortfolioAssetSummary, StockPortfolioCnySummary } from "../stock-portfolio/types.js";
 
 export type MarketIntelMarketScope = "us" | "cn";
 export type MarketIntelMarket = "us" | "cn-a" | "hk";
@@ -165,9 +166,24 @@ export interface MarketIntelMarketSnapshot {
   cross_market: MarketIntelPlaceholderSection;
 }
 
+export interface MarketIntelPortfolioSourceSummary {
+  provider: string;
+  config: string;
+  label?: string;
+  status: "ok" | "error";
+  error?: string;
+}
+
 export interface MarketIntelPortfolioContext {
-  status: "not_configured" | "not_implemented";
+  status: "not_configured" | "ok" | "partial";
   profile?: string;
+  ok_count: number;
+  failed_count: number;
+  cny_summary?: StockPortfolioCnySummary;
+  asset_summary?: StockPortfolioAssetSummary;
+  sources: MarketIntelPortfolioSourceSummary[];
+  warnings: string[];
+  usage_notes: string[];
   notes: string[];
 }
 

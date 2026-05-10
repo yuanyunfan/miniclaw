@@ -30,7 +30,15 @@ export function buildMarketIntelScores(params: {
   evidence: MarketIntelEvidenceItem[];
 }): MarketIntelScores {
   const calendarEvidence = params.evidence.filter((item) => item.category === "calendar");
-  const directionalEvidence = params.evidence.filter((item) => item.category !== "calendar");
+  const directionalEvidence = params.evidence.filter((item) => (
+    item.category === "quote" ||
+    item.category === "macro" ||
+    item.category === "news" ||
+    item.category === "earnings" ||
+    item.category === "filing" ||
+    item.category === "sector" ||
+    item.category === "risk"
+  ));
   const target = params.marketScope === "us" ? "US broad market" : "CN/HK broad market";
   return {
     index_direction: scoreFromEvidence({

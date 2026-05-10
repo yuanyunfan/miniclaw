@@ -72,6 +72,80 @@ describe("runMarketIntelProvider", () => {
     expect(parsed.role_protocol.roles).toContain("Risk, Scenario & Devil's Advocate");
   });
 
+  it("includes stock-portfolio context and defers commit", async () => {
+    let calledConfig: string | undefined;
+    let committed = false;
+    const result = await runMarketIntelProvider({
+      configName: "us-pre-market",
+      jobName: "us-stock-pre-market",
+      channelId: "1000000000000000000",
+      runAt: new Date("2026-05-08T12:45:00.000Z"),
+    }, {
+      loadProviderConfig: () => testConfig({ portfolio_provider_config: "us-stock" }),
+      portfolioRunner: async (args) => {
+        calledConfig = args.configName;
+        return {
+          text: JSON.stringify({
+            generated_at: "2026-05-08T12:45:00.000Z",
+            source: "stock-portfolio",
+            profile: "us-stock",
+            ok_count: 1,
+            failed_count: 1,
+            cny_summary: {
+              base_currency: "CNY",
+              fx_rates: { USD: 7.1 },
+              gross_profit_cny: 100,
+              gross_loss_cny: -30,
+              net_pnl_cny: 70,
+              winners_count: 1,
+              losers_count: 1,
+              flat_count: 0,
+              positions_with_pnl_count: 2,
+              by_currency: [],
+              top_gainers: [],
+              top_losers: [],
+              warnings: [],
+            },
+            warnings: ["futu-stock/cn: unavailable account_id=ABC123"],
+            usage_notes: ["portfolio note"],
+            sources: [
+              { provider: "futu-stock", config: "us-stock", status: "ok" },
+              { provider: "eastmoney-jywg-readonly", config: "cn-stock", status: "error", error: "unavailable" },
+            ],
+          }),
+          commit: async () => { committed = true; },
+        };
+      },
+    });
+
+    const parsed = JSON.parse(result.text);
+    expect(calledConfig).toBe("us-stock");
+    expect(parsed.portfolio_context.status).toBe("partial");
+    expect(parsed.portfolio_context.cny_summary.net_pnl_cny).toBe(70);
+    expect(parsed.portfolio_context.sources).toHaveLength(2);
+    expect(parsed.data_quality.sources).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "portfolio.stock-portfolio", status: "partial" }),
+    ]));
+    expect(parsed.evidence.map((item: { id: string }) => item.id)).toContain("portfolio.stock-portfolio.1");
+    expect(result.text).not.toContain("account_id=ABC123");
+    await result.commit?.();
+    expect(committed).toBe(true);
+  });
+
+  it("fails closed when stock-portfolio fails", async () => {
+    await expect(runMarketIntelProvider({
+      configName: "us-pre-market",
+      jobName: "us-stock-pre-market",
+      channelId: "1000000000000000000",
+      runAt: new Date("2026-05-08T12:45:00.000Z"),
+    }, {
+      loadProviderConfig: () => testConfig({ portfolio_provider_config: "us-stock" }),
+      portfolioRunner: async () => {
+        throw new Error("broker token=abcdefghijklmnopqrstuvwxyz123456");
+      },
+    })).rejects.toThrow(/token=\[redacted\]/);
+  });
+
   it("returns skipTask when all configured markets are closed", async () => {
     const result = await runMarketIntelProvider({
       configName: "us-pre-market",

@@ -12,15 +12,10 @@ import type {
 } from "./types.js";
 import { buildMarketIntelScores } from "./scoring.js";
 import type { PreProviderRunArgs } from "../types.js";
+import { buildNotConfiguredPortfolioContext } from "./portfolio.js";
+import { sanitizeMarketIntelError } from "./redaction.js";
 
-export function sanitizeMarketIntelError(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err);
-  return raw
-    .replace(/(validatekey=)[^&\s"']+/gi, "$1[redacted]")
-    .replace(/(password|token|cookie|secret|session|account|customer|acc_id|account_id)\s*[:=]\s*[^,\s}]+/gi, "$1=[redacted]")
-    .replace(/([A-Za-z0-9+/=_-]{24,})/g, "[redacted]")
-    .slice(0, 800);
-}
+export { sanitizeMarketIntelError };
 
 function redactJsonStringValues(value: unknown): unknown {
   if (typeof value === "string") return sanitizeMarketIntelError(value);
@@ -56,23 +51,11 @@ export function buildMarketIntelMarketSnapshot(config: MarketIntelProviderConfig
   };
 }
 
-function buildPortfolioContext(config: MarketIntelProviderConfig): MarketIntelPortfolioContext {
-  if (!config.portfolio_provider_config) {
-    return {
-      status: "not_configured",
-      notes: ["portfolio_provider_config is not set; portfolio integration is scheduled for phase 2."],
-    };
-  }
-  return {
-    status: "not_implemented",
-    profile: config.portfolio_provider_config,
-    notes: [
-      `portfolio_provider_config=${config.portfolio_provider_config} is configured, but stock-portfolio integration is scheduled for phase 2.`,
-    ],
-  };
-}
-
-function buildSourceQuality(config: MarketIntelProviderConfig, calendar: MarketIntelCalendarSnapshot): MarketIntelDataQualitySource[] {
+function buildSourceQuality(
+  config: MarketIntelProviderConfig,
+  calendar: MarketIntelCalendarSnapshot,
+  portfolioContext: MarketIntelPortfolioContext,
+): MarketIntelDataQualitySource[] {
   const quoteSources = [
     config.sources.quotes.us_primary,
     config.sources.quotes.hk_primary,
@@ -132,23 +115,32 @@ function buildSourceQuality(config: MarketIntelProviderConfig, calendar: MarketI
     },
   ];
   sources.push({
-    id: "portfolio.placeholder",
+    id: "portfolio.stock-portfolio",
     collector: "portfolio",
     source: config.portfolio_provider_config ?? "none",
-    tier: "placeholder",
-    status: config.portfolio_provider_config ? "not_implemented" : "skipped",
-    message: config.portfolio_provider_config
-      ? "Portfolio context integration is planned for phase 2."
-      : "No portfolio provider config is set.",
+    tier: config.portfolio_provider_config ? "local_readonly" : "placeholder",
+    status: portfolioContext.status === "not_configured"
+      ? "skipped"
+      : portfolioContext.status === "partial"
+        ? "partial"
+        : "ok",
+    message: portfolioContext.status === "not_configured"
+      ? "No portfolio provider config is set."
+      : `stock-portfolio completed: ok=${portfolioContext.ok_count}, failed=${portfolioContext.failed_count}.`,
   });
   return sources;
 }
 
-function buildDataQuality(config: MarketIntelProviderConfig, calendar: MarketIntelCalendarSnapshot): MarketIntelDataQuality {
-  const sources = buildSourceQuality(config, calendar);
+function buildDataQuality(
+  config: MarketIntelProviderConfig,
+  calendar: MarketIntelCalendarSnapshot,
+  portfolioContext: MarketIntelPortfolioContext,
+): MarketIntelDataQuality {
+  const sources = buildSourceQuality(config, calendar, portfolioContext);
   const warnings = sources
     .filter((source) => source.status === "not_implemented" || source.status === "failed" || source.status === "missing_config")
     .map((source) => `${source.collector}: ${source.message ?? source.status}`);
+  warnings.push(...portfolioContext.warnings.map((warning) => `portfolio: ${warning}`));
   return {
     status: warnings.length ? "partial" : "ok",
     warnings,
@@ -164,6 +156,21 @@ function buildCalendarEvidence(args: PreProviderRunArgs, calendar: MarketIntelCa
     source_tier: "official",
     captured_at: args.runAt.toISOString(),
     summary: `Calendar status=${calendar.status}; tradable=${calendar.tradable_markets.join(", ") || "none"}; closed=${calendar.closed_markets.join(", ") || "none"}.`,
+  };
+}
+
+function buildPortfolioEvidence(
+  args: PreProviderRunArgs,
+  portfolioContext: MarketIntelPortfolioContext,
+): MarketIntelEvidenceItem | undefined {
+  if (portfolioContext.status === "not_configured") return undefined;
+  return {
+    id: "portfolio.stock-portfolio.1",
+    category: "portfolio",
+    source: `stock-portfolio/${portfolioContext.profile ?? "default"}`,
+    source_tier: "local_readonly",
+    captured_at: args.runAt.toISOString(),
+    summary: `Portfolio context status=${portfolioContext.status}; ok_sources=${portfolioContext.ok_count}; failed_sources=${portfolioContext.failed_count}; warnings=${portfolioContext.warnings.length}.`,
   };
 }
 
@@ -186,9 +193,14 @@ export function buildMarketIntelPayload(params: {
   configName: string;
   config: MarketIntelProviderConfig;
   calendar: MarketIntelCalendarSnapshot;
+  portfolioContext?: MarketIntelPortfolioContext;
   skipReason?: string;
 }): MarketIntelPayload {
-  const evidence = [buildCalendarEvidence(params.args, params.calendar)];
+  const portfolioContext = params.portfolioContext ?? buildNotConfiguredPortfolioContext();
+  const evidence = [
+    buildCalendarEvidence(params.args, params.calendar),
+    buildPortfolioEvidence(params.args, portfolioContext),
+  ].filter((item): item is MarketIntelEvidenceItem => item !== undefined);
   return {
     generated_at: params.args.runAt.toISOString(),
     source: "market-intel",
@@ -208,8 +220,8 @@ export function buildMarketIntelPayload(params: {
       closed_markets: params.calendar.closed_markets,
     },
     calendar: params.calendar,
-    data_quality: buildDataQuality(params.config, params.calendar),
-    portfolio_context: buildPortfolioContext(params.config),
+    data_quality: buildDataQuality(params.config, params.calendar, portfolioContext),
+    portfolio_context: portfolioContext,
     market_snapshot: buildMarketIntelMarketSnapshot(params.config),
     macro_policy: placeholder(["Macro/policy collector is not implemented in phase 1. Do not infer policy changes from this placeholder."]),
     news: placeholder(["News collector is not implemented in phase 1. Do not invent headlines."]),
@@ -220,7 +232,8 @@ export function buildMarketIntelPayload(params: {
     evidence,
     role_protocol: roleProtocol(),
     usage_notes: [
-      "This phase-1 market-intel payload intentionally contains only calendar evidence and structured placeholders.",
+      "This market-intel payload contains implemented calendar and optional portfolio evidence plus structured placeholders for later market collectors.",
+      "Portfolio context, when configured, is read-only and already redacted by stock-portfolio before this payload is built.",
       "The downstream LLM must cite evidence IDs for factual claims and mark unsupported market views as hypotheses.",
       "No automatic trading, order placement, broker unlock, raw account ID, token, cookie, validatekey, or session data is allowed.",
       "Directional scores remain insufficient_data until quote, macro, sector, news, earnings, and risk collectors are implemented.",

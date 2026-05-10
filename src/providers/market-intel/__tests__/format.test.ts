@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildMarketIntelCalendarSnapshot } from "../calendar.js";
 import { buildMarketIntelPayload, formatMarketIntelPayload, sanitizeMarketIntelError } from "../format.js";
+import { buildPortfolioContextFromText } from "../portfolio.js";
 import type { MarketIntelProviderConfig } from "../types.js";
 
 function testConfig(): MarketIntelProviderConfig {
@@ -72,12 +73,39 @@ describe("market-intel formatting", () => {
       configName: "us-pre-market",
       config,
       calendar,
+      portfolioContext: buildPortfolioContextFromText(JSON.stringify({
+        generated_at: "2026-05-08T12:45:00.000Z",
+        source: "stock-portfolio",
+        profile: "us-stock",
+        ok_count: 1,
+        failed_count: 0,
+        cny_summary: {
+          base_currency: "CNY",
+          fx_rates: { USD: 7.1 },
+          gross_profit_cny: 100,
+          gross_loss_cny: -20,
+          net_pnl_cny: 80,
+          winners_count: 1,
+          losers_count: 1,
+          flat_count: 0,
+          positions_with_pnl_count: 2,
+          by_currency: [],
+          top_gainers: [],
+          top_losers: [],
+          warnings: [],
+        },
+        warnings: [],
+        usage_notes: ["portfolio note"],
+        sources: [{ provider: "futu-stock", config: "us-stock", status: "ok" }],
+      }), "us-stock"),
     });
 
     expect(payload.run_context.calendar_status).toBe("pre_market");
     expect(payload.data_quality.status).toBe("partial");
     expect(payload.market_snapshot.indices.status).toBe("not_implemented");
-    expect(payload.portfolio_context.status).toBe("not_implemented");
+    expect(payload.portfolio_context.status).toBe("ok");
+    expect(payload.portfolio_context.cny_summary?.net_pnl_cny).toBe(80);
+    expect(payload.evidence.map((item) => item.id)).toContain("portfolio.stock-portfolio.1");
     expect(payload.evidence[0]?.id).toBe("calendar.static.1");
     expect(payload.scores.index_direction.direction).toBe("insufficient_data");
   });
@@ -104,8 +132,11 @@ describe("market-intel formatting", () => {
       config,
       calendar,
     });
+    const first = payload.evidence[0];
+    expect(first).toBeDefined();
+    if (!first) return;
     payload.evidence[0] = {
-      ...payload.evidence[0],
+      ...first,
       summary: "session=abcdefghijklmnopqrstuvwxyz1234567890",
     };
 
