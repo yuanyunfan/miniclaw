@@ -231,6 +231,7 @@ describe("runDoctorShip", () => {
       ok: false,
       app: "miniclaw",
       dbPath: join(tmp, "data.db"),
+      activeChatStatePath: join(tmp, "active-chats.json"),
       runningTasks: [{
         id: "task-running",
         prompt: "long task",
@@ -239,6 +240,7 @@ describe("runDoctorShip", () => {
         session_id: null,
         discord_thread_id: null,
       }],
+      runningChats: [],
       exitCode: 1,
       reason: "running_tasks",
     };

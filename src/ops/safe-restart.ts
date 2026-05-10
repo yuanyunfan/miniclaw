@@ -4,6 +4,11 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawn } from "node:child_process";
+import {
+  listActiveChatsFromState,
+  resolveActiveChatStatePath,
+  type ActiveChatSummary,
+} from "../agent/chat-runtime.js";
 
 const DEFAULT_APP_NAME = "miniclaw";
 const DEFAULT_DB_PATH = "~/.miniclaw/data.db";
@@ -23,15 +28,18 @@ export interface SafeRestartArgs {
   force: boolean;
   json: boolean;
   dbPath?: string;
+  activeChatStatePath?: string;
 }
 
 export interface SafeRestartResult {
   ok: boolean;
   app: string;
   dbPath: string;
+  activeChatStatePath: string;
   runningTasks: RunningTaskSummary[];
+  runningChats: ActiveChatSummary[];
   exitCode: number;
-  reason?: "running_tasks" | "pm2_failed";
+  reason?: "running_tasks" | "running_chats" | "running_work" | "pm2_failed";
 }
 
 export type RestartExecutor = (app: string, options: { json: boolean }) => Promise<number>;
@@ -116,6 +124,10 @@ export function parseSafeRestartArgs(argv: string[]): SafeRestartArgs {
       const value = argv[++i];
       if (!value) throw new Error("--db requires a SQLite DB path");
       args.dbPath = resolveHome(value);
+    } else if (arg === "--active-chat-state") {
+      const value = argv[++i];
+      if (!value) throw new Error("--active-chat-state requires a state file path");
+      args.activeChatStatePath = resolveHome(value);
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
@@ -130,6 +142,20 @@ function formatTask(task: RunningTaskSummary): string {
   const cwd = task.cwd ? ` cwd=${task.cwd}` : "";
   const session = task.session_id ? ` session=${task.session_id.slice(0, 16)}` : "";
   return `- ${id} created=${task.created_at}${session}${cwd}\n  ${prompt}`;
+}
+
+function formatChat(chat: ActiveChatSummary): string {
+  const id = chat.id.slice(0, 8);
+  const channel = chat.channel_id.slice(-6);
+  const prompt = chat.prompt.replace(/\s+/g, " ").slice(0, 100) || "(empty prompt)";
+  return `- ${id} started=${chat.started_at} pid=${chat.pid} channel=*${channel}\n  ${prompt}`;
+}
+
+function runningReason(tasks: RunningTaskSummary[], chats: ActiveChatSummary[]): SafeRestartResult["reason"] {
+  if (tasks.length && chats.length) return "running_work";
+  if (tasks.length) return "running_tasks";
+  if (chats.length) return "running_chats";
+  return undefined;
 }
 
 async function defaultPm2Restart(app: string, options: { json: boolean }): Promise<number> {
@@ -157,33 +183,46 @@ export async function runSafeRestart(
   const writeOut = options.stdout ?? ((line) => process.stdout.write(line + "\n"));
   const writeErr = options.stderr ?? ((line) => process.stderr.write(line + "\n"));
   const dbPath = args.dbPath ?? resolveSafeRestartDbPath(options.env);
+  const activeChatStatePath = args.activeChatStatePath ?? resolveActiveChatStatePath(options.env);
   const runningTasks = listRunningTasksFromDb(dbPath);
+  const runningChats = listActiveChatsFromState(activeChatStatePath);
+  const activeWorkCount = runningTasks.length + runningChats.length;
 
-  if (runningTasks.length && !args.force) {
+  if (activeWorkCount && !args.force) {
     const result: SafeRestartResult = {
       ok: false,
       app: args.app,
       dbPath,
+      activeChatStatePath,
       runningTasks,
+      runningChats,
       exitCode: 1,
-      reason: "running_tasks",
+      reason: runningReason(runningTasks, runningChats),
     };
     if (args.json) {
       writeOut(JSON.stringify(result));
     } else {
-      writeErr(`Refusing to restart PM2 app "${args.app}": ${runningTasks.length} running task(s).`);
+      writeErr(
+        `Refusing to restart PM2 app "${args.app}": ` +
+        `${runningTasks.length} running task(s), ${runningChats.length} active chat(s).`
+      );
       for (const task of runningTasks) writeErr(formatTask(task));
+      for (const chat of runningChats) writeErr(formatChat(chat));
       writeErr("Use `pnpm safe-restart -- --force` to restart anyway.");
     }
     return result;
   }
 
   if (!args.json) {
-    if (runningTasks.length) {
-      writeErr(`Force restarting PM2 app "${args.app}"; ${runningTasks.length} running task(s) may be interrupted:`);
+    if (activeWorkCount) {
+      writeErr(
+        `Force restarting PM2 app "${args.app}"; ` +
+        `${runningTasks.length} running task(s), ${runningChats.length} active chat(s) may be interrupted:`
+      );
       for (const task of runningTasks) writeErr(formatTask(task));
+      for (const chat of runningChats) writeErr(formatChat(chat));
     } else {
-      writeOut(`Restarting PM2 app "${args.app}" (no running MiniClaw tasks found).`);
+      writeOut(`Restarting PM2 app "${args.app}" (no running MiniClaw tasks or active chats found).`);
     }
   }
 
@@ -193,7 +232,9 @@ export async function runSafeRestart(
     ok: exitCode === 0,
     app: args.app,
     dbPath,
+    activeChatStatePath,
     runningTasks,
+    runningChats,
     exitCode,
     ...(exitCode === 0 ? {} : { reason: "pm2_failed" as const }),
   };

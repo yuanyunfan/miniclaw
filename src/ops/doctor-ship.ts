@@ -301,6 +301,7 @@ export async function runDoctorShip(args: DoctorShipArgs, deps: DoctorShipDeps =
       repair_run_id: repairRun!.id,
       app: args.app,
       running_tasks: restart.runningTasks.length,
+      running_chats: restart.runningChats.length,
     });
     return {
       ok: true,
@@ -317,12 +318,13 @@ export async function runDoctorShip(args: DoctorShipArgs, deps: DoctorShipDeps =
     };
   }
 
-  const deferred = restart.reason === "running_tasks";
+  const deferred = ["running_tasks", "running_chats", "running_work"].includes(restart.reason ?? "");
   appendIncidentEventFn(incident.id, deferred ? "live_restart_deferred" : "live_restart_failed", {
     repair_run_id: repairRun!.id,
     app: args.app,
     reason: restart.reason,
     running_tasks: restart.runningTasks.map((task) => task.id),
+    running_chats: restart.runningChats.map((chat) => chat.id),
     exit_code: restart.exitCode,
   });
   return {
@@ -337,7 +339,7 @@ export async function runDoctorShip(args: DoctorShipArgs, deps: DoctorShipDeps =
     restartAttempted: true,
     restart,
     message: deferred
-      ? "repair shipped to main; live restart deferred because active tasks are running"
+      ? "repair shipped to main; live restart deferred because active work is still running"
       : `repair shipped to main; safe restart failed with exit code ${restart.exitCode}`,
   };
 }
@@ -356,6 +358,7 @@ export function formatDoctorShipResult(result: DoctorShipResult): string {
     ...(result.restart ? [
       `Restart result: ${result.restart.ok ? "ok" : result.restart.reason ?? "failed"}`,
       `Running tasks during restart: ${result.restart.runningTasks.length}`,
+      `Active chats during restart: ${result.restart.runningChats.length}`,
     ] : []),
     `Message: ${result.message}`,
   ].join("\n");

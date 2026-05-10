@@ -18,7 +18,7 @@ The key design constraint is that the main MiniClaw process must not blindly mod
 3. Let MiniClaw produce a structured root-cause report for each incident.
 4. Support a guarded repair workflow that can generate patches in an isolated workspace.
 5. Run targeted tests and existing quality gates before any commit or push.
-6. Use `pnpm safe-restart` for runtime updates and refuse restart when active tasks exist.
+6. Use `pnpm safe-restart` for runtime updates and refuse restart when active tasks or chats exist.
 7. Keep every repair auditable: incident record, evidence bundle, diff, verification output, commit SHA, push target, and restart result.
 
 ## Non-Goals
@@ -120,7 +120,7 @@ Default policy:
 - Auto commit is allowed only for low-risk, allowlisted changes with passing verification.
 - Auto push should initially target a repair branch, not `main`.
 - Updating the live PM2 app must go through `pnpm safe-restart`.
-- Restart is refused when active MiniClaw tasks exist.
+- Restart is refused when active MiniClaw tasks or chats exist.
 - Main-branch push or live restart should require explicit approval until the system proves reliable.
 
 Low-risk allowlist candidates:
@@ -292,8 +292,8 @@ Phase 4:
 
 - End-to-end dry run: create synthetic bug incident, repair branch, test, commit, push disabled.
 - Safe restart smoke:
-  - with running tasks: restart refused
-  - without running tasks: restart allowed
+  - with running tasks or active chats: restart refused
+  - without running tasks or active chats: restart allowed
 - Audit report snapshot tests.
 
 ## Runtime And Security Rules
@@ -345,8 +345,8 @@ Recommended action:
   - Mitigation: use isolated worktrees and refuse dirty target workspaces.
 - Risk: repair pushes broken code.
   - Mitigation: require quality gates, path allowlist, patch-size limits, and branch-first shipping.
-- Risk: repair restarts MiniClaw while tasks are running.
-  - Mitigation: only use `pnpm safe-restart`; default refusal protects active tasks.
+- Risk: repair restarts MiniClaw while tasks or chats are running.
+  - Mitigation: only use `pnpm safe-restart`; default refusal protects active tasks and chats.
 - Risk: sensitive data leaks into reports or commits.
   - Mitigation: central redaction utilities plus G0/secrets gates before commit and push.
 - Rollback: disable with `doctor.enabled: false`; remove repair worktrees; revert repair commits normally.

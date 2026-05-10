@@ -9,6 +9,7 @@ const ENV_KEYS = [
   "MINICLAW_E2E_FAKE_AGENT",
   "MINICLAW_E2E_SENDER_USER_IDS",
   "MINICLAW_DISABLE_SCHEDULER",
+  "MINICLAW_ACTIVE_CHAT_STATE_PATH",
 ] as const;
 
 let tmp: string;
@@ -45,6 +46,7 @@ e2e:
   process.env.MINICLAW_E2E_FAKE_AGENT = "true";
   process.env.MINICLAW_E2E_SENDER_USER_IDS = "test-user";
   process.env.MINICLAW_DISABLE_SCHEDULER = "true";
+  process.env.MINICLAW_ACTIVE_CHAT_STATE_PATH = join(tmp, "active-chats.json");
 });
 
 afterEach(() => {

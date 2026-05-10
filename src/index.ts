@@ -18,6 +18,12 @@ import {
   listActiveTaskIds,
   waitForActiveTasksToDrain,
 } from "./agent/task.js";
+import {
+  getActiveChatCount,
+  interruptActiveChats,
+  listActiveChatIds,
+  waitForActiveChatsToDrain,
+} from "./agent/chat-runtime.js";
 
 const log = createLogger("main");
 let bot: ReturnType<typeof createBot> | null = null;
@@ -31,7 +37,11 @@ async function beginGracefulShutdown(reason: string, force = false): Promise<voi
 
   if (force || signalCount >= 3) {
     const ids = interruptActiveTasks(SHUTDOWN_FORCE_SUMMARY);
-    log.error(`Forcing shutdown after ${signalCount} signal(s); interrupted=${ids.join(",") || "none"}`);
+    const chatIds = interruptActiveChats(SHUTDOWN_FORCE_SUMMARY);
+    log.error(
+      `Forcing shutdown after ${signalCount} signal(s); ` +
+      `interrupted_tasks=${ids.join(",") || "none"} interrupted_chats=${chatIds.join(",") || "none"}`
+    );
     connectivityMonitor?.stop();
     doctorScheduler?.stop();
     stopScheduler();
@@ -52,17 +62,26 @@ async function beginGracefulShutdown(reason: string, force = false): Promise<voi
     stopScheduler();
 
     const activeAtStart = listActiveTaskIds();
-    if (activeAtStart.length) {
+    const activeChatsAtStart = listActiveChatIds();
+    if (activeAtStart.length || activeChatsAtStart.length) {
       log.info(
-        `Waiting for ${activeAtStart.length} active task(s) to drain ` +
-        `for up to ${config.shutdownDrainTimeoutMs}ms: ${activeAtStart.join(",")}`
+        `Waiting for ${activeAtStart.length} active task(s) and ${activeChatsAtStart.length} active chat(s) to drain ` +
+        `for up to ${config.shutdownDrainTimeoutMs}ms: ` +
+        `tasks=${activeAtStart.join(",") || "none"} chats=${activeChatsAtStart.join(",") || "none"}`
       );
     }
 
-    const drained = await waitForActiveTasksToDrain(config.shutdownDrainTimeoutMs);
-    if (!drained && getActiveTaskCount() > 0) {
+    const [tasksDrained, chatsDrained] = await Promise.all([
+      waitForActiveTasksToDrain(config.shutdownDrainTimeoutMs),
+      waitForActiveChatsToDrain(config.shutdownDrainTimeoutMs),
+    ]);
+    if (!tasksDrained && getActiveTaskCount() > 0) {
       const interrupted = interruptActiveTasks(SHUTDOWN_DRAIN_TIMEOUT_SUMMARY);
       log.warn(`Drain timeout reached; interrupted task(s): ${interrupted.join(",") || "none"}`);
+    }
+    if (!chatsDrained && getActiveChatCount() > 0) {
+      const interrupted = interruptActiveChats(SHUTDOWN_DRAIN_TIMEOUT_SUMMARY);
+      log.warn(`Drain timeout reached; interrupted chat(s): ${interrupted.join(",") || "none"}`);
     }
 
     await bot?.destroy();
@@ -71,6 +90,7 @@ async function beginGracefulShutdown(reason: string, force = false): Promise<voi
   })().catch(async (err) => {
     log.error("Graceful shutdown failed:", err);
     interruptActiveTasks(SHUTDOWN_FORCE_SUMMARY);
+    interruptActiveChats(SHUTDOWN_FORCE_SUMMARY);
     connectivityMonitor?.stop();
     doctorScheduler?.stop();
     stopScheduler();

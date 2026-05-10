@@ -15,6 +15,7 @@ import type { CodexInputEntry } from "./codex.js";
 import { codexInput, codexThreadOptions, formatCodexItemLine, getCodexClient, withCodexTimeout } from "./codex.js";
 import { formatCodexUsage } from "./usage.js";
 import { buildFakeChatReply } from "../e2e/fake-agent.js";
+import { beginActiveChat } from "./chat-runtime.js";
 
 const log = createLogger("chat");
 
@@ -61,6 +62,8 @@ export async function chat(
   const hasAttach = !!(attachmentBlocks && attachmentBlocks.length);
   log.info(`▶ chat ch=${chShort} attach=${hasAttach ? attachmentBlocks!.length : 0} prompt="${prompt.slice(0, 60).replace(/\s+/g, " ")}"`);
 
+  const activeChat = beginActiveChat({ channelId, userId, prompt });
+  try {
   addChatMessage(channelId, userId, "user", prompt);
 
   if (config.e2e.fakeAgent) {
@@ -79,7 +82,15 @@ export async function chat(
   const system = systemParts.join("\n\n");
 
   if (config.agentProvider === "codex") {
-    const result = await chatWithCodex(system, prompt, historyContext, attachmentCodexInputs, callbacks, runtimeContext);
+    const result = await chatWithCodex(
+      system,
+      prompt,
+      historyContext,
+      attachmentCodexInputs,
+      callbacks,
+      runtimeContext,
+      activeChat.signal
+    );
     log.info(
       `✓ chat/codex ch=${chShort} ${Date.now() - startedAt}ms ` +
       `tools=${result.toolCount} reply.len=${result.reply.length}` +
@@ -92,12 +103,7 @@ export async function chat(
     return result.reply;
   }
 
-  const timeoutCtrl = new AbortController();
-  const timeout = setTimeout(
-    () => timeoutCtrl.abort(new Error(`chat timeout after ${config.chatTimeoutMs}ms`)),
-    config.chatTimeoutMs,
-  );
-  timeout.unref?.();
+  const timeoutCtrl = withCodexTimeout(activeChat.signal, config.chatTimeoutMs);
 
   // 首轮 user message：附件 + 文字
   const userContent: ContentBlockParam[] = [
@@ -121,7 +127,7 @@ export async function chat(
 
     for (let i = 0; i < MAX_ITERATIONS; i++) {
       if (timeoutCtrl.signal.aborted) {
-        throw new Error(`chat timeout after ${config.chatTimeoutMs}ms`);
+        throw chatAbortError(timeoutCtrl.signal);
       }
       iters++;
       const stream = ant.messages.stream({
@@ -174,11 +180,11 @@ export async function chat(
     }
   } catch (err) {
     if (timeoutCtrl.signal.aborted) {
-      throw new Error(`chat timeout after ${config.chatTimeoutMs}ms`);
+      throw chatAbortError(timeoutCtrl.signal);
     }
     throw err;
   } finally {
-    clearTimeout(timeout);
+    if (!timeoutCtrl.signal.aborted) timeoutCtrl.abort();
   }
 
   if (iters >= MAX_ITERATIONS && stopReason === "tool_use") {
@@ -210,6 +216,9 @@ export async function chat(
   });
 
   return result;
+  } finally {
+    activeChat.finish();
+  }
 }
 
 function formatToolLine(name: string, input: Record<string, unknown>): string {
@@ -229,6 +238,13 @@ function shortenPath(p: string): string {
 function truncate(s: string, max: number): string {
   const clean = s.replace(/\n/g, " ").trim();
   return clean.length > max ? clean.slice(0, max) + "…" : clean;
+}
+
+function chatAbortError(signal: AbortSignal): Error {
+  const reason = signal.reason;
+  const message = reason instanceof Error ? reason.message : typeof reason === "string" ? reason : "";
+  if (message && !message.startsWith("Codex timeout after")) return new Error(message);
+  return new Error(`chat timeout after ${config.chatTimeoutMs}ms`);
 }
 
 function buildHistoryContext(rows: Array<{ role: string; content: string }>): string {
@@ -259,11 +275,12 @@ async function chatWithCodex(
   attachmentCodexInputs?: CodexInputEntry[],
   callbacks?: ChatCallbacks,
   runtimeContext?: string,
+  activeSignal?: AbortSignal,
 ): Promise<{ reply: string; tokensSummary?: string; toolCount: number }> {
   const codex = getCodexClient();
   const thread = codex.startThread(codexThreadOptions("chat", config.defaultCwd));
-  const ctrl = new AbortController();
-  const timeoutCtrl = withCodexTimeout(ctrl.signal, config.chatTimeoutMs);
+  const fallbackCtrl = new AbortController();
+  const timeoutCtrl = withCodexTimeout(activeSignal ?? fallbackCtrl.signal, config.chatTimeoutMs);
   const fullPrompt = [
     system,
     "你正在处理 Discord 轻量聊天。默认直接回答；只有在需要确认本地文件、运行只读命令或搜索资料时才使用工具。用中文回复。",
@@ -313,13 +330,13 @@ async function chatWithCodex(
     }
 
     if (timeoutCtrl.signal.aborted) {
-      throw new Error(`chat timeout after ${config.chatTimeoutMs}ms`);
+      throw chatAbortError(timeoutCtrl.signal);
     }
 
     return { reply: reply.trim() || "[无文字回复]", ...(tokensSummary ? { tokensSummary } : {}), toolCount };
   } catch (err) {
     if (timeoutCtrl.signal.aborted) {
-      throw new Error(`chat timeout after ${config.chatTimeoutMs}ms`);
+      throw chatAbortError(timeoutCtrl.signal);
     }
     throw err;
   } finally {

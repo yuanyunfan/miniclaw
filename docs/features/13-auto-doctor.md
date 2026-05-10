@@ -196,7 +196,7 @@ Live restart is opt-in:
 pnpm run doctor:ship -- --incident <incident-id> --execute --approve-main --restart
 ```
 
-The restart path calls `pnpm safe-restart` through the same safe-restart implementation used by the standalone command. It never passes `--force`. If active tasks exist, restart is deferred, `live_restart_deferred` is recorded, and the patch remains shipped but not live-restarted.
+The restart path calls `pnpm safe-restart` through the same safe-restart implementation used by the standalone command. It never passes `--force`. If active tasks or chats exist, restart is deferred, `live_restart_deferred` is recorded, and the patch remains shipped but not live-restarted.
 
 Repair summaries posted to the configured Auto Improve summary channel include the preview, ship, and ship-plus-restart commands when a repair branch has been pushed.
 
