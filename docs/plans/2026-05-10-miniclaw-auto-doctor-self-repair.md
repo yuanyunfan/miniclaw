@@ -369,3 +369,192 @@ Recommended action:
 - Incident DB, persistent incident deduplication, self-repair worker, auto commit/push, and live self-update are not implemented yet.
 - Current safe restart and graceful drain behavior must remain the runtime update boundary.
 - The next useful implementation slice should be Phase 2: incident persistence and `/health` open-incident visibility.
+
+## Next Development Plan: Hourly Doctor And Self-Repair
+
+### Target Behavior
+
+MiniClaw should run Auto Doctor automatically once per hour, detect actionable incidents, attempt policy-allowed self-repair in an isolated workspace, and post a concise result summary to the Discord `#monitor-github` channel.
+
+The initial self-repair target is guarded automation, not blind self-modification. Diagnosis can run automatically. Repair can run automatically only for allowlisted, low-risk MiniClaw code bugs. Shipping to `main` and live restart should remain conservative until the repair loop has enough successful history.
+
+### Channel And Trigger Configuration
+
+Add explicit doctor config instead of hardcoding the channel name:
+
+- `doctor.enabled`: default `true`
+- `doctor.auto_diagnose_enabled`: default `false` for first rollout, then enable in local config after smoke tests
+- `doctor.scan_interval_ms`: default `3600000`
+- `doctor.summary_channel_id`: Discord channel id for repair summaries; local config should point this to `#monitor-github`
+- `doctor.auto_repair_enabled`: default `false`
+- `doctor.auto_push_enabled`: default `false`
+- `doctor.auto_restart_enabled`: default `false`
+- `doctor.max_repairs_per_day`: default `2`
+- `doctor.max_parallel_repairs`: default `1`
+- `doctor.allowed_paths`: default allowlist for low-risk MiniClaw source/test/docs paths
+- `doctor.blocked_paths`: secrets, runtime state, local DB, logs, `.env`, user config, package manager auth files
+
+Hourly trigger should be implemented as a built-in runtime scheduler, not as a user YAML cron job. The doctor loop is MiniClaw operations infrastructure, so it needs access to incident persistence, repair policy, and alert state without being mixed into normal user cron jobs.
+
+### Phase 2A: Incident Persistence And Deduplication
+
+Add DB-backed incident storage before any repair logic:
+
+1. Increase the DB schema version and add `incidents`, `incident_events`, and `repair_runs`.
+2. Add typed store functions:
+   - `createOrUpdateIncident`
+   - `listOpenIncidents`
+   - `getIncident`
+   - `appendIncidentEvent`
+   - `markIncidentStatus`
+   - `createRepairRun`
+   - `updateRepairRun`
+3. Use deterministic dedupe keys so the hourly scan does not spam duplicate incidents:
+   - task incidents: `task:<task_id>:<status>`
+   - cron incidents: `cron:<job_name>:<failure_run_id or last_run_at>`
+   - PM2 restart loop: `pm2:<app>:<restart_window>`
+   - connectivity outage: `connectivity:<status>:<hour_bucket>`
+4. Add open incident counts to `/health`.
+5. Add `/incidents` and `/incident id:<id>` as read-only operator views.
+
+Exit criteria:
+
+- Repeated hourly scans update the same open incident instead of creating duplicates.
+- `/health` reports open incident count.
+- No code repair path exists yet.
+
+### Phase 2B: Hourly Auto Doctor Loop
+
+Add `src/ops/doctor-scheduler.ts` and start it from `src/index.ts` after Discord `clientReady`.
+
+Loop behavior:
+
+1. Skip when MiniClaw is draining.
+2. Skip if another doctor scan is active.
+3. Run read-only doctor evidence collection for recent task, cron, PM2, logs, and connectivity state.
+4. Create or update incidents through the persistence layer.
+5. For newly opened or severity-escalated incidents, post a short diagnosis to `doctor.summary_channel_id`.
+6. For repair-eligible incidents, enqueue a repair attempt only if `doctor.auto_repair_enabled` is true.
+
+The hourly diagnosis message should go to `#monitor-github` only when there is something actionable. A clean hourly scan should remain log-only or send a compact daily digest later, otherwise the monitor channel becomes noisy.
+
+Exit criteria:
+
+- Synthetic cron/task failures create incidents on the next scan.
+- Clean scans do not spam Discord.
+- Drain state stops the doctor loop from starting new repair work.
+
+### Phase 3A: Self-Repair Worker
+
+Add a separate worker CLI:
+
+```bash
+pnpm run doctor:repair -- --incident <incident-id>
+pnpm run doctor:repair -- --incident <incident-id> --dry-run
+pnpm run doctor:repair -- --incident <incident-id> --json
+```
+
+Worker responsibilities:
+
+1. Load incident, evidence, diagnosis, policy, and current Git state.
+2. Refuse blocked categories:
+   - provider auth/session/cookie/secret issues
+   - missing third-party data
+   - network/Discord outage without a MiniClaw code signal
+   - dirty main worktree when no isolated worktree can be created
+3. Create an isolated worktree under:
+
+```text
+/Users/yuan/ProjectRepo/miniclaw-repairs/<incident-id>
+```
+
+4. Create a repair branch such as:
+
+```text
+doctor-repair/<incident-id>
+```
+
+5. Generate a strict repair prompt that includes:
+   - incident summary
+   - evidence bundle
+   - allowed and blocked paths
+   - expected tests
+   - safety rules
+   - requirement to keep the patch small
+6. Run the coding agent inside the isolated worktree.
+7. Collect changed files, patch stats, test output, and final report.
+8. Persist the repair run status and post a summary to `#monitor-github`.
+
+The worker should not modify the live main worktree directly. The main bot should only enqueue or spawn this worker and observe its result.
+
+Exit criteria:
+
+- A synthetic incident can produce a dry-run repair plan.
+- A safe fixture bug can produce a patch in an isolated worktree.
+- Failed verification leaves the repair branch and report available for inspection.
+
+### Phase 3B: Verification And Commit Policy
+
+Add a repair verifier that runs staged gates in increasing cost order:
+
+1. `pnpm run quality:g0`
+2. `pnpm run quality:secrets`
+3. targeted Vitest command selected by changed files
+4. `pnpm run typecheck`
+5. `pnpm run lint`
+6. `pnpm test`
+7. `pnpm run build`
+
+Commit policy:
+
+- Allow auto commit on the repair branch only when all required gates pass.
+- Commit author must be the personal project author.
+- Commit body must include `Co-authored-by: Codex <codex@openai.com>`.
+- Do not auto push to `main` in this phase.
+- Auto push to the repair branch can be enabled later with `doctor.auto_push_enabled`.
+
+Exit criteria:
+
+- Passing repair creates a commit on `doctor-repair/<incident-id>`.
+- Failing repair records exact failed gate and does not commit.
+- Forbidden path changes are rejected before commit.
+
+### Phase 4: Guarded Ship And Live Update
+
+This phase should be opt-in after Phase 3 has real successful runs.
+
+Allowed ship flow:
+
+1. Push repair branch.
+2. Post summary to `#monitor-github` with:
+   - incident id and title
+   - likely root cause
+   - changed files
+   - verification gates
+   - commit SHA
+   - branch name
+   - whether live restart was attempted
+3. Main-branch update requires explicit approval unless `doctor.require_approval_for_main=false`.
+4. Live restart must use `pnpm safe-restart --json`.
+5. If active tasks exist, restart is refused and the Discord summary should say the patch is shipped but live update is pending.
+
+Exit criteria:
+
+- No repair path can hard-restart MiniClaw while tasks are running.
+- `#monitor-github` receives a complete audit summary for each repair attempt.
+- Operator can approve or manually merge/restart from the repair report.
+
+### Recommended First Implementation Slice
+
+Implement in this order:
+
+1. Config keys and `#monitor-github` summary channel resolution.
+2. Incident persistence and dedupe.
+3. Hourly read-only doctor scheduler.
+4. Discord notification for new or escalated incidents.
+5. Self-repair dry-run worker.
+6. Isolated worktree repair worker with verification.
+7. Auto commit to repair branch.
+8. Optional branch push and safe restart approval flow.
+
+This keeps the next code change reviewable: the first PR/commit should stop at automatic hourly diagnosis and incident records. Self-repair should be a separate atomic change after the incident lifecycle is observable.
