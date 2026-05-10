@@ -19,6 +19,7 @@ import { createAndRunDiscordTask, taskCapacityError } from "../discord/task-inta
 import { buildTaskSourceFromInteraction, withTaskThreadMetadata } from "../discord/task-context.js";
 import { resolveTaskCwd } from "../routing/cwd.js";
 import { buildTaskPromptWithContext } from "../routing/task-context.js";
+import { formatDoctorReport, runDoctor, type DoctorMode } from "../ops/doctor.js";
 
 const log = createLogger("handlers");
 
@@ -124,6 +125,30 @@ export async function handleHealth(interaction: ChatInputCommandInteraction): Pr
     })],
     ephemeral: true,
   });
+}
+
+export async function handleDoctor(interaction: ChatInputCommandInteraction): Promise<void> {
+  if (!isAllowed(interaction.user.id)) {
+    await interaction.reply({ content: "⛔ 无权限", ephemeral: true });
+    return;
+  }
+
+  const taskIdPrefix = interaction.options.getString("task_id") ?? undefined;
+  const cronJobName = interaction.options.getString("cron") ?? undefined;
+  const mode: DoctorMode = taskIdPrefix ? "task" : cronJobName ? "cron" : "recent";
+
+  await interaction.deferReply({ ephemeral: true });
+  const report = await runDoctor({
+    mode,
+    taskIdPrefix,
+    cronJobName,
+    json: false,
+    dbPath: config.dbPath,
+    connectivityStatePath: config.connectivity.statePath,
+    cwd: process.cwd(),
+  });
+
+  await interaction.editReply(formatDoctorReport(report).slice(0, 1900));
 }
 
 export async function handleAgentConfig(interaction: ChatInputCommandInteraction): Promise<void> {

@@ -1,0 +1,371 @@
+# MiniClaw Auto Doctor And Self-Repair Loop
+
+Status: in_progress
+Date: 2026-05-10
+
+## Background
+
+MiniClaw is now used as a long-running Discord task runner. Failures often show up as Discord task errors, cron failures, chat reply errors, interrupted task rows, PM2 restarts, or connectivity outages. The current operating model is still mostly manual: the user notices the symptom, asks MiniClaw or Codex to inspect logs/DB/state, then asks for a code fix.
+
+The target direction is a controlled self-evolution loop: MiniClaw should detect runtime problems, collect evidence, produce a diagnosis, and, for safe low-risk cases, run an isolated repair workflow that can create a verified patch. Only after quality gates pass and restart safety checks are satisfied should it commit, push, and optionally update the running PM2 app.
+
+The key design constraint is that the main MiniClaw process must not blindly modify or restart itself. The safe shape is an Auto Doctor in the runtime plus a separate Self-Repair Worker.
+
+## Goals
+
+1. Automatically detect incidents from task, cron, PM2, log, and connectivity state.
+2. Preserve enough context for diagnosis without requiring the user to paste logs into Discord manually.
+3. Let MiniClaw produce a structured root-cause report for each incident.
+4. Support a guarded repair workflow that can generate patches in an isolated workspace.
+5. Run targeted tests and existing quality gates before any commit or push.
+6. Use `pnpm safe-restart` for runtime updates and refuse restart when active tasks exist.
+7. Keep every repair auditable: incident record, evidence bundle, diff, verification output, commit SHA, push target, and restart result.
+
+## Non-Goals
+
+- Do not let the Discord bot main process directly edit the main working tree.
+- Do not auto-fix secrets, account sessions, cookies, credentials, or auth failures.
+- Do not auto-force-push, rewrite history, or run destructive Git operations.
+- Do not auto-merge large architecture changes into `main`.
+- Do not bypass existing quality gates.
+- Do not treat every task failure as a MiniClaw code bug; user prompt issues, provider data absence, network outages, and third-party failures must remain separate classifications.
+
+## Existing Architecture Evidence
+
+- `src/store/db.ts` persists task rows with `running`, `interrupted`, `completed`, `failed`, and `cancelled` status values plus Discord source metadata.
+- `src/agent/task.ts` owns in-process active task tracking, cancellation, graceful drain waits, and interrupted-task persistence.
+- `src/agent/recovery.ts` marks stale running tasks as interrupted on startup and posts recovery guidance into Discord threads.
+- `src/runtime/shutdown.ts` is the shared draining-state holder; new work rejects while drain is active.
+- `src/index.ts` owns the graceful shutdown path: stop monitor/scheduler, wait for task drain, interrupt remaining tasks only after timeout, then exit.
+- `src/cron/scheduler.ts` records cron run status, retries failures, and can send/update Discord failure alerts.
+- `src/monitoring/connectivity-monitor.ts` and `src/monitoring/connectivity-core.ts` probe Discord, general network, and SMTP reachability, then persist runtime connectivity state.
+- `src/ops/safe-restart.ts` refuses PM2 restart when the MiniClaw SQLite DB contains `status='running'` tasks unless `--force` is explicitly provided.
+- `package.json` exposes `quality:commit` and `quality:push`; Git hooks call these gates before commit and push.
+- `src/routing/intent.ts` already treats runtime diagnostics terms such as "任务失败", "回复出错", "排查", and "why fail" as task-like work rather than lightweight chat.
+
+## Proposed Architecture
+
+### 1. Incident Detector
+
+Add a detector layer that periodically scans runtime sources and normalizes symptoms into incidents.
+
+Input sources:
+
+- SQLite task DB: recent `failed`, `interrupted`, and long-running `running` rows.
+- Cron state: jobs with `last_status='error'`, retry metadata, and last error text.
+- PM2 state: restart count, status, uptime, unstable restart loops.
+- MiniClaw logs: recent error lines from `~/.miniclaw/logs/miniclaw-error.log` and selected out log windows.
+- Connectivity state: `~/.miniclaw/runtime/connectivity.json`.
+- Git state: current commit SHA, branch, dirty status, remote, and local hook availability.
+
+Suggested incident types:
+
+- `task_failed`
+- `task_interrupted`
+- `task_running_too_long`
+- `cron_failed`
+- `chat_error`
+- `discord_outage`
+- `pm2_restart_loop`
+- `quality_gate_failed`
+
+### 2. Auto Doctor
+
+Auto Doctor is read-only. It should collect evidence, classify the failure, and post a diagnosis to Discord.
+
+Expected diagnosis fields:
+
+- incident id
+- severity
+- likely category: `user_prompt`, `network`, `discord`, `provider_data`, `provider_auth`, `miniclaw_bug`, `third_party`, `unknown`
+- affected task id / cron job / thread / message URL
+- evidence summary
+- suspected root cause
+- whether repair is allowed by policy
+- recommended next action
+
+This layer should be safe to enable first because it does not modify code or runtime state.
+
+### 3. Self-Repair Worker
+
+Self-Repair Worker is a separate CLI/script, not logic embedded in the long-running Discord bot.
+
+Suggested command:
+
+```bash
+pnpm doctor:repair -- --incident <incident-id>
+```
+
+Worker responsibilities:
+
+1. Load the incident and evidence bundle.
+2. Refuse if the main workspace is dirty unless explicitly configured to use a separate worktree.
+3. Create or reuse an isolated repair worktree under a path such as:
+
+```text
+/Users/yuan/ProjectRepo/miniclaw-repairs/<incident-id>
+```
+
+4. Ask the coding agent to implement a narrow fix using the incident report as input.
+5. Require a failing or targeted test when the bug is testable.
+6. Run verification gates.
+7. Produce a repair report with changed files, diff summary, tests, and remaining risks.
+
+### 4. Ship Controller
+
+Ship Controller decides whether a repair can be committed, pushed, and deployed.
+
+Default policy:
+
+- Auto commit is allowed only for low-risk, allowlisted changes with passing verification.
+- Auto push should initially target a repair branch, not `main`.
+- Updating the live PM2 app must go through `pnpm safe-restart`.
+- Restart is refused when active MiniClaw tasks exist.
+- Main-branch push or live restart should require explicit approval until the system proves reliable.
+
+Low-risk allowlist candidates:
+
+- Smart router false positive/negative fixes.
+- Task metadata/context propagation bugs.
+- Cron runner bugs.
+- Cron failure alert formatting bugs.
+- Provider parsing bugs with fixture-based tests.
+- Typed error handling improvements.
+
+Always require approval:
+
+- Secrets, credentials, cookies, sessions, auth config.
+- Git history operations.
+- Schema migrations.
+- Destructive file operations.
+- Large refactors or cross-cutting architecture changes.
+- Any forced restart while active tasks exist.
+
+## Data Model
+
+Add tables after the read-only doctor prototype proves useful.
+
+```sql
+CREATE TABLE incidents (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  severity TEXT NOT NULL,
+  status TEXT NOT NULL,
+  title TEXT NOT NULL,
+  summary TEXT,
+  subject_id TEXT,
+  subject_type TEXT,
+  source_json TEXT,
+  evidence_json TEXT,
+  diagnosis_json TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  resolved_at TEXT
+);
+
+CREATE TABLE incident_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  incident_id TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  payload_json TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (incident_id) REFERENCES incidents(id)
+);
+
+CREATE TABLE repair_runs (
+  id TEXT PRIMARY KEY,
+  incident_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  workspace_path TEXT,
+  branch TEXT,
+  base_sha TEXT,
+  commit_sha TEXT,
+  verification_json TEXT,
+  report_json TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  completed_at TEXT,
+  FOREIGN KEY (incident_id) REFERENCES incidents(id)
+);
+```
+
+Incident statuses:
+
+- `open`
+- `diagnosing`
+- `diagnosed`
+- `repair_blocked`
+- `repairing`
+- `repair_ready`
+- `shipped`
+- `resolved`
+- `ignored`
+
+## Implementation Plan
+
+### Phase 1: Read-Only Doctor
+
+1. Add `src/ops/doctor/` modules for evidence collection:
+   - task DB collector
+   - cron state collector
+   - PM2 collector
+   - log window collector
+   - connectivity collector
+   - git state collector
+2. Add `scripts/doctor.ts` with modes:
+   - `pnpm run doctor -- --recent`
+   - `pnpm run doctor -- --task <task-id>`
+   - `pnpm run doctor -- --cron <job-name>`
+   - `pnpm run doctor -- --json`
+3. Add a Discord slash command or button path:
+   - `/doctor`
+   - `/doctor task_id:<id>`
+   - cron failure alert button: `诊断`
+4. Render a concise diagnosis into Discord without making changes.
+
+### Phase 2: Incident Persistence
+
+1. Add `incidents` and `incident_events` tables.
+2. Deduplicate incidents by source and time window.
+3. Let task failures, cron failures, chat errors, connectivity outages, and restart recovery create incident records.
+4. Show open incident counts in `/health`.
+5. Add `/incidents` and `/incident id:<id>` read-only commands if useful.
+
+### Phase 3: Controlled Repair Worker
+
+1. Add `scripts/doctor-repair.ts`.
+2. Create isolated repair worktrees.
+3. Generate a strict repair prompt from the incident:
+   - evidence bundle
+   - current architecture notes
+   - allowed paths
+   - required verification
+   - forbidden operations
+4. Run targeted tests, then broader gates as needed.
+5. Post repair report to Discord.
+6. Do not auto-push to `main` in this phase.
+
+### Phase 4: Guarded Auto Ship
+
+1. Add config:
+   - `doctor.enabled`
+   - `doctor.auto_diagnose_enabled`
+   - `doctor.auto_repair_enabled`
+   - `doctor.auto_push_enabled`
+   - `doctor.auto_restart_enabled`
+   - `doctor.allowed_paths`
+   - `doctor.max_patch_files`
+   - `doctor.require_approval_for_main`
+2. Auto commit and push only when:
+   - incident category is allowlisted
+   - changed paths are allowlisted
+   - patch size is below threshold
+   - tests pass
+   - secret and G0 checks pass
+   - no unrelated dirty changes are present in the target workspace
+3. Use `pnpm safe-restart --json` for live update.
+4. Require explicit approval for main branch update or restart until enough successful repair history exists.
+
+## Verification Plan
+
+Phase 1:
+
+- Unit tests for evidence collectors with fixture DB/log/state files.
+- Unit tests for diagnosis rendering and redaction.
+- `pnpm run typecheck`
+- `pnpm vitest run src/ops/doctor`
+
+Phase 2:
+
+- DB migration tests.
+- Incident deduplication tests.
+- `/health` formatter tests for open incident counts.
+- Cron failure to incident integration test.
+
+Phase 3:
+
+- Worktree creation tests with temporary Git repos.
+- Repair policy tests for dirty main workspace, forbidden paths, and blocked incident categories.
+- Verification runner tests for pass/fail propagation.
+- Manual dry run against a synthetic incident.
+
+Phase 4:
+
+- End-to-end dry run: create synthetic bug incident, repair branch, test, commit, push disabled.
+- Safe restart smoke:
+  - with running tasks: restart refused
+  - without running tasks: restart allowed
+- Audit report snapshot tests.
+
+## Runtime And Security Rules
+
+- Redact tokens, cookies, authorization headers, session strings, and long high-entropy values from all evidence.
+- Never include runtime logs, DB files, private docs, or attachment caches in commits.
+- Never run repair on the main worktree if it has unrelated dirty changes.
+- Never call full `createBot()` from diagnostic CLIs; use minimal clients or no Discord client at all.
+- Never bypass `pnpm safe-restart`.
+- Never force-push.
+- Keep Auto Doctor read-only by default.
+- Keep Self-Repair Worker disabled unless explicitly configured.
+
+## Discord UX
+
+Recommended commands/buttons:
+
+- `/doctor`: show recent incidents and system diagnosis summary.
+- `/doctor task_id:<id>`: diagnose a specific task.
+- `/doctor cron:<job-name>`: diagnose a specific cron job.
+- `/incidents`: list open incidents.
+- `诊断`: button on cron/task failure alerts.
+- `尝试修复`: approval button after a diagnosis says repair is safe.
+- `部署修复`: approval button after verification passes.
+
+Suggested diagnosis message shape:
+
+```text
+MiniClaw Doctor: task_failed
+
+Likely category: miniclaw_bug
+Affected task: abc12345
+Evidence:
+- task status changed to failed at ...
+- matching error lines ...
+- current PM2 app is online, no restart loop detected
+
+Recommended action:
+- This looks repairable.
+- Proposed repair scope: src/routing, src/discord tests.
+- Approval required before code changes.
+```
+
+## Risks And Rollback
+
+- Risk: false diagnosis leads to unnecessary repair work.
+  - Mitigation: keep diagnosis read-only first and expose evidence clearly.
+- Risk: automatic repair touches user work.
+  - Mitigation: use isolated worktrees and refuse dirty target workspaces.
+- Risk: repair pushes broken code.
+  - Mitigation: require quality gates, path allowlist, patch-size limits, and branch-first shipping.
+- Risk: repair restarts MiniClaw while tasks are running.
+  - Mitigation: only use `pnpm safe-restart`; default refusal protects active tasks.
+- Risk: sensitive data leaks into reports or commits.
+  - Mitigation: central redaction utilities plus G0/secrets gates before commit and push.
+- Rollback: disable with `doctor.enabled: false`; remove repair worktrees; revert repair commits normally.
+
+## Documentation Sync
+
+- `docs/architecture.md`: add the Auto Doctor and Self-Repair Worker once implementation starts.
+- `docs/quality-gates.md`: document repair-specific verification gates when Phase 3 exists.
+- `docs/features/`: add a feature doc after the first user-facing `/doctor` command lands.
+- `README.md`: add only a short operator summary after the feature is usable.
+
+## Execution Notes
+
+- Phase 1 read-only Auto Doctor has been implemented.
+  - Added `pnpm run doctor` for local CLI diagnosis. `pnpm doctor` is a pnpm builtin and should not be used for this project script.
+  - Added `/doctor` slash command for Discord read-only diagnosis.
+  - Added collectors for task DB, cron state, PM2 state, logs, connectivity state, and Git state.
+  - Added diagnosis classification for task failures, interrupted/long-running tasks, cron failures, Discord/connectivity issues, PM2 restart loops, provider auth/data issues, and likely MiniClaw bugs.
+  - Added tests under `src/ops/__tests__/doctor.test.ts`.
+- Incident DB, persistent incident deduplication, self-repair worker, auto commit/push, and live self-update are not implemented yet.
+- Current safe restart and graceful drain behavior must remain the runtime update boundary.
+- The next useful implementation slice should be Phase 2: incident persistence and `/health` open-incident visibility.

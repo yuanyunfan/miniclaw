@@ -34,6 +34,16 @@ const commands = [
     .setDescription("查看 MiniClaw 运行健康状态"),
 
   new SlashCommandBuilder()
+    .setName("doctor")
+    .setDescription("只读诊断 MiniClaw task / cron / 运行状态")
+    .addStringOption((opt) =>
+      opt.setName("task_id").setDescription("任务 ID 前缀（可选）").setRequired(false)
+    )
+    .addStringOption((opt) =>
+      opt.setName("cron").setDescription("cron job 名称（可选）").setRequired(false)
+    ),
+
+  new SlashCommandBuilder()
     .setName("agent-config")
     .setDescription("查看当前 agent settings / MCP / skills 继承摘要"),
 

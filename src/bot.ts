@@ -15,7 +15,7 @@ import {
 import { config } from "./config.js";
 import { chat, type ChatCallbacks } from "./agent/chat.js";
 import { chunkMessage } from "./discord/chunks.js";
-import { handleTask, handleStatus, handleHealth, handleAgentConfig, handleCancel, handleResume, handleRemember, handleForget, handleMemories } from "./commands/handlers.js";
+import { handleTask, handleStatus, handleHealth, handleDoctor, handleAgentConfig, handleCancel, handleResume, handleRemember, handleForget, handleMemories } from "./commands/handlers.js";
 import { executeTask } from "./agent/task.js";
 import { recoverInterruptedTasks } from "./agent/recovery.js";
 import { createTask, getChatHistory, getTaskByThreadId, recordSmartRouterDecision, updateSmartRouterDecision } from "./store/db.js";
@@ -727,6 +727,9 @@ export function createBot(): Client {
           break;
         case "health":
           await handleHealth(cmd);
+          break;
+        case "doctor":
+          await handleDoctor(cmd);
           break;
         case "agent-config":
           await handleAgentConfig(cmd);
