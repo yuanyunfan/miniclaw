@@ -213,16 +213,19 @@ export function extractMarketForecastJsonFromReport(reportText: string): Forecas
 }
 
 export function stripMarketForecastJsonForDisplay(reportText: string): string {
-  const taggedBlock = /(?:^|\n)[ \t]*(?:#{1,6}[ \t]+)?Forecast JSON[ \t]*\n+(?:[ \t]*\n)*<market_forecast_json>\s*[\s\S]*?\s*<\/market_forecast_json>[ \t]*(?=\n|$)/gi;
+  const forecastJsonHeading = "(?:Forecast JSON|预测\\s*JSON|预测\\s*json|机器可读\\s*JSON)";
+  const taggedBlock = new RegExp(`(?:^|\\n)[ \\t]*(?:#{1,6}[ \\t]+)?${forecastJsonHeading}[ \\t]*\\n+(?:[ \\t]*\\n)*<market_forecast_json>\\s*[\\s\\S]*?\\s*<\\/market_forecast_json>[ \\t]*(?=\\n|$)`, "gi");
   const taggedOnly = /<market_forecast_json>\s*[\s\S]*?\s*<\/market_forecast_json>/gi;
-  const fencedBlock = /(?:^|\n)[ \t]*(?:#{1,6}[ \t]+)?Forecast JSON[ \t]*\n+(?:[ \t]*\n)*```(?:market-forecast-json|forecast_json|json)\s*[\s\S]*?```[ \t]*(?=\n|$)/gi;
+  const fencedBlock = new RegExp(`(?:^|\\n)[ \\t]*(?:#{1,6}[ \\t]+)?${forecastJsonHeading}[ \\t]*\\n+(?:[ \\t]*\\n)*\`\`\`(?:market-forecast-json|forecast_json|json)\\s*[\\s\\S]*?\`\`\`[ \\t]*(?=\\n|$)`, "gi");
   const fencedOnly = /```(?:market-forecast-json|forecast_json)\s*[\s\S]*?```/gi;
+  const orphanHeading = new RegExp(`(?:^|\\n)[ \\t]*(?:#{1,6}[ \\t]+)?${forecastJsonHeading}[ \\t]*(?=\\n|$)`, "gi");
 
   return reportText
     .replace(taggedBlock, "\n")
     .replace(taggedOnly, "")
     .replace(fencedBlock, "\n")
     .replace(fencedOnly, "")
+    .replace(orphanHeading, "\n")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();

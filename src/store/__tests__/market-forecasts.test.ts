@@ -188,6 +188,27 @@ Base case...
     expect(display).not.toContain("index_probabilities");
   });
 
+  it("strips localized forecast JSON headings from user-facing display text", () => {
+    const report = [
+      "# 美股盘前报告 - 2026-05-11",
+      "## 数据质量与来源",
+      "新鲜来源：SEC、Fed。",
+      "",
+      "## 预测 JSON",
+      "<market_forecast_json>",
+      "{\"index_probabilities\":[{\"target\":\"SPY\",\"up\":0.4,\"range_bound\":0.4,\"down\":0.2}]}",
+      "</market_forecast_json>",
+    ].join("\n");
+
+    const display = stripMarketForecastJsonForDisplay(report);
+
+    expect(display).toContain("# 美股盘前报告 - 2026-05-11");
+    expect(display).toContain("## 数据质量与来源");
+    expect(display).not.toContain("预测 JSON");
+    expect(display).not.toContain("market_forecast_json");
+    expect(display).not.toContain("index_probabilities");
+  });
+
   it("records evaluation rows for the post-market phase", () => {
     const id = recordMarketForecastFromPayload({ payload: payload() });
     const evaluationId = recordMarketForecastEvaluation({
