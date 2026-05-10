@@ -157,6 +157,15 @@ function formatRepairNotification(result: DoctorRepairResult): string {
   if (result.policy.blockers.length) {
     lines.push("", "Policy blockers:", ...result.policy.blockers.map((item) => `- ${item}`));
   }
+  if (result.pushed) {
+    lines.push(
+      "",
+      "Ship approval:",
+      `- Preview: \`pnpm run doctor:ship -- --incident ${result.incident.id}\``,
+      `- Ship to main: \`pnpm run doctor:ship -- --incident ${result.incident.id} --execute --approve-main\``,
+      `- Ship + safe restart: \`pnpm run doctor:ship -- --incident ${result.incident.id} --execute --approve-main --restart\``
+    );
+  }
   if (result.agent?.response) {
     lines.push("", "Agent report:", result.agent.response.slice(0, 600));
   }

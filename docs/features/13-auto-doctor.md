@@ -1,12 +1,12 @@
 # Auto Doctor
 
-Status: phase-4a-repair-branch-push
+Status: phase-4b-guarded-ship
 
 ## Summary
 
 Auto Doctor is MiniClaw's read-only runtime diagnosis path. It collects local evidence from task DB rows, cron state, PM2, logs, connectivity state, and Git state, then produces a concise diagnosis without modifying files, DB state, Git history, or PM2 runtime.
 
-This is the first slice of the broader self-repair plan. Phase 2 adds incident persistence and an optional hourly read-only diagnosis loop. Phase 3A adds a guarded repair worker that can run in an isolated worktree. Phase 3B commits verified repairs to the isolated repair branch. Phase 4A can optionally push that repair branch. It still does not implement automatic push to `main` or live self-update.
+This is the first slice of the broader self-repair plan. Phase 2 adds incident persistence and an optional hourly read-only diagnosis loop. Phase 3A adds a guarded repair worker that can run in an isolated worktree. Phase 3B commits verified repairs to the isolated repair branch. Phase 4A can optionally push that repair branch. Phase 4B adds an explicit operator-approved ship path that can fast-forward `main` from a pushed repair branch and optionally call safe restart.
 
 ## Commands
 
@@ -21,6 +21,10 @@ pnpm run doctor:repair -- --incident <incident-id>
 pnpm run doctor:repair -- --incident <incident-id> --dry-run
 pnpm run doctor:repair -- --incident <incident-id> --execute
 pnpm run doctor:repair -- --incident <incident-id> --json
+pnpm run doctor:ship -- --incident <incident-id>
+pnpm run doctor:ship -- --incident <incident-id> --execute --approve-main
+pnpm run doctor:ship -- --incident <incident-id> --execute --approve-main --restart
+pnpm run doctor:ship -- --incident <incident-id> --json
 ```
 
 Discord:
@@ -115,6 +119,41 @@ When automatic repair is enabled, the hourly scheduler applies the same worker p
 - incidents already in `repair_blocked`, `repairing`, or `repair_ready` are not downgraded by later hourly scans.
 - every repair attempt posts a concise result summary to `doctor.summary_channel_id`.
 
+## Guarded Ship
+
+`doctor:ship` is the explicit approval boundary between a pushed repair branch and the live MiniClaw runtime. It defaults to dry-run:
+
+```bash
+pnpm run doctor:ship -- --incident <incident-id>
+```
+
+The command loads the latest `repair_runs` row for the incident and requires `status=repair_pushed`, a branch, and a commit SHA. It does not run Codex or modify source files.
+
+Main update requires explicit approval while `doctor.require_approval_for_main=true`:
+
+```bash
+pnpm run doctor:ship -- --incident <incident-id> --execute --approve-main
+```
+
+The approved path is deliberately narrow:
+
+- it must run from a clean live `main` worktree.
+- it fetches only the pushed `doctor-repair/<incident-id>` branch.
+- it verifies the fetched branch head equals the recorded repair commit SHA.
+- it updates `main` only with `git merge --ff-only`.
+- it pushes `HEAD:main` after the fast-forward succeeds.
+- it marks the incident `shipped` and records a `repair_main_updated` event.
+
+Live restart is opt-in:
+
+```bash
+pnpm run doctor:ship -- --incident <incident-id> --execute --approve-main --restart
+```
+
+The restart path calls `pnpm safe-restart` through the same safe-restart implementation used by the standalone command. It never passes `--force`. If active tasks exist, restart is deferred, `live_restart_deferred` is recorded, and the patch remains shipped but not live-restarted.
+
+Repair summaries posted to `doctor.summary_channel_id` include the preview, ship, and ship-plus-restart commands when a repair branch has been pushed.
+
 ## Safety Boundary
 
 Auto diagnosis remains read-only by design:
@@ -126,6 +165,8 @@ Auto diagnosis remains read-only by design:
 - It redacts common token, cookie, password, secret, authorization, and high-entropy values from logs and errors.
 
 The repair worker can edit only the isolated repair worktree in execute mode. It can commit verified patches to the isolated repair branch and, if configured, push that branch to `origin`. It does not push or merge to `main`, restart MiniClaw, or modify the live main worktree.
+
+Only `doctor:ship --execute --approve-main` can update `main`, and only by fast-forwarding from the pushed repair branch. Only `doctor:ship --restart` can request a live restart, and it must go through safe-restart without force.
 
 If a diagnosis says `repairAllowed: yes`, that means the evidence looks compatible with the controlled repair workflow. It does not mean MiniClaw has already repaired anything.
 

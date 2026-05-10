@@ -393,7 +393,12 @@ Recommended action:
 - Phase 4A repair branch push shipped:
   - When `doctor.auto_push_enabled=true`, verified repair commits are pushed only to the isolated `doctor-repair/<incident-id>` branch.
   - Push success/failure is recorded in incident events and included in the Discord repair summary.
-  - Main branch update and live self-update are still pending.
+  - Automatic main update and live self-update remain pending by design; guarded operator approval is handled by Phase 4B.
+- Phase 4B guarded ship shipped:
+  - Added `pnpm run doctor:ship` as the explicit approval boundary after a repair branch is pushed.
+  - Default mode is dry-run; main update requires `--execute --approve-main` while `doctor.require_approval_for_main=true`.
+  - The ship path requires a clean live `main` worktree, fetches the recorded repair branch, verifies the commit SHA, fast-forwards `main`, and pushes `HEAD:main`.
+  - Optional `--restart` calls safe-restart without force; active tasks defer live restart instead of being interrupted.
 
 ## Next Development Plan: Hourly Doctor And Self-Repair
 
@@ -586,6 +591,6 @@ Implement in this order:
 6. Isolated worktree repair worker with verification.
 7. Auto commit to repair branch. Shipped.
 8. Optional branch push. Shipped.
-9. Safe restart approval flow.
+9. Safe restart approval flow. Shipped as guarded `doctor:ship`.
 
 This keeps the next code change reviewable: the first PR/commit should stop at automatic hourly diagnosis and incident records. Self-repair should be a separate atomic change after the incident lifecycle is observable.

@@ -8,6 +8,7 @@ import {
   createOrUpdateIncident,
   createRepairRun,
   getIncident,
+  getLatestRepairRunForIncident,
   listIncidentEvents,
   listOpenIncidents,
   markIncidentStatus,
@@ -95,6 +96,7 @@ describe("incidents store", () => {
 
     const updated = listOpenIncidents(100).find((row) => row.id === incident.id);
     expect(updated).toBeDefined();
+    expect(getLatestRepairRunForIncident(incident.id)?.id).toBe(repair.id);
     expect(countRepairRunsByStatus(["verified"])).toBeGreaterThanOrEqual(1);
     expect(countRepairRunsSince("2020-01-01T00:00:00.000Z")).toBeGreaterThanOrEqual(1);
   });

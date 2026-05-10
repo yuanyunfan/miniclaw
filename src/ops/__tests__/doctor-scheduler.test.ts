@@ -194,6 +194,23 @@ describe("doctor scheduler", () => {
     expect(result.repairSkipped).toEqual([]);
   });
 
+  it("includes guarded ship commands when a repair branch was pushed", async () => {
+    const { __testables } = await import("../doctor-scheduler.js");
+    const row = incidentRow();
+    const repair = {
+      ...repairResult(row),
+      pushed: true,
+      pushTarget: "origin/doctor-repair/incident-123456",
+      message: "repair committed and pushed to isolated repair branch",
+    };
+
+    const text = __testables.formatRepairNotification(repair);
+
+    expect(text).toContain("Ship approval:");
+    expect(text).toContain("pnpm run doctor:ship -- --incident incident-123456");
+    expect(text).toContain("--execute --approve-main --restart");
+  });
+
   it("skips auto repair when the daily repair cap is reached", async () => {
     process.env.MINICLAW_DOCTOR_AUTO_DIAGNOSE_ENABLED = "true";
     process.env.MINICLAW_DOCTOR_AUTO_REPAIR_ENABLED = "true";

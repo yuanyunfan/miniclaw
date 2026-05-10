@@ -310,6 +310,12 @@ export function getRepairRun(id: string): RepairRunRow | undefined {
   return getDb().prepare("SELECT * FROM repair_runs WHERE id = ?").get(id) as RepairRunRow | undefined;
 }
 
+export function getLatestRepairRunForIncident(incidentId: string): RepairRunRow | undefined {
+  return getDb()
+    .prepare("SELECT * FROM repair_runs WHERE incident_id = ? ORDER BY created_at DESC, id DESC LIMIT 1")
+    .get(incidentId) as RepairRunRow | undefined;
+}
+
 export function countRepairRunsSince(sinceIso: string): number {
   const row = getDb()
     .prepare("SELECT COUNT(*) AS count FROM repair_runs WHERE created_at >= ?")
