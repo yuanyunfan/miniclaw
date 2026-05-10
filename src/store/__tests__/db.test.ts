@@ -109,6 +109,12 @@ describe("schema migrations", () => {
     expect(__testables.columnExists("tasks", "source_metadata_json")).toBe(true);
     expect(__testables.columnExists("tasks", "parent_context_json")).toBe(true);
   });
+
+  it("ensures doctor incident tables exist", () => {
+    expect(__testables.columnExists("incidents", "dedupe_key")).toBe(true);
+    expect(__testables.columnExists("incident_events", "event_type")).toBe(true);
+    expect(__testables.columnExists("repair_runs", "incident_id")).toBe(true);
+  });
 });
 
 describe("updateTask", () => {

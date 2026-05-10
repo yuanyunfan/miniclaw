@@ -89,6 +89,35 @@ storage:
   db_path: "~/.miniclaw/data.db"
   memory_path: "~/.miniclaw/memories/MEMORY.md"
 
+doctor:
+  enabled: true
+  # Keep false until the summary channel is configured and a manual /doctor smoke test passes.
+  auto_diagnose_enabled: false
+  scan_interval_ms: 3600000 # 1 hour
+  # Example: #monitor-github channel id. Quote Discord IDs.
+  summary_channel_id: ""
+  auto_repair_enabled: false
+  auto_push_enabled: false
+  auto_restart_enabled: false
+  max_repairs_per_day: 2
+  max_parallel_repairs: 1
+  allowed_paths:
+    - "src/**/*.ts"
+    - "scripts/**/*.ts"
+    - "docs/**/*.md"
+    - "prompts/**/*.md"
+    - "config.example.yaml"
+  blocked_paths:
+    - ".env"
+    - ".env.*"
+    - ".npmrc"
+    - ".netrc"
+    - "~/.miniclaw/**"
+    - "~/.ssh/**"
+    - "**/*.db"
+    - "**/*.sqlite"
+    - "**/*.log"
+
 e2e:
   # Test-only mode for Discord E2E harnesses. Production config should keep this false.
   mode: false

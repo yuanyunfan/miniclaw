@@ -138,17 +138,19 @@ export function healthEmbed(params: {
   interruptedTasks: number;
   scheduledJobs: number;
   cronErrors: number;
+  openIncidents: number;
   dbPath: string;
 }): EmbedBuilder {
   return new EmbedBuilder()
     .setTitle("🩺 MiniClaw Health")
-    .setColor(params.cronErrors > 0 ? 0xf39c12 : 0x2ecc71)
+    .setColor(params.cronErrors > 0 || params.openIncidents > 0 ? 0xf39c12 : 0x2ecc71)
     .addFields(
       { name: "Provider", value: `${params.provider} / ${params.model}`, inline: true },
       { name: "Uptime", value: fmtUptime(params.uptimeSec), inline: true },
       { name: "Memory", value: `rss ${params.rssMb.toFixed(1)}MB · heap ${params.heapUsedMb.toFixed(1)}MB`, inline: false },
       { name: "Tasks", value: `${params.activeTasks}/${params.maxConcurrentTasks} active · ${params.interruptedTasks} interrupted`, inline: true },
       { name: "Cron", value: `${params.scheduledJobs} scheduled · ${params.cronErrors} recent error`, inline: true },
+      { name: "Doctor", value: `${params.openIncidents} open incident`, inline: true },
       { name: "DB", value: params.dbPath, inline: false },
     )
     .setTimestamp();

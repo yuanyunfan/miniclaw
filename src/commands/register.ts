@@ -44,6 +44,13 @@ const commands = [
     ),
 
   new SlashCommandBuilder()
+    .setName("incidents")
+    .setDescription("查看 Auto Doctor open incidents")
+    .addIntegerOption((opt) =>
+      opt.setName("limit").setDescription("最多显示多少条（默认 10，最多 25）").setRequired(false)
+    ),
+
+  new SlashCommandBuilder()
     .setName("agent-config")
     .setDescription("查看当前 agent settings / MCP / skills 继承摘要"),
 

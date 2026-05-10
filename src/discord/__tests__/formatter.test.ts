@@ -64,11 +64,13 @@ describe("healthEmbed", () => {
       interruptedTasks: 2,
       scheduledJobs: 15,
       cronErrors: 0,
+      openIncidents: 1,
       dbPath: "/tmp/miniclaw.db",
     });
     const data = e.toJSON();
     expect(data.title).toBe("🩺 MiniClaw Health");
-    expect(data.fields?.map((f) => f.name)).toEqual(["Provider", "Uptime", "Memory", "Tasks", "Cron", "DB"]);
+    expect(data.fields?.map((f) => f.name)).toEqual(["Provider", "Uptime", "Memory", "Tasks", "Cron", "Doctor", "DB"]);
     expect(data.fields?.find((f) => f.name === "Tasks")?.value).toContain("1/4 active");
+    expect(data.fields?.find((f) => f.name === "Doctor")?.value).toContain("1 open incident");
   });
 });

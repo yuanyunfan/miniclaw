@@ -69,6 +69,17 @@ const ENV_KEYS = [
   "MINICLAW_CONNECTIVITY_REQUEST_TIMEOUT_MS",
   "MINICLAW_CONNECTIVITY_GENERAL_TEST_URL",
   "MINICLAW_CONNECTIVITY_STATE_PATH",
+  "MINICLAW_DOCTOR_ENABLED",
+  "MINICLAW_DOCTOR_AUTO_DIAGNOSE_ENABLED",
+  "MINICLAW_DOCTOR_SCAN_INTERVAL_MS",
+  "MINICLAW_DOCTOR_SUMMARY_CHANNEL_ID",
+  "MINICLAW_DOCTOR_AUTO_REPAIR_ENABLED",
+  "MINICLAW_DOCTOR_AUTO_PUSH_ENABLED",
+  "MINICLAW_DOCTOR_AUTO_RESTART_ENABLED",
+  "MINICLAW_DOCTOR_MAX_REPAIRS_PER_DAY",
+  "MINICLAW_DOCTOR_MAX_PARALLEL_REPAIRS",
+  "MINICLAW_DOCTOR_ALLOWED_PATHS",
+  "MINICLAW_DOCTOR_BLOCKED_PATHS",
   "MINICLAW_NOTIFY_EMAIL_ENABLED",
   "MINICLAW_NOTIFY_EMAIL_SMTP_HOST",
   "MINICLAW_NOTIFY_EMAIL_SMTP_PORT",
@@ -182,6 +193,18 @@ connectivity:
   request_timeout_ms: 5000
   general_test_url: "https://example.com/health"
   state_path: "${join(tmpDir, "connectivity.json")}"
+doctor:
+  enabled: true
+  auto_diagnose_enabled: true
+  scan_interval_ms: 60000
+  summary_channel_id: "1498885395025494086"
+  auto_repair_enabled: false
+  auto_push_enabled: false
+  auto_restart_enabled: false
+  max_repairs_per_day: 1
+  max_parallel_repairs: 1
+  allowed_paths: ["src/**/*.ts", "docs/**/*.md"]
+  blocked_paths: [".env", "~/.miniclaw/**"]
 notifications:
   email:
     enabled: true
@@ -236,6 +259,19 @@ notifications:
       requestTimeoutMs: 5000,
       generalTestUrl: "https://example.com/health",
       statePath: join(tmpDir, "connectivity.json"),
+    });
+    expect(config.doctor).toEqual({
+      enabled: true,
+      autoDiagnoseEnabled: true,
+      scanIntervalMs: 60000,
+      summaryChannelId: "1498885395025494086",
+      autoRepairEnabled: false,
+      autoPushEnabled: false,
+      autoRestartEnabled: false,
+      maxRepairsPerDay: 1,
+      maxParallelRepairs: 1,
+      allowedPaths: ["src/**/*.ts", "docs/**/*.md"],
+      blockedPaths: [".env", "~/.miniclaw/**"],
     });
     expect(config.notifications.email).toMatchObject({
       enabled: true,

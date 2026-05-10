@@ -369,6 +369,12 @@ Recommended action:
 - Incident DB, persistent incident deduplication, self-repair worker, auto commit/push, and live self-update are not implemented yet.
 - Current safe restart and graceful drain behavior must remain the runtime update boundary.
 - The next useful implementation slice should be Phase 2: incident persistence and `/health` open-incident visibility.
+- Phase 2 automatic diagnosis implementation has started.
+  - Added doctor config for hourly scanning, `#monitor-github` summary channel, and future repair gates.
+  - Added incident, incident event, and repair run persistence with deterministic dedupe keys.
+  - Added an hourly read-only Auto Doctor scheduler that can create/update incidents and notify only new or severity-escalated incidents.
+  - Added `/incidents` and open incident count in `/health`.
+  - Self-repair worker, auto commit/push, and live self-update are still pending.
 
 ## Next Development Plan: Hourly Doctor And Self-Repair
 

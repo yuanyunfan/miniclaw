@@ -20,6 +20,7 @@ import { buildTaskSourceFromInteraction, withTaskThreadMetadata } from "../disco
 import { resolveTaskCwd } from "../routing/cwd.js";
 import { buildTaskPromptWithContext } from "../routing/task-context.js";
 import { formatDoctorReport, runDoctor, type DoctorMode } from "../ops/doctor.js";
+import { countOpenIncidents, listOpenIncidents } from "../store/incidents.js";
 
 const log = createLogger("handlers");
 
@@ -121,8 +122,30 @@ export async function handleHealth(interaction: ChatInputCommandInteraction): Pr
       interruptedTasks: interrupted.length,
       scheduledJobs: scheduled.length,
       cronErrors,
+      openIncidents: countOpenIncidents(),
       dbPath: config.dbPath,
     })],
+    ephemeral: true,
+  });
+}
+
+export async function handleIncidents(interaction: ChatInputCommandInteraction): Promise<void> {
+  if (!isAllowed(interaction.user.id)) {
+    await interaction.reply({ content: "⛔ 无权限", ephemeral: true });
+    return;
+  }
+
+  const limit = Math.min(Math.max(interaction.options.getInteger("limit") ?? 10, 1), 25);
+  const incidents = listOpenIncidents(limit);
+  const lines = incidents.length
+    ? incidents.map((incident) => [
+      `**${incident.id.slice(0, 8)}** [${incident.severity}/${incident.status}] ${incident.title}`,
+      `  ↳ type=${incident.type} subject=${incident.subject_type ?? "unknown"}:${incident.subject_id ?? "-"}`,
+    ].join("\n")).join("\n")
+    : "(无 open incident)";
+
+  await interaction.reply({
+    content: `MiniClaw open incidents (${incidents.length})\n\n${lines}`.slice(0, 1900),
     ephemeral: true,
   });
 }

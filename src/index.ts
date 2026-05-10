@@ -5,6 +5,7 @@ import { registerCommands } from "./commands/register.js";
 import { createBot } from "./bot.js";
 import { startScheduler, stopScheduler } from "./cron/scheduler.js";
 import { startConnectivityMonitor, type ConnectivityMonitorHandle } from "./monitoring/connectivity-monitor.js";
+import { startDoctorScheduler, type DoctorSchedulerHandle } from "./ops/doctor-scheduler.js";
 import { createLogger } from "./lib/log.js";
 import {
   beginDraining,
@@ -21,6 +22,7 @@ import {
 const log = createLogger("main");
 let bot: ReturnType<typeof createBot> | null = null;
 let connectivityMonitor: ConnectivityMonitorHandle | null = null;
+let doctorScheduler: DoctorSchedulerHandle | null = null;
 let shutdownPromise: Promise<void> | null = null;
 let signalCount = 0;
 
@@ -31,6 +33,7 @@ async function beginGracefulShutdown(reason: string, force = false): Promise<voi
     const ids = interruptActiveTasks(SHUTDOWN_FORCE_SUMMARY);
     log.error(`Forcing shutdown after ${signalCount} signal(s); interrupted=${ids.join(",") || "none"}`);
     connectivityMonitor?.stop();
+    doctorScheduler?.stop();
     stopScheduler();
     await bot?.destroy();
     process.exit(1);
@@ -45,6 +48,7 @@ async function beginGracefulShutdown(reason: string, force = false): Promise<voi
     beginDraining(reason);
     log.info("Shutting down: stopping connectivity monitor and cron scheduler");
     connectivityMonitor?.stop();
+    doctorScheduler?.stop();
     stopScheduler();
 
     const activeAtStart = listActiveTaskIds();
@@ -68,6 +72,7 @@ async function beginGracefulShutdown(reason: string, force = false): Promise<voi
     log.error("Graceful shutdown failed:", err);
     interruptActiveTasks(SHUTDOWN_FORCE_SUMMARY);
     connectivityMonitor?.stop();
+    doctorScheduler?.stop();
     stopScheduler();
     await bot?.destroy();
     process.exit(1);
@@ -97,6 +102,7 @@ async function main(): Promise<void> {
   bot = createBot();
   bot.once("clientReady", (client) => {
     connectivityMonitor = startConnectivityMonitor(client);
+    doctorScheduler = startDoctorScheduler(client);
     if (config.e2e.disableScheduler) {
       log.info("Cron scheduler disabled by MINICLAW_DISABLE_SCHEDULER");
       return;
@@ -116,6 +122,7 @@ async function main(): Promise<void> {
 main().catch((err) => {
   log.error("Fatal error:", err);
   connectivityMonitor?.stop();
+  doctorScheduler?.stop();
   void bot?.destroy();
   process.exit(1);
 });

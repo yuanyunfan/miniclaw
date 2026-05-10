@@ -341,6 +341,24 @@ const connectivityStatePath = resolveHome(requiredString(
   "MINICLAW_CONNECTIVITY_STATE_PATH",
   "~/.miniclaw/runtime/connectivity.json"
 ));
+const doctorAllowedPathsFallback = [
+  "src/**/*.ts",
+  "scripts/**/*.ts",
+  "docs/**/*.md",
+  "prompts/**/*.md",
+  "config.example.yaml",
+];
+const doctorBlockedPathsFallback = [
+  ".env",
+  ".env.*",
+  ".npmrc",
+  ".netrc",
+  "~/.miniclaw/**",
+  "~/.ssh/**",
+  "**/*.db",
+  "**/*.sqlite",
+  "**/*.log",
+];
 const notifyEmailHost = optionalString([
   ["notifications", "email", "smtp_host"],
   ["email", "smtp_host"],
@@ -592,6 +610,27 @@ export const config = {
     requestTimeoutMs: positiveNumber(["connectivity", "request_timeout_ms"], "MINICLAW_CONNECTIVITY_REQUEST_TIMEOUT_MS", 10_000),
     generalTestUrl: requiredString(["connectivity", "general_test_url"], "MINICLAW_CONNECTIVITY_GENERAL_TEST_URL", "https://www.qq.com"),
     statePath: connectivityStatePath,
+  },
+  doctor: {
+    enabled: boolValue(["doctor", "enabled"], "MINICLAW_DOCTOR_ENABLED", true),
+    autoDiagnoseEnabled: boolValue(
+      ["doctor", "auto_diagnose_enabled"],
+      "MINICLAW_DOCTOR_AUTO_DIAGNOSE_ENABLED",
+      false
+    ),
+    scanIntervalMs: positiveNumber(
+      ["doctor", "scan_interval_ms"],
+      "MINICLAW_DOCTOR_SCAN_INTERVAL_MS",
+      3_600_000
+    ),
+    summaryChannelId: optionalString(["doctor", "summary_channel_id"], "MINICLAW_DOCTOR_SUMMARY_CHANNEL_ID"),
+    autoRepairEnabled: boolValue(["doctor", "auto_repair_enabled"], "MINICLAW_DOCTOR_AUTO_REPAIR_ENABLED", false),
+    autoPushEnabled: boolValue(["doctor", "auto_push_enabled"], "MINICLAW_DOCTOR_AUTO_PUSH_ENABLED", false),
+    autoRestartEnabled: boolValue(["doctor", "auto_restart_enabled"], "MINICLAW_DOCTOR_AUTO_RESTART_ENABLED", false),
+    maxRepairsPerDay: positiveInt(["doctor", "max_repairs_per_day"], "MINICLAW_DOCTOR_MAX_REPAIRS_PER_DAY", 2),
+    maxParallelRepairs: positiveInt(["doctor", "max_parallel_repairs"], "MINICLAW_DOCTOR_MAX_PARALLEL_REPAIRS", 1),
+    allowedPaths: stringArray(["doctor", "allowed_paths"], "MINICLAW_DOCTOR_ALLOWED_PATHS", doctorAllowedPathsFallback),
+    blockedPaths: stringArray(["doctor", "blocked_paths"], "MINICLAW_DOCTOR_BLOCKED_PATHS", doctorBlockedPathsFallback),
   },
   notifications: {
     email: {
