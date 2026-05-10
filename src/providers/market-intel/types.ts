@@ -13,6 +13,9 @@ export type MarketIntelSourceStatus = "ok" | "partial" | "missing_config" | "fai
 export type MarketIntelDirection = "bullish" | "bearish" | "neutral" | "mixed" | "insufficient_data";
 export type MarketIntelSnapshotSectionStatus = "ok" | "partial" | "empty" | "not_implemented";
 export type MarketIntelQuoteWatchBucket = "indices" | "sectors" | "macro" | "cross_market" | "symbols";
+export type MarketIntelEvidenceSectionStatus = "ok" | "partial" | "empty" | "skipped" | "not_implemented";
+export type MarketIntelEvidenceImportance = "low" | "medium" | "high";
+export type MarketIntelEvidenceFreshness = "fresh" | "stale" | "unknown";
 
 export interface MarketIntelTimeWindow {
   start: string;
@@ -135,9 +138,15 @@ export interface MarketIntelEvidenceItem {
   source: string;
   source_tier: MarketIntelSourceTier;
   captured_at: string;
+  title?: string;
   summary: string;
+  published_at?: string;
+  importance?: MarketIntelEvidenceImportance;
+  freshness?: MarketIntelEvidenceFreshness;
   freshness_minutes?: number;
   url?: string;
+  symbols?: string[];
+  sectors?: string[];
 }
 
 export interface MarketIntelDataQualitySource {
@@ -159,6 +168,23 @@ export interface MarketIntelPlaceholderSection {
   status: "not_implemented";
   items: unknown[];
   notes: string[];
+}
+
+export interface MarketIntelEvidenceSection {
+  status: MarketIntelEvidenceSectionStatus;
+  items: MarketIntelEvidenceItem[];
+  notes: string[];
+}
+
+export interface MarketIntelEvidenceCollection {
+  macro_policy: MarketIntelEvidenceSection;
+  news: MarketIntelEvidenceSection;
+  earnings: MarketIntelEvidenceSection;
+  filings: MarketIntelEvidenceSection;
+  risks: MarketIntelEvidenceSection;
+  evidence: MarketIntelEvidenceItem[];
+  data_quality_sources: MarketIntelDataQualitySource[];
+  warnings: string[];
 }
 
 export interface MarketIntelSnapshotItem {
@@ -267,11 +293,11 @@ export interface MarketIntelPayload {
   data_quality: MarketIntelDataQuality;
   portfolio_context: MarketIntelPortfolioContext;
   market_snapshot: MarketIntelMarketSnapshot;
-  macro_policy: MarketIntelPlaceholderSection;
-  news: MarketIntelPlaceholderSection;
-  earnings: MarketIntelPlaceholderSection;
-  filings: MarketIntelPlaceholderSection;
-  risks: MarketIntelPlaceholderSection;
+  macro_policy: MarketIntelEvidenceSection;
+  news: MarketIntelEvidenceSection;
+  earnings: MarketIntelEvidenceSection;
+  filings: MarketIntelEvidenceSection;
+  risks: MarketIntelEvidenceSection;
   scores: MarketIntelScores;
   evidence: MarketIntelEvidenceItem[];
   role_protocol: MarketIntelRoleProtocol;
@@ -279,6 +305,10 @@ export interface MarketIntelPayload {
 }
 
 export type MarketIntelPortfolioRunner = (args: PreProviderRunArgs) => Promise<PreProviderResult>;
+export type MarketIntelEvidenceCollector = (params: {
+  args: PreProviderRunArgs;
+  config: MarketIntelProviderConfig;
+}) => Promise<MarketIntelEvidenceCollection>;
 
 export interface MarketIntelQuoteRequest {
   symbol: string;

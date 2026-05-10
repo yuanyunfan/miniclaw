@@ -1,16 +1,18 @@
 import type { PreProviderResult, PreProviderRunArgs } from "../types.js";
 import { runStockPortfolioProvider } from "../stock-portfolio/index.js";
 import { buildMarketIntelCalendarSnapshot } from "./calendar.js";
+import { buildEmptyMarketIntelEvidenceCollection, collectMarketIntelOfficialEvidence } from "./collectors/official.js";
 import { loadMarketIntelProviderConfig } from "./config.js";
 import { buildMarketIntelPayload, formatMarketIntelPayload } from "./format.js";
 import { buildNotConfiguredPortfolioContext, collectMarketIntelPortfolio } from "./portfolio.js";
 import { buildEmptyMarketIntelSnapshot, collectMarketIntelMarketSnapshot, YahooMarketIntelQuoteClient } from "./quotes.js";
-import type { MarketIntelQuoteClient, MarketIntelPortfolioRunner, MarketIntelProviderConfig } from "./types.js";
+import type { MarketIntelEvidenceCollector, MarketIntelQuoteClient, MarketIntelPortfolioRunner, MarketIntelProviderConfig } from "./types.js";
 
 export interface MarketIntelProviderDeps {
   loadProviderConfig?: (name?: string) => MarketIntelProviderConfig;
   portfolioRunner?: MarketIntelPortfolioRunner;
   quoteClient?: MarketIntelQuoteClient;
+  evidenceCollector?: MarketIntelEvidenceCollector;
 }
 
 export async function runMarketIntelProvider(
@@ -43,6 +45,12 @@ export async function runMarketIntelProvider(
       config,
       client: deps.quoteClient ?? new YahooMarketIntelQuoteClient(),
     });
+  const evidenceCollection = skipReason
+    ? buildEmptyMarketIntelEvidenceCollection()
+    : await (deps.evidenceCollector ?? collectMarketIntelOfficialEvidence)({
+      args,
+      config,
+    });
   const payload = buildMarketIntelPayload({
     args,
     configName,
@@ -52,6 +60,7 @@ export async function runMarketIntelProvider(
     marketSnapshot: marketSnapshot.snapshot,
     quoteEvidence: marketSnapshot.evidence,
     quoteWarnings: marketSnapshot.warnings,
+    evidenceCollection,
     skipReason,
   });
   const text = formatMarketIntelPayload(payload);

@@ -2,10 +2,11 @@ import type {
   MarketIntelCalendarSnapshot,
   MarketIntelDataQuality,
   MarketIntelDataQualitySource,
+  MarketIntelEvidenceCollection,
   MarketIntelEvidenceItem,
+  MarketIntelEvidenceSection,
   MarketIntelMarketSnapshot,
   MarketIntelPayload,
-  MarketIntelPlaceholderSection,
   MarketIntelPortfolioContext,
   MarketIntelProviderConfig,
   MarketIntelRoleProtocol,
@@ -27,12 +28,20 @@ function redactJsonStringValues(value: unknown): unknown {
   );
 }
 
-function placeholder(notes: string[]): MarketIntelPlaceholderSection {
+export function buildMarketIntelEvidenceSection(
+  status: MarketIntelEvidenceSection["status"],
+  items: MarketIntelEvidenceItem[],
+  notes: string[],
+): MarketIntelEvidenceSection {
   return {
-    status: "not_implemented",
-    items: [],
+    status,
+    items,
     notes,
   };
+}
+
+function placeholder(notes: string[]): MarketIntelEvidenceSection {
+  return buildMarketIntelEvidenceSection("not_implemented", [], notes);
 }
 
 function buildSourceQuality(
@@ -40,6 +49,7 @@ function buildSourceQuality(
   calendar: MarketIntelCalendarSnapshot,
   portfolioContext: MarketIntelPortfolioContext,
   marketSnapshot: MarketIntelMarketSnapshot,
+  evidenceCollection?: MarketIntelEvidenceCollection,
 ): MarketIntelDataQualitySource[] {
   const quoteSources = [
     config.sources.quotes.us_primary,
@@ -88,30 +98,32 @@ function buildSourceQuality(
       status: quoteStatus,
       message: `Quote snapshot completed: items=${quoteItems.length}, failures=${quoteFailures.length}, stale=${quoteStale.length}.`,
     },
-    {
-      id: "macro.placeholder",
-      collector: "macro",
-      source: macroSources.join(", ") || "none",
-      tier: "placeholder",
-      status: "not_implemented",
-      message: "Macro/policy collectors are planned for phase 4.",
-    },
-    {
-      id: "news.placeholder",
-      collector: "news",
-      source: config.sources.news.provider,
-      tier: "placeholder",
-      status: "not_implemented",
-      message: "News collector is planned for phase 4.",
-    },
-    {
-      id: "earnings.placeholder",
-      collector: "earnings",
-      source: config.sources.earnings.provider,
-      tier: "placeholder",
-      status: "not_implemented",
-      message: "Earnings and filings collectors are planned for phase 4.",
-    },
+    ...(evidenceCollection?.data_quality_sources ?? [
+      {
+        id: "macro.placeholder",
+        collector: "macro",
+        source: macroSources.join(", ") || "none",
+        tier: "placeholder",
+        status: "not_implemented",
+        message: "Macro/policy collectors are planned for phase 4.",
+      },
+      {
+        id: "news.placeholder",
+        collector: "news",
+        source: config.sources.news.provider,
+        tier: "placeholder",
+        status: "not_implemented",
+        message: "News collector is planned for phase 4.",
+      },
+      {
+        id: "earnings.placeholder",
+        collector: "earnings",
+        source: config.sources.earnings.provider,
+        tier: "placeholder",
+        status: "not_implemented",
+        message: "Earnings and filings collectors are planned for phase 4.",
+      },
+    ]),
     {
       id: "sectors.placeholder",
       collector: "sectors",
@@ -144,12 +156,14 @@ function buildDataQuality(
   portfolioContext: MarketIntelPortfolioContext,
   marketSnapshot: MarketIntelMarketSnapshot,
   quoteWarnings: string[],
+  evidenceCollection?: MarketIntelEvidenceCollection,
 ): MarketIntelDataQuality {
-  const sources = buildSourceQuality(config, calendar, portfolioContext, marketSnapshot);
+  const sources = buildSourceQuality(config, calendar, portfolioContext, marketSnapshot, evidenceCollection);
   const warnings = sources
     .filter((source) => source.status === "not_implemented" || source.status === "failed" || source.status === "missing_config")
     .map((source) => `${source.collector}: ${source.message ?? source.status}`);
   warnings.push(...quoteWarnings);
+  warnings.push(...(evidenceCollection?.warnings ?? []));
   warnings.push(...portfolioContext.warnings.map((warning) => `portfolio: ${warning}`));
   return {
     status: warnings.length ? "partial" : "ok",
@@ -207,6 +221,7 @@ export function buildMarketIntelPayload(params: {
   marketSnapshot?: MarketIntelMarketSnapshot;
   quoteEvidence?: MarketIntelEvidenceItem[];
   quoteWarnings?: string[];
+  evidenceCollection?: MarketIntelEvidenceCollection;
   skipReason?: string;
 }): MarketIntelPayload {
   const portfolioContext = params.portfolioContext ?? buildNotConfiguredPortfolioContext();
@@ -215,6 +230,7 @@ export function buildMarketIntelPayload(params: {
     buildCalendarEvidence(params.args, params.calendar),
     buildPortfolioEvidence(params.args, portfolioContext),
     ...(params.quoteEvidence ?? []),
+    ...(params.evidenceCollection?.evidence ?? []),
   ].filter((item): item is MarketIntelEvidenceItem => item !== undefined);
   return {
     generated_at: params.args.runAt.toISOString(),
@@ -235,19 +251,31 @@ export function buildMarketIntelPayload(params: {
       closed_markets: params.calendar.closed_markets,
     },
     calendar: params.calendar,
-    data_quality: buildDataQuality(params.config, params.calendar, portfolioContext, marketSnapshot, params.quoteWarnings ?? []),
+    data_quality: buildDataQuality(
+      params.config,
+      params.calendar,
+      portfolioContext,
+      marketSnapshot,
+      params.quoteWarnings ?? [],
+      params.evidenceCollection,
+    ),
     portfolio_context: portfolioContext,
     market_snapshot: marketSnapshot,
-    macro_policy: placeholder(["Macro/policy collector is not implemented in phase 1. Do not infer policy changes from this placeholder."]),
-    news: placeholder(["News collector is not implemented in phase 1. Do not invent headlines."]),
-    earnings: placeholder(["Earnings collector is not implemented in phase 1. Do not invent earnings dates or surprises."]),
-    filings: placeholder(["Filings collector is not implemented in phase 1. Do not invent SEC/exchange filings."]),
-    risks: placeholder(["Risk collector is not implemented in phase 1. Use this payload only as a skeleton until risk evidence exists."]),
+    macro_policy: params.evidenceCollection?.macro_policy
+      ?? placeholder(["Macro/policy collector is not implemented. Do not infer policy changes from this placeholder."]),
+    news: params.evidenceCollection?.news
+      ?? placeholder(["News collector is not implemented. Do not invent headlines."]),
+    earnings: params.evidenceCollection?.earnings
+      ?? placeholder(["Earnings collector is not implemented. Do not invent earnings dates or surprises."]),
+    filings: params.evidenceCollection?.filings
+      ?? placeholder(["Filings collector is not implemented. Do not invent SEC/exchange filings."]),
+    risks: params.evidenceCollection?.risks
+      ?? placeholder(["Risk collector is not implemented. Use this payload only as a skeleton until risk evidence exists."]),
     scores: buildMarketIntelScores({ marketScope: params.config.market_scope, evidence, snapshot: marketSnapshot }),
     evidence,
     role_protocol: roleProtocol(),
     usage_notes: [
-      "This market-intel payload contains implemented calendar, optional portfolio, and quote snapshot evidence plus structured placeholders for later macro/news collectors.",
+      "This market-intel payload contains implemented calendar, optional portfolio, quote snapshot, and official-source evidence where available.",
       "Portfolio context, when configured, is read-only and already redacted by stock-portfolio before this payload is built.",
       "The downstream LLM must cite evidence IDs for factual claims and mark unsupported market views as hypotheses.",
       "No automatic trading, order placement, broker unlock, raw account ID, token, cookie, validatekey, or session data is allowed.",

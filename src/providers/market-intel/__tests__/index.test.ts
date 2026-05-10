@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { buildEmptyMarketIntelEvidenceCollection } from "../collectors/official.js";
 import { runMarketIntelProvider } from "../index.js";
 import type { MarketIntelProviderConfig, MarketIntelQuoteClient, MarketIntelQuoteRequest, MarketIntelQuoteSnapshotInput } from "../types.js";
 
@@ -16,6 +17,7 @@ const quoteClient: MarketIntelQuoteClient = {
     };
   },
 };
+const evidenceCollector = async () => buildEmptyMarketIntelEvidenceCollection();
 
 function testConfig(overrides: Partial<MarketIntelProviderConfig> = {}): MarketIntelProviderConfig {
   return {
@@ -78,6 +80,7 @@ describe("runMarketIntelProvider", () => {
     }, {
       loadProviderConfig: () => testConfig(),
       quoteClient,
+      evidenceCollector,
     });
 
     const parsed = JSON.parse(result.text);
@@ -102,6 +105,7 @@ describe("runMarketIntelProvider", () => {
     }, {
       loadProviderConfig: () => testConfig({ portfolio_provider_config: "us-stock" }),
       quoteClient,
+      evidenceCollector,
       portfolioRunner: async (args) => {
         calledConfig = args.configName;
         return {
@@ -160,6 +164,7 @@ describe("runMarketIntelProvider", () => {
       runAt: new Date("2026-05-08T12:45:00.000Z"),
     }, {
       loadProviderConfig: () => testConfig({ portfolio_provider_config: "us-stock" }),
+      evidenceCollector,
       portfolioRunner: async () => {
         throw new Error("broker token=abcdefghijklmnopqrstuvwxyz123456");
       },
@@ -174,6 +179,7 @@ describe("runMarketIntelProvider", () => {
       runAt: new Date("2026-05-09T12:45:00.000Z"),
     }, {
       loadProviderConfig: () => testConfig(),
+      evidenceCollector,
     });
 
     const parsed = JSON.parse(result.text);
@@ -200,6 +206,7 @@ describe("runMarketIntelProvider", () => {
         },
       }),
       quoteClient,
+      evidenceCollector,
     });
 
     const parsed = JSON.parse(result.text);
