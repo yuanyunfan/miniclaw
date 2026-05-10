@@ -1,7 +1,7 @@
 import { v4 as uuid } from "uuid";
 import { spawn } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
-import type { Client, SendableChannels } from "discord.js";
+import { AttachmentBuilder, type Client, type SendableChannels } from "discord.js";
 import { config } from "../config.js";
 import { createTask } from "../store/db.js";
 import { executeTask, getActiveTaskCount, type TaskResult } from "../agent/task.js";
@@ -12,6 +12,7 @@ import { renderTemplate } from "./template.js";
 import { resolve, join } from "node:path";
 import { createLogger } from "../lib/log.js";
 import { runPreProvider } from "../providers/index.js";
+import type { PreProviderAttachment } from "../providers/types.js";
 import { DRAINING_MESSAGE, isDraining } from "../runtime/shutdown.js";
 
 const log = createLogger("cron");
@@ -133,6 +134,30 @@ async function fetchSendableChannel(client: Client, channelId: string): Promise<
   return ch as SendableChannels;
 }
 
+async function sendPreProviderAttachments(
+  channel: SendableChannels,
+  jobName: string,
+  attachments: PreProviderAttachment[],
+): Promise<void> {
+  if (!attachments.length) return;
+  const existing = attachments.filter((attachment) => existsSync(attachment.path)).slice(0, 10);
+  if (!existing.length) {
+    log.warn(`${jobName} pre_provider produced attachment paths, but no files exist`);
+    return;
+  }
+  try {
+    await channel.send({
+      content: `📊 cron \`${jobName}\` 附图`,
+      files: existing.map((attachment) => new AttachmentBuilder(attachment.path, {
+        name: attachment.name,
+        description: attachment.description,
+      })),
+    });
+  } catch (err) {
+    log.warn(`${jobName} failed to send pre_provider attachment(s):`, err);
+  }
+}
+
 export async function runTask(job: CronJobTask, client: Client): Promise<void> {
   assertNotDraining(job.name);
   if (getActiveTaskCount() >= config.maxConcurrentTasks) {
@@ -147,6 +172,7 @@ export async function runTask(job: CronJobTask, client: Client): Promise<void> {
   // 如果配了 pre_script，先跑它，把 stdout 拼到 prompt 顶部
   let prependedContext = "";
   let preProviderCommit: (() => Promise<void>) | undefined;
+  const preProviderAttachments: PreProviderAttachment[] = [];
   if (job.pre_script) {
     try {
       const stdout = await runPreScript(
@@ -173,6 +199,9 @@ export async function runTask(job: CronJobTask, client: Client): Promise<void> {
       });
       prependedContext += buildCronPreProviderBlock(job.pre_provider, result.text);
       preProviderCommit = result.commit;
+      if (result.attachments?.length) {
+        preProviderAttachments.push(...result.attachments);
+      }
       if (result.skipTask) {
         const skipMessage = result.skipTask.message
           ? `${result.skipTask.reason}: ${result.skipTask.message}`
@@ -220,6 +249,7 @@ export async function runTask(job: CronJobTask, client: Client): Promise<void> {
   });
   const result = await executeTask({ taskId, prompt, cwd, channel, outputMode: "raw" });
   assertTaskResultOk(job.name, result);
+  await sendPreProviderAttachments(channel, job.name, preProviderAttachments);
   if (preProviderCommit) {
     await preProviderCommit();
   }

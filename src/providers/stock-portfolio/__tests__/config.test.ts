@@ -39,6 +39,7 @@ fx_rates:
 fx_rates_as_of: "2026-05-08"
 fx_rates_source: manual-test
 top_movers_limit: 5
+include_asset_pie_chart: true
 sources:
   - provider: futu-stock
     config: daily-stock-market
@@ -63,6 +64,7 @@ sources:
     expect(config.top_movers_limit).toBe(5);
     expect(config.include_cny_summary).toBe(true);
     expect(config.include_asset_summary).toBe(false);
+    expect(config.include_asset_pie_chart).toBe(true);
     expect(config.sources).toEqual([
       {
         provider: "futu-stock",

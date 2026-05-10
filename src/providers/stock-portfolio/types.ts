@@ -26,6 +26,7 @@ export interface StockPortfolioProviderConfig {
   top_movers_limit: number;
   include_cny_summary: boolean;
   include_asset_summary: boolean;
+  include_asset_pie_chart: boolean;
 }
 
 export interface StockPortfolioSourceOk {

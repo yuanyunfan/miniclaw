@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Client } from "discord.js";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { CronJobTask } from "../types.js";
 
 const mocks = vi.hoisted(() => ({
@@ -140,5 +143,44 @@ describe("cron task runner", () => {
     expect(send).toHaveBeenCalledWith("需要重新登录微信公众号后台 session");
     expect(mocks.createTask).not.toHaveBeenCalled();
     expect(mocks.executeTask).not.toHaveBeenCalled();
+  });
+
+  it("uploads pre_provider attachments after a successful raw cron task", async () => {
+    const { runTask } = await import("../runner-task.js");
+    const tmp = mkdtempSync(join(tmpdir(), "miniclaw-cron-task-attachments-"));
+    const chartPath = join(tmp, "chart.png");
+    writeFileSync(chartPath, "png");
+    const send = vi.fn(async () => ({ id: "message-1" }));
+    mocks.runPreProvider.mockResolvedValue({
+      text: "{\"asset_summary\":{}}",
+      attachments: [{
+        path: chartPath,
+        name: "asset-pie.png",
+        description: "asset pie",
+      }],
+    });
+    mocks.executeTask.mockResolvedValue({
+      success: true,
+      sessionId: "codex:thread-1",
+      costUsd: 0,
+      durationMs: 1000,
+      turns: 1,
+      result: "ok",
+    });
+
+    try {
+      await expect(runTask({
+        ...taskJob(),
+        pre_provider: "stock-portfolio",
+        pre_provider_config: "daily-stock-summary",
+      }, client(send))).resolves.toBeUndefined();
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({
+      content: expect.stringContaining("附图"),
+      files: expect.arrayContaining([expect.anything()]),
+    }));
   });
 });

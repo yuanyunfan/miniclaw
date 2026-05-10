@@ -13,6 +13,7 @@ const config: StockPortfolioProviderConfig = {
   top_movers_limit: 5,
   include_cny_summary: true,
   include_asset_summary: false,
+  include_asset_pie_chart: false,
   sources: [
     { provider: "futu-stock", config: "daily-stock-market", enabled: true, required: false, include_asset_totals: true },
     { provider: "eastmoney-jywg-readonly", config: "daily-stock-market", enabled: true, required: false, include_asset_totals: true },

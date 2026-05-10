@@ -3,6 +3,7 @@ import { runEastmoneyJywgProvider } from "../eastmoney-jywg-readonly/index.js";
 import { runFutuStockProvider } from "../futu-stock/index.js";
 import { loadStockPortfolioProviderConfig } from "./config.js";
 import { buildStockPortfolioPayload, formatStockPortfolioPayload, sanitizeStockPortfolioError } from "./format.js";
+import { buildAssetPieChartModel, renderAssetPieChartPng } from "./pie-chart.js";
 import type {
   StockPortfolioProviderConfig,
   StockPortfolioSourceConfig,
@@ -90,8 +91,31 @@ export async function runStockPortfolioProvider(
     config,
     sources: results,
   });
+  const attachments: PreProviderResult["attachments"] = [];
+  if (config.include_asset_pie_chart && payload.asset_summary) {
+    try {
+      const model = buildAssetPieChartModel(payload.asset_summary);
+      if (model) {
+        const path = await renderAssetPieChartPng(model, {
+          profile: configName,
+          generatedAt: args.runAt,
+        });
+        attachments.push({
+          path,
+          name: `stock-portfolio-${configName}-asset-pie.png`,
+          description: "Daily Stock Summary asset allocation pie chart",
+        });
+        payload.usage_notes.push(
+          "MiniClaw will upload a PNG asset allocation pie chart after the Markdown report. In the holdings classification section, mention that the pie chart is attached below.",
+        );
+      }
+    } catch (err) {
+      payload.warnings.push(`asset pie chart generation failed: ${sanitizeStockPortfolioError(err)}`);
+    }
+  }
   return {
     text: formatStockPortfolioPayload(payload),
+    ...(attachments.length ? { attachments } : {}),
     commit: async () => {
       for (const commit of commits) await commit();
     },

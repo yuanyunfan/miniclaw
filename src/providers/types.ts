@@ -5,8 +5,20 @@ export interface PreProviderRunArgs {
   runAt: Date;
 }
 
+export interface PreProviderAttachment {
+  path: string;
+  name?: string;
+  description?: string;
+}
+
 export interface PreProviderResult {
   text: string;
+  /**
+   * Optional files generated from structured provider data. Cron task runners
+   * upload these after the LLM report so providers can attach charts/screenshots
+   * without asking the LLM to create or parse binary output.
+   */
+  attachments?: PreProviderAttachment[];
   /**
    * Optional guard for scheduled tasks: when present, the cron runner logs the
    * reason and skips the downstream LLM task.
