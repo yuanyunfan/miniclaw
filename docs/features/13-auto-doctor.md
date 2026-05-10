@@ -6,7 +6,7 @@ Status: phase-5d-discord-operator-actions
 
 Auto Doctor is MiniClaw's read-only runtime diagnosis path. It collects local evidence from task DB rows, normalized task trace events, cron state, PM2, logs, connectivity state, and Git state, then produces a concise diagnosis without modifying files, DB state, Git history, or PM2 runtime.
 
-This is the first slice of the broader self-repair plan. Phase 2 adds incident persistence and an optional hourly read-only diagnosis loop. Phase 3A adds a guarded repair worker that can run in an isolated worktree. Phase 3B commits verified repairs to the isolated repair branch. Phase 4A can optionally push that repair branch. Phase 4B adds an explicit operator-approved ship path that can fast-forward `main` from a pushed repair branch and optionally call safe restart. Phase 5A adds incident operator commands, Phase 5B adds normalized task trace evidence, Phase 5C adds repair metrics and promotion blockers, and Phase 5D exposes guarded ship/restart operator shortcuts in Discord.
+This is the first slice of the broader self-repair plan. Phase 2 adds incident persistence and an optional scheduled read-only diagnosis loop. Phase 3A adds a guarded repair worker that can run in an isolated worktree. Phase 3B commits verified repairs to the isolated repair branch. Phase 4A can optionally push that repair branch. Phase 4B adds an explicit operator-approved ship path that can fast-forward `main` from a pushed repair branch and optionally call safe restart. Phase 5A adds incident operator commands, Phase 5B adds normalized task trace evidence, Phase 5C adds repair metrics and promotion blockers, and Phase 5D exposes guarded ship/restart operator shortcuts in Discord.
 
 ## Commands
 
@@ -47,7 +47,8 @@ Automatic scan:
 
 - Disabled by default until configured.
 - Enable with `doctor.auto_diagnose_enabled: true` or `MINICLAW_DOCTOR_AUTO_DIAGNOSE_ENABLED=true`.
-- Default interval is one hour: `doctor.scan_interval_ms: 3600000`.
+- Default interval is two hours: `doctor.scan_interval_ms: 7200000`.
+- Interval scans are skipped when the MiniClaw log fingerprint has not changed since the previous scan; startup and manual scans still run.
 - Summary notifications go to `doctor.summary_channel_id` when an explicit channel ID is configured; otherwise MiniClaw resolves `doctor.summary_channel_name`, which defaults to `#miniclaw-auto-improve`.
 - If `doctor.auto_repair_enabled: true`, repair-eligible incidents are passed to the guarded repair worker after the scan.
 
@@ -101,7 +102,7 @@ When automatic diagnosis is enabled, MiniClaw stores actionable symptoms as inci
 - connectivity degradation
 - PM2 unstable restarts
 
-Incidents use deterministic dedupe keys, so repeated hourly scans update the same incident instead of posting duplicate alerts. `/health` includes the open incident count, and `/incidents` lists open incidents.
+Incidents use deterministic dedupe keys, so repeated scheduled scans update the same incident instead of posting duplicate alerts. `/health` includes the open incident count, and `/incidents` lists open incidents.
 
 ## Incident Detail And Lifecycle
 
@@ -119,7 +120,7 @@ Lifecycle commands keep the incident record auditable:
 
 - `/incident resolve` marks a fixed or no-longer-relevant incident as `resolved`.
 - `/incident ignore` marks a non-actionable incident as `ignored`.
-- `/incident retry-repair` reopens an eligible incident as `diagnosed` so the hourly Auto Doctor scheduler can attempt repair again under the existing repair policy and rate limits.
+- `/incident retry-repair` reopens an eligible incident as `diagnosed` so the scheduled Auto Doctor loop can attempt repair again under the existing repair policy and rate limits.
 - `/incident ship-preview` runs the guarded `doctor:ship` dry-run path and records a `ship_preview_requested` event.
 
 Resolved and ignored incidents are excluded from the default `/incidents` open list. Retry repair does not execute a long-running repair inside the Discord interaction and does not bypass `doctor.auto_repair_enabled`, category/type policy, path allowlists, dirty-worktree checks, or approval gates.
@@ -157,11 +158,11 @@ Execute mode is intentionally gated:
 
 Successful verification leaves the incident in `repair_ready` and stores the repair report in `repair_runs`. If auto commit is enabled, `repair_runs.commit_sha` records the repair branch commit. Failed agent execution, forbidden paths, failed verification, or commit failure leave the incident in `repair_blocked` with the evidence stored for review.
 
-When automatic repair is enabled, the hourly scheduler applies the same worker policy and rate limits before attempting repair:
+When automatic repair is enabled, the scheduled Auto Doctor loop applies the same worker policy and rate limits before attempting repair:
 
 - `doctor.max_parallel_repairs` limits active `repairing` runs.
 - `doctor.max_repairs_per_day` limits new repair runs per UTC day.
-- incidents already in `repair_blocked`, `repairing`, or `repair_ready` are not downgraded by later hourly scans.
+- incidents already in `repair_blocked`, `repairing`, or `repair_ready` are not downgraded by later scheduled scans.
 - every repair attempt posts a concise result summary to the configured Auto Improve summary channel.
 
 ## Guarded Ship

@@ -270,7 +270,7 @@ export async function handleIncident(interaction: ChatInputCommandInteraction): 
     await interaction.reply({
       content: [
         `✅ Incident ${incident.id.slice(0, 8)} 已重新开放为 \`diagnosed\`。`,
-        "下一次 hourly Auto Doctor scan 会按现有 policy/rate limit 尝试 repair；不会绕过 allowed paths、dirty worktree 或 approval gates。",
+        "下一次 scheduled Auto Doctor scan 会按现有 policy/rate limit 尝试 repair；不会绕过 allowed paths、dirty worktree 或 approval gates。",
       ].join("\n"),
       ephemeral: true,
     });

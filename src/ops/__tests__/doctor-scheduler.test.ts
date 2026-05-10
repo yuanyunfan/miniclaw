@@ -127,6 +127,52 @@ describe("doctor scheduler", () => {
     await expect(scheduler.runOnce("test")).resolves.toMatchObject({ skipped: "disabled" });
   });
 
+  it("skips interval scans when MiniClaw logs have not changed", async () => {
+    process.env.MINICLAW_DOCTOR_AUTO_DIAGNOSE_ENABLED = "true";
+    const { createDoctorScheduler } = await import("../doctor-scheduler.js");
+    const row = incidentRow();
+    let fingerprint = "logs:v1";
+    const runDoctor = vi.fn(async () => reportWithFailedTask());
+    const notify = vi.fn(async () => undefined);
+    const scheduler = createDoctorScheduler({} as Client, {
+      runDoctorFn: runDoctor,
+      createOrUpdateIncidentFn: vi.fn(() => ({ row, created: true, severityEscalated: false })),
+      appendIncidentEventFn: vi.fn(() => 1),
+      sendNotificationFn: notify,
+      drainingFn: () => false,
+      logFingerprintFn: () => fingerprint,
+    });
+
+    await expect(scheduler.runOnce("interval")).resolves.toMatchObject({ created: [row] });
+    await expect(scheduler.runOnce("interval")).resolves.toMatchObject({ skipped: "no_new_logs" });
+
+    fingerprint = "logs:v2";
+    await expect(scheduler.runOnce("interval")).resolves.toMatchObject({ created: [row] });
+    expect(runDoctor).toHaveBeenCalledTimes(2);
+    expect(notify).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not skip startup or manual scans when log fingerprint is unchanged", async () => {
+    process.env.MINICLAW_DOCTOR_AUTO_DIAGNOSE_ENABLED = "true";
+    const { createDoctorScheduler } = await import("../doctor-scheduler.js");
+    const row = incidentRow();
+    const runDoctor = vi.fn(async () => reportWithFailedTask());
+    const scheduler = createDoctorScheduler({} as Client, {
+      runDoctorFn: runDoctor,
+      createOrUpdateIncidentFn: vi.fn(() => ({ row, created: true, severityEscalated: false })),
+      appendIncidentEventFn: vi.fn(() => 1),
+      sendNotificationFn: vi.fn(async () => undefined),
+      drainingFn: () => false,
+      logFingerprintFn: () => "logs:v1",
+    });
+
+    await expect(scheduler.runOnce("interval")).resolves.toMatchObject({ created: [row] });
+    await expect(scheduler.runOnce("startup")).resolves.toMatchObject({ created: [row] });
+    await expect(scheduler.runOnce("manual")).resolves.toMatchObject({ created: [row] });
+
+    expect(runDoctor).toHaveBeenCalledTimes(3);
+  });
+
   it("persists and notifies new incident candidates", async () => {
     process.env.MINICLAW_DOCTOR_AUTO_DIAGNOSE_ENABLED = "true";
     process.env.MINICLAW_DOCTOR_SUMMARY_CHANNEL_ID = "channel-1";

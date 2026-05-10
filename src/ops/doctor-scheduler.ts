@@ -1,3 +1,6 @@
+import { existsSync, statSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 import type { Client } from "discord.js";
 import { config } from "../config.js";
 import { createLogger } from "../lib/log.js";
@@ -16,9 +19,11 @@ import { deriveDoctorIncidentCandidates, type DoctorIncidentCandidate } from "./
 import { runDoctorRepair, type DoctorRepairResult } from "./doctor-repair.js";
 
 const log = createLogger("doctor-scheduler");
+const DEFAULT_LOG_DIR = "~/.miniclaw/logs";
+const DOCTOR_LOG_FILES = ["miniclaw-error.log", "miniclaw-out.log"] as const;
 
 export interface DoctorScanResult {
-  skipped?: "disabled" | "draining" | "already_running";
+  skipped?: "disabled" | "draining" | "already_running" | "no_new_logs";
   report?: DoctorReport;
   created: IncidentRow[];
   updated: IncidentRow[];
@@ -56,7 +61,38 @@ type DoctorSchedulerDeps = {
   sendRepairNotificationFn?: (client: Client, result: DoctorRepairResult) => Promise<void>;
   drainingFn?: () => boolean;
   nowFn?: () => Date;
+  logFingerprintFn?: () => string | null;
 };
+
+function resolveHome(path: string): string {
+  const trimmed = path.trim();
+  if (trimmed === "~") return homedir();
+  if (trimmed.startsWith("~/")) return resolve(homedir(), trimmed.slice(2));
+  return resolve(trimmed);
+}
+
+function envOptional(name: string): string | undefined {
+  const value = process.env[name]?.trim();
+  return value ? value : undefined;
+}
+
+function logDir(): string {
+  return resolveHome(envOptional("MINICLAW_LOG_DIR") ?? DEFAULT_LOG_DIR);
+}
+
+function logFingerprint(): string | null {
+  try {
+    const dir = logDir();
+    return DOCTOR_LOG_FILES.map((file) => {
+      const path = join(dir, file);
+      if (!existsSync(path)) return `${file}:missing`;
+      const stat = statSync(path);
+      return `${file}:${stat.size}:${stat.mtimeMs}`;
+    }).join("|");
+  } catch {
+    return null;
+  }
+}
 
 function shouldNotify(result: CreateOrUpdateIncidentResult): boolean {
   return result.created || result.severityEscalated;
@@ -178,7 +214,9 @@ export function createDoctorScheduler(
   const sendRepairNotificationFn = deps.sendRepairNotificationFn ?? sendDoctorRepairNotification;
   const drainingFn = deps.drainingFn ?? isDraining;
   const nowFn = deps.nowFn ?? (() => new Date());
+  const logFingerprintFn = deps.logFingerprintFn ?? logFingerprint;
   let running = false;
+  let lastLogFingerprint: string | null = null;
 
   const skipResult = (skipped: DoctorScanResult["skipped"]): DoctorScanResult => ({
     skipped,
@@ -244,6 +282,12 @@ export function createDoctorScheduler(
       if (running) {
         return skipResult("already_running");
       }
+      if (reason === "interval") {
+        const currentLogFingerprint = logFingerprintFn();
+        if (currentLogFingerprint && currentLogFingerprint === lastLogFingerprint) {
+          return skipResult("no_new_logs");
+        }
+      }
 
       running = true;
       try {
@@ -305,6 +349,7 @@ export function createDoctorScheduler(
             `doctor scan processed ${candidates.length} incident candidate(s): created=${created.length} updated=${updated.length} repaired=${repaired.length}`
           );
         }
+        lastLogFingerprint = logFingerprintFn();
         return { report, created, updated, notified, repaired, repairSkipped };
       } catch (err) {
         log.error("doctor scan failed:", err);
@@ -340,6 +385,7 @@ export function startDoctorScheduler(client: Client): DoctorSchedulerHandle | nu
     run("interval");
   }, config.doctor.scanIntervalMs);
   timer.unref?.();
+  log.info(`Auto Doctor scheduler started: interval=${config.doctor.scanIntervalMs}ms`);
   run("startup");
 
   const originalStop = handle.stop.bind(handle);
@@ -347,7 +393,6 @@ export function startDoctorScheduler(client: Client): DoctorSchedulerHandle | nu
     originalStop();
     clearInterval(timer);
   };
-  log.info(`Auto Doctor scheduler started: interval=${config.doctor.scanIntervalMs}ms`);
   return handle;
 }
 

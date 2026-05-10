@@ -93,7 +93,7 @@ doctor:
   enabled: true
   # Keep false until the summary channel is configured and a manual /doctor smoke test passes.
   auto_diagnose_enabled: false
-  scan_interval_ms: 3600000 # 1 hour
+  scan_interval_ms: 7200000 # 2 hours
   # Auto Doctor/Auto Improve notifications. ID wins when both are set.
   # Quote Discord IDs. If the ID is blank, MiniClaw looks for this channel name in the configured guild.
   summary_channel_id: ""

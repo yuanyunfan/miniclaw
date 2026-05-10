@@ -370,9 +370,9 @@ Recommended action:
 - Current safe restart and graceful drain behavior must remain the runtime update boundary.
 - Historical next slice after Phase 1 was Phase 2: incident persistence and `/health` open-incident visibility.
 - Phase 2 automatic diagnosis implementation has started.
-  - Added doctor config for hourly scanning, Auto Improve summary channel delivery, and future repair gates.
+  - Added doctor config for scheduled scanning, Auto Improve summary channel delivery, and future repair gates.
   - Added incident, incident event, and repair run persistence with deterministic dedupe keys.
-  - Added an hourly read-only Auto Doctor scheduler that can create/update incidents and notify only new or severity-escalated incidents.
+  - Added a scheduled read-only Auto Doctor loop that can create/update incidents and notify only new or severity-escalated incidents.
   - Added `/incidents` and open incident count in `/health`.
   - Self-repair worker, auto commit/push, and live self-update are still pending.
 - Phase 3A code shipped:
@@ -382,10 +382,10 @@ Recommended action:
   - Repair results are persisted in `repair_runs`; successful verification marks incidents `repair_ready`.
   - Auto commit/push, automatic scheduler enqueueing, and live self-update are still pending.
 - Phase 3A automatic dispatch shipped:
-  - The hourly doctor scheduler now attempts repair-eligible incidents when `doctor.auto_repair_enabled=true`.
+  - The scheduled doctor loop now attempts repair-eligible incidents when `doctor.auto_repair_enabled=true`.
   - Auto repair respects `doctor.max_parallel_repairs` and `doctor.max_repairs_per_day`.
   - Repair summaries are posted to the configured Auto Improve summary channel.
-  - Later hourly scans preserve repair lifecycle states instead of downgrading them back to `diagnosed`.
+  - Later scheduled scans preserve repair lifecycle states instead of downgrading them back to `diagnosed`.
 - Phase 3B repair commit policy shipped:
   - Repair verification now runs G0, secrets, targeted Vitest where applicable, typecheck, lint, test, and build before commit.
   - Verified repairs are committed only on the isolated `doctor-repair/<incident-id>` branch.
@@ -402,7 +402,7 @@ Recommended action:
 - Phase 5A incident detail and lifecycle first slice shipped:
   - Added `/incident view` for status, diagnosis, source metadata, latest repair run, recent events, and suggested operator commands.
   - Added `/incident resolve` and `/incident ignore`; both write incident events and remove the incident from the default open list.
-  - Added `/incident retry-repair`, which reopens eligible incidents for the hourly scheduler without bypassing repair policy or approval gates.
+  - Added `/incident retry-repair`, which reopens eligible incidents for the scheduled doctor loop without bypassing repair policy or approval gates.
   - Added `/incident ship-preview`, which runs the guarded `doctor:ship` dry-run path and records a preview event.
 - Phase 5B task trace first slice shipped:
   - Added a normalized `task_events` table and `TaskReporter` boundary for lifecycle, provider/tool, Discord delivery, cancellation, interruption, and finish events.
@@ -419,11 +419,11 @@ Recommended action:
   - Added `/incident request-restart` as a Discord shortcut that still reuses the guarded `doctor:ship` server-side checks and safe-restart without `--force`.
   - `/incident view` now lists the guarded ship and restart commands when the incident status allows them.
 
-## Next Development Plan: Hourly Doctor And Self-Repair
+## Next Development Plan: Scheduled Doctor And Self-Repair
 
 ### Target Behavior
 
-MiniClaw should run Auto Doctor automatically once per hour, detect actionable incidents, attempt policy-allowed self-repair in an isolated workspace, and post a concise result summary to the Discord `#miniclaw-auto-improve` channel.
+MiniClaw should run Auto Doctor automatically every two hours by default, skip interval scans when MiniClaw logs have not changed since the previous scan, detect actionable incidents, attempt policy-allowed self-repair in an isolated workspace, and post a concise result summary to the Discord `#miniclaw-auto-improve` channel.
 
 The initial self-repair target is guarded automation, not blind self-modification. Diagnosis can run automatically. Repair can run automatically only for allowlisted, low-risk MiniClaw code bugs. Shipping to `main` and live restart should remain conservative until the repair loop has enough successful history.
 
@@ -433,7 +433,7 @@ Add explicit doctor config instead of hardcoding the channel name:
 
 - `doctor.enabled`: default `true`
 - `doctor.auto_diagnose_enabled`: default `false` for first rollout, then enable in local config after smoke tests
-- `doctor.scan_interval_ms`: default `3600000`
+- `doctor.scan_interval_ms`: default `7200000`
 - `doctor.summary_channel_id`: optional Discord channel id for repair summaries; when present it wins over name lookup
 - `doctor.summary_channel_name`: Discord channel name for Auto Doctor/Auto Improve summaries, default `miniclaw-auto-improve`
 - `doctor.auto_repair_enabled`: default `false`
@@ -449,7 +449,7 @@ Add explicit doctor config instead of hardcoding the channel name:
 - `doctor.allowed_paths`: default allowlist for low-risk MiniClaw source/test/docs paths
 - `doctor.blocked_paths`: secrets, runtime state, local DB, logs, `.env`, user config, package manager auth files
 
-Hourly trigger should be implemented as a built-in runtime scheduler, not as a user YAML cron job. The doctor loop is MiniClaw operations infrastructure, so it needs access to incident persistence, repair policy, and alert state without being mixed into normal user cron jobs.
+The scheduled trigger should be implemented as a built-in runtime scheduler, not as a user YAML cron job. The doctor loop is MiniClaw operations infrastructure, so it needs access to incident persistence, repair policy, and alert state without being mixed into normal user cron jobs.
 
 ### Phase 2A: Incident Persistence And Deduplication
 
@@ -464,7 +464,7 @@ Add DB-backed incident storage before any repair logic:
    - `markIncidentStatus`
    - `createRepairRun`
    - `updateRepairRun`
-3. Use deterministic dedupe keys so the hourly scan does not spam duplicate incidents:
+3. Use deterministic dedupe keys so the scheduled scan does not spam duplicate incidents:
    - task incidents: `task:<task_id>:<status>`
    - cron incidents: `cron:<job_name>:<failure_run_id or last_run_at>`
    - PM2 restart loop: `pm2:<app>:<restart_window>`
@@ -474,11 +474,11 @@ Add DB-backed incident storage before any repair logic:
 
 Exit criteria:
 
-- Repeated hourly scans update the same open incident instead of creating duplicates.
+- Repeated scheduled scans update the same open incident instead of creating duplicates.
 - `/health` reports open incident count.
 - No code repair path exists yet.
 
-### Phase 2B: Hourly Auto Doctor Loop
+### Phase 2B: Scheduled Auto Doctor Loop
 
 Add `src/ops/doctor-scheduler.ts` and start it from `src/index.ts` after Discord `clientReady`.
 
@@ -486,12 +486,13 @@ Loop behavior:
 
 1. Skip when MiniClaw is draining.
 2. Skip if another doctor scan is active.
-3. Run read-only doctor evidence collection for recent task, cron, PM2, logs, and connectivity state.
-4. Create or update incidents through the persistence layer.
-5. For newly opened or severity-escalated incidents, post a short diagnosis to the configured Auto Improve summary channel.
-6. For repair-eligible incidents, enqueue a repair attempt only if `doctor.auto_repair_enabled` is true.
+3. For interval scans, skip when the MiniClaw log fingerprint is unchanged since the previous scan.
+4. Run read-only doctor evidence collection for recent task, cron, PM2, logs, and connectivity state.
+5. Create or update incidents through the persistence layer.
+6. For newly opened or severity-escalated incidents, post a short diagnosis to the configured Auto Improve summary channel.
+7. For repair-eligible incidents, enqueue a repair attempt only if `doctor.auto_repair_enabled` is true.
 
-The hourly diagnosis message should go to `#miniclaw-auto-improve` only when there is something actionable. A clean hourly scan should remain log-only or send a compact daily digest later, otherwise the monitor channel becomes noisy.
+The scheduled diagnosis message should go to `#miniclaw-auto-improve` only when there is something actionable. A clean scheduled scan should remain log-only or send a compact daily digest later, otherwise the monitor channel becomes noisy.
 
 Exit criteria:
 
@@ -696,7 +697,7 @@ Implement in this order:
 
 1. Config keys and `#miniclaw-auto-improve` summary channel resolution.
 2. Incident persistence and dedupe.
-3. Hourly read-only doctor scheduler.
+3. Scheduled read-only doctor loop.
 4. Discord notification for new or escalated incidents.
 5. Self-repair dry-run worker.
 6. Isolated worktree repair worker with verification.

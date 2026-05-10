@@ -86,7 +86,7 @@ const commands = [
     .addSubcommand((sub) =>
       sub
         .setName("retry-repair")
-        .setDescription("重新开放 incident，让 hourly Auto Doctor 按 policy 再尝试修复")
+        .setDescription("重新开放 incident，让 scheduled Auto Doctor 按 policy 再尝试修复")
         .addStringOption((opt) =>
           opt.setName("id").setDescription("incident id 或前缀").setRequired(true)
         )

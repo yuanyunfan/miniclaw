@@ -327,6 +327,7 @@ storage:
 
     expect(config.doctor.summaryChannelId).toBeUndefined();
     expect(config.doctor.summaryChannelName).toBe("miniclaw-auto-improve");
+    expect(config.doctor.scanIntervalMs).toBe(7200000);
   });
 
   it("supports doctor summary channel name env override", async () => {
@@ -350,6 +351,29 @@ storage:
     const { config } = await import("../config.js");
 
     expect(config.doctor.summaryChannelName).toBe("custom-auto-improve");
+  });
+
+  it("supports doctor scan interval env override", async () => {
+    const cfg = join(tmpDir, "config.yaml");
+    writeFileSync(cfg, `
+discord:
+  client_id: "client-yaml"
+  guild_id: "guild-yaml"
+  allowed_user_id: "user-yaml"
+agent:
+  provider: codex
+  default_cwd: "${tmpDir}"
+storage:
+  db_path: "${join(tmpDir, "data.db")}"
+  memory_path: "${join(tmpDir, "MEMORY.md")}"
+`);
+    process.env.MINICLAW_CONFIG = cfg;
+    process.env.DISCORD_TOKEN = "token-env";
+    process.env.MINICLAW_DOCTOR_SCAN_INTERVAL_MS = "90000";
+
+    const { config } = await import("../config.js");
+
+    expect(config.doctor.scanIntervalMs).toBe(90000);
   });
 
   it("supports legacy top-level email SMTP config for notifications", async () => {

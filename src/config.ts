@@ -639,7 +639,7 @@ export const config = {
     scanIntervalMs: positiveNumber(
       ["doctor", "scan_interval_ms"],
       "MINICLAW_DOCTOR_SCAN_INTERVAL_MS",
-      3_600_000
+      7_200_000
     ),
     summaryChannelId: doctorSummaryChannelId,
     summaryChannelName: doctorSummaryChannelName,
