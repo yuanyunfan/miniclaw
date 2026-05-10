@@ -683,6 +683,27 @@ export const config = {
   },
   maxAttachmentMb: positiveNumber(["attachments", "max_mb"], "MINICLAW_MAX_ATTACHMENT_MB", 32),
   maxAttachments: positiveInt(["attachments", "max_count"], "MINICLAW_MAX_ATTACHMENTS", 10),
+  audioTranscription: {
+    enabled: boolValue(
+      ["attachments", "audio_transcription", "enabled"],
+      "MINICLAW_AUDIO_TRANSCRIPTION_ENABLED",
+      true
+    ),
+    model: requiredString(
+      ["attachments", "audio_transcription", "model"],
+      "MINICLAW_AUDIO_TRANSCRIPTION_MODEL",
+      "gpt-4o-mini-transcribe"
+    ),
+    maxMb: positiveNumber(
+      ["attachments", "audio_transcription", "max_mb"],
+      "MINICLAW_AUDIO_TRANSCRIPTION_MAX_MB",
+      25
+    ),
+    language: optionalString(
+      ["attachments", "audio_transcription", "language"],
+      "MINICLAW_AUDIO_TRANSCRIPTION_LANGUAGE"
+    ),
+  },
 } as const;
 
 export function assertE2eSafeRuntimePath(kind: string, path: string): void {

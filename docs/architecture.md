@@ -187,7 +187,7 @@ sequenceDiagram
     Note over B: 闸 1+2: 非 bot + allowedUserId<br/>Path 1: 不是 thread → 跳过<br/>Path 2 入口: auto_reply 或 @mention
 
     opt 消息带附件
-        B->>B: processAttachments(message.attachments)<br/>图片/PDF → 下载 base64 block（raven/Copilot 不支持 URL 源），文本 → 内联 text block，二进制 → 落盘到 tmpdir
+        B->>B: processAttachments(message.attachments)<br/>图片/PDF → 下载 base64 block（raven/Copilot 不支持 URL 源），文本 → 内联 text block，语音 → 转写 transcript，二进制 → 落盘到 tmpdir
     end
 
     B->>B: parseExplicitMemory(content)
@@ -495,8 +495,9 @@ classify by mime + ext
    │   │     │      │         <cwd>/.miniclaw-attachments/{scope}/<name><br>
    │   │     │      │         + text block "📎 已保存到 ..."
    │   │     │      │
-   │   │     │      └─→ notice "⚠️ 暂不支持转写"
-   │   │     │           （Phase 2 接入 Whisper）
+   │   │     │      └─→ 下载（.ogg 先经 ffmpeg 转 webm）→ OpenAI audio transcription<br>
+   │   │     │           <audio_transcript name=...>...</audio_transcript><br>
+   │   │     │           失败时 notice "❌ 转写失败: ..."
    │   │     │
    │   │     └─→ fetch → utf8 → text block
    │   │         "<file name=...>...</file>"  (≤1MB)
@@ -513,7 +514,7 @@ classify by mime + ext
 
 **清理**：task 路径附件落到 `<cwd>/.miniclaw-attachments/<taskId>/`，executeTask `finally` 块 `rmSync` 整目录。chat 路径走 `os.tmpdir()`，靠 OS 周期清理。
 
-**配置**：推荐写在 `attachments.max_mb` / `attachments.max_count`；旧 `MINICLAW_MAX_ATTACHMENT_MB` / `MINICLAW_MAX_ATTACHMENTS` env 仍可覆盖。
+**配置**：推荐写在 `attachments.max_mb` / `attachments.max_count`；旧 `MINICLAW_MAX_ATTACHMENT_MB` / `MINICLAW_MAX_ATTACHMENTS` env 仍可覆盖。语音转写配置在 `attachments.audio_transcription.*`，env 覆盖为 `MINICLAW_AUDIO_TRANSCRIPTION_ENABLED` / `MINICLAW_AUDIO_TRANSCRIPTION_MODEL` / `MINICLAW_AUDIO_TRANSCRIPTION_MAX_MB` / `MINICLAW_AUDIO_TRANSCRIPTION_LANGUAGE`；转写调用 OpenAI Audio Transcriptions API，需要 `OPENAI_API_KEY`。Discord `.ogg` voice message 会先用本机 `ffmpeg` 转成 `.webm` 再上传。
 
 **chat_history 取舍**：附件不写入 chat_history（只写文字 prompt），续话需要重新上传——避免 base64 反复进 context。
 

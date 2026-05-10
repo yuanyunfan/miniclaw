@@ -144,12 +144,42 @@ describe("processAttachments", () => {
     expect((r.codexInputs[0] as { text: string }).text).toContain("hello");
   });
 
-  it("audio → notice，不出 block", async () => {
+  it("audio → 下载并转写成 text block", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(Buffer.from("fake-audio"))
+    );
     const att = makeAtt({ name: "v.m4a", size: 1000, contentType: "audio/m4a" });
-    const r = await processAttachments([att], { scope: "s5" });
-    expect(r.blocks).toEqual([]);
-    expect(r.codexInputs).toEqual([]);
-    expect(r.notices[0]).toMatch(/语音/);
+    const transcribeAudio = vi.fn().mockResolvedValue({ text: "你好 MiniClaw", model: "gpt-4o-mini-transcribe" });
+
+    const r = await processAttachments([att], { cwd: dir, scope: "s5" }, { transcribeAudio });
+
+    expect(transcribeAudio).toHaveBeenCalledWith({
+      buffer: Buffer.from("fake-audio"),
+      filename: "v.m4a",
+      contentType: "audio/m4a",
+      size: 1000,
+    });
+    expect(r.blocks[0]).toMatchObject({ type: "text" });
+    expect((r.blocks[0] as { text: string }).text).toContain("<audio_transcript");
+    expect((r.blocks[0] as { text: string }).text).toContain("你好 MiniClaw");
+    expect((r.codexInputs[0] as { text: string }).text).toContain("你好 MiniClaw");
+    expect(r.notices[0]).toMatch(/已自动转写/);
+    expect(existsSync(join(dir, ".miniclaw-attachments", "s5", "v.m4a"))).toBe(true);
+  });
+
+  it("audio 转写失败 → notice，不阻断其他附件", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (url) => new Response(Buffer.from(String(url).includes("x.md") ? "hello" : "fake-audio"))
+    );
+    const audio = makeAtt({ name: "v.ogg", size: 1000, contentType: "audio/ogg", url: "https://cdn/v.ogg" });
+    const text = makeAtt({ name: "x.md", size: 5, contentType: "text/markdown", url: "https://cdn/x.md" });
+    const transcribeAudio = vi.fn().mockRejectedValue(new Error("缺少 OPENAI_API_KEY"));
+
+    const r = await processAttachments([audio, text], { scope: "s-audio-fail" }, { transcribeAudio });
+
+    expect(r.notices.find((n) => n.includes("转写失败"))).toContain("缺少 OPENAI_API_KEY");
+    expect(r.blocks.length).toBe(1);
+    expect((r.blocks[0] as { text: string }).text).toContain("hello");
   });
 
   it("二进制 → 落盘 + 路径 text block", async () => {

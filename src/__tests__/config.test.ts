@@ -63,6 +63,10 @@ const ENV_KEYS = [
   "MINICLAW_E2E_FAKE_AGENT",
   "MINICLAW_MAX_ATTACHMENT_MB",
   "MINICLAW_MAX_ATTACHMENTS",
+  "MINICLAW_AUDIO_TRANSCRIPTION_ENABLED",
+  "MINICLAW_AUDIO_TRANSCRIPTION_MODEL",
+  "MINICLAW_AUDIO_TRANSCRIPTION_MAX_MB",
+  "MINICLAW_AUDIO_TRANSCRIPTION_LANGUAGE",
   "MINICLAW_CONNECTIVITY_MONITOR_ENABLED",
   "MINICLAW_CONNECTIVITY_INTERVAL_MS",
   "MINICLAW_CONNECTIVITY_FAILURE_THRESHOLD",
@@ -193,6 +197,11 @@ storage:
 attachments:
   max_mb: 16
   max_count: 3
+  audio_transcription:
+    enabled: true
+    model: gpt-4o-transcribe
+    max_mb: 20
+    language: zh
 connectivity:
   enabled: true
   interval_ms: 30000
@@ -304,6 +313,13 @@ notifications:
       to: "owner@example.com",
     });
     expect(config.maxAttachments).toBe(3);
+    expect(config.maxAttachmentMb).toBe(16);
+    expect(config.audioTranscription).toEqual({
+      enabled: true,
+      model: "gpt-4o-transcribe",
+      maxMb: 20,
+      language: "zh",
+    });
   });
 
   it("defaults doctor summaries to the Auto Improve channel name and supports env override", async () => {
@@ -329,6 +345,12 @@ storage:
     expect(config.doctor.summaryChannelName).toBe("miniclaw-auto-improve");
     expect(config.doctor.scanIntervalMs).toBe(7200000);
     expect(config.autoReplyChannelIds).toEqual(["*"]);
+    expect(config.audioTranscription).toEqual({
+      enabled: true,
+      model: "gpt-4o-mini-transcribe",
+      maxMb: 25,
+      language: undefined,
+    });
   });
 
   it("allows explicitly disabling no-mention channel replies", async () => {
@@ -353,6 +375,37 @@ storage:
     const { config } = await import("../config.js");
 
     expect(config.autoReplyChannelIds).toEqual([]);
+  });
+
+  it("supports audio transcription env overrides", async () => {
+    const cfg = join(tmpDir, "config.yaml");
+    writeFileSync(cfg, `
+discord:
+  client_id: "client-yaml"
+  guild_id: "guild-yaml"
+  allowed_user_id: "user-yaml"
+agent:
+  provider: codex
+  default_cwd: "${tmpDir}"
+storage:
+  db_path: "${join(tmpDir, "data.db")}"
+  memory_path: "${join(tmpDir, "MEMORY.md")}"
+`);
+    process.env.MINICLAW_CONFIG = cfg;
+    process.env.DISCORD_TOKEN = "token-env";
+    process.env.MINICLAW_AUDIO_TRANSCRIPTION_ENABLED = "false";
+    process.env.MINICLAW_AUDIO_TRANSCRIPTION_MODEL = "whisper-1";
+    process.env.MINICLAW_AUDIO_TRANSCRIPTION_MAX_MB = "12";
+    process.env.MINICLAW_AUDIO_TRANSCRIPTION_LANGUAGE = "en";
+
+    const { config } = await import("../config.js");
+
+    expect(config.audioTranscription).toEqual({
+      enabled: false,
+      model: "whisper-1",
+      maxMb: 12,
+      language: "en",
+    });
   });
 
   it("supports doctor summary channel name env override", async () => {

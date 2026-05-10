@@ -5,6 +5,7 @@ import { join, extname, basename } from "node:path";
 import { tmpdir } from "node:os";
 import { config } from "../config.js";
 import type { CodexInputEntry } from "../agent/codex.js";
+import { transcribeAudio, type AudioTranscriptionInput, type AudioTranscriptionResult } from "./audio-transcription.js";
 
 export interface AttachmentResult {
   blocks: ContentBlockParam[];
@@ -16,6 +17,10 @@ export interface AttachmentResult {
 export interface AttachmentScope {
   cwd?: string;
   scope: string;
+}
+
+export interface ProcessAttachmentDeps {
+  transcribeAudio?: (input: AudioTranscriptionInput) => Promise<AudioTranscriptionResult>;
 }
 
 const IMAGE_MIME = /^image\/(png|jpe?g|gif|webp)$/i;
@@ -58,6 +63,17 @@ function safeName(name: string): string {
   return b.slice(0, 200) || "file";
 }
 
+function escapeXml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function escapeXmlAttr(value: string): string {
+  return escapeXml(value).replaceAll('"', "&quot;");
+}
+
 async function downloadToBuffer(url: string, timeoutMs = config.attachmentTimeoutMs): Promise<Buffer> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(new Error(`attachment download timeout after ${timeoutMs}ms`)), timeoutMs);
@@ -95,6 +111,7 @@ export function cleanupAttachmentScope(opts: AttachmentScope): void {
 export async function processAttachments(
   attachments: Attachment[],
   opts: AttachmentScope,
+  deps: ProcessAttachmentDeps = {},
 ): Promise<AttachmentResult> {
   const blocks: ContentBlockParam[] = [];
   const codexInputs: CodexInputEntry[] = [];
@@ -174,7 +191,30 @@ export async function processAttachments(
           break;
         }
         case "audio": {
-          notices.push(`⚠️ \`${name}\` 是语音文件，暂不支持自动转写（后续可接入 Whisper API）`);
+          const dir = ensureDir();
+          const buf = await downloadToBuffer(att.url);
+          const path = join(dir, safeName(name));
+          writeFileSync(path, buf);
+
+          try {
+            const transcription = await (deps.transcribeAudio ?? transcribeAudio)({
+              buffer: buf,
+              filename: name,
+              contentType: att.contentType,
+              size: att.size,
+            });
+            const inline = [
+              `<audio_transcript name="${escapeXmlAttr(name)}" size="${att.size}" model="${escapeXmlAttr(transcription.model)}">`,
+              escapeXml(transcription.text),
+              "</audio_transcript>",
+            ].join("\n");
+            blocks.push({ type: "text", text: inline });
+            codexInputs.push({ type: "text", text: inline });
+            notices.push(`🎙️ \`${name}\` 已自动转写`);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            notices.push(`❌ \`${name}\` 转写失败: ${msg}`);
+          }
           break;
         }
         case "binary":
@@ -201,4 +241,4 @@ export async function processAttachments(
   return { blocks, codexInputs, textSummary, notices };
 }
 
-export const __testables = { classify, imageMediaType, safeName, downloadToBuffer, attachmentBaseDir };
+export const __testables = { classify, imageMediaType, safeName, escapeXml, escapeXmlAttr, downloadToBuffer, attachmentBaseDir };

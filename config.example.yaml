@@ -141,3 +141,9 @@ e2e:
 attachments:
   max_mb: 32
   max_count: 10
+  audio_transcription:
+    enabled: true
+    model: gpt-4o-mini-transcribe
+    max_mb: 25
+    # Optional ISO-639-1 language hint, for example zh or en.
+    language: ""
