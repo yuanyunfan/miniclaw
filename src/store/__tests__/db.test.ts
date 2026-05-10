@@ -122,6 +122,14 @@ describe("schema migrations", () => {
     expect(__testables.columnExists("task_events", "event_type")).toBe(true);
     expect(__testables.columnExists("task_events", "payload_json")).toBe(true);
   });
+
+  it("ensures market forecast persistence tables exist", () => {
+    expect(__testables.columnExists("market_forecasts", "payload_json")).toBe(true);
+    expect(__testables.columnExists("market_forecasts", "report_text")).toBe(true);
+    expect(__testables.columnExists("market_forecast_items", "forecast_id")).toBe(true);
+    expect(__testables.columnExists("market_forecast_items", "source")).toBe(true);
+    expect(__testables.columnExists("market_forecast_evaluations", "score_json")).toBe(true);
+  });
 });
 
 describe("updateTask", () => {

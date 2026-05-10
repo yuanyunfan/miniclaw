@@ -10,10 +10,17 @@ const mocks = vi.hoisted(() => ({
   executeTask: vi.fn(),
   getActiveTaskCount: vi.fn(() => 0),
   runPreProvider: vi.fn(),
+  recordMarketForecastFromPayload: vi.fn(() => "forecast-1"),
+  updateMarketForecastReport: vi.fn(() => ({ hasJson: true, insertedItemCount: 4 })),
 }));
 
 vi.mock("../../store/db.js", () => ({
   createTask: mocks.createTask,
+}));
+
+vi.mock("../../store/market-forecasts.js", () => ({
+  recordMarketForecastFromPayload: mocks.recordMarketForecastFromPayload,
+  updateMarketForecastReport: mocks.updateMarketForecastReport,
 }));
 
 vi.mock("../../agent/task.js", () => ({
@@ -60,6 +67,10 @@ beforeEach(() => {
   mocks.getActiveTaskCount.mockReset();
   mocks.getActiveTaskCount.mockReturnValue(0);
   mocks.runPreProvider.mockReset();
+  mocks.recordMarketForecastFromPayload.mockReset();
+  mocks.recordMarketForecastFromPayload.mockReturnValue("forecast-1");
+  mocks.updateMarketForecastReport.mockReset();
+  mocks.updateMarketForecastReport.mockReturnValue({ hasJson: true, insertedItemCount: 4 });
 });
 
 describe("cron task runner", () => {
@@ -143,6 +154,75 @@ describe("cron task runner", () => {
     expect(send).toHaveBeenCalledWith("需要重新登录微信公众号后台 session");
     expect(mocks.createTask).not.toHaveBeenCalled();
     expect(mocks.executeTask).not.toHaveBeenCalled();
+  });
+
+  it("persists market-intel forecasts before and after the raw cron task", async () => {
+    const { runTask } = await import("../runner-task.js");
+    const providerPayload = {
+      generated_at: "2026-05-08T12:45:00.000Z",
+      source: "market-intel",
+      profile: "us-pre-market",
+      market_scope: "us",
+      session: "pre_market",
+      run_context: {
+        job_name: "us-stock-pre-market",
+        channel_id: "1000000000000000000",
+        timezone: "America/New_York",
+        calendar_status: "pre_market",
+        trade_date: "2026-05-08",
+        skipped: false,
+        open_markets: [],
+        tradable_markets: ["us"],
+        closed_markets: [],
+      },
+      data_quality: { status: "partial", warnings: [], sources: [] },
+      scores: {
+        index_direction: {
+          target: "US broad market",
+          direction: "bullish",
+          probability: 0.55,
+          confidence: 0.4,
+          evidence_ids: ["quote.indices.1"],
+          rationale: "positive snapshot",
+        },
+        sector_opportunities: [],
+        risk_level: {
+          target: "market risk",
+          direction: "neutral",
+          probability: 0.5,
+          confidence: 0.2,
+          evidence_ids: ["calendar.static.1"],
+          rationale: "calendar known",
+        },
+      },
+    };
+    mocks.runPreProvider.mockResolvedValue({ text: JSON.stringify(providerPayload) });
+    mocks.executeTask.mockResolvedValue({
+      success: true,
+      sessionId: "codex:thread-1",
+      costUsd: 0,
+      durationMs: 1000,
+      turns: 1,
+      result: "<market_forecast_json>{\"index_probabilities\":[{\"target\":\"SPY\",\"up\":0.4,\"range_bound\":0.4,\"down\":0.2}]}</market_forecast_json>",
+    });
+
+    await expect(runTask({
+      ...taskJob(),
+      name: "us-stock-pre-market",
+      pre_provider: "market-intel",
+      pre_provider_config: "us-pre-market",
+    }, client())).resolves.toBeUndefined();
+
+    const createdTask = mocks.createTask.mock.calls[0]?.[0] as { id?: string } | undefined;
+    expect(createdTask?.id).toBeDefined();
+    expect(mocks.recordMarketForecastFromPayload).toHaveBeenCalledWith({
+      taskId: createdTask?.id,
+      payload: expect.objectContaining({
+        source: "market-intel",
+        market_scope: "us",
+      }),
+    });
+    expect(mocks.updateMarketForecastReport).toHaveBeenCalledWith("forecast-1", expect.stringContaining("market_forecast_json"));
   });
 
   it("uploads pre_provider attachments after a successful raw cron task", async () => {

@@ -4,6 +4,7 @@ import { existsSync, statSync } from "node:fs";
 import { AttachmentBuilder, type Client, type SendableChannels } from "discord.js";
 import { config } from "../config.js";
 import { createTask } from "../store/db.js";
+import { recordMarketForecastFromPayload, updateMarketForecastReport } from "../store/market-forecasts.js";
 import { executeTask, getActiveTaskCount, type TaskResult } from "../agent/task.js";
 import { TaskReporter } from "../agent/task-reporter.js";
 import { loadPrompt } from "../agent/prompts.js";
@@ -13,6 +14,7 @@ import { resolve, join } from "node:path";
 import { createLogger } from "../lib/log.js";
 import { runPreProvider } from "../providers/index.js";
 import type { PreProviderAttachment } from "../providers/types.js";
+import type { MarketIntelPayload } from "../providers/market-intel/types.js";
 import { DRAINING_MESSAGE, isDraining } from "../runtime/shutdown.js";
 
 const log = createLogger("cron");
@@ -57,6 +59,21 @@ function buildCronTaskPrompt(jobName: string, prependedContext: string, rendered
     prepended_context: prependedContext,
     user_prompt: renderedPrompt,
   });
+}
+
+function parseMarketIntelPayload(providerText: string): MarketIntelPayload {
+  const parsed = JSON.parse(providerText) as Partial<MarketIntelPayload>;
+  if (
+    parsed?.source !== "market-intel" ||
+    typeof parsed.generated_at !== "string" ||
+    typeof parsed.market_scope !== "string" ||
+    typeof parsed.session !== "string" ||
+    !parsed.run_context ||
+    !parsed.scores
+  ) {
+    throw new Error("market-intel provider did not return a valid MarketIntelPayload JSON object");
+  }
+  return parsed as MarketIntelPayload;
 }
 
 function buildCronSkillPrompt(jobName: string, skillName: string, skillArgs?: Record<string, string | number | boolean>): string {
@@ -173,6 +190,7 @@ export async function runTask(job: CronJobTask, client: Client): Promise<void> {
   let prependedContext = "";
   let preProviderCommit: (() => Promise<void>) | undefined;
   const preProviderAttachments: PreProviderAttachment[] = [];
+  let marketIntelPayload: MarketIntelPayload | undefined;
   if (job.pre_script) {
     try {
       const stdout = await runPreScript(
@@ -198,6 +216,9 @@ export async function runTask(job: CronJobTask, client: Client): Promise<void> {
         runAt: new Date(),
       });
       prependedContext += buildCronPreProviderBlock(job.pre_provider, result.text);
+      if (job.pre_provider === "market-intel") {
+        marketIntelPayload = parseMarketIntelPayload(result.text);
+      }
       preProviderCommit = result.commit;
       if (result.attachments?.length) {
         preProviderAttachments.push(...result.attachments);
@@ -233,6 +254,9 @@ export async function runTask(job: CronJobTask, client: Client): Promise<void> {
     source_route_type: "cron_task",
     source_channel_id: job.channel,
   });
+  const marketForecastId = marketIntelPayload
+    ? recordMarketForecastFromPayload({ taskId, payload: marketIntelPayload })
+    : undefined;
   const reporter = new TaskReporter(taskId);
   reporter.accepted({
     route: "cron_task",
@@ -248,6 +272,15 @@ export async function runTask(job: CronJobTask, client: Client): Promise<void> {
     prepended_context_chars: prependedContext.length,
   });
   const result = await executeTask({ taskId, prompt, cwd, channel, outputMode: "raw" });
+  if (marketForecastId) {
+    const extraction = updateMarketForecastReport(marketForecastId, result.result);
+    reporter.contextCaptured({
+      source_route_type: "market_forecast_persistence",
+      forecast_id: marketForecastId,
+      llm_forecast_json: extraction.hasJson,
+      llm_forecast_items: extraction.insertedItemCount,
+    });
+  }
   assertTaskResultOk(job.name, result);
   await sendPreProviderAttachments(channel, job.name, preProviderAttachments);
   if (preProviderCommit) {
