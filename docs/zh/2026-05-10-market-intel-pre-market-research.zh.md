@@ -1240,3 +1240,24 @@ Fixture scenarios：
 - Phase 8 第一版已交付只读 calibration loop：
   - `pnpm market-calibration` 汇总最近 hit rate、Brier score、data-quality correlation、source-level reliability weights、weak spots 和 recommendations。
   - 第一版不自动改 prompt 或 source weights；样本量足够前只做可观测和保守建议。
+
+2026-05-10 追加实现备注：
+
+- Phase 4 缺口补齐：
+  - CN official filings 现在包含 SSE、SZSE 和 HKEX public announcement search，前提是对应公开 endpoint 可访问。
+  - Generic 低质量 web/news search 仍然不进入默认路径；news 路径使用 official RSS / pages，并在 `data_quality` 中标注 source failure。
+  - Risk evidence 现在从 official macro / news / filing evidence 和 source failure signals 中确定性派生，不再返回 risk `not_implemented` section。
+- Phase 7 缺口补齐：
+  - `market-forecast-evaluation` 现在同时评分 index direction、sector opportunities 和 risk alerts。
+  - Sector calls 会匹配配置里的 benchmark / proxy label；无法匹配的 sector calls 会记录为 `unknown`，并给出 unmapped warning。
+  - Risk alerts 通过 configured benchmarks 是否触发 downside threshold 的 market-risk proxy 做自动评分。
+- Phase 8 缺口补齐：
+  - `pnpm market-calibration -- --write-config --min-samples 5` 可以把 runtime calibration rules 写入 `~/.miniclaw/providers/market-intel/calibration.yaml`。
+  - Runtime `market-intel` 会读取该配置，并对 provider-score 应用 weight / confidence cap；面向 LLM 的 source weights 和 prompt rules 会注入 payload。
+  - 如果没有足够 evaluation 样本，命令会有意跳过写入权重变更，不会硬调。
+- Runtime prompt / config 更新：
+  - 盘前 prompts 现在要求 Forecast Editor 遵守 `calibration.prompt_rules` 和 `calibration.source_weights`。
+  - 盘后 prompts 现在要求按 `score_groups` 分别解释 index / sector / risk calibration。
+  - US post-market evaluation config 已加入 US sector ETF benchmarks；CN config 已加入可用 CN theme 的 ETF / proxy labels。
+- 受控 cron 验收：
+  - `pnpm cron:test` 可以通过 `MINICLAW_CRON_TEST_RUN_AT` 指定一个已知交易时段时间戳；这样即使当前是周末或假日，也能跑完整 Discord 验收链路，同时不影响正常 scheduler。

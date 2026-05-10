@@ -212,10 +212,10 @@ function toSnapshotItem(params: {
 
 function sectionStatus(items: MarketIntelSnapshotItem[], failures: MarketIntelSnapshotFailure[]): MarketIntelSnapshotSectionStatus {
   const hardFailures = failures.filter((failure) => !failure.skipped);
-  if (!items.length && !hardFailures.length) return failures.length ? "not_implemented" : "empty";
+  if (!items.length && !hardFailures.length) return "empty";
   if (items.length && !hardFailures.length) return "ok";
   if (items.length) return "partial";
-  return "not_implemented";
+  return "partial";
 }
 
 function sectionFor(

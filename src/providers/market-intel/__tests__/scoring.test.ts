@@ -74,4 +74,32 @@ describe("buildMarketIntelScores", () => {
     expect(scores.index_direction.probability).toBe(0.6);
     expect(scores.index_direction.evidence_ids).toEqual(["quote.indices.1"]);
   });
+
+  it("uses derived risk evidence instead of a not-implemented risk placeholder", () => {
+    const evidence: MarketIntelEvidenceItem[] = [
+      {
+        id: "calendar.static.1",
+        category: "calendar",
+        source: "static",
+        source_tier: "official",
+        captured_at: "2026-05-08T12:45:00.000Z",
+        summary: "pre-market",
+      },
+      {
+        id: "risk.derived.1",
+        category: "risk",
+        source: "market-intel derived risk flags",
+        source_tier: "local_readonly",
+        captured_at: "2026-05-08T12:45:00.000Z",
+        summary: "Derived company_event_risk from filing.hkex.1",
+        importance: "high",
+      },
+    ];
+
+    const scores = buildMarketIntelScores({ marketScope: "cn", evidence });
+
+    expect(scores.risk_level.direction).toBe("bearish");
+    expect(scores.risk_level.evidence_ids).toContain("risk.derived.1");
+    expect(scores.risk_level.rationale).not.toContain("not implemented");
+  });
 });

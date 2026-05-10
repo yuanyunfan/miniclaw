@@ -34,6 +34,7 @@ export interface MarketForecastEvaluationQuoteClient {
 export type MarketForecastEvaluationPortfolioRunner = (args: PreProviderRunArgs) => Promise<PreProviderResult>;
 
 export type MarketForecastOutcomeBucket = "up" | "range_bound" | "down" | "unknown";
+export type MarketForecastEvaluationItemType = "index_direction" | "sector_opportunity" | "risk_alert";
 
 export interface MarketForecastProbabilityGroup {
   target: string;
@@ -58,12 +59,14 @@ export interface MarketForecastBenchmarkResult {
 }
 
 export interface MarketForecastEvaluationScore {
+  item_type: MarketForecastEvaluationItemType;
   target: string;
   benchmark_symbol: string;
   predicted: MarketForecastOutcomeBucket;
   actual: MarketForecastOutcomeBucket;
   hit: boolean;
   brier_score?: number;
+  details?: string;
   probabilities: {
     up: number;
     range_bound: number;

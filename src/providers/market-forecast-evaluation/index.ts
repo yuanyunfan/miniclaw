@@ -14,6 +14,7 @@ import { loadMarketForecastEvaluationProviderConfig } from "./config.js";
 import type {
   MarketForecastBenchmarkConfig,
   MarketForecastBenchmarkResult,
+  MarketForecastEvaluationItemType,
   MarketForecastEvaluationPortfolioRunner,
   MarketForecastEvaluationProviderConfig,
   MarketForecastEvaluationQuoteClient,
@@ -71,7 +72,7 @@ function normalizeProbabilities(input: { up: number; range_bound: number; down: 
 
 function bucketFromProviderDirection(direction: string): "up" | "range_bound" | "down" {
   if (direction === "bullish" || direction === "up") return "up";
-  if (direction === "bearish" || direction === "down") return "down";
+  if (direction === "bearish" || direction === "down" || direction === "risk" || direction === "alert" || direction === "urgent") return "down";
   return "range_bound";
 }
 
@@ -91,8 +92,14 @@ function providerProbabilityGroup(item: MarketForecastItemRow): MarketForecastPr
   };
 }
 
-function probabilityGroups(items: MarketForecastItemRow[]): MarketForecastProbabilityGroup[] {
-  const llm = items.filter((item) => item.source === "llm_report" && item.item_type === "index_probability");
+function probabilityGroups(
+  items: MarketForecastItemRow[],
+  itemType: "index_probability" | "sector_opportunity" | "risk_alert",
+): MarketForecastProbabilityGroup[] {
+  const llm = items.filter((item) => item.source === "llm_report" && item.item_type === itemType);
+  if (itemType !== "index_probability" && llm.length) {
+    return llm.map(providerProbabilityGroup);
+  }
   if (llm.length) {
     const grouped = new Map<string, MarketForecastProbabilityGroup>();
     for (const item of llm) {
@@ -115,8 +122,16 @@ function probabilityGroups(items: MarketForecastItemRow[]): MarketForecastProbab
       ...normalizeProbabilities(group),
     }));
   }
+  if (itemType === "risk_alert") {
+    return items
+      .filter((item) => item.source === "provider_score" && item.item_type === "risk_level")
+      .map(providerProbabilityGroup);
+  }
   return items
-    .filter((item) => item.source === "provider_score" && item.item_type === "index_direction")
+    .filter((item) => (
+      item.source === "provider_score"
+      && item.item_type === (itemType === "index_probability" ? "index_direction" : itemType)
+    ))
     .map(providerProbabilityGroup);
 }
 
@@ -154,13 +169,13 @@ function brierScore(group: MarketForecastProbabilityGroup, actual: MarketForecas
   return Math.round(score * 10000) / 10000;
 }
 
-function groupForBenchmark(groups: MarketForecastProbabilityGroup[], benchmark: MarketForecastBenchmarkResult): MarketForecastProbabilityGroup | undefined {
+function textMatchesBenchmark(target: string, benchmark: MarketForecastBenchmarkResult | MarketForecastBenchmarkConfig): boolean {
+  const lowerTarget = target.toLowerCase();
   const lowerSymbol = benchmark.symbol.toLowerCase();
   const lowerLabel = benchmark.label?.toLowerCase();
-  return groups.find((group) => {
-    const target = group.target.toLowerCase();
-    return target.includes(lowerSymbol) || (lowerLabel ? target.includes(lowerLabel) : false);
-  }) ?? groups[0];
+  return lowerTarget.includes(lowerSymbol)
+    || lowerSymbol.includes(lowerTarget)
+    || (lowerLabel ? lowerTarget.includes(lowerLabel) || lowerLabel.includes(lowerTarget) : false);
 }
 
 async function benchmarkResults(params: {
@@ -198,31 +213,104 @@ async function benchmarkResults(params: {
   return out;
 }
 
-function evaluationScores(groups: MarketForecastProbabilityGroup[], benchmarks: MarketForecastBenchmarkResult[]): MarketForecastEvaluationScore[] {
-  return benchmarks.flatMap((benchmark) => {
-    const group = groupForBenchmark(groups, benchmark);
-    if (!group) return [];
-    const predicted = predictedBucket(group);
-    return [{
-      target: group.target,
-      benchmark_symbol: benchmark.symbol,
-      predicted,
-      actual: benchmark.outcome,
-      hit: benchmark.outcome !== "unknown" && predicted === benchmark.outcome,
-      brier_score: brierScore(group, benchmark.outcome),
-      probabilities: {
-        up: group.up,
-        range_bound: group.range_bound,
-        down: group.down,
-      },
-    }];
+function scoreForGroup(params: {
+  itemType: MarketForecastEvaluationItemType;
+  group: MarketForecastProbabilityGroup;
+  benchmark: MarketForecastBenchmarkResult;
+  details?: string;
+}): MarketForecastEvaluationScore {
+  const predicted = predictedBucket(params.group);
+  return {
+    item_type: params.itemType,
+    target: params.group.target,
+    benchmark_symbol: params.benchmark.symbol,
+    predicted,
+    actual: params.benchmark.outcome,
+    hit: params.benchmark.outcome !== "unknown" && predicted === params.benchmark.outcome,
+    brier_score: brierScore(params.group, params.benchmark.outcome),
+    details: params.details,
+    probabilities: {
+      up: params.group.up,
+      range_bound: params.group.range_bound,
+      down: params.group.down,
+    },
+  };
+}
+
+function indexEvaluationScores(groups: MarketForecastProbabilityGroup[], benchmarks: MarketForecastBenchmarkResult[]): MarketForecastEvaluationScore[] {
+  return groups.flatMap((group) => {
+    const matched = benchmarks.filter((benchmark) => textMatchesBenchmark(group.target, benchmark));
+    const selected = matched.length ? matched : benchmarks.slice(0, 1);
+    return selected.map((benchmark) => scoreForGroup({ itemType: "index_direction", group, benchmark }));
   });
 }
 
+function sectorEvaluationScores(groups: MarketForecastProbabilityGroup[], benchmarks: MarketForecastBenchmarkResult[]): MarketForecastEvaluationScore[] {
+  return groups.map((group) => {
+    const benchmark = benchmarks.find((item) => textMatchesBenchmark(group.target, item));
+    if (!benchmark) {
+      return scoreForGroup({
+        itemType: "sector_opportunity",
+        group,
+        benchmark: {
+          symbol: "unmapped_sector_benchmark",
+          provider_symbol: "unmapped_sector_benchmark",
+          outcome: "unknown",
+          source: "market-forecast-evaluation",
+          error: "No benchmark_symbols entry matched this sector/theme target.",
+        },
+        details: "No benchmark_symbols entry matched this sector/theme target; add a sector ETF or proxy label to score it automatically.",
+      });
+    }
+    return scoreForGroup({
+      itemType: "sector_opportunity",
+      group,
+      benchmark,
+      details: `Sector/theme target matched benchmark ${benchmark.symbol}${benchmark.label ? ` (${benchmark.label})` : ""}.`,
+    });
+  });
+}
+
+function riskProxyBenchmark(benchmarks: MarketForecastBenchmarkResult[]): MarketForecastBenchmarkResult {
+  const known = benchmarks.filter((benchmark) => benchmark.outcome !== "unknown");
+  if (!known.length) {
+    return {
+      symbol: "market_risk_proxy",
+      provider_symbol: "market_risk_proxy",
+      outcome: "unknown",
+      source: "market-forecast-evaluation",
+      error: "No known benchmark outcomes were available for risk proxy scoring.",
+    };
+  }
+  const anyDown = known.some((benchmark) => benchmark.outcome === "down");
+  const broadOutcome = anyDown ? "down" : "range_bound";
+  return {
+    symbol: "market_risk_proxy",
+    provider_symbol: "market_risk_proxy",
+    outcome: broadOutcome,
+    source: "benchmark_composite",
+    change_pct: known.filter((benchmark) => benchmark.outcome === "down").length,
+  };
+}
+
+function riskEvaluationScores(groups: MarketForecastProbabilityGroup[], benchmarks: MarketForecastBenchmarkResult[]): MarketForecastEvaluationScore[] {
+  const benchmark = riskProxyBenchmark(benchmarks);
+  return groups.map((group) => scoreForGroup({
+    itemType: "risk_alert",
+    group,
+    benchmark,
+    details: benchmark.outcome === "down"
+      ? "Risk proxy triggered because at least one configured benchmark closed below the downside threshold."
+      : benchmark.outcome === "unknown"
+        ? "Risk proxy could not be scored because benchmark outcomes are unknown."
+        : "Risk proxy did not trigger because configured benchmarks avoided downside-threshold outcomes.",
+  }));
+}
+
 function calibrationNote(scores: MarketForecastEvaluationScore[], benchmarks: MarketForecastBenchmarkResult[]): string {
-  if (!scores.length) return "No probability forecast was available to evaluate.";
+  if (!scores.length) return "No probability, sector, or risk forecast was available to evaluate.";
   const known = scores.filter((score) => score.actual !== "unknown");
-  if (!known.length) return "Benchmark quote data was unavailable, so no directional calibration score was produced.";
+  if (!known.length) return "Benchmark quote data was unavailable, so no calibration score was produced.";
   const hits = known.filter((score) => score.hit).length;
   const briers = known.map((score) => score.brier_score).filter((score): score is number => score !== undefined);
   const avgBrier = briers.length
@@ -232,7 +320,13 @@ function calibrationNote(scores: MarketForecastEvaluationScore[], benchmarks: Ma
     .filter((benchmark) => benchmark.change_pct !== undefined)
     .map((benchmark) => `${benchmark.symbol} ${benchmark.change_pct}% (${benchmark.outcome})`)
     .join("; ");
-  return `Forecast direction hit ${hits}/${known.length}${avgBrier !== undefined ? `, avg Brier ${avgBrier}` : ""}.${changes ? ` Benchmarks: ${changes}.` : ""}`;
+  const byType = [...new Set(known.map((score) => score.item_type))]
+    .map((type) => {
+      const subset = known.filter((score) => score.item_type === type);
+      return `${type} ${subset.filter((score) => score.hit).length}/${subset.length}`;
+    })
+    .join("; ");
+  return `Forecast scoring hit ${hits}/${known.length}${avgBrier !== undefined ? `, avg Brier ${avgBrier}` : ""}${byType ? ` (${byType})` : ""}.${changes ? ` Benchmarks: ${changes}.` : ""}`;
 }
 
 function payloadJson(payload: unknown): string {
@@ -259,9 +353,14 @@ export async function runMarketForecastEvaluationProvider(
     session: config.forecast_session,
   });
   const items = forecast ? (deps.listItems ?? listMarketForecastItems)(forecast.id) : [];
-  const groups = probabilityGroups(items);
+  const groups = probabilityGroups(items, "index_probability");
+  const sectorGroups = probabilityGroups(items, "sector_opportunity");
+  const riskGroups = probabilityGroups(items, "risk_alert");
   const benchmarks = await benchmarkResults({ config, quoteClient });
-  const scores = evaluationScores(groups, benchmarks);
+  const indexScores = indexEvaluationScores(groups, benchmarks);
+  const sectorScores = sectorEvaluationScores(sectorGroups, benchmarks);
+  const riskScores = riskEvaluationScores(riskGroups, benchmarks);
+  const scores = [...indexScores, ...sectorScores, ...riskScores];
   const note = calibrationNote(scores, benchmarks);
   const status = !forecast
     ? "no_forecast"
@@ -288,8 +387,15 @@ export async function runMarketForecastEvaluationProvider(
       }
       : undefined,
     probability_groups: groups,
+    sector_probability_groups: sectorGroups,
+    risk_probability_groups: riskGroups,
     benchmark_results: benchmarks,
     scores,
+    score_groups: {
+      index_direction: indexScores,
+      sector_opportunity: sectorScores,
+      risk_alert: riskScores,
+    },
     calibration_note: note,
     data_quality: {
       quote_source: quoteClient.source,
@@ -299,6 +405,11 @@ export async function runMarketForecastEvaluationProvider(
           : undefined,
         !forecast ? "no matching pre-market forecast found for this trade date." : undefined,
         !groups.length && forecast ? "matching forecast has no stored index probability items." : undefined,
+        !sectorGroups.length && forecast ? "matching forecast has no stored sector opportunity items." : undefined,
+        sectorScores.some((score) => score.benchmark_symbol === "unmapped_sector_benchmark")
+          ? "some sector opportunity items could not be matched to configured benchmark_symbols."
+          : undefined,
+        !riskGroups.length && forecast ? "matching forecast has no stored risk alert items." : undefined,
         ...benchmarks.filter((benchmark) => benchmark.error).map((benchmark) => `${benchmark.symbol}: ${benchmark.error}`),
       ].filter((warning): warning is string => Boolean(warning)),
     },
@@ -318,7 +429,15 @@ export async function runMarketForecastEvaluationProvider(
           forecastId: forecast.id,
           evaluatedAt: args.runAt.toISOString(),
           outcome: { benchmarks },
-          score: { scores, calibration_note: note },
+          score: {
+            scores,
+            score_groups: {
+              index_direction: indexScores,
+              sector_opportunity: sectorScores,
+              risk_alert: riskScores,
+            },
+            calibration_note: note,
+          },
           notes: note,
         });
       }
@@ -330,6 +449,8 @@ export async function runMarketForecastEvaluationProvider(
 export const __testables = {
   probabilityGroups,
   outcomeBucket,
-  evaluationScores,
+  indexEvaluationScores,
+  sectorEvaluationScores,
+  riskEvaluationScores,
   calibrationNote,
 };

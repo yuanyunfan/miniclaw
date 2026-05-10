@@ -201,13 +201,32 @@ describe("collectMarketIntelOfficialEvidence", () => {
         if (url.includes("query.sse.com.cn")) {
           return `jsonpCallback({"pageHelp":{"data":[{"SECURITY_CODE":"600000","SECURITY_NAME":"浦发银行","TITLE":"浦发银行2025年年度报告","SSEDATE":"2026-05-08","URL":"/disclosure/listedinfo/announcement/c/new/2026-05-08/600000.pdf"}]}})`;
         }
+        if (url.includes("hkexnews.hk")) {
+          return `<table><tbody><tr>
+            <td class="text-right text-end release-time"><span>Release Time: </span>08/05/2026 09:05</td>
+            <td class="text-right text-end stock-short-code"><span>Stock Code: </span>0700</td>
+            <td class="stock-short-name"><span>Stock Short Name: </span>TENCENT</td>
+            <td><div class="doc-link"><a href="/listedco/listconews/sehk/2026/0508/2026050800001.pdf">Inside Information - Trading Update</a></div></td>
+          </tr></tbody></table>`;
+        }
         throw new Error(`unexpected getText ${url}`);
       },
       async getJson() {
         throw new Error("not used");
       },
-      async postJson() {
-        throw new Error("not used");
+      async postJson(url) {
+        if (url.includes("szse.cn")) {
+          return {
+            data: [{
+              title: "比亚迪：2026年第一季度报告",
+              publishTime: "2026-05-08 00:00:00",
+              attachPath: "/disc/disk03/finalpage/2026-05-08/byd.pdf",
+              secCode: ["002594"],
+              secName: ["比亚迪"],
+            }],
+          };
+        }
+        throw new Error(`unexpected postJson ${url}`);
       },
     };
 
@@ -221,8 +240,15 @@ describe("collectMarketIntelOfficialEvidence", () => {
       "NBS latest releases page",
     ]));
     expect(result.filings.items[0]?.source).toBe("SSE listed company announcements");
+    expect(result.filings.items.map((item) => item.source)).toEqual(expect.arrayContaining([
+      "SZSE listed company announcements",
+      "HKEXnews listed company announcements",
+    ]));
+    expect(result.risks.status).toBe("ok");
     expect(result.data_quality_sources).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: "filing.hkex", status: "skipped" }),
+      expect.objectContaining({ id: "filing.hkex", status: "ok" }),
+      expect.objectContaining({ id: "filing.szse", status: "ok" }),
+      expect.objectContaining({ id: "risk.derived", status: "ok" }),
     ]));
   });
 

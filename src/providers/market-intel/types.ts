@@ -1,5 +1,6 @@
 import type { PreProviderResult, PreProviderRunArgs } from "../types.js";
 import type { StockPortfolioAssetSummary, StockPortfolioCnySummary } from "../stock-portfolio/types.js";
+import type { MarketIntelScoringCalibrationConfig } from "./calibration.js";
 
 export type MarketIntelMarketScope = "us" | "cn";
 export type MarketIntelMarket = "us" | "cn-a" | "hk";
@@ -299,6 +300,7 @@ export interface MarketIntelPayload {
   filings: MarketIntelEvidenceSection;
   risks: MarketIntelEvidenceSection;
   scores: MarketIntelScores;
+  calibration?: MarketIntelScoringCalibrationConfig;
   evidence: MarketIntelEvidenceItem[];
   role_protocol: MarketIntelRoleProtocol;
   usage_notes: string[];

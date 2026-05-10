@@ -18,7 +18,8 @@ cron task
     -> market calendar guard
     -> stock-portfolio redacted context
     -> quote snapshot
-    -> official macro / policy / filings evidence
+    -> official macro / policy / news / filings evidence
+    -> derived risk flags
     -> deterministic scores + data_quality
   -> 5 analyst roles
   -> Forecast Editor compact JSON
@@ -120,22 +121,27 @@ pre_provider_config: us-post-market
 
 该 provider 会读取当天同 market scope/session 的最新盘前 forecast，优先用 `llm_report` 的 `index_probability`，如果没有则回退到 provider score；再拉 benchmark latest / previous close 快照，计算：
 
-- actual bucket: `up` / `range_bound` / `down` / `unknown`
-- predicted bucket
-- hit / miss
-- Brier score
+- index direction actual bucket: `up` / `range_bound` / `down` / `unknown`
+- sector opportunity benchmark/proxy attribution
+- risk alert proxy trigger scoring
+- predicted bucket、hit / miss、Brier score
+- grouped `score_groups.index_direction` / `score_groups.sector_opportunity` / `score_groups.risk_alert`
 - calibration note
 
-如果评价 quote 来自 fallback source，盘后报告必须明确标注 provisional calibration。
+如果评价 quote 来自 fallback source，或 sector target 没有匹配 benchmark/proxy，盘后报告必须明确标注 provisional calibration / unmapped sector。
 
 ## Calibration Loop
 
-Phase 8 的第一版是只读 CLI，不自动改 prompt 或权重：
+Phase 8 现在分成两层：
+
+- 默认只读 summary：不自动改 prompt 或权重。
+- 显式 `--write-config`：只有达到 `--min-samples` 样本门槛后，才把 source reliability weight / confidence cap / prompt tightening rules 写入 `~/.miniclaw/providers/market-intel/calibration.yaml`。样本不足时不硬调。
 
 ```bash
 pnpm market-calibration
 pnpm market-calibration -- --days 14 --market-scope us
 pnpm market-calibration -- --format json
+pnpm market-calibration -- --days 7 --write-config --min-samples 5
 ```
 
 输出内容：
@@ -144,11 +150,12 @@ pnpm market-calibration -- --format json
 - by market scope：US 与 CN 分开看。
 - by data quality：观察 `ok` / `partial` / `blocked` 与准确率的相关性。
 - by forecast source：区分 `llm_report` 与 `provider_score`。
+- by score type：区分 index、sector、risk 的命中情况。
 - proposed source reliability weights：样本不足时保持 `1.0`，样本足够后才建议轻微上调或下调。
 - weak spots：缺少盘后评价、缺少概率 JSON、缺少 evidence IDs、fallback quote、high Brier。
 - recommendations：下一轮该收紧 prompt、等待数据、还是优先补 primary close data。
 
-这一步的原则是先让弱点可见，再根据真实一周样本调整 scoring weights 和 prompt rules。
+`market-intel` 运行时会读取 calibration config，并把 rules 注入 payload；provider_score 的机械概率会按配置调整，`llm_report` 权重和 prompt rules 交给 Forecast Editor 执行。原则仍然是先让弱点可见，再根据真实样本调整 scoring weights 和 prompt rules。
 
 ## 验证
 
@@ -159,4 +166,6 @@ pnpm run lint
 pnpm run build
 pnpm cron:list
 pnpm market-calibration
+MINICLAW_CRON_TEST_RUN_AT=2026-05-08T12:45:00-04:00 pnpm cron:test us-stock-pre-market
+MINICLAW_CRON_TEST_RUN_AT=2026-05-08T08:45:00+08:00 pnpm cron:test cn-stock-pre-market
 ```

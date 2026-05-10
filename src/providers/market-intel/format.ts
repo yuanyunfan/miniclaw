@@ -11,6 +11,7 @@ import type {
   MarketIntelProviderConfig,
   MarketIntelRoleProtocol,
 } from "./types.js";
+import type { MarketIntelScoringCalibrationConfig } from "./calibration.js";
 import { buildMarketIntelScores } from "./scoring.js";
 import type { PreProviderRunArgs } from "../types.js";
 import { buildNotConfiguredPortfolioContext } from "./portfolio.js";
@@ -41,7 +42,7 @@ export function buildMarketIntelEvidenceSection(
 }
 
 function placeholder(notes: string[]): MarketIntelEvidenceSection {
-  return buildMarketIntelEvidenceSection("not_implemented", [], notes);
+  return buildMarketIntelEvidenceSection("skipped", [], notes);
 }
 
 function buildSourceQuality(
@@ -104,24 +105,24 @@ function buildSourceQuality(
         collector: "macro",
         source: macroSources.join(", ") || "none",
         tier: "placeholder",
-        status: "not_implemented",
-        message: "Macro/policy collectors are planned for phase 4.",
+        status: "missing_config",
+        message: "Macro/policy collector output is unavailable for this run.",
       },
       {
         id: "news.placeholder",
         collector: "news",
         source: config.sources.news.provider,
         tier: "placeholder",
-        status: "not_implemented",
-        message: "News collector is planned for phase 4.",
+        status: "missing_config",
+        message: "News collector output is unavailable for this run.",
       },
       {
         id: "earnings.placeholder",
         collector: "earnings",
         source: config.sources.earnings.provider,
         tier: "placeholder",
-        status: "not_implemented",
-        message: "Earnings and filings collectors are planned for phase 4.",
+        status: "missing_config",
+        message: "Earnings and filings collector output is unavailable for this run.",
       },
     ]),
     {
@@ -222,6 +223,7 @@ export function buildMarketIntelPayload(params: {
   quoteEvidence?: MarketIntelEvidenceItem[];
   quoteWarnings?: string[];
   evidenceCollection?: MarketIntelEvidenceCollection;
+  calibration?: MarketIntelScoringCalibrationConfig;
   skipReason?: string;
 }): MarketIntelPayload {
   const portfolioContext = params.portfolioContext ?? buildNotConfiguredPortfolioContext();
@@ -232,6 +234,9 @@ export function buildMarketIntelPayload(params: {
     ...(params.quoteEvidence ?? []),
     ...(params.evidenceCollection?.evidence ?? []),
   ].filter((item): item is MarketIntelEvidenceItem => item !== undefined);
+  const calibrationNotes = params.calibration?.source_weights.length
+    ? [`Runtime calibration loaded: ${params.calibration.source_weights.map((item) => `${item.source}=weight ${item.weight}`).join(", ")}.`]
+    : [];
   return {
     generated_at: params.args.runAt.toISOString(),
     source: "market-intel",
@@ -262,16 +267,22 @@ export function buildMarketIntelPayload(params: {
     portfolio_context: portfolioContext,
     market_snapshot: marketSnapshot,
     macro_policy: params.evidenceCollection?.macro_policy
-      ?? placeholder(["Macro/policy collector is not implemented. Do not infer policy changes from this placeholder."]),
+      ?? placeholder(["Macro/policy collector output is unavailable. Do not infer policy changes from this placeholder."]),
     news: params.evidenceCollection?.news
-      ?? placeholder(["News collector is not implemented. Do not invent headlines."]),
+      ?? placeholder(["News collector output is unavailable. Do not invent headlines."]),
     earnings: params.evidenceCollection?.earnings
-      ?? placeholder(["Earnings collector is not implemented. Do not invent earnings dates or surprises."]),
+      ?? placeholder(["Earnings collector output is unavailable. Do not invent earnings dates or surprises."]),
     filings: params.evidenceCollection?.filings
-      ?? placeholder(["Filings collector is not implemented. Do not invent SEC/exchange filings."]),
+      ?? placeholder(["Filings collector output is unavailable. Do not invent SEC/exchange filings."]),
     risks: params.evidenceCollection?.risks
-      ?? placeholder(["Risk collector is not implemented. Use this payload only as a skeleton until risk evidence exists."]),
-    scores: buildMarketIntelScores({ marketScope: params.config.market_scope, evidence, snapshot: marketSnapshot }),
+      ?? placeholder(["Risk collector output is unavailable. Treat risk views as low-confidence until evidence exists."]),
+    scores: buildMarketIntelScores({
+      marketScope: params.config.market_scope,
+      evidence,
+      snapshot: marketSnapshot,
+      calibration: params.calibration,
+    }),
+    calibration: params.calibration,
     evidence,
     role_protocol: roleProtocol(),
     usage_notes: [
@@ -279,7 +290,9 @@ export function buildMarketIntelPayload(params: {
       "Portfolio context, when configured, is read-only and already redacted by stock-portfolio before this payload is built.",
       "The downstream LLM must cite evidence IDs for factual claims and mark unsupported market views as hypotheses.",
       "No automatic trading, order placement, broker unlock, raw account ID, token, cookie, validatekey, or session data is allowed.",
-      "Directional scores remain insufficient_data until quote, macro, sector, news, earnings, and risk collectors are implemented.",
+      "Directional scores are deterministic hints. High-conviction views still require explicit evidence IDs and invalidation triggers.",
+      ...calibrationNotes,
+      ...(params.calibration?.prompt_rules ?? []),
     ],
   };
 }

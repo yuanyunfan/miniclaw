@@ -3,6 +3,7 @@ import type {
   MarketForecastEvaluationRow,
   MarketForecastItemRow,
 } from "../../store/market-forecasts.js";
+import type { MarketIntelScoringCalibrationConfig } from "../market-intel/calibration.js";
 import type { MarketForecastEvaluationScore, MarketForecastOutcomeBucket } from "./types.js";
 
 type AggregateKey = string;
@@ -49,9 +50,15 @@ export interface MarketForecastCalibrationSummary {
   by_market_scope: MarketForecastCalibrationGroup[];
   by_data_quality: MarketForecastCalibrationGroup[];
   by_forecast_source: MarketForecastCalibrationGroup[];
+  by_score_type: MarketForecastCalibrationGroup[];
   source_reliability_weights: MarketForecastReliabilityWeight[];
   weak_spots: MarketForecastCalibrationWeakSpots;
   recommendations: string[];
+}
+
+export interface MarketForecastCalibrationConfigBuildOptions {
+  generatedAt?: string;
+  minSamples?: number;
 }
 
 interface ParsedEvaluation {
@@ -100,12 +107,14 @@ function asEvaluationScore(value: unknown): MarketForecastEvaluationScore | unde
   const p = probabilities as Record<string, unknown>;
   if (typeof p.up !== "number" || typeof p.range_bound !== "number" || typeof p.down !== "number") return undefined;
   return {
+    item_type: typeof row.item_type === "string" ? row.item_type as MarketForecastEvaluationScore["item_type"] : "index_direction",
     target: row.target,
     benchmark_symbol: row.benchmark_symbol,
     predicted: row.predicted,
     actual: row.actual,
     hit: row.hit === true,
     brier_score: typeof row.brier_score === "number" ? row.brier_score : undefined,
+    details: typeof row.details === "string" ? row.details : undefined,
     probabilities: {
       up: p.up,
       range_bound: p.range_bound,
@@ -285,6 +294,44 @@ function recommendations(summary: {
   return out;
 }
 
+export function buildMarketIntelScoringCalibrationConfig(
+  summary: MarketForecastCalibrationSummary,
+  options: MarketForecastCalibrationConfigBuildOptions = {},
+): MarketIntelScoringCalibrationConfig {
+  const minSamples = options.minSamples ?? 5;
+  const sourceWeights = summary.source_reliability_weights
+    .filter((weight) => weight.samples >= minSamples)
+    .map((weight) => ({
+      source: weight.source,
+      weight: weight.proposed_weight,
+      confidence_cap: weight.confidence_cap,
+      samples: weight.samples,
+      hit_rate: weight.hit_rate,
+      avg_brier_score: weight.avg_brier_score,
+      rationale: weight.rationale,
+    }));
+  const promptRules: string[] = [];
+  if (summary.weak_spots.missing_probability_forecasts > 0) {
+    promptRules.push("Prompt rule: Forecast Editor must output index_probabilities with up/range_bound/down probabilities for every benchmark target.");
+  }
+  if (summary.weak_spots.missing_evidence_items > 0) {
+    promptRules.push("Prompt rule: Any sector_opportunity or risk_alert without evidence_ids must be downgraded to a hypothesis/watchlist item.");
+  }
+  if (summary.weak_spots.high_brier_scores > 0) {
+    promptRules.push("Prompt rule: Repeated high-Brier misses require lower confidence and explicit downside/upside invalidation triggers.");
+  }
+  if (summary.weak_spots.fallback_source_evaluations > 0) {
+    promptRules.push("Prompt rule: Treat fallback-source calibration as provisional and avoid aggressive confidence increases from it.");
+  }
+  return {
+    version: 1,
+    generated_at: options.generatedAt ?? summary.generated_at,
+    min_samples: minSamples,
+    source_weights: sourceWeights,
+    prompt_rules: promptRules,
+  };
+}
+
 export function summarizeMarketForecastCalibration(params: {
   records: MarketForecastCalibrationRecord[];
   generatedAt?: string;
@@ -297,6 +344,7 @@ export function summarizeMarketForecastCalibration(params: {
   const byMarket = new Map<string, MutableGroup>();
   const byQuality = new Map<string, MutableGroup>();
   const bySource = new Map<string, MutableGroup>();
+  const byScoreType = new Map<string, MutableGroup>();
   const weakSpots: MarketForecastCalibrationWeakSpots = {
     unevaluated_forecasts: 0,
     missing_probability_forecasts: 0,
@@ -312,6 +360,12 @@ export function summarizeMarketForecastCalibration(params: {
     addForecast(groupMapValue(byMarket, record.forecast.market_scope), record.forecast.id, evaluation);
     addForecast(groupMapValue(byQuality, record.forecast.data_quality_status ?? "unknown"), record.forecast.id, evaluation);
     addForecast(groupMapValue(bySource, source), record.forecast.id, evaluation);
+    if (evaluation?.scores.length) {
+      for (const scoreType of new Set(evaluation.scores.map((score) => score.item_type))) {
+        const scores = evaluation.scores.filter((score) => score.item_type === scoreType);
+        addForecast(groupMapValue(byScoreType, scoreType), record.forecast.id, { ...evaluation, scores });
+      }
+    }
 
     if (!evaluation?.scores.length) weakSpots.unevaluated_forecasts++;
     if (!hasProbabilityItems(record.items)) weakSpots.missing_probability_forecasts++;
@@ -340,6 +394,7 @@ export function summarizeMarketForecastCalibration(params: {
     by_market_scope: [...byMarket.values()].map(finalizeGroup).sort((a, b) => a.key.localeCompare(b.key)),
     by_data_quality: [...byQuality.values()].map(finalizeGroup).sort((a, b) => a.key.localeCompare(b.key)),
     by_forecast_source: byForecastSource,
+    by_score_type: [...byScoreType.values()].map(finalizeGroup).sort((a, b) => a.key.localeCompare(b.key)),
     source_reliability_weights: byForecastSource.map(reliabilityWeight),
     weak_spots: weakSpots,
     recommendations: recommendations({ totals, weakSpots }),

@@ -1237,3 +1237,24 @@ Implementation notes:
 - Phase 8 first slice shipped a read-only calibration loop:
   - `pnpm market-calibration` summarizes recent hit rate, Brier score, data-quality correlation, source-level reliability weights, weak spots, and recommendations.
   - The first slice does not automatically rewrite prompt rules or source weights; it waits for enough evaluated samples before recommending down-weighting or up-weighting.
+
+Follow-up implementation notes on 2026-05-10:
+
+- Phase 4 gap closure:
+  - CN official filings now include SSE, SZSE, and HKEX public announcement searches where endpoints are reachable.
+  - Generic low-quality web/news search remains intentionally excluded from defaults; the news path uses official RSS/pages and marks source failures in `data_quality`.
+  - Risk evidence is now deterministically derived from official macro/news/filing evidence and source-failure signals, instead of returning a risk `not_implemented` section.
+- Phase 7 gap closure:
+  - `market-forecast-evaluation` now scores index direction, sector opportunities, and risk alerts.
+  - Sector calls are matched to configured benchmark/proxy labels; unmapped sector calls are recorded as `unknown` with an explicit unmapped warning.
+  - Risk alerts are scored through a market-risk proxy based on configured benchmark downside-threshold outcomes.
+- Phase 8 gap closure:
+  - `pnpm market-calibration -- --write-config --min-samples 5` can write runtime calibration rules to `~/.miniclaw/providers/market-intel/calibration.yaml`.
+  - Runtime `market-intel` loads this config and applies provider-score weights/confidence caps; LLM-facing source weights and prompt rules are injected into the payload.
+  - With zero or insufficient evaluated samples, the command intentionally skips writing weight changes.
+- Runtime prompt/config updates:
+  - Pre-market prompts now require Forecast Editor to honor `calibration.prompt_rules` and `calibration.source_weights`.
+  - Post-market prompts now ask for separate index/sector/risk calibration commentary from `score_groups`.
+  - US post-market evaluation config now includes US sector ETF benchmarks; CN config includes explicit ETF/proxy labels for available CN themes.
+- Controlled cron validation:
+  - `MINICLAW_CRON_TEST_RUN_AT` can be set for `pnpm cron:test` so weekend or holiday validation can run against a known trading-session timestamp without changing the scheduler.

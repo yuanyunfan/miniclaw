@@ -1,6 +1,14 @@
 import { initDb } from "../src/store/db.js";
 import { listMarketForecastCalibrationRecords } from "../src/store/market-forecasts.js";
-import { summarizeMarketForecastCalibration, type MarketForecastCalibrationGroup } from "../src/providers/market-forecast-evaluation/calibration.js";
+import {
+  buildMarketIntelScoringCalibrationConfig,
+  summarizeMarketForecastCalibration,
+  type MarketForecastCalibrationGroup,
+} from "../src/providers/market-forecast-evaluation/calibration.js";
+import {
+  getMarketIntelScoringCalibrationConfigPath,
+  writeMarketIntelScoringCalibrationConfig,
+} from "../src/providers/market-intel/calibration.js";
 
 function argValue(name: string, fallback?: string): string | undefined {
   const idx = process.argv.indexOf(name);
@@ -41,6 +49,9 @@ const marketScope = argValue("--market-scope");
 const since = argValue("--since", daysAgoIso(days));
 const until = argValue("--until");
 const format = argValue("--format", "text");
+const writeConfig = process.argv.includes("--write-config");
+const minSamples = Math.max(1, Math.min(100, Number.parseInt(argValue("--min-samples", "5") ?? "5", 10) || 5));
+const configPath = argValue("--config-path", getMarketIntelScoringCalibrationConfigPath());
 
 initDb();
 
@@ -59,7 +70,8 @@ const summary = summarizeMarketForecastCalibration({
 });
 
 if (format === "json") {
-  console.log(JSON.stringify(summary, null, 2));
+  const calibration_config = buildMarketIntelScoringCalibrationConfig(summary, { minSamples });
+  console.log(JSON.stringify({ ...summary, calibration_config }, null, 2));
   process.exit(0);
 }
 
@@ -89,6 +101,11 @@ if (summary.by_forecast_source.length) {
   for (const group of summary.by_forecast_source) console.log(groupLine(group));
 }
 
+if (summary.by_score_type.length) {
+  console.log("\nBy score type");
+  for (const group of summary.by_score_type) console.log(groupLine(group));
+}
+
 console.log("\nProposed source reliability weights");
 if (!summary.source_reliability_weights.length) {
   console.log("- no source samples");
@@ -114,4 +131,18 @@ for (const [key, value] of Object.entries(summary.weak_spots)) {
 console.log("\nRecommendations");
 for (const recommendation of summary.recommendations) {
   console.log(`- ${recommendation}`);
+}
+
+const calibrationConfig = buildMarketIntelScoringCalibrationConfig(summary, { minSamples });
+console.log("\nRuntime calibration config");
+console.log(`- min_samples=${minSamples}`);
+console.log(`- eligible_source_weights=${calibrationConfig.source_weights.length}`);
+console.log(`- prompt_rules=${calibrationConfig.prompt_rules.length}`);
+if (writeConfig) {
+  if (!calibrationConfig.source_weights.length && !calibrationConfig.prompt_rules.length) {
+    console.log("- write skipped: no eligible source weights or prompt rules were produced.");
+  } else {
+    writeMarketIntelScoringCalibrationConfig(calibrationConfig, configPath);
+    console.log(`- wrote ${configPath}`);
+  }
 }

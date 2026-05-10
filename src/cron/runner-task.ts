@@ -41,6 +41,16 @@ const SCRIPTS_DIR = process.env.MINICLAW_SCRIPTS_DIR ?? join(homedir(), ".minicl
 const PRE_SCRIPT_CONTEXT_MAX_CHARS = 50000;
 const PRE_PROVIDER_CONTEXT_MAX_CHARS = 50000;
 
+function cronRunAt(): Date {
+  const override = process.env.MINICLAW_CRON_TEST_RUN_AT;
+  if (!override) return new Date();
+  const parsed = new Date(override);
+  if (!Number.isFinite(parsed.getTime())) {
+    throw new Error(`invalid MINICLAW_CRON_TEST_RUN_AT: ${override}`);
+  }
+  return parsed;
+}
+
 function buildCronPreScriptBlock(scriptName: string, stdout: string): string {
   const truncated = stdout.slice(0, PRE_SCRIPT_CONTEXT_MAX_CHARS)
     + (stdout.length > PRE_SCRIPT_CONTEXT_MAX_CHARS ? "\n... (truncated)" : "");
@@ -102,6 +112,7 @@ async function runPreScript(
   timeoutSec: number,
   jobName: string,
   channelId: string,
+  runAt: Date,
 ): Promise<string> {
   const scriptPath = join(SCRIPTS_DIR, scriptName);
   if (!existsSync(scriptPath)) throw new Error(`pre_script not found: ${scriptPath}`);
@@ -113,7 +124,7 @@ async function runPreScript(
   const env = {
     ...process.env,
     MINICLAW_CRON_NAME: jobName,
-    MINICLAW_CRON_RUN_AT: new Date().toISOString(),
+    MINICLAW_CRON_RUN_AT: runAt.toISOString(),
     MINICLAW_CHANNEL_ID: channelId,
   };
 
@@ -177,6 +188,7 @@ async function sendPreProviderAttachments(
 
 export async function runTask(job: CronJobTask, client: Client): Promise<void> {
   assertNotDraining(job.name);
+  const runAt = cronRunAt();
   if (getActiveTaskCount() >= config.maxConcurrentTasks) {
     const msg = `${job.name} skipped: hit MINICLAW_MAX_CONCURRENT_TASKS=${config.maxConcurrentTasks}`;
     log.warn(msg);
@@ -199,6 +211,7 @@ export async function runTask(job: CronJobTask, client: Client): Promise<void> {
         job.pre_script_timeout_sec ?? 120,
         job.name,
         job.channel,
+        runAt,
       );
       prependedContext = buildCronPreScriptBlock(job.pre_script, stdout);
     } catch (err) {
@@ -213,7 +226,7 @@ export async function runTask(job: CronJobTask, client: Client): Promise<void> {
         configName: job.pre_provider_config,
         jobName: job.name,
         channelId: job.channel,
-        runAt: new Date(),
+        runAt,
       });
       prependedContext += buildCronPreProviderBlock(job.pre_provider, result.text);
       if (job.pre_provider === "market-intel") {

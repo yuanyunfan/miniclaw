@@ -1,6 +1,7 @@
 import type { PreProviderResult, PreProviderRunArgs } from "../types.js";
 import { runStockPortfolioProvider } from "../stock-portfolio/index.js";
 import { buildMarketIntelCalendarSnapshot } from "./calendar.js";
+import { loadMarketIntelScoringCalibrationConfig } from "./calibration.js";
 import { buildEmptyMarketIntelEvidenceCollection, collectMarketIntelOfficialEvidence } from "./collectors/official.js";
 import { loadMarketIntelProviderConfig } from "./config.js";
 import { buildMarketIntelPayload, formatMarketIntelPayload } from "./format.js";
@@ -13,6 +14,7 @@ export interface MarketIntelProviderDeps {
   portfolioRunner?: MarketIntelPortfolioRunner;
   quoteClient?: MarketIntelQuoteClient;
   evidenceCollector?: MarketIntelEvidenceCollector;
+  loadCalibrationConfig?: typeof loadMarketIntelScoringCalibrationConfig;
 }
 
 export async function runMarketIntelProvider(
@@ -51,6 +53,7 @@ export async function runMarketIntelProvider(
       args,
       config,
     });
+  const calibration = (deps.loadCalibrationConfig ?? loadMarketIntelScoringCalibrationConfig)();
   const payload = buildMarketIntelPayload({
     args,
     configName,
@@ -61,6 +64,7 @@ export async function runMarketIntelProvider(
     quoteEvidence: marketSnapshot.evidence,
     quoteWarnings: marketSnapshot.warnings,
     evidenceCollection,
+    calibration,
     skipReason,
   });
   const text = formatMarketIntelPayload(payload);

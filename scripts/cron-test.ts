@@ -18,6 +18,9 @@ const bot = createCronRunnerClient();
 
 bot.once(Events.ClientReady, async (client) => {
   console.log(`\n🔧 立刻触发 cron job: ${name}\n`);
+  if (process.env.MINICLAW_CRON_TEST_RUN_AT) {
+    console.log(`🕒 MINICLAW_CRON_TEST_RUN_AT=${process.env.MINICLAW_CRON_TEST_RUN_AT}\n`);
+  }
   try {
     await runJobNow(name, client);
     console.log(`\n✅ done`);

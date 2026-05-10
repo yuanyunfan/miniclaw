@@ -128,7 +128,7 @@ function section(
     ? failures.length ? "partial" : "ok"
     : implemented.length
       ? failures.length ? "partial" : "empty"
-      : sources.length ? "skipped" : "not_implemented";
+      : sources.length ? "skipped" : "empty";
   return { status, items, notes };
 }
 
@@ -222,10 +222,55 @@ function extractDatedHtmlLinks(params: {
 }
 
 function importanceFromTitle(title: string): MarketIntelEvidenceImportance {
-  return /(FOMC|monetary|rate|Treasury|CPI|PPI|employment|payroll|GDP|PMI|liquidity|open market|reverse repo|statement|inflation)/i
+  return /(FOMC|monetary|rate|Treasury|CPI|PPI|employment|payroll|GDP|PMI|liquidity|open market|reverse repo|statement|inflation|inside information|profit warning|trading halt|resumption|default|investigation|减持|增持|停牌|复牌|业绩预告|风险|问询|监管|处罚)/i
     .test(title)
     ? "high"
     : "medium";
+}
+
+function yyyymmdd(date: Date): string {
+  return dateOnly(date).replace(/-/g, "");
+}
+
+function hkexPublishedAt(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const match = /(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/.exec(value);
+  if (!match) return value;
+  const [, day, month, year, hour, minute] = match;
+  return `${year}-${month}-${day}T${hour}:${minute}:00+08:00`;
+}
+
+function cleanCellText(html: string): string {
+  return decodeHtml(html)
+    .replace(/^Release Time:\s*/i, "")
+    .replace(/^Stock Code:\s*/i, "")
+    .replace(/^Stock Short Name:\s*/i, "")
+    .trim();
+}
+
+function cellByClass(rowHtml: string, className: string): string | undefined {
+  const re = new RegExp(`<td\\b[^>]*class=["'][^"']*${className}[^"']*["'][^>]*>([\\s\\S]*?)<\\/td>`, "i");
+  const match = re.exec(rowHtml);
+  return match?.[1];
+}
+
+function exchangeAnnouncementIsLowSignal(title: string): boolean {
+  return /(Mandatory Call Payoff|Residual Value|Callable Bull\/Bear|Callable Bull|Bear Contract|Derivative Warrant|Inline Warrant|Base Listing Document|Supplemental Listing Document|Launch Announcement|Liquidity Provider|Stabilising Action|Monthly Return|Next Day Disclosure Return)/i
+    .test(title);
+}
+
+function exchangeAnnouncementIsCatalyst(title: string): boolean {
+  return /(inside information|profit warning|profit alert|results|annual report|interim report|quarterly|trading halt|resumption|discloseable transaction|connected transaction|acquisition|disposal|placing|subscription|rights issue|share repurchase|dividend|default|investigation|lawsuit|业绩|年度报告|季度报告|半年度报告|权益变动|增持|减持|停牌|复牌|问询|监管|处罚|重大|风险|回购|分红|诉讼|仲裁|担保|重组|并购)/i
+    .test(title);
+}
+
+function riskKeyword(title: string): string | undefined {
+  const checks: Array<[RegExp, string]> = [
+    [/(FOMC|rate|yield|Treasury|inflation|CPI|PPI|payroll|employment|liquidity|open market|reverse repo|PMI|monetary)/i, "macro_policy_event"],
+    [/(profit warning|trading halt|resumption|default|investigation|lawsuit|delisting|impairment|inside information|subpoena|bankruptcy)/i, "company_event_risk"],
+    [/(停牌|复牌|业绩预告|权益变动|减持|问询|监管|处罚|诉讼|仲裁|违约|风险|重大)/i, "company_event_risk"],
+  ];
+  return checks.find(([pattern]) => pattern.test(title))?.[1];
 }
 
 class FetchMarketIntelOfficialHttpClient implements MarketIntelOfficialHttpClient {
@@ -746,7 +791,214 @@ async function collectSse(params: {
   }
 }
 
+async function collectSzse(params: {
+  args: PreProviderRunArgs;
+  config: MarketIntelProviderConfig;
+  http: MarketIntelOfficialHttpClient;
+}): Promise<CollectorResult> {
+  if (params.config.sources.earnings.provider !== "exchange_announcements") {
+    return skippedResult({
+      id: "filing.szse",
+      collector: "filings",
+      sourceName: params.config.sources.earnings.provider,
+      message: "SZSE announcements are not configured as the earnings/filings provider.",
+    });
+  }
+  const beginDate = dateOnly(addDays(params.args.runAt, -7));
+  const endDate = dateOnly(params.args.runAt);
+  const url = "https://www.szse.cn/api/disc/announcement/annList?random=0.1";
+  try {
+    const json = await params.http.postJson(url, {
+      seDate: [beginDate, endDate],
+      channelCode: ["listedNotice_disc"],
+      pageSize: Math.min(50, params.config.sources.earnings.max_items),
+      pageNum: 1,
+    }, {
+      headers: {
+        Referer: "https://www.szse.cn/disclosure/listed/notice/index.html",
+      },
+    });
+    const rows = asArray(recordValue(json, "data"));
+    const items = rows
+      .flatMap((row, index): MarketIntelEvidenceItem[] => {
+        const title = decodeHtml(stringValue(recordValue(row, "title")) ?? "");
+        if (!title || exchangeAnnouncementIsLowSignal(title)) return [];
+        const symbols = stringArray(recordValue(row, "secCode"));
+        const names = stringArray(recordValue(row, "secName"));
+        const publishedAt = stringValue(recordValue(row, "publishTime"));
+        const attachPath = stringValue(recordValue(row, "attachPath"));
+        const url = attachPath ? absoluteUrl("https://disc.static.szse.cn/", attachPath) : undefined;
+        return [{
+          id: `filing.szse.${index + 1}`,
+          category: "filing",
+          source: "SZSE listed company announcements",
+          source_tier: "official",
+          captured_at: params.args.runAt.toISOString(),
+          title,
+          summary: `${symbols.join(", ") || "SZSE"}${names.length ? ` ${names.join(", ")}` : ""}: ${title}${publishedAt ? ` (${publishedAt})` : ""}`,
+          published_at: publishedAt,
+          importance: exchangeAnnouncementIsCatalyst(title) ? "high" : importanceFromTitle(title),
+          ...freshness(params.args.runAt, publishedAt, params.config.quality.max_stale_minutes.news),
+          url,
+          symbols: symbols.length ? symbols : undefined,
+        }];
+      })
+      .slice(0, params.config.sources.earnings.max_items);
+    return {
+      items,
+      source: source({
+        id: "filing.szse",
+        collector: "filings",
+        source: "exchange_announcements",
+        tier: "official",
+        status: "ok",
+        message: `SZSE announcements fetched: items=${items.length}.`,
+      }),
+    };
+  } catch (err) {
+    return failureResult({ id: "filing.szse", collector: "filings", sourceName: "szse_announcements", err });
+  }
+}
+
+async function collectHkex(params: {
+  args: PreProviderRunArgs;
+  config: MarketIntelProviderConfig;
+  http: MarketIntelOfficialHttpClient;
+}): Promise<CollectorResult> {
+  if (params.config.sources.earnings.provider !== "exchange_announcements") {
+    return skippedResult({
+      id: "filing.hkex",
+      collector: "filings",
+      sourceName: params.config.sources.earnings.provider,
+      message: "HKEX announcements are not configured as the earnings/filings provider.",
+    });
+  }
+  const beginDate = yyyymmdd(addDays(params.args.runAt, -7));
+  const endDate = yyyymmdd(params.args.runAt);
+  const url = new URL("https://www1.hkexnews.hk/search/titlesearch.xhtml");
+  url.searchParams.set("lang", "en");
+  url.searchParams.set("market", "SEHK");
+  url.searchParams.set("searchType", "0");
+  url.searchParams.set("documentType", "-1");
+  url.searchParams.set("sortByOptions", "DateTime");
+  url.searchParams.set("sortDir", "0");
+  url.searchParams.set("from", beginDate);
+  url.searchParams.set("to", endDate);
+  url.searchParams.set("rowRange", String(Math.min(50, params.config.sources.earnings.max_items)));
+  try {
+    const html = await params.http.getText(url.href, {
+      headers: {
+        Referer: "https://www1.hkexnews.hk/search/titlesearch.xhtml?lang=en",
+      },
+    });
+    const rows = [...html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map((match) => match[1] ?? "");
+    const items = rows
+      .flatMap((row, index): MarketIntelEvidenceItem[] => {
+        const linkMatch = /<div\b[^>]*class=["'][^"']*doc-link[^"']*["'][^>]*>[\s\S]*?<a\b([^>]*)>([\s\S]*?)<\/a>/i.exec(row);
+        if (!linkMatch) return [];
+        const href = attr(linkMatch[1] ?? "", "href");
+        const title = decodeHtml(linkMatch[2] ?? "");
+        if (!href || !title || exchangeAnnouncementIsLowSignal(title)) return [];
+        const publishedAt = hkexPublishedAt(cleanCellText(cellByClass(row, "release-time") ?? ""));
+        const stockCodeText = cleanCellText(cellByClass(row, "stock-short-code") ?? "");
+        const nameText = cleanCellText(cellByClass(row, "stock-short-name") ?? "");
+        const symbols = stockCodeText
+          .split(/\s+/)
+          .map((item) => item.trim())
+          .filter(Boolean);
+        return [{
+          id: `filing.hkex.${index + 1}`,
+          category: "filing",
+          source: "HKEXnews listed company announcements",
+          source_tier: "official",
+          captured_at: params.args.runAt.toISOString(),
+          title,
+          summary: `${stockCodeText || "HKEX"}${nameText ? ` ${nameText}` : ""}: ${title}${publishedAt ? ` (${publishedAt})` : ""}`,
+          published_at: publishedAt,
+          importance: exchangeAnnouncementIsCatalyst(title) ? "high" : importanceFromTitle(title),
+          ...freshness(params.args.runAt, publishedAt, params.config.quality.max_stale_minutes.news),
+          url: absoluteUrl("https://www1.hkexnews.hk/", href),
+          symbols: symbols.length ? symbols : undefined,
+        }];
+      })
+      .slice(0, params.config.sources.earnings.max_items);
+    return {
+      items,
+      source: source({
+        id: "filing.hkex",
+        collector: "filings",
+        source: "exchange_announcements",
+        tier: "official",
+        status: "ok",
+        message: `HKEX announcement search fetched: items=${items.length}.`,
+      }),
+    };
+  } catch (err) {
+    return failureResult({ id: "filing.hkex", collector: "filings", sourceName: "hkex_announcements", err });
+  }
+}
+
+function deriveRiskEvidence(params: {
+  runAt: Date;
+  evidence: MarketIntelEvidenceItem[];
+  sources: MarketIntelDataQualitySource[];
+}): CollectorResult {
+  const items: MarketIntelEvidenceItem[] = [];
+  const seen = new Set<string>();
+  for (const item of params.evidence) {
+    const title = item.title ?? item.summary;
+    const riskType = riskKeyword(title);
+    if (!riskType || seen.has(riskType)) continue;
+    seen.add(riskType);
+    items.push({
+      id: `risk.derived.${items.length + 1}`,
+      category: "risk",
+      source: "market-intel derived risk flags",
+      source_tier: "local_readonly",
+      captured_at: params.runAt.toISOString(),
+      title: `${riskType} flagged from official evidence`,
+      summary: `Derived ${riskType} from ${item.id}: ${item.summary}`,
+      published_at: item.published_at,
+      importance: item.importance === "high" ? "high" : "medium",
+      freshness: item.freshness,
+      freshness_minutes: item.freshness_minutes,
+      url: item.url,
+      symbols: item.symbols,
+      sectors: item.sectors,
+    });
+    if (items.length >= 8) break;
+  }
+
+  const failedSources = params.sources.filter((item) => item.status === "failed" || item.status === "missing_config");
+  if (failedSources.length) {
+    items.push({
+      id: `risk.derived.${items.length + 1}`,
+      category: "risk",
+      source: "market-intel derived risk flags",
+      source_tier: "local_readonly",
+      captured_at: params.runAt.toISOString(),
+      title: "data_quality_risk flagged from source failures",
+      summary: `Official source coverage is degraded: ${failedSources.map((item) => item.id).join(", ")}.`,
+      importance: "medium",
+      freshness: "fresh",
+    });
+  }
+
+  return {
+    items,
+    source: source({
+      id: "risk.derived",
+      collector: "risk",
+      source: "derived_from_official_evidence",
+      tier: "local_readonly",
+      status: "ok",
+      message: `Derived risk flags from official evidence: items=${items.length}.`,
+    }),
+  };
+}
+
 function splitCollection(
+  args: PreProviderRunArgs,
   config: MarketIntelProviderConfig,
   results: CollectorResult[],
 ): MarketIntelEvidenceCollection {
@@ -762,10 +1014,14 @@ function splitCollection(
     .filter((item) => item.source.collector === "filings")
     .flatMap((item) => item.items);
   const earningsItems = filingItems.filter((item) => item.importance === "high" || /10-[QK]|8-K|earnings|annual|quarter/i.test(item.summary));
-  const allEvidence = dedupeEvidence([...macroItems, ...newsItems, ...filingItems]);
+  const baseEvidence = dedupeEvidence([...macroItems, ...newsItems, ...filingItems]);
+  const riskResult = deriveRiskEvidence({ runAt: args.runAt, evidence: baseEvidence, sources });
+  const riskItems = riskResult.items;
+  const allEvidence = dedupeEvidence([...baseEvidence, ...riskItems]);
   const macroSources = sources.filter((item) => item.collector === "macro" || item.id === "news.federal_reserve");
   const newsSources = sources.filter((item) => item.collector === "news" || item.id === "macro.pboc" || item.id === "macro.nbs");
   const filingSources = sources.filter((item) => item.collector === "filings");
+  const riskSources = [riskResult.source];
 
   return {
     macro_policy: section(macroItems, macroSources, [
@@ -780,22 +1036,24 @@ function splitCollection(
     filings: section(filingItems, filingSources, [
       config.market_scope === "us"
         ? "SEC EDGAR submissions are collected for configured US stock symbols only."
-        : "SSE announcements are collected as the first CN exchange announcement source; HKEX/SZSE are not yet implemented.",
+        : "SSE, SZSE, and HKEX official announcement searches are collected where their public endpoints are reachable.",
     ]),
-    risks: emptySection("not_implemented", "Risk flags will be derived after macro/news/filings coverage stabilizes."),
+    risks: section(riskItems, riskSources, [
+      "Risk flags are deterministically derived from official macro/news/filing evidence and source-failure signals.",
+    ]),
     evidence: allEvidence,
-    data_quality_sources: sources,
+    data_quality_sources: [...sources, riskResult.source],
     warnings,
   };
 }
 
 export function buildEmptyMarketIntelEvidenceCollection(): MarketIntelEvidenceCollection {
   return {
-    macro_policy: emptySection("not_implemented", "Official macro/policy collector was not run."),
-    news: emptySection("not_implemented", "Official news collector was not run."),
-    earnings: emptySection("not_implemented", "Earnings collector was not run."),
-    filings: emptySection("not_implemented", "Filings collector was not run."),
-    risks: emptySection("not_implemented", "Risk collector was not run."),
+    macro_policy: emptySection("skipped", "Official macro/policy collector was skipped for this run."),
+    news: emptySection("skipped", "Official news collector was skipped for this run."),
+    earnings: emptySection("skipped", "Earnings collector was skipped for this run."),
+    filings: emptySection("skipped", "Filings collector was skipped for this run."),
+    risks: emptySection("skipped", "Risk collector was skipped for this run."),
     evidence: [],
     data_quality_sources: [
       source({
@@ -803,8 +1061,8 @@ export function buildEmptyMarketIntelEvidenceCollection(): MarketIntelEvidenceCo
         collector: "macro",
         source: "official_sources",
         tier: "placeholder",
-        status: "not_implemented",
-        message: "Official evidence collector was not run.",
+        status: "skipped",
+        message: "Official evidence collector was skipped for this run.",
       }),
     ],
     warnings: [],
@@ -830,12 +1088,8 @@ export async function collectMarketIntelOfficialEvidence(
       collectPbc({ ...params, http }),
       collectNbs({ ...params, http }),
       collectSse({ ...params, http }),
-      skippedResult({
-        id: "filing.hkex",
-        collector: "filings",
-        sourceName: "hkex_announcements",
-        message: "HKEX announcement search endpoint is not yet implemented in market-intel.",
-      }),
+      collectSzse({ ...params, http }),
+      collectHkex({ ...params, http }),
     ]);
-  return splitCollection(params.config, sourceResults);
+  return splitCollection(params.args, params.config, sourceResults);
 }

@@ -62,6 +62,7 @@ function client(send = vi.fn(async () => ({ id: "message-1" }))): Client {
 }
 
 beforeEach(() => {
+  delete process.env.MINICLAW_CRON_TEST_RUN_AT;
   mocks.createTask.mockReset();
   mocks.executeTask.mockReset();
   mocks.getActiveTaskCount.mockReset();
@@ -223,6 +224,25 @@ describe("cron task runner", () => {
       }),
     });
     expect(mocks.updateMarketForecastReport).toHaveBeenCalledWith("forecast-1", expect.stringContaining("market_forecast_json"));
+  });
+
+  it("passes MINICLAW_CRON_TEST_RUN_AT to pre_provider for controlled cron tests", async () => {
+    process.env.MINICLAW_CRON_TEST_RUN_AT = "2026-05-08T12:45:00.000Z";
+    const { runTask } = await import("../runner-task.js");
+    mocks.runPreProvider.mockResolvedValue({
+      text: "{\"status\":\"ok\"}",
+      skipTask: { reason: "controlled_test_stop", message: "stop before task" },
+    });
+
+    await expect(runTask({
+      ...taskJob(),
+      pre_provider: "stock-portfolio",
+      pre_provider_config: "us-stock",
+    }, client())).resolves.toBeUndefined();
+
+    expect(mocks.runPreProvider).toHaveBeenCalledWith("stock-portfolio", expect.objectContaining({
+      runAt: new Date("2026-05-08T12:45:00.000Z"),
+    }));
   });
 
   it("uploads pre_provider attachments after a successful raw cron task", async () => {

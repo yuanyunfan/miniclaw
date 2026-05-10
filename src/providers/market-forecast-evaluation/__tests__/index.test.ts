@@ -50,6 +50,23 @@ function item(direction: "up" | "range_bound" | "down", probability: number): Ma
   };
 }
 
+function forecastItem(overrides: Partial<MarketForecastItemRow>): MarketForecastItemRow {
+  return {
+    ...item("up", 0.6),
+    id: overrides.id ?? "custom-item",
+    item_type: overrides.item_type ?? "sector_opportunity",
+    target: overrides.target ?? "XLK",
+    direction: overrides.direction ?? "bullish",
+    probability: overrides.probability ?? 0.6,
+    confidence: overrides.confidence ?? 0.5,
+    evidence_ids_json: overrides.evidence_ids_json ?? JSON.stringify(["quote.sectors.1"]),
+    invalidation: overrides.invalidation ?? null,
+    rationale: overrides.rationale ?? null,
+    source: overrides.source ?? "llm_report",
+    created_at: overrides.created_at ?? "2026-05-08T12:45:00.000Z",
+  };
+}
+
 const quoteClient: MarketForecastEvaluationQuoteClient = {
   source: "mock_quotes",
   source_tier: "official",
@@ -129,6 +146,60 @@ describe("runMarketForecastEvaluationProvider", () => {
     expect(parsed.data_quality.warnings).toContain("no matching pre-market forecast found for this trade date.");
     await result.commit?.();
     expect(recordEvaluation).not.toHaveBeenCalled();
+  });
+
+  it("scores sector opportunities and risk alerts alongside index direction", async () => {
+    const recordEvaluation = vi.fn(() => "evaluation-1");
+    const result = await runMarketForecastEvaluationProvider({
+      configName: "us-post-market",
+      jobName: "us-stock-post-market",
+      channelId: "channel-1",
+      runAt: new Date("2026-05-08T20:30:00.000Z"),
+    }, {
+      loadProviderConfig: () => ({
+        ...config(),
+        portfolio_provider_config: undefined,
+        benchmark_symbols: [
+          ...config().benchmark_symbols,
+          { symbol: "XLK", provider_symbol: "XLK", label: "technology sector" },
+        ],
+      }),
+      quoteClient,
+      findForecast: () => forecast(),
+      listItems: () => [
+        item("up", 0.6),
+        item("range_bound", 0.3),
+        item("down", 0.1),
+        forecastItem({ id: "sector-1", item_type: "sector_opportunity", target: "XLK", direction: "bullish", probability: 0.65 }),
+        forecastItem({ id: "risk-1", item_type: "risk_alert", target: "market risk", direction: "urgent", probability: 0.7 }),
+      ],
+      recordEvaluation,
+    });
+
+    const parsed = JSON.parse(result.text);
+    expect(parsed.score_groups.sector_opportunity[0]).toMatchObject({
+      item_type: "sector_opportunity",
+      target: "XLK",
+      benchmark_symbol: "XLK",
+      hit: true,
+    });
+    expect(parsed.score_groups.risk_alert[0]).toMatchObject({
+      item_type: "risk_alert",
+      benchmark_symbol: "market_risk_proxy",
+      predicted: "down",
+      actual: "range_bound",
+      hit: false,
+    });
+
+    await result.commit?.();
+    expect(recordEvaluation).toHaveBeenCalledWith(expect.objectContaining({
+      score: expect.objectContaining({
+        score_groups: expect.objectContaining({
+          sector_opportunity: expect.any(Array),
+          risk_alert: expect.any(Array),
+        }),
+      }),
+    }));
   });
 });
 

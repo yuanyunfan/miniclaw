@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { summarizeMarketForecastCalibration } from "../calibration.js";
+import { buildMarketIntelScoringCalibrationConfig, summarizeMarketForecastCalibration } from "../calibration.js";
 import type {
   MarketForecastCalibrationRecord,
   MarketForecastEvaluationRow,
@@ -59,6 +59,7 @@ function evaluation(overrides: Partial<MarketForecastEvaluationRow> = {}): Marke
     }),
     score_json: JSON.stringify({
       scores: [{
+        item_type: "index_direction",
         target: "SPY",
         benchmark_symbol: "SPY",
         predicted: "up",
@@ -102,6 +103,7 @@ describe("market forecast calibration summary", () => {
     expect(summary.by_market_scope[0]?.key).toBe("us");
     expect(summary.by_data_quality[0]?.key).toBe("partial");
     expect(summary.by_forecast_source[0]?.key).toBe("llm_report");
+    expect(summary.by_score_type[0]?.key).toBe("index_direction");
     expect(summary.source_reliability_weights[0]?.proposed_weight).toBe(1);
   });
 
@@ -135,6 +137,7 @@ describe("market forecast calibration summary", () => {
       evaluated_at: "2026-05-08T20:00:00.000Z",
       score_json: JSON.stringify({
         scores: [{
+          item_type: "index_direction",
           target: "SPY",
           benchmark_symbol: "SPY",
           predicted: "up",
@@ -165,5 +168,37 @@ describe("market forecast calibration summary", () => {
     expect(summary.totals.miss_count).toBe(0);
     expect(summary.weak_spots.fallback_source_evaluations).toBe(1);
     expect(summary.weak_spots.high_brier_scores).toBe(0);
+  });
+
+  it("builds runtime calibration config only after the sample gate", () => {
+    const records: MarketForecastCalibrationRecord[] = Array.from({ length: 5 }, (_, index) => ({
+      forecast: forecast({ id: `forecast-${index}`, data_quality_status: "ok" }),
+      items: [item({ forecast_id: `forecast-${index}` })],
+      evaluations: [evaluation({
+        id: `evaluation-${index}`,
+        forecast_id: `forecast-${index}`,
+        score_json: JSON.stringify({
+          scores: [{
+            item_type: "index_direction",
+            target: "SPY",
+            benchmark_symbol: "SPY",
+            predicted: "up",
+            actual: "up",
+            hit: true,
+            brier_score: 0.2,
+            probabilities: { up: 0.7, range_bound: 0.2, down: 0.1 },
+          }],
+        }),
+      })],
+    }));
+
+    const summary = summarizeMarketForecastCalibration({ records, generatedAt: "2026-05-10T00:00:00.000Z" });
+    const config = buildMarketIntelScoringCalibrationConfig(summary, { minSamples: 5 });
+
+    expect(config.source_weights[0]).toMatchObject({
+      source: "llm_report",
+      weight: 1.1,
+      samples: 5,
+    });
   });
 });
