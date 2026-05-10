@@ -20,7 +20,20 @@ import { buildTaskSourceFromInteraction, withTaskThreadMetadata } from "../disco
 import { resolveTaskCwd } from "../routing/cwd.js";
 import { buildTaskPromptWithContext } from "../routing/task-context.js";
 import { formatDoctorReport, runDoctor, type DoctorMode } from "../ops/doctor.js";
-import { countOpenIncidents, listOpenIncidents } from "../store/incidents.js";
+import { evaluateRepairPolicy } from "../ops/doctor-repair.js";
+import { formatDoctorShipResult, runDoctorShip } from "../ops/doctor-ship.js";
+import {
+  appendIncidentEvent,
+  countOpenIncidents,
+  getIncident,
+  listIncidentEvents,
+  listIncidentsByIdPrefix,
+  listOpenIncidents,
+  listRepairRunsForIncident,
+  markIncidentStatus,
+  type IncidentRow,
+} from "../store/incidents.js";
+import { formatIncidentDetail, formatIncidentResolution } from "./incident-detail.js";
 
 const log = createLogger("handlers");
 
@@ -148,6 +161,125 @@ export async function handleIncidents(interaction: ChatInputCommandInteraction):
     content: `MiniClaw open incidents (${incidents.length})\n\n${lines}`.slice(0, 1900),
     ephemeral: true,
   });
+}
+
+function resolveIncident(input: string): { incident?: IncidentRow; error?: string } {
+  const id = input.trim();
+  if (!id) return { error: "incident id 不能为空" };
+
+  const exact = getIncident(id);
+  if (exact) return { incident: exact };
+
+  const matches = listIncidentsByIdPrefix(id, 6);
+  if (matches.length === 1) return { incident: matches[0] };
+  if (matches.length > 1) {
+    return {
+      error: `incident id 前缀 \`${id}\` 匹配多条：${matches.map((row) => row.id.slice(0, 8)).join(", ")}`,
+    };
+  }
+  return { error: `找不到 incident \`${id}\`` };
+}
+
+export async function handleIncident(interaction: ChatInputCommandInteraction): Promise<void> {
+  if (!isAllowed(interaction.user.id)) {
+    await interaction.reply({ content: "⛔ 无权限", ephemeral: true });
+    return;
+  }
+
+  const subcommand = interaction.options.getSubcommand(true);
+  const id = interaction.options.getString("id", true);
+  const { incident, error } = resolveIncident(id);
+  if (!incident) {
+    await interaction.reply({ content: `❌ ${error}`, ephemeral: true });
+    return;
+  }
+
+  if (subcommand === "view") {
+    const events = listIncidentEvents(incident.id, 8);
+    const repairRuns = listRepairRunsForIncident(incident.id, 5);
+    await interaction.reply({
+      content: formatIncidentDetail({ incident, events, repairRuns }),
+      ephemeral: true,
+    });
+    return;
+  }
+
+  if (subcommand === "resolve" || subcommand === "ignore") {
+    const status = subcommand === "resolve" ? "resolved" : "ignored";
+    const reason = interaction.options.getString("reason") ?? undefined;
+    markIncidentStatus(incident.id, status);
+    appendIncidentEvent(incident.id, status === "resolved" ? "incident_resolved" : "incident_ignored", {
+      user_id: interaction.user.id,
+      previous_status: incident.status,
+      reason,
+    });
+    await interaction.reply({
+      content: formatIncidentResolution(status, incident, reason),
+      ephemeral: true,
+    });
+    return;
+  }
+
+  if (subcommand === "retry-repair") {
+    const retryableStatuses = new Set(["open", "diagnosed", "repair_blocked"]);
+    if (!retryableStatuses.has(incident.status)) {
+      await interaction.reply({
+        content: `❌ Incident ${incident.id.slice(0, 8)} 当前状态为 \`${incident.status}\`，不能 retry repair。`,
+        ephemeral: true,
+      });
+      return;
+    }
+
+    const policy = evaluateRepairPolicy(incident, true, false);
+    if (!policy.allowed) {
+      await interaction.reply({
+        content: [
+          `❌ Incident ${incident.id.slice(0, 8)} 不符合 retry repair policy。`,
+          "",
+          ...policy.blockers.map((item) => `- ${item}`),
+        ].join("\n").slice(0, 1900),
+        ephemeral: true,
+      });
+      return;
+    }
+
+    markIncidentStatus(incident.id, "diagnosed");
+    appendIncidentEvent(incident.id, "repair_retry_requested", {
+      user_id: interaction.user.id,
+      previous_status: incident.status,
+    });
+    await interaction.reply({
+      content: [
+        `✅ Incident ${incident.id.slice(0, 8)} 已重新开放为 \`diagnosed\`。`,
+        "下一次 hourly Auto Doctor scan 会按现有 policy/rate limit 尝试 repair；不会绕过 allowed paths、dirty worktree 或 approval gates。",
+      ].join("\n"),
+      ephemeral: true,
+    });
+    return;
+  }
+
+  if (subcommand === "ship-preview") {
+    await interaction.deferReply({ ephemeral: true });
+    const result = await runDoctorShip({
+      incidentId: incident.id,
+      dryRun: true,
+      execute: false,
+      approveMain: false,
+      restart: false,
+      app: "miniclaw",
+      json: false,
+    });
+    appendIncidentEvent(incident.id, "ship_preview_requested", {
+      user_id: interaction.user.id,
+      status: result.status,
+      branch: result.branch,
+      commit_sha: result.commitSha,
+    });
+    await interaction.editReply(formatDoctorShipResult(result).slice(0, 1900));
+    return;
+  }
+
+  await interaction.reply({ content: "未知 incident 操作", ephemeral: true });
 }
 
 export async function handleDoctor(interaction: ChatInputCommandInteraction): Promise<void> {

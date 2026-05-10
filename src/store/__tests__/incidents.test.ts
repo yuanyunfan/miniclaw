@@ -10,7 +10,9 @@ import {
   getIncident,
   getLatestRepairRunForIncident,
   listIncidentEvents,
+  listIncidentsByIdPrefix,
   listOpenIncidents,
+  listRepairRunsForIncident,
   markIncidentStatus,
   updateRepairRun,
 } from "../incidents.js";
@@ -99,6 +101,7 @@ describe("incidents store", () => {
     expect(getLatestRepairRunForIncident(incident.id)?.id).toBe(repair.id);
     expect(countRepairRunsByStatus(["verified"])).toBeGreaterThanOrEqual(1);
     expect(countRepairRunsSince("2020-01-01T00:00:00.000Z")).toBeGreaterThanOrEqual(1);
+    expect(listRepairRunsForIncident(incident.id, 5).map((row) => row.id)).toContain(repair.id);
   });
 
   it("does not downgrade repair lifecycle statuses during hourly rediagnosis", () => {
@@ -122,5 +125,18 @@ describe("incidents store", () => {
     expect(updated.created).toBe(false);
     expect(updated.row.status).toBe("repair_ready");
     expect(updated.row.summary).toBe("same hourly symptom");
+  });
+
+  it("finds incidents by id prefix for operator commands", () => {
+    const incident = createOrUpdateIncident({
+      dedupeKey: "task:prefix-lookup:failed",
+      type: "task_failed",
+      severity: "warning",
+      title: "Task failed: prefix-lookup",
+    }).row;
+
+    expect(listIncidentsByIdPrefix(incident.id.slice(0, 8), 5).some((row) => row.id === incident.id)).toBe(true);
+    expect(listIncidentsByIdPrefix("does-not-exist", 5)).toEqual([]);
+    expect(listIncidentsByIdPrefix("%", 5)).toEqual([]);
   });
 });

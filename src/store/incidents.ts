@@ -194,6 +194,15 @@ export function getIncident(id: string): IncidentRow | undefined {
   return row ? parseIncidentRow(row) : undefined;
 }
 
+export function listIncidentsByIdPrefix(prefix: string, limit = 5): IncidentRow[] {
+  const normalized = prefix.trim();
+  if (!normalized) return [];
+  const escaped = normalized.replace(/[\\%_]/g, (char) => `\\${char}`);
+  return getDb()
+    .prepare("SELECT * FROM incidents WHERE id LIKE ? ESCAPE '\\' ORDER BY updated_at DESC, created_at DESC LIMIT ?")
+    .all(`${escaped}%`, limit) as IncidentRow[];
+}
+
 export function getIncidentByDedupeKey(dedupeKey: string): IncidentRow | undefined {
   const row = getDb().prepare("SELECT * FROM incidents WHERE dedupe_key = ?").get(dedupeKey);
   return row ? parseIncidentRow(row) : undefined;
@@ -314,6 +323,12 @@ export function getLatestRepairRunForIncident(incidentId: string): RepairRunRow 
   return getDb()
     .prepare("SELECT * FROM repair_runs WHERE incident_id = ? ORDER BY created_at DESC, id DESC LIMIT 1")
     .get(incidentId) as RepairRunRow | undefined;
+}
+
+export function listRepairRunsForIncident(incidentId: string, limit = 5): RepairRunRow[] {
+  return getDb()
+    .prepare("SELECT * FROM repair_runs WHERE incident_id = ? ORDER BY created_at DESC, id DESC LIMIT ?")
+    .all(incidentId, limit) as RepairRunRow[];
 }
 
 export function countRepairRunsSince(sinceIso: string): number {

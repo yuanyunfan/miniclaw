@@ -34,6 +34,11 @@ Discord:
 /doctor task_id:<task-id-prefix>
 /doctor cron:<job-name>
 /incidents
+/incident view id:<incident-id-or-prefix>
+/incident resolve id:<incident-id-or-prefix> reason:<optional-reason>
+/incident ignore id:<incident-id-or-prefix> reason:<optional-reason>
+/incident retry-repair id:<incident-id-or-prefix>
+/incident ship-preview id:<incident-id-or-prefix>
 ```
 
 Automatic scan:
@@ -94,6 +99,26 @@ When automatic diagnosis is enabled, MiniClaw stores actionable symptoms as inci
 - PM2 unstable restarts
 
 Incidents use deterministic dedupe keys, so repeated hourly scans update the same incident instead of posting duplicate alerts. `/health` includes the open incident count, and `/incidents` lists open incidents.
+
+## Incident Detail And Lifecycle
+
+`/incident view` turns one persisted incident into an operator detail view. The command accepts a full incident id or a unique prefix, then shows:
+
+- status, severity, type, title, subject, and timestamps
+- diagnosis category, repair-allowed flag, and recommended action
+- source metadata such as task id, cron name, channel id, and Discord message URL when present
+- latest repair run branch, commit SHA, workspace, and completion state
+- recent incident events
+- suggested follow-up operator commands
+
+Lifecycle commands keep the incident record auditable:
+
+- `/incident resolve` marks a fixed or no-longer-relevant incident as `resolved`.
+- `/incident ignore` marks a non-actionable incident as `ignored`.
+- `/incident retry-repair` reopens an eligible incident as `diagnosed` so the hourly Auto Doctor scheduler can attempt repair again under the existing repair policy and rate limits.
+- `/incident ship-preview` runs the guarded `doctor:ship` dry-run path and records a `ship_preview_requested` event.
+
+Resolved and ignored incidents are excluded from the default `/incidents` open list. Retry repair does not execute a long-running repair inside the Discord interaction and does not bypass `doctor.auto_repair_enabled`, category/type policy, path allowlists, dirty-worktree checks, or approval gates.
 
 ## Guarded Repair Worker
 

@@ -366,9 +366,9 @@ Recommended action:
   - Added collectors for task DB, cron state, PM2 state, logs, connectivity state, and Git state.
   - Added diagnosis classification for task failures, interrupted/long-running tasks, cron failures, Discord/connectivity issues, PM2 restart loops, provider auth/data issues, and likely MiniClaw bugs.
   - Added tests under `src/ops/__tests__/doctor.test.ts`.
-- Incident DB, persistent incident deduplication, self-repair worker, auto commit/push, and live self-update are not implemented yet.
+- Historical note after Phase 1: incident DB, persistent incident deduplication, self-repair worker, auto commit/push, and live self-update were not implemented yet.
 - Current safe restart and graceful drain behavior must remain the runtime update boundary.
-- The next useful implementation slice should be Phase 2: incident persistence and `/health` open-incident visibility.
+- Historical next slice after Phase 1 was Phase 2: incident persistence and `/health` open-incident visibility.
 - Phase 2 automatic diagnosis implementation has started.
   - Added doctor config for hourly scanning, `#monitor-github` summary channel, and future repair gates.
   - Added incident, incident event, and repair run persistence with deterministic dedupe keys.
@@ -399,6 +399,11 @@ Recommended action:
   - Default mode is dry-run; main update requires `--execute --approve-main` while `doctor.require_approval_for_main=true`.
   - The ship path requires a clean live `main` worktree, fetches the recorded repair branch, verifies the commit SHA, fast-forwards `main`, and pushes `HEAD:main`.
   - Optional `--restart` calls safe-restart without force; active tasks defer live restart instead of being interrupted.
+- Phase 5A incident detail and lifecycle first slice shipped:
+  - Added `/incident view` for status, diagnosis, source metadata, latest repair run, recent events, and suggested operator commands.
+  - Added `/incident resolve` and `/incident ignore`; both write incident events and remove the incident from the default open list.
+  - Added `/incident retry-repair`, which reopens eligible incidents for the hourly scheduler without bypassing repair policy or approval gates.
+  - Added `/incident ship-preview`, which runs the guarded `doctor:ship` dry-run path and records a preview event.
 
 ## Next Development Plan: Hourly Doctor And Self-Repair
 
@@ -579,6 +584,97 @@ Exit criteria:
 - `#monitor-github` receives a complete audit summary for each repair attempt.
 - Operator can approve or manually merge/restart from the repair report.
 
+### Phase 5: Reliability, Observability, And Operator UX
+
+Phase 5 should not relax the `main` update or live restart approval boundary yet. After Phase 4B, the system can already produce, push, and ship guarded repair branches. The next goal is to make the repair loop easier to understand, audit, retry, and improve before considering more automatic production updates.
+
+#### Phase 5A: Incident Detail And Lifecycle Operations
+
+Turn incidents into a first-class Discord operator surface:
+
+1. Add a complete `/incident id:<incident-id>` detail view.
+2. Show incident status, severity, category, subject, source metadata, diagnosis, evidence summary, and latest events.
+3. Link related task id, cron job, Discord thread, repair run, branch, commit SHA, ship status, and restart result when available.
+4. Add guarded lifecycle operations:
+   - `resolve`: mark a fixed or no-longer-relevant incident as resolved.
+   - `ignore`: suppress a non-actionable incident without deleting evidence.
+   - `retry repair`: enqueue a new repair attempt only when policy still allows it.
+   - `ship preview`: show the exact `doctor:ship` command and dry-run output when a repair is ready or pushed.
+5. Keep every operation as an `incident_events` row.
+
+Exit criteria:
+
+- `/incident id:<id>` gives enough evidence to decide whether the diagnosis and repair proposal are trustworthy.
+- Resolved and ignored incidents no longer appear in the default open incident list.
+- Retry actions do not bypass repair policy, dirty-worktree checks, or approval gates.
+
+#### Phase 5B: TaskReporter And Normalized Trace
+
+Improve Auto Doctor diagnosis quality by recording structured task events instead of relying mainly on log text:
+
+1. Introduce a `TaskViewEvent` or equivalent normalized event shape.
+2. Add a `TaskReporter` boundary between task execution and Discord rendering.
+3. Record key task lifecycle events:
+   - accepted/rejected because draining
+   - smart router decision
+   - context and metadata capture
+   - tool/provider invocation start and finish
+   - provider/auth/data/network errors
+   - Discord send/edit failures
+   - cancellation, interruption, completion, and recovery notices
+4. Store a compact trace reference on task rows or in a dedicated trace table.
+5. Let incident detection consume structured trace events before falling back to raw logs.
+
+Exit criteria:
+
+- A failed Discord task can be diagnosed from structured trace data without manually reading the full process log first.
+- Auto Doctor reports distinguish MiniClaw bugs from provider data/auth/network/user-prompt failures more reliably.
+- Discord progress/final-message rendering becomes a consumer of task events rather than a source of runtime logic.
+
+#### Phase 5C: Repair Quality Metrics And Promotion Policy
+
+Add reliability metrics before relaxing approval settings:
+
+1. Track repair attempts by incident type, category, changed file count, gate duration, and final outcome.
+2. Track whether shipped repairs later create regression incidents.
+3. Add a repair history summary to `/doctor` or `/incidents`.
+4. Define promotion policy for any future reduction of `doctor.require_approval_for_main`:
+   - minimum successful repair count
+   - no recent regression incidents
+   - only specific allowlisted paths
+   - small patch size
+   - full quality gates passed
+   - no active tasks when restart is requested
+
+Exit criteria:
+
+- The operator can see whether Auto Doctor repairs are actually reliable over time.
+- There is a documented, measurable reason before any approval gate is weakened.
+- Blind automatic `main` update or forced restart remains forbidden.
+
+#### Phase 5D: Discord Operator Actions
+
+Make the existing guarded flow easier to execute from `#monitor-github`:
+
+1. Add Discord components or clear slash-command shortcuts for:
+   - view incident
+   - retry repair
+   - preview ship
+   - approve guarded ship
+   - request safe restart
+2. Require explicit approval for operations that affect `main` or the live PM2 app.
+3. Re-run the same server-side policy checks used by CLI scripts; Discord UI must not become a bypass.
+4. Post a concise operation summary back to `#monitor-github`.
+
+Exit criteria:
+
+- The operator can move from alert to diagnosis to repair preview to guarded ship without leaving Discord for routine cases.
+- Main update and restart still require explicit action and still respect safe restart refusal when tasks are running.
+
+#### Later: Incident Board Or Dashboard
+
+A Web dashboard is not the next priority. Add it only after Discord incident operations and structured trace data exist, and only if cross-incident search, provider health boards, or longer repair history views become painful in Discord.
+
 ### Recommended First Implementation Slice
 
 Implement in this order:
@@ -592,5 +688,10 @@ Implement in this order:
 7. Auto commit to repair branch. Shipped.
 8. Optional branch push. Shipped.
 9. Safe restart approval flow. Shipped as guarded `doctor:ship`.
+10. `/incident id:<id>` detail view with repair/ship history.
+11. Incident lifecycle operations: resolve, ignore, retry repair, and ship preview.
+12. `TaskReporter` and normalized task trace events.
+13. Repair reliability metrics and promotion policy.
+14. Discord operator actions for the guarded repair/ship flow.
 
-This keeps the next code change reviewable: the first PR/commit should stop at automatic hourly diagnosis and incident records. Self-repair should be a separate atomic change after the incident lifecycle is observable.
+The next code change should start with Phase 5A, because it is low risk and makes the already shipped Auto Doctor data operationally useful. Do not move to more automatic `main` updates or live restarts until Phase 5B and Phase 5C provide enough trace quality and repair reliability evidence.

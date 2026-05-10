@@ -51,6 +51,56 @@ const commands = [
     ),
 
   new SlashCommandBuilder()
+    .setName("incident")
+    .setDescription("查看或管理单个 Auto Doctor incident")
+    .addSubcommand((sub) =>
+      sub
+        .setName("view")
+        .setDescription("查看 incident 详情、事件和 repair 历史")
+        .addStringOption((opt) =>
+          opt.setName("id").setDescription("incident id 或前缀").setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("resolve")
+        .setDescription("把 incident 标记为 resolved")
+        .addStringOption((opt) =>
+          opt.setName("id").setDescription("incident id 或前缀").setRequired(true)
+        )
+        .addStringOption((opt) =>
+          opt.setName("reason").setDescription("处理说明（可选）").setRequired(false)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("ignore")
+        .setDescription("把 incident 标记为 ignored")
+        .addStringOption((opt) =>
+          opt.setName("id").setDescription("incident id 或前缀").setRequired(true)
+        )
+        .addStringOption((opt) =>
+          opt.setName("reason").setDescription("忽略原因（可选）").setRequired(false)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("retry-repair")
+        .setDescription("重新开放 incident，让 hourly Auto Doctor 按 policy 再尝试修复")
+        .addStringOption((opt) =>
+          opt.setName("id").setDescription("incident id 或前缀").setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("ship-preview")
+        .setDescription("预览 pushed repair branch 的 guarded ship 命令")
+        .addStringOption((opt) =>
+          opt.setName("id").setDescription("incident id 或前缀").setRequired(true)
+        )
+    ),
+
+  new SlashCommandBuilder()
     .setName("agent-config")
     .setDescription("查看当前 agent settings / MCP / skills 继承摘要"),
 
