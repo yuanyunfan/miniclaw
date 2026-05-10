@@ -115,6 +115,18 @@ echo "MEDIA:$PWD/snapshot.json"
     expect(payload.files).toHaveLength(1);
   });
 
+  it("silent_success=true 且无输出时不发送成功状态", async () => {
+    writeScript("script.sh", `#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+`);
+    const sent: unknown[] = [];
+
+    await runScript(scriptJob({ silent_success: true }), fakeClient(sent));
+
+    expect(sent).toEqual([]);
+  });
+
   it("多个 DISCORD_MESSAGE 会拆成多条消息，附件放在最后一条", async () => {
     writeScript("script.sh", `#!/usr/bin/env bash
 set -euo pipefail

@@ -114,6 +114,7 @@ type: script
 channel: "${VALID_CHANNEL}"
 script: backup-db.sh
 args: ["--keep", "14"]
+silent_success: true
 timeout_sec: 600
 `);
     const r = loadCronJobs();
@@ -123,6 +124,7 @@ timeout_sec: 600
       expect(r.jobs[0].args).toEqual(["--keep", "14"]);
       expect(r.jobs[0].timeout_sec).toBe(600);
       expect(r.jobs[0].capture_output).toBe(true);
+      expect(r.jobs[0].silent_success).toBe(true);
     }
   });
 

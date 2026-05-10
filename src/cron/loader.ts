@@ -141,6 +141,7 @@ function validateJob(raw: unknown, file: string): CronJob {
       script: r.script.trim(),
       args: Array.isArray(r.args) ? r.args.map(String) : undefined,
       capture_output: r.capture_output !== false,
+      silent_success: r.silent_success === true,
       timeout_sec: timeout,
     };
   }

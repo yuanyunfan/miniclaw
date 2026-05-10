@@ -34,6 +34,7 @@ export interface CronJobScript extends CronJobBase {
   script: string;            // 相对 ~/.miniclaw/scripts/ 的文件名
   args?: string[];
   capture_output?: boolean;  // true → stdout/stderr 转发到 channel
+  silent_success?: boolean;  // true → exit=0 且无 DISCORD_MESSAGE/MEDIA 输出时不发成功状态
   timeout_sec?: number;      // 默认 300（5 分钟），上限 1800（30 分钟）
 }
 

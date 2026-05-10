@@ -198,6 +198,10 @@ export async function runScript(job: CronJobScript, client: Client): Promise<voi
     ? extractScriptDirectives(stdout)
     : { paths: [], remaining: stdout, messages: [] };
 
+  if (success && job.silent_success && attachmentPaths.length === 0 && messages.length === 0 && !remaining && !stderr) {
+    return;
+  }
+
   if (!job.capture_output && success && attachmentPaths.length === 0) {
     await postToChannel(client, job.channel, `cron \`${job.name}\` ${status} (${durationS}s)`);
     return;

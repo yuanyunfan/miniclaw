@@ -15,7 +15,14 @@ type ChannelSpec = string | { name: string; private?: boolean };
 const STRUCTURE = [
   {
     category: "🤖 AI",
-    channels: ["daily-ai-news", "daily-ai-frontier", "daily-tech-radar", "daily-github-trending", "daily-app-trending"],
+    channels: [
+      "daily-ai-news",
+      "daily-ai-frontier",
+      "daily-tech-radar",
+      "daily-github-trending",
+      "daily-app-trending",
+      { name: "miniclaw-third-part", private: true },
+    ],
   },
   {
     category: "👤 PERSONAL",
