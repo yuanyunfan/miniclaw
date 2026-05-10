@@ -129,8 +129,8 @@ function buildSourceQuality(
       collector: "sectors",
       source: config.sources.sectors.provider,
       tier: "placeholder",
-      status: "not_implemented",
-      message: "Sector collector is planned for phase 3.",
+      status: "skipped",
+      message: "Dedicated sector signal collector is not configured; mapped sector watchlist quotes are included in the quote snapshot.",
     },
   ];
   sources.push({
