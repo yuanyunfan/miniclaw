@@ -381,6 +381,12 @@ Recommended action:
   - Added repair policy gates, allowed/blocked path validation, and verification commands.
   - Repair results are persisted in `repair_runs`; successful verification marks incidents `repair_ready`.
   - Auto commit/push, automatic scheduler enqueueing, and live self-update are still pending.
+- Phase 3A automatic dispatch shipped:
+  - The hourly doctor scheduler now attempts repair-eligible incidents when `doctor.auto_repair_enabled=true`.
+  - Auto repair respects `doctor.max_parallel_repairs` and `doctor.max_repairs_per_day`.
+  - Repair summaries are posted to `doctor.summary_channel_id`.
+  - Later hourly scans preserve repair lifecycle states instead of downgrading them back to `diagnosed`.
+  - Auto commit/push and live self-update are still pending.
 
 ## Next Development Plan: Hourly Doctor And Self-Repair
 

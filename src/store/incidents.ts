@@ -28,6 +28,15 @@ const SEVERITY_RANK: Record<IncidentSeverity, number> = {
   critical: 2,
 };
 
+const STATUS_PRESERVED_ON_REDIAGNOSIS: readonly IncidentStatus[] = [
+  "repair_blocked",
+  "repairing",
+  "repair_ready",
+  "shipped",
+  "resolved",
+  "ignored",
+];
+
 export interface IncidentRow {
   id: string;
   dedupe_key: string;
@@ -150,7 +159,7 @@ export function createOrUpdateIncident(input: IncidentInput): CreateOrUpdateInci
       type = @type,
       severity = @severity,
       status = CASE
-        WHEN status IN ('resolved', 'ignored') THEN status
+        WHEN status IN ('repair_blocked', 'repairing', 'repair_ready', 'shipped', 'resolved', 'ignored') THEN status
         ELSE @status
       END,
       title = @title,
@@ -300,3 +309,23 @@ export function updateRepairRun(
 export function getRepairRun(id: string): RepairRunRow | undefined {
   return getDb().prepare("SELECT * FROM repair_runs WHERE id = ?").get(id) as RepairRunRow | undefined;
 }
+
+export function countRepairRunsSince(sinceIso: string): number {
+  const row = getDb()
+    .prepare("SELECT COUNT(*) AS count FROM repair_runs WHERE created_at >= ?")
+    .get(sinceIso) as { count?: number } | undefined;
+  return Number(row?.count ?? 0);
+}
+
+export function countRepairRunsByStatus(statuses: readonly string[]): number {
+  if (!statuses.length) return 0;
+  const placeholders = statuses.map(() => "?").join(", ");
+  const row = getDb()
+    .prepare(`SELECT COUNT(*) AS count FROM repair_runs WHERE status IN (${placeholders})`)
+    .get(...statuses) as { count?: number } | undefined;
+  return Number(row?.count ?? 0);
+}
+
+export const __testables = {
+  STATUS_PRESERVED_ON_REDIAGNOSIS,
+};

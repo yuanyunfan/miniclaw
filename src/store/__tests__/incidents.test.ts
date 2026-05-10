@@ -3,6 +3,8 @@ import { initDb } from "../db.js";
 import {
   appendIncidentEvent,
   countOpenIncidents,
+  countRepairRunsByStatus,
+  countRepairRunsSince,
   createOrUpdateIncident,
   createRepairRun,
   getIncident,
@@ -93,5 +95,30 @@ describe("incidents store", () => {
 
     const updated = listOpenIncidents(100).find((row) => row.id === incident.id);
     expect(updated).toBeDefined();
+    expect(countRepairRunsByStatus(["verified"])).toBeGreaterThanOrEqual(1);
+    expect(countRepairRunsSince("2020-01-01T00:00:00.000Z")).toBeGreaterThanOrEqual(1);
+  });
+
+  it("does not downgrade repair lifecycle statuses during hourly rediagnosis", () => {
+    const incident = createOrUpdateIncident({
+      dedupeKey: "task:repair-ready:failed",
+      type: "task_failed",
+      severity: "warning",
+      title: "Task failed: repair-ready",
+    }).row;
+    markIncidentStatus(incident.id, "repair_ready");
+
+    const updated = createOrUpdateIncident({
+      dedupeKey: "task:repair-ready:failed",
+      type: "task_failed",
+      severity: "warning",
+      status: "diagnosed",
+      title: "Task failed: repair-ready",
+      summary: "same hourly symptom",
+    });
+
+    expect(updated.created).toBe(false);
+    expect(updated.row.status).toBe("repair_ready");
+    expect(updated.row.summary).toBe("same hourly symptom");
   });
 });

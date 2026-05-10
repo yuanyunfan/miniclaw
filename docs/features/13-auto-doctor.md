@@ -38,6 +38,7 @@ Automatic scan:
 - Enable with `doctor.auto_diagnose_enabled: true` or `MINICLAW_DOCTOR_AUTO_DIAGNOSE_ENABLED=true`.
 - Default interval is one hour: `doctor.scan_interval_ms: 3600000`.
 - Summary notifications go to `doctor.summary_channel_id`, which should be configured to `#monitor-github` on the user's MiniClaw server.
+- If `doctor.auto_repair_enabled: true`, repair-eligible incidents are passed to the guarded repair worker after the scan.
 
 ## Evidence Sources
 
@@ -103,6 +104,13 @@ Execute mode is intentionally gated:
 - verification currently runs `pnpm run typecheck`, `pnpm run lint`, and `pnpm test`.
 
 Successful verification leaves the incident in `repair_ready` and stores the repair report in `repair_runs`. Failed agent execution, forbidden paths, or failed verification leave the incident in `repair_blocked` with the evidence stored for review.
+
+When automatic repair is enabled, the hourly scheduler applies the same worker policy and rate limits before attempting repair:
+
+- `doctor.max_parallel_repairs` limits active `repairing` runs.
+- `doctor.max_repairs_per_day` limits new repair runs per UTC day.
+- incidents already in `repair_blocked`, `repairing`, or `repair_ready` are not downgraded by later hourly scans.
+- every repair attempt posts a concise result summary to `doctor.summary_channel_id`.
 
 ## Safety Boundary
 
