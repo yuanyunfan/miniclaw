@@ -73,6 +73,7 @@ const ENV_KEYS = [
   "MINICLAW_DOCTOR_AUTO_DIAGNOSE_ENABLED",
   "MINICLAW_DOCTOR_SCAN_INTERVAL_MS",
   "MINICLAW_DOCTOR_SUMMARY_CHANNEL_ID",
+  "MINICLAW_DOCTOR_SUMMARY_CHANNEL_NAME",
   "MINICLAW_DOCTOR_AUTO_REPAIR_ENABLED",
   "MINICLAW_DOCTOR_AUTO_COMMIT_ENABLED",
   "MINICLAW_DOCTOR_AUTO_PUSH_ENABLED",
@@ -277,6 +278,7 @@ notifications:
       autoDiagnoseEnabled: true,
       scanIntervalMs: 60000,
       summaryChannelId: "1498885395025494086",
+      summaryChannelName: "miniclaw-auto-improve",
       autoRepairEnabled: false,
       autoCommitEnabled: true,
       autoPushEnabled: false,
@@ -302,6 +304,52 @@ notifications:
       to: "owner@example.com",
     });
     expect(config.maxAttachments).toBe(3);
+  });
+
+  it("defaults doctor summaries to the Auto Improve channel name and supports env override", async () => {
+    const cfg = join(tmpDir, "config.yaml");
+    writeFileSync(cfg, `
+discord:
+  client_id: "client-yaml"
+  guild_id: "guild-yaml"
+  allowed_user_id: "user-yaml"
+agent:
+  provider: codex
+  default_cwd: "${tmpDir}"
+storage:
+  db_path: "${join(tmpDir, "data.db")}"
+  memory_path: "${join(tmpDir, "MEMORY.md")}"
+`);
+    process.env.MINICLAW_CONFIG = cfg;
+    process.env.DISCORD_TOKEN = "token-env";
+
+    const { config } = await import("../config.js");
+
+    expect(config.doctor.summaryChannelId).toBeUndefined();
+    expect(config.doctor.summaryChannelName).toBe("miniclaw-auto-improve");
+  });
+
+  it("supports doctor summary channel name env override", async () => {
+    const cfg = join(tmpDir, "config.yaml");
+    writeFileSync(cfg, `
+discord:
+  client_id: "client-yaml"
+  guild_id: "guild-yaml"
+  allowed_user_id: "user-yaml"
+agent:
+  provider: codex
+  default_cwd: "${tmpDir}"
+storage:
+  db_path: "${join(tmpDir, "data.db")}"
+  memory_path: "${join(tmpDir, "MEMORY.md")}"
+`);
+    process.env.MINICLAW_CONFIG = cfg;
+    process.env.DISCORD_TOKEN = "token-env";
+    process.env.MINICLAW_DOCTOR_SUMMARY_CHANNEL_NAME = "custom-auto-improve";
+
+    const { config } = await import("../config.js");
+
+    expect(config.doctor.summaryChannelName).toBe("custom-auto-improve");
   });
 
   it("supports legacy top-level email SMTP config for notifications", async () => {

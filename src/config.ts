@@ -359,6 +359,9 @@ const doctorBlockedPathsFallback = [
   "**/*.sqlite",
   "**/*.log",
 ];
+const doctorSummaryChannelId = optionalString(["doctor", "summary_channel_id"], "MINICLAW_DOCTOR_SUMMARY_CHANNEL_ID");
+const doctorSummaryChannelName = optionalString(["doctor", "summary_channel_name"], "MINICLAW_DOCTOR_SUMMARY_CHANNEL_NAME")
+  ?? "miniclaw-auto-improve";
 const doctorRepairWorktreeRoot = resolveHome(requiredString(
   ["doctor", "repair_worktree_root"],
   "MINICLAW_DOCTOR_REPAIR_WORKTREE_ROOT",
@@ -638,7 +641,8 @@ export const config = {
       "MINICLAW_DOCTOR_SCAN_INTERVAL_MS",
       3_600_000
     ),
-    summaryChannelId: optionalString(["doctor", "summary_channel_id"], "MINICLAW_DOCTOR_SUMMARY_CHANNEL_ID"),
+    summaryChannelId: doctorSummaryChannelId,
+    summaryChannelName: doctorSummaryChannelName,
     autoRepairEnabled: boolValue(["doctor", "auto_repair_enabled"], "MINICLAW_DOCTOR_AUTO_REPAIR_ENABLED", false),
     autoCommitEnabled: boolValue(["doctor", "auto_commit_enabled"], "MINICLAW_DOCTOR_AUTO_COMMIT_ENABLED", true),
     autoPushEnabled: boolValue(["doctor", "auto_push_enabled"], "MINICLAW_DOCTOR_AUTO_PUSH_ENABLED", false),

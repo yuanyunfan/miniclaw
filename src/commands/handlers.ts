@@ -21,6 +21,7 @@ import { buildTaskSourceFromInteraction, withTaskThreadMetadata } from "../disco
 import { resolveTaskCwd } from "../routing/cwd.js";
 import { buildTaskPromptWithContext } from "../routing/task-context.js";
 import { formatDoctorReport, runDoctor, type DoctorMode } from "../ops/doctor.js";
+import { resolveDoctorSummaryChannel } from "../ops/doctor-discord.js";
 import { collectRepairMetrics, formatRepairMetrics } from "../ops/doctor-metrics.js";
 import { evaluateRepairPolicy } from "../ops/doctor-repair.js";
 import { formatDoctorShipResult, runDoctorShip } from "../ops/doctor-ship.js";
@@ -189,13 +190,10 @@ function resolveIncident(input: string): { incident?: IncidentRow; error?: strin
 }
 
 async function sendIncidentOperationSummary(interaction: ChatInputCommandInteraction, content: string): Promise<void> {
-  const channelId = config.doctor.summaryChannelId;
-  if (!channelId) return;
   try {
-    const channel = await interaction.client.channels.fetch(channelId);
-    if (channel && "isSendable" in channel && channel.isSendable()) {
-      await channel.send(content.slice(0, 1900));
-    }
+    const channel = await resolveDoctorSummaryChannel(interaction.client);
+    if (!channel) return;
+    await channel.send(content.slice(0, 1900));
   } catch (err) {
     log.error("Failed to send incident operation summary:", err);
   }
@@ -325,7 +323,9 @@ export async function handleIncident(interaction: ChatInputCommandInteraction): 
       main_updated: result.mainUpdated,
       restart_attempted: result.restartAttempted,
     });
-    await interaction.editReply(formatDoctorShipResult(result).slice(0, 1900));
+    const summary = formatDoctorShipResult(result).slice(0, 1900);
+    await interaction.editReply(summary);
+    await sendIncidentOperationSummary(interaction, summary);
     return;
   }
 

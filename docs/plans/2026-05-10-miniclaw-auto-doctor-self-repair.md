@@ -370,7 +370,7 @@ Recommended action:
 - Current safe restart and graceful drain behavior must remain the runtime update boundary.
 - Historical next slice after Phase 1 was Phase 2: incident persistence and `/health` open-incident visibility.
 - Phase 2 automatic diagnosis implementation has started.
-  - Added doctor config for hourly scanning, `#monitor-github` summary channel, and future repair gates.
+  - Added doctor config for hourly scanning, Auto Improve summary channel delivery, and future repair gates.
   - Added incident, incident event, and repair run persistence with deterministic dedupe keys.
   - Added an hourly read-only Auto Doctor scheduler that can create/update incidents and notify only new or severity-escalated incidents.
   - Added `/incidents` and open incident count in `/health`.
@@ -384,7 +384,7 @@ Recommended action:
 - Phase 3A automatic dispatch shipped:
   - The hourly doctor scheduler now attempts repair-eligible incidents when `doctor.auto_repair_enabled=true`.
   - Auto repair respects `doctor.max_parallel_repairs` and `doctor.max_repairs_per_day`.
-  - Repair summaries are posted to `doctor.summary_channel_id`.
+  - Repair summaries are posted to the configured Auto Improve summary channel.
   - Later hourly scans preserve repair lifecycle states instead of downgrading them back to `diagnosed`.
 - Phase 3B repair commit policy shipped:
   - Repair verification now runs G0, secrets, targeted Vitest where applicable, typecheck, lint, test, and build before commit.
@@ -423,7 +423,7 @@ Recommended action:
 
 ### Target Behavior
 
-MiniClaw should run Auto Doctor automatically once per hour, detect actionable incidents, attempt policy-allowed self-repair in an isolated workspace, and post a concise result summary to the Discord `#monitor-github` channel.
+MiniClaw should run Auto Doctor automatically once per hour, detect actionable incidents, attempt policy-allowed self-repair in an isolated workspace, and post a concise result summary to the Discord `#miniclaw-auto-improve` channel.
 
 The initial self-repair target is guarded automation, not blind self-modification. Diagnosis can run automatically. Repair can run automatically only for allowlisted, low-risk MiniClaw code bugs. Shipping to `main` and live restart should remain conservative until the repair loop has enough successful history.
 
@@ -434,7 +434,8 @@ Add explicit doctor config instead of hardcoding the channel name:
 - `doctor.enabled`: default `true`
 - `doctor.auto_diagnose_enabled`: default `false` for first rollout, then enable in local config after smoke tests
 - `doctor.scan_interval_ms`: default `3600000`
-- `doctor.summary_channel_id`: Discord channel id for repair summaries; local config should point this to `#monitor-github`
+- `doctor.summary_channel_id`: optional Discord channel id for repair summaries; when present it wins over name lookup
+- `doctor.summary_channel_name`: Discord channel name for Auto Doctor/Auto Improve summaries, default `miniclaw-auto-improve`
 - `doctor.auto_repair_enabled`: default `false`
 - `doctor.auto_commit_enabled`: default `true`; only applies after `doctor.auto_repair_enabled` allows an execute repair
 - `doctor.auto_push_enabled`: default `false`
@@ -487,10 +488,10 @@ Loop behavior:
 2. Skip if another doctor scan is active.
 3. Run read-only doctor evidence collection for recent task, cron, PM2, logs, and connectivity state.
 4. Create or update incidents through the persistence layer.
-5. For newly opened or severity-escalated incidents, post a short diagnosis to `doctor.summary_channel_id`.
+5. For newly opened or severity-escalated incidents, post a short diagnosis to the configured Auto Improve summary channel.
 6. For repair-eligible incidents, enqueue a repair attempt only if `doctor.auto_repair_enabled` is true.
 
-The hourly diagnosis message should go to `#monitor-github` only when there is something actionable. A clean hourly scan should remain log-only or send a compact daily digest later, otherwise the monitor channel becomes noisy.
+The hourly diagnosis message should go to `#miniclaw-auto-improve` only when there is something actionable. A clean hourly scan should remain log-only or send a compact daily digest later, otherwise the monitor channel becomes noisy.
 
 Exit criteria:
 
@@ -537,7 +538,7 @@ doctor-repair/<incident-id>
    - requirement to keep the patch small
 6. Run the coding agent inside the isolated worktree.
 7. Collect changed files, patch stats, test output, and final report.
-8. Persist the repair run status and post a summary to `#monitor-github`.
+8. Persist the repair run status and post a summary to `#miniclaw-auto-improve`.
 
 The worker should not modify the live main worktree directly. The main bot should only enqueue or spawn this worker and observe its result.
 
@@ -580,7 +581,7 @@ This phase should be opt-in after Phase 3 has real successful runs.
 Allowed ship flow:
 
 1. Push repair branch.
-2. Post summary to `#monitor-github` with:
+2. Post summary to `#miniclaw-auto-improve` with:
    - incident id and title
    - likely root cause
    - changed files
@@ -595,7 +596,7 @@ Allowed ship flow:
 Exit criteria:
 
 - No repair path can hard-restart MiniClaw while tasks are running.
-- `#monitor-github` receives a complete audit summary for each repair attempt.
+- `#miniclaw-auto-improve` receives a complete audit summary for each repair attempt.
 - Operator can approve or manually merge/restart from the repair report.
 
 ### Phase 5: Reliability, Observability, And Operator UX
@@ -668,7 +669,7 @@ Exit criteria:
 
 #### Phase 5D: Discord Operator Actions
 
-Make the existing guarded flow easier to execute from `#monitor-github`:
+Make the existing guarded flow easier to execute from `#miniclaw-auto-improve`:
 
 1. Add Discord components or clear slash-command shortcuts for:
    - view incident
@@ -678,7 +679,7 @@ Make the existing guarded flow easier to execute from `#monitor-github`:
    - request safe restart
 2. Require explicit approval for operations that affect `main` or the live PM2 app.
 3. Re-run the same server-side policy checks used by CLI scripts; Discord UI must not become a bypass.
-4. Post a concise operation summary back to `#monitor-github`.
+4. Post a concise operation summary back to `#miniclaw-auto-improve`.
 
 Exit criteria:
 
@@ -693,7 +694,7 @@ A Web dashboard is not the next priority. Add it only after Discord incident ope
 
 Implement in this order:
 
-1. Config keys and `#monitor-github` summary channel resolution.
+1. Config keys and `#miniclaw-auto-improve` summary channel resolution.
 2. Incident persistence and dedupe.
 3. Hourly read-only doctor scheduler.
 4. Discord notification for new or escalated incidents.

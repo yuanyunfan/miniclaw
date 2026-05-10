@@ -48,7 +48,7 @@ Automatic scan:
 - Disabled by default until configured.
 - Enable with `doctor.auto_diagnose_enabled: true` or `MINICLAW_DOCTOR_AUTO_DIAGNOSE_ENABLED=true`.
 - Default interval is one hour: `doctor.scan_interval_ms: 3600000`.
-- Summary notifications go to `doctor.summary_channel_id`, which should be configured to `#monitor-github` on the user's MiniClaw server.
+- Summary notifications go to `doctor.summary_channel_id` when an explicit channel ID is configured; otherwise MiniClaw resolves `doctor.summary_channel_name`, which defaults to `#miniclaw-auto-improve`.
 - If `doctor.auto_repair_enabled: true`, repair-eligible incidents are passed to the guarded repair worker after the scan.
 
 ## Evidence Sources
@@ -162,7 +162,7 @@ When automatic repair is enabled, the hourly scheduler applies the same worker p
 - `doctor.max_parallel_repairs` limits active `repairing` runs.
 - `doctor.max_repairs_per_day` limits new repair runs per UTC day.
 - incidents already in `repair_blocked`, `repairing`, or `repair_ready` are not downgraded by later hourly scans.
-- every repair attempt posts a concise result summary to `doctor.summary_channel_id`.
+- every repair attempt posts a concise result summary to the configured Auto Improve summary channel.
 
 ## Guarded Ship
 
@@ -197,7 +197,7 @@ pnpm run doctor:ship -- --incident <incident-id> --execute --approve-main --rest
 
 The restart path calls `pnpm safe-restart` through the same safe-restart implementation used by the standalone command. It never passes `--force`. If active tasks exist, restart is deferred, `live_restart_deferred` is recorded, and the patch remains shipped but not live-restarted.
 
-Repair summaries posted to `doctor.summary_channel_id` include the preview, ship, and ship-plus-restart commands when a repair branch has been pushed.
+Repair summaries posted to the configured Auto Improve summary channel include the preview, ship, and ship-plus-restart commands when a repair branch has been pushed.
 
 Discord operator shortcuts reuse the same server-side ship path:
 

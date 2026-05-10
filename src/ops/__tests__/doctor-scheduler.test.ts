@@ -11,6 +11,7 @@ const ENV_KEYS = [
   "MINICLAW_DOCTOR_MAX_REPAIRS_PER_DAY",
   "MINICLAW_DOCTOR_MAX_PARALLEL_REPAIRS",
   "MINICLAW_DOCTOR_SUMMARY_CHANNEL_ID",
+  "MINICLAW_DOCTOR_SUMMARY_CHANNEL_NAME",
 ] as const;
 
 let previousEnv: Record<string, string | undefined>;
@@ -103,6 +104,7 @@ beforeEach(() => {
   for (const key of ENV_KEYS) {
     previousEnv[key] = process.env[key];
   }
+  process.env.MINICLAW_DOCTOR_AUTO_REPAIR_ENABLED = "false";
 });
 
 afterEach(() => {

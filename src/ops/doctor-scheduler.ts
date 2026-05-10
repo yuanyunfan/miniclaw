@@ -1,4 +1,4 @@
-import type { Client, SendableChannels } from "discord.js";
+import type { Client } from "discord.js";
 import { config } from "../config.js";
 import { createLogger } from "../lib/log.js";
 import { isDraining } from "../runtime/shutdown.js";
@@ -11,6 +11,7 @@ import {
   type IncidentRow,
 } from "../store/incidents.js";
 import { runDoctor, type DoctorReport } from "./doctor.js";
+import { doctorSummaryChannelEventTarget, resolveDoctorSummaryChannel } from "./doctor-discord.js";
 import { deriveDoctorIncidentCandidates, type DoctorIncidentCandidate } from "./doctor-incidents.js";
 import { runDoctorRepair, type DoctorRepairResult } from "./doctor-repair.js";
 
@@ -107,28 +108,13 @@ function formatIncidentNotification(incident: IncidentRow, candidate: DoctorInci
   return lines.join("\n").slice(0, 1900);
 }
 
-async function fetchSendableChannel(client: Client, channelId: string): Promise<SendableChannels | null> {
-  try {
-    const channel = await client.channels.fetch(channelId);
-    if (channel && "isSendable" in channel && channel.isSendable()) return channel as SendableChannels;
-  } catch (err) {
-    log.error(`failed to fetch doctor summary channel ${channelId}:`, err);
-  }
-  return null;
-}
-
 async function sendDoctorNotification(
   client: Client,
   incident: IncidentRow,
   candidate: DoctorIncidentCandidate,
   report: DoctorReport
 ): Promise<void> {
-  const channelId = config.doctor.summaryChannelId;
-  if (!channelId) {
-    log.warn(`doctor incident ${incident.id} has no summary channel configured`);
-    return;
-  }
-  const channel = await fetchSendableChannel(client, channelId);
+  const channel = await resolveDoctorSummaryChannel(client);
   if (!channel) return;
   await channel.send(formatIncidentNotification(incident, candidate, report));
 }
@@ -173,12 +159,7 @@ function formatRepairNotification(result: DoctorRepairResult): string {
 }
 
 async function sendDoctorRepairNotification(client: Client, result: DoctorRepairResult): Promise<void> {
-  const channelId = config.doctor.summaryChannelId;
-  if (!channelId) {
-    log.warn(`doctor repair ${result.repairRun?.id ?? "(unknown)"} has no summary channel configured`);
-    return;
-  }
-  const channel = await fetchSendableChannel(client, channelId);
+  const channel = await resolveDoctorSummaryChannel(client);
   if (!channel) return;
   await channel.send(formatRepairNotification(result));
 }
@@ -234,7 +215,7 @@ export function createDoctorScheduler(
       try {
         await sendRepairNotificationFn(client, repairResult);
         appendIncidentEventFn(incident.id, "repair_notified", {
-          channel_id: config.doctor.summaryChannelId,
+          ...doctorSummaryChannelEventTarget(),
           repair_run_id: repairResult.repairRun?.id,
           ok: repairResult.ok,
         });
@@ -295,7 +276,7 @@ export function createDoctorScheduler(
           if (candidate.notify && shouldNotify(result)) {
             await sendNotificationFn(client, result.row, candidate, report);
             appendIncidentEventFn(result.row.id, "doctor_notified", {
-              channel_id: config.doctor.summaryChannelId,
+              ...doctorSummaryChannelEventTarget(),
               reason,
             });
             notified.push(result.row);
