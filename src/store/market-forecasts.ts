@@ -44,6 +44,12 @@ export interface MarketForecastEvaluationRow {
   created_at: string;
 }
 
+export interface MarketForecastCalibrationRecord {
+  forecast: MarketForecastRow;
+  items: MarketForecastItemRow[];
+  evaluations: MarketForecastEvaluationRow[];
+}
+
 export interface ReportForecastExtractionResult {
   hasJson: boolean;
   insertedItemCount: number;
@@ -365,4 +371,43 @@ export function listMarketForecastEvaluations(forecastId: string): MarketForecas
   return getDb()
     .prepare("SELECT * FROM market_forecast_evaluations WHERE forecast_id = ? ORDER BY evaluated_at ASC")
     .all(forecastId) as MarketForecastEvaluationRow[];
+}
+
+export function listMarketForecastCalibrationRecords(params: {
+  marketScope?: string;
+  since?: string;
+  until?: string;
+  limit?: number;
+} = {}): MarketForecastCalibrationRecord[] {
+  const clauses = ["1 = 1"];
+  const values: Record<string, string | number> = {
+    limit: Math.max(1, Math.min(500, params.limit ?? 100)),
+  };
+  if (params.marketScope) {
+    clauses.push("market_scope = @market_scope");
+    values.market_scope = params.marketScope;
+  }
+  if (params.since) {
+    clauses.push("generated_at >= @since");
+    values.since = params.since;
+  }
+  if (params.until) {
+    clauses.push("generated_at <= @until");
+    values.until = params.until;
+  }
+
+  const forecasts = getDb()
+    .prepare(
+      `SELECT * FROM market_forecasts
+       WHERE ${clauses.join(" AND ")}
+       ORDER BY generated_at DESC, created_at DESC
+       LIMIT @limit`
+    )
+    .all(values) as MarketForecastRow[];
+
+  return forecasts.map((forecast) => ({
+    forecast,
+    items: listMarketForecastItems(forecast.id),
+    evaluations: listMarketForecastEvaluations(forecast.id),
+  }));
 }

@@ -1223,3 +1223,17 @@ Initial planning evidence collected on 2026-05-10:
   - Remove Stooq and AKShare from the default pre-market source plan.
 
 Material deviations from this plan and final verification evidence should be appended here during implementation.
+
+Implementation notes:
+
+- Phase 6 shipped forecast persistence in DB schema v7:
+  - `market_forecasts`, `market_forecast_items`, and `market_forecast_evaluations`.
+  - `src/cron/runner-task.ts` persists `market-intel` payloads and extracts compact `<market_forecast_json>` blocks from the final report.
+  - `pnpm market-forecasts` provides read-only inspection.
+- Phase 7 shipped `market-forecast-evaluation`:
+  - Post-market jobs can evaluate stored pre-market forecasts against benchmark snapshots.
+  - The provider writes evaluation rows through `commit()` and injects a calibration note into post-market report context.
+  - Current benchmark close data uses a fallback quote path and marks calibration as provisional when fallback data is used.
+- Phase 8 first slice shipped a read-only calibration loop:
+  - `pnpm market-calibration` summarizes recent hit rate, Brier score, data-quality correlation, source-level reliability weights, weak spots, and recommendations.
+  - The first slice does not automatically rewrite prompt rules or source weights; it waits for enough evaluated samples before recommending down-weighting or up-weighting.

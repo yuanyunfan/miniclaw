@@ -4,6 +4,7 @@ import { createTask, initDb } from "../db.js";
 import {
   extractMarketForecastJsonFromReport,
   getMarketForecast,
+  listMarketForecastCalibrationRecords,
   listMarketForecastItems,
   recordMarketForecastEvaluation,
   recordMarketForecastFromPayload,
@@ -177,5 +178,26 @@ Base case...
     });
 
     expect(evaluationId).toHaveLength(36);
+  });
+
+  it("lists forecast calibration records with items and evaluations", () => {
+    const id = recordMarketForecastFromPayload({ payload: payload() });
+    recordMarketForecastEvaluation({
+      forecastId: id,
+      evaluatedAt: "2026-05-08T21:00:00.000Z",
+      outcome: { close_direction: "up" },
+      score: { scores: [] },
+    });
+
+    const records = listMarketForecastCalibrationRecords({
+      marketScope: "us",
+      since: "2026-05-08T00:00:00.000Z",
+      until: "2026-05-09T00:00:00.000Z",
+      limit: 20,
+    });
+    const found = records.find((record) => record.forecast.id === id);
+
+    expect(found?.items.length).toBeGreaterThan(0);
+    expect(found?.evaluations.length).toBe(1);
   });
 });

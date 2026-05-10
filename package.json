@@ -36,6 +36,7 @@
     "cron:list": "tsx scripts/cron-list.ts",
     "cron:test": "tsx scripts/cron-test.ts",
     "market-forecasts": "tsx scripts/market-forecasts.ts",
+    "market-calibration": "tsx scripts/market-forecast-calibration.ts",
     "wechat-mp:login": "tsx scripts/wechat-mp-login.ts",
     "wechat-mp:check": "tsx scripts/wechat-mp-check.ts",
     "wechat-mp:collect": "tsx scripts/wechat-mp-collect.ts",
