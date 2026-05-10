@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  classifyMessageCapabilities,
   classifyMessageIntent,
   classifySmartRoute,
   resolveSmartRouterAction,
+  shouldUseCapabilityClassifier,
   shouldUseLlmClassifier,
+  type RouteCapabilityDecision,
   type SmartRouterPolicy,
 } from "../intent.js";
 
@@ -20,50 +23,69 @@ const policy: SmartRouterPolicy = {
   },
 };
 
-describe("classifyMessageIntent", () => {
-  it("classifies explanation as chat", () => {
+function capability(overrides: Partial<RouteCapabilityDecision> = {}): RouteCapabilityDecision {
+  return {
+    needsCurrentInfo: false,
+    needsMultiStepResearch: false,
+    needsFileWrite: false,
+    needsShell: false,
+    needsGit: false,
+    needsBrowser: false,
+    needsRuntimeInspection: false,
+    needsLongRunning: false,
+    createsPersistentOutput: false,
+    hasExternalUrl: false,
+    hasAttachments: false,
+    estimatedEffort: "short",
+    confidence: 0.8,
+    reason: "test classifier decision",
+    evidence: ["llm_classifier"],
+    matchedSignals: ["llm_classifier"],
+    riskFlags: [],
+    lockedCapabilities: [],
+    ...overrides,
+  };
+}
+
+describe("classifyMessageCapabilities and fallback route", () => {
+  it("keeps explanation as chat without task capabilities", () => {
     const d = classifyMessageIntent({ content: "解释一下 RSS 是什么", channelId: "chat-1" });
     expect(d.intent).toBe("chat");
     expect(d.matchedSignals).toContain("explain");
+    expect(d.capabilities?.needsMultiStepResearch).toBe(false);
   });
 
-  it("classifies plain Chinese summaries as chat", () => {
+  it("keeps plain Chinese summaries as chat", () => {
     const d = classifyMessageIntent({ content: "总结一下这篇文章", channelId: "chat-1" });
     expect(d.intent).toBe("chat");
     expect(d.matchedSignals).toContain("summary");
   });
 
-  it("classifies ordinary URL summaries as chat but asks the LLM classifier to verify", () => {
+  it("keeps ordinary URL summaries in chat but asks the capability classifier to verify", () => {
     const d = classifyMessageIntent({ content: "https://example.com/post 给我总结一下", channelId: "chat-1" });
     expect(d.intent).toBe("chat");
     expect(d.matchedSignals).toContain("summary");
     expect(d.matchedSignals).toContain("external_url");
+    expect(d.capabilities?.hasExternalUrl).toBe(true);
     expect(shouldUseLlmClassifier(d, policy)).toBe(true);
   });
 
-  it("suggests task mode for WeChat public-account article summaries", () => {
+  it("suggests task mode for WeChat public-account article summaries without classifier downgrade", () => {
     const d = classifyMessageIntent({
       content: "链接：https://mp.weixin.qq.com/s/43wPVMKzNxC_R0ZYmUn0Rg 给我总结一下",
       channelId: "chat-1",
     });
     expect(d.intent).toBe("task_suggest");
     expect(d.matchedSignals).toContain("wechat_article");
-    expect(d.matchedSignals).toContain("browser_required");
+    expect(d.capabilities?.needsBrowser).toBe(true);
     expect(d.riskFlags).toContain("browser_required");
+    expect(shouldUseCapabilityClassifier(d.capabilities!, policy)).toBe(false);
 
     const resolved = resolveSmartRouterAction(d, policy, "chat-1");
     expect(resolved.intent).toBe("task_suggest");
   });
 
-  it("does not ask the LLM classifier to downgrade WeChat article summaries", () => {
-    const d = classifyMessageIntent({
-      content: "链接：https://mp.weixin.qq.com/s/43wPVMKzNxC_R0ZYmUn0Rg 给我总结一下",
-      channelId: "chat-1",
-    });
-    expect(shouldUseLlmClassifier(d, policy)).toBe(false);
-  });
-
-  it("suggests task mode for URL-only messages so the LLM classifier can decide", () => {
+  it("suggests task mode for URL-only messages so the classifier can decide", () => {
     const d = classifyMessageIntent({ content: "https://example.com/post", channelId: "chat-1" });
     expect(d.intent).toBe("task_suggest");
     expect(d.matchedSignals).toContain("external_url");
@@ -73,6 +95,8 @@ describe("classifyMessageIntent", () => {
   it("classifies file modification plus validation as task_confirm", () => {
     const d = classifyMessageIntent({ content: "修改 README 并跑测试", channelId: "chat-1" });
     expect(d.intent).toBe("task_confirm");
+    expect(d.capabilities?.needsFileWrite).toBe(true);
+    expect(d.capabilities?.needsShell).toBe(true);
     expect(d.riskFlags).toContain("writes_files");
     expect(d.riskFlags).toContain("runs_tests");
   });
@@ -80,6 +104,7 @@ describe("classifyMessageIntent", () => {
   it("classifies git operations as task_confirm", () => {
     const d = classifyMessageIntent({ content: "commit 并 push 到 GitHub main", channelId: "chat-1" });
     expect(d.intent).toBe("task_confirm");
+    expect(d.capabilities?.needsGit).toBe(true);
     expect(d.riskFlags).toContain("git_operation");
   });
 
@@ -89,24 +114,28 @@ describe("classifyMessageIntent", () => {
       channelId: "chat-1",
     });
     expect(d.intent).toBe("task_confirm");
-    expect(d.matchedSignals).toContain("capture_or_persist");
+    expect(d.capabilities?.createsPersistentOutput).toBe(true);
+    expect(d.capabilities?.needsLongRunning).toBe(true);
     expect(d.riskFlags).toContain("long_running_or_persistent_output");
   });
 
   it("keeps attachment-only messages in chat by default", () => {
     const d = classifyMessageIntent({ content: "", channelId: "chat-1", hasAttachments: true });
     expect(d.intent).toBe("chat");
+    expect(d.capabilities?.hasAttachments).toBe(true);
     expect(d.matchedSignals).toContain("attachments");
   });
 
-  it("classifies repo analysis as task_suggest", () => {
+  it("classifies repo analysis as multi-step research task_suggest", () => {
     const d = classifyMessageIntent({ content: "帮我深入分析这个 repo", channelId: "chat-1" });
     expect(d.intent).toBe("task_suggest");
+    expect(d.capabilities?.needsMultiStepResearch).toBe(true);
   });
 
   it("classifies runtime failure diagnosis as task_confirm", () => {
     const d = classifyMessageIntent({ content: "为什么会任务失败呢? 给我分析一下", channelId: "other" });
     expect(d.intent).toBe("task_confirm");
+    expect(d.capabilities?.needsRuntimeInspection).toBe(true);
     expect(d.matchedSignals).toContain("runtime_diagnostics");
     expect(d.riskFlags).toContain("runtime_diagnostics");
   });
@@ -118,8 +147,9 @@ describe("classifyMessageIntent", () => {
     });
     expect(d.intent).toBe("task_suggest");
     expect(d.matchedSignals).toContain("external_activity_research");
-    expect(d.riskFlags).toContain("long_running_research");
-    expect(shouldUseLlmClassifier(d, policy)).toBe(false);
+    expect(d.capabilities?.needsCurrentInfo).toBe(true);
+    expect(d.capabilities?.needsMultiStepResearch).toBe(true);
+    expect(shouldUseCapabilityClassifier(d.capabilities!, policy)).toBe(true);
 
     const resolved = resolveSmartRouterAction(d, policy, "chat-1");
     expect(resolved.intent).toBe("task_suggest");
@@ -129,66 +159,74 @@ describe("classifyMessageIntent", () => {
     const d = classifyMessageIntent({ content: "GitHub contribution 是什么意思？", channelId: "chat-1" });
     expect(d.intent).toBe("chat");
     expect(d.matchedSignals).not.toContain("external_activity_research");
+    expect(d.capabilities?.needsCurrentInfo).toBe(false);
   });
 });
 
-describe("LLM classifier decision points", () => {
-  it("uses LLM for ambiguous suggestions", () => {
-    const d = classifyMessageIntent({ content: "调研一下有没有方案", channelId: "chat-1" });
-    expect(shouldUseLlmClassifier(d, policy)).toBe(true);
+describe("capability classifier decision points", () => {
+  it("uses the classifier for ambiguous suggestions", () => {
+    const d = classifyMessageCapabilities({ content: "调研一下有没有方案", channelId: "chat-1" });
+    expect(shouldUseCapabilityClassifier(d, policy)).toBe(true);
   });
 
-  it("merges LLM decision with heuristic signals", async () => {
+  it("allows the classifier to downgrade soft research hints to chat", async () => {
     const d = await classifySmartRoute(
       { content: "调研一下有没有方案", channelId: "chat-1" },
       policy,
-      async () => ({
-        intent: "chat",
-        confidence: 0.8,
-        reason: "research answer can be chat",
-        matchedSignals: ["llm_classifier"],
-        riskFlags: [],
+      async () => capability({
+        reason: "can be answered as a short read-only brainstorm",
+        evidence: ["short_brainstorm"],
+        matchedSignals: ["short_brainstorm"],
       })
     );
     expect(d.intent).toBe("chat");
     expect(d.matchedSignals).toContain("research");
     expect(d.matchedSignals).toContain("llm_classifier");
+    expect(d.capabilities?.needsMultiStepResearch).toBe(false);
   });
 
-  it("keeps deterministic browser-required URL summaries as task_suggest without LLM override", async () => {
+  it("does not let the classifier downgrade locked write and shell capabilities", async () => {
+    const d = await classifySmartRoute(
+      { content: "修改 README 并跑测试", channelId: "chat-1" },
+      policy,
+      async () => capability({ reason: "should not be used" })
+    );
+    expect(d.intent).toBe("task_confirm");
+    expect(d.matchedSignals).not.toContain("llm_classifier");
+    expect(d.capabilities?.needsFileWrite).toBe(true);
+    expect(d.capabilities?.needsShell).toBe(true);
+  });
+
+  it("keeps deterministic browser-required URL summaries as task_suggest without classifier override", async () => {
     const d = await classifySmartRoute(
       { content: "链接：https://mp.weixin.qq.com/s/43wPVMKzNxC_R0ZYmUn0Rg 给我总结一下", channelId: "chat-1" },
       policy,
-      async () => ({
-        intent: "chat",
-        confidence: 0.9,
-        reason: "should not be used",
-        matchedSignals: ["llm_classifier"],
-        riskFlags: [],
-      })
+      async () => capability({ reason: "should not be used" })
     );
     expect(d.intent).toBe("task_suggest");
     expect(d.matchedSignals).not.toContain("llm_classifier");
+    expect(d.capabilities?.needsBrowser).toBe(true);
   });
 
-  it("still asks the LLM classifier to review ordinary URL summaries", async () => {
+  it("lets the classifier upgrade ordinary URL summaries when current multi-step research is needed", async () => {
     const d = await classifySmartRoute(
-      { content: "https://example.com/post 给我总结一下", channelId: "chat-1" },
+      { content: "https://example.com/releases 给我分析最近变化", channelId: "chat-1" },
       policy,
-      async () => ({
-        intent: "chat",
-        confidence: 0.8,
-        reason: "ordinary static page summary",
-        matchedSignals: ["llm_classifier"],
-        riskFlags: [],
+      async () => capability({
+        needsCurrentInfo: true,
+        needsMultiStepResearch: true,
+        hasExternalUrl: true,
+        estimatedEffort: "medium",
+        reason: "requires current release investigation",
+        evidence: ["current_releases"],
       })
     );
-    expect(d.intent).toBe("chat");
-    expect(d.matchedSignals).toContain("external_url");
-    expect(d.matchedSignals).toContain("llm_classifier");
+    expect(d.intent).toBe("task_suggest");
+    expect(d.capabilities?.needsCurrentInfo).toBe(true);
+    expect(d.capabilities?.needsMultiStepResearch).toBe(true);
   });
 
-  it("fails closed to heuristic when LLM throws", async () => {
+  it("fails closed to heuristic capabilities when the classifier throws", async () => {
     const d = await classifySmartRoute(
       { content: "调研一下有没有方案", channelId: "chat-1" },
       policy,
@@ -198,6 +236,7 @@ describe("LLM classifier decision points", () => {
     );
     expect(d.intent).toBe("task_suggest");
     expect(d.riskFlags).toContain("classifier_failed");
+    expect(d.capabilities?.needsMultiStepResearch).toBe(true);
   });
 });
 

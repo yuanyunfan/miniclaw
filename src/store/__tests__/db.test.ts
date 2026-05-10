@@ -99,6 +99,7 @@ describe("schema migrations", () => {
   it("ensures smart router decisions table exists", () => {
     expect(__testables.columnExists("smart_router_decisions", "prompt_hash")).toBe(true);
     expect(__testables.columnExists("smart_router_decisions", "action_result")).toBe(true);
+    expect(__testables.columnExists("smart_router_decisions", "capabilities_json")).toBe(true);
   });
 
   it("ensures task source context columns exist", () => {
@@ -175,6 +176,7 @@ describe("smart router decisions", () => {
       reason: "strong task signal",
       matched_signals: ["modify", "validation"],
       risk_flags: ["writes_files", "runs_tests"],
+      capabilities_json: JSON.stringify({ needsFileWrite: true, needsShell: true }),
       action_result: "confirmation_pending",
     });
 
@@ -190,5 +192,6 @@ describe("smart router decisions", () => {
     expect(row?.action_result).toBe("confirmed_task_created");
     expect(row?.created_task_id).toBe("task-1");
     expect(JSON.parse(row?.matched_signals ?? "[]")).toEqual(["modify", "validation"]);
+    expect(JSON.parse(row?.capabilities_json ?? "{}")).toEqual({ needsFileWrite: true, needsShell: true });
   });
 });

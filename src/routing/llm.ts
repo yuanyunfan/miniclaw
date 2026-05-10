@@ -1,9 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { config } from "../config.js";
 import { codexThreadOptions, getCodexClient, withCodexTimeout } from "../agent/codex.js";
-import type { LlmRouteClassifier, RouteDecision, RouteIntent } from "./intent.js";
+import type { EstimatedEffort, LlmRouteClassifier, RouteCapabilityDecision } from "./intent.js";
 
-const VALID_INTENTS = new Set<RouteIntent>(["chat", "task_suggest", "task_confirm", "task_auto", "ignore"]);
+const VALID_EFFORTS = new Set<EstimatedEffort>(["short", "medium", "long"]);
 
 let anthropicClient: Anthropic | null = null;
 
@@ -18,31 +18,34 @@ function getAnthropicClient(): Anthropic {
   return anthropicClient;
 }
 
-function classifierPrompt(content: string, heuristic: RouteDecision): string {
+function classifierPrompt(content: string, heuristic: RouteCapabilityDecision): string {
   return [
-    "Classify a Discord message for MiniClaw routing. Output JSON only.",
+    "Classify the capabilities needed to handle a Discord message for MiniClaw. Output JSON only.",
     "",
-    "Intent meanings:",
-    "- chat: read-only Q&A, explanation, analysis, pure-text summary, or ordinary static-web URL summary.",
-    "- task_suggest: ambiguous; task mode may help but chat can still answer.",
-    "- task_confirm: likely needs file edits, commands, tests, git, deployment, or long-running work.",
-    "- task_auto: only if the prompt itself is clearly executable task work; runtime policy decides whether auto is allowed.",
-    "- ignore: should not respond.",
+    "Do not answer the user's request. Do not browse, fetch URLs, inspect files, or run tools.",
+    "Only judge which capabilities would be needed if MiniClaw handled the request.",
     "",
-    "URL rules:",
-    "- Static public webpage summary can stay chat when it is likely one quick fetch.",
-    "- mp.weixin.qq.com, WeChat public-account articles, login/cookie pages, anti-bot pages, dynamic pages, or browser-required pages should be task_suggest.",
-    "- Explicit fetch/crawl/collect/monitor/save/export/write-to-file/Obsidian note requests should be task_confirm.",
-    "- Current or recent public-activity investigations, such as GitHub contributions, commits, releases, PRs, or developer activity, should be task_suggest because they often need multiple live lookups and can exceed chat timeout.",
+    "Capability meanings:",
+    "- needs_current_info: requires current or recently changed information, such as today's GitHub activity, latest releases, prices, news, or schedules.",
+    "- needs_multi_step_research: likely needs multiple lookups, comparison, synthesis, repo inspection, log/DB inspection, or non-trivial investigation.",
+    "- needs_file_write: likely needs creating, editing, deleting, or persisting files/docs/code.",
+    "- needs_shell: likely needs running commands, tests, builds, scripts, service restarts, deployments, or local probes.",
+    "- needs_git: likely needs commit, push, merge, rebase, branch, or other Git state changes.",
+    "- needs_browser: likely needs browser/login/cookie/dynamic page/anti-bot handling.",
+    "- needs_runtime_inspection: likely needs checking logs, DB, process state, task history, or local runtime status.",
+    "- needs_long_running: likely exceeds a quick chat answer because it needs many steps, long execution, or durable work.",
+    "- creates_persistent_output: likely creates durable artifacts such as files, notes, reports, docs, or scheduled outputs.",
     "",
-    "Be conservative. Prefer chat or task_suggest when unsure. Do not invent facts.",
+    "Routing policy is NOT your job. MiniClaw will map capabilities to chat/task locally.",
+    "Be conservative about write/shell/git capabilities, but do not mark every analytical question as multi-step research.",
+    "A pure concept explanation or short read-only answer should keep all capability booleans false.",
     "",
-    `Heuristic: ${JSON.stringify(heuristic)}`,
+    `Heuristic capability hints: ${JSON.stringify(heuristic)}`,
     "",
     `<message>\n${content.slice(0, 4000)}\n</message>`,
     "",
     `Return exactly:
-{"intent":"chat|task_suggest|task_confirm|task_auto|ignore","confidence":0.0,"reason":"short reason","riskFlags":["writes_files"]}`,
+{"needs_current_info":false,"needs_multi_step_research":false,"needs_file_write":false,"needs_shell":false,"needs_git":false,"needs_browser":false,"needs_runtime_inspection":false,"needs_long_running":false,"creates_persistent_output":false,"has_external_url":false,"has_attachments":false,"estimated_effort":"short|medium|long","confidence":0.0,"reason":"short reason","evidence":["short signal"],"risk_flags":["short_risk"]}`,
   ].join("\n");
 }
 
@@ -53,36 +56,57 @@ function textFromAnthropicContent(content: Anthropic.Messages.ContentBlock[]): s
     .join("\n");
 }
 
-function parseDecisionJson(text: string): RouteDecision {
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error("LLM classifier did not return JSON");
-  const raw = JSON.parse(match[0]) as {
-    intent?: unknown;
-    confidence?: unknown;
-    reason?: unknown;
-    riskFlags?: unknown;
-    matchedSignals?: unknown;
-  };
+function coerceBoolean(raw: unknown): boolean {
+  if (typeof raw === "boolean") return raw;
+  if (typeof raw === "string") return raw.trim().toLowerCase() === "true";
+  return Boolean(raw);
+}
 
-  const intent = typeof raw.intent === "string" && VALID_INTENTS.has(raw.intent as RouteIntent)
-    ? raw.intent as RouteIntent
-    : undefined;
-  if (!intent) throw new Error(`Invalid classifier intent: ${String(raw.intent)}`);
+function getBoolean(raw: Record<string, unknown>, camel: string, snake: string): boolean {
+  return coerceBoolean(raw[camel] ?? raw[snake] ?? false);
+}
+
+function stringArray(raw: unknown, fallback: string[] = []): string[] {
+  if (!Array.isArray(raw)) return fallback;
+  return raw.filter((v): v is string => typeof v === "string" && Boolean(v.trim()));
+}
+
+function parseCapabilityJson(text: string): RouteCapabilityDecision {
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error("LLM capability classifier did not return JSON");
+  const raw = JSON.parse(match[0]) as Record<string, unknown>;
 
   const confidence = typeof raw.confidence === "number" ? raw.confidence : Number(raw.confidence);
-  const riskFlags = Array.isArray(raw.riskFlags)
-    ? raw.riskFlags.filter((v): v is string => typeof v === "string")
-    : [];
-  const matchedSignals = Array.isArray(raw.matchedSignals)
-    ? raw.matchedSignals.filter((v): v is string => typeof v === "string")
-    : ["llm_classifier"];
+  const estimatedEffortRaw = typeof raw.estimated_effort === "string"
+    ? raw.estimated_effort
+    : typeof raw.estimatedEffort === "string"
+      ? raw.estimatedEffort
+      : "short";
+  const estimatedEffort = VALID_EFFORTS.has(estimatedEffortRaw as EstimatedEffort)
+    ? estimatedEffortRaw as EstimatedEffort
+    : "short";
+  const evidence = stringArray(raw.evidence, ["llm_classifier"]);
+  const riskFlags = stringArray(raw.risk_flags ?? raw.riskFlags);
 
   return {
-    intent,
+    needsCurrentInfo: getBoolean(raw, "needsCurrentInfo", "needs_current_info"),
+    needsMultiStepResearch: getBoolean(raw, "needsMultiStepResearch", "needs_multi_step_research"),
+    needsFileWrite: getBoolean(raw, "needsFileWrite", "needs_file_write"),
+    needsShell: getBoolean(raw, "needsShell", "needs_shell"),
+    needsGit: getBoolean(raw, "needsGit", "needs_git"),
+    needsBrowser: getBoolean(raw, "needsBrowser", "needs_browser"),
+    needsRuntimeInspection: getBoolean(raw, "needsRuntimeInspection", "needs_runtime_inspection"),
+    needsLongRunning: getBoolean(raw, "needsLongRunning", "needs_long_running"),
+    createsPersistentOutput: getBoolean(raw, "createsPersistentOutput", "creates_persistent_output"),
+    hasExternalUrl: getBoolean(raw, "hasExternalUrl", "has_external_url"),
+    hasAttachments: getBoolean(raw, "hasAttachments", "has_attachments"),
+    estimatedEffort,
     confidence: Number.isFinite(confidence) ? confidence : 0.5,
-    reason: typeof raw.reason === "string" ? raw.reason : "LLM classifier decision",
-    matchedSignals,
+    reason: typeof raw.reason === "string" ? raw.reason : "LLM capability classifier decision",
+    evidence,
+    matchedSignals: [...new Set([...evidence, "llm_classifier"])],
     riskFlags,
+    lockedCapabilities: [],
   };
 }
 
@@ -96,7 +120,7 @@ export const classifyRouteWithLlm: LlmRouteClassifier = async (input, heuristic)
       temperature: 0,
       messages: [{ role: "user", content: prompt }],
     });
-    return parseDecisionJson(textFromAnthropicContent(msg.content));
+    return parseCapabilityJson(textFromAnthropicContent(msg.content));
   }
 
   const codex = getCodexClient();
@@ -121,10 +145,10 @@ export const classifyRouteWithLlm: LlmRouteClassifier = async (input, heuristic)
         text = event.item.text;
       }
     }
-    return parseDecisionJson(text);
+    return parseCapabilityJson(text);
   } finally {
     if (!timeoutCtrl.signal.aborted) timeoutCtrl.abort();
   }
 };
 
-export const __testables = { parseDecisionJson, classifierPrompt };
+export const __testables = { parseCapabilityJson, classifierPrompt };

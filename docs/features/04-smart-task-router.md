@@ -163,13 +163,13 @@ router 创建出来的 task 应该和 `/task` 完全一致：
 
 router 应该保守。false positive 比 false negative 更危险，因为 task 模式可能修改文件、消耗更多 token、触发长时间工具执行或改变 Git 状态。
 
-完整方案必须包含两层实现。确定性启发式负责低成本覆盖明显场景，LLM classifier 负责处理自然语言里的模糊意图、上下文依赖和中英文混合表达。没有 LLM classifier，smart router 只能算 rule-based guardrail，不能算真正的自然语言 task router。
+完整方案分三层：确定性启发式只识别硬边界和 cheap capability hints；LLM classifier 只判断完成请求需要哪些能力；本地 policy resolver 再把 capability 映射成 `chat`、`task_suggest`、`task_confirm` 或 `task_auto`。LLM 不直接拥有最终路由权。
 
 ### 第一层：确定性启发式
 
 这一层应该便宜、可测试，并且每条 eligible message 都运行。
 
-强 task 信号：
+硬 task 能力：
 
 - 修改类动词：`修复`、`实现`、`修改`、`重构`、`更新`、`加上`、`删除`、`迁移`、`生成`、`创建`、`push`、`commit`。
 - 验证类动词：`跑测试`、`构建`、`build`、`lint`、`typecheck`、`e2e`、`回归测试`。
@@ -178,7 +178,7 @@ router 应该保守。false positive 比 false negative 更危险，因为 task 
 - 多步骤完成语义：“实现并验证”、“修改并 push”、“跑完后告诉我结果”。
 - 附件加动作：“基于这个文件修改”、“把附件里的内容整理到项目里”。
 
-强 chat 信号：
+轻量 chat 信号：
 
 - 解释类动词：`解释`、`简述`、`分析一下`、`对比`、`讲讲`、`是什么`。
 - 知识类问题：`为什么`、`能否`、`原理`、`风险`、`关系`。
@@ -189,38 +189,61 @@ router 应该保守。false positive 比 false negative 更危险，因为 task 
 - `分析这个项目` 可能是 read-only chat，也可能是深度 task。
 - `调研一下` 可能只是解释，也可能需要 repo 改动或 web/API 执行。
 - `测试一下` 通常偏 task，但也可能是在问“如何测试”。
-- `今天/最近的 GitHub contribution、commits、releases、开发动态分析` 偏 task_suggest，因为它常常需要多轮 live lookup，容易超过 chat timeout。
+- `今天/最近的 GitHub contribution、commits、releases、开发动态分析` 会标记为 `needs_current_info + needs_multi_step_research`，最终通常映射到 `task_suggest`。
 
-启发式层应该返回：
+启发式层先返回 capability decision：
 
 ```ts
-type RouteIntent = "chat" | "task_suggest" | "task_confirm" | "task_auto" | "ignore";
-
-interface RouteDecision {
-  intent: RouteIntent;
+interface RouteCapabilityDecision {
+  needsCurrentInfo: boolean;
+  needsMultiStepResearch: boolean;
+  needsFileWrite: boolean;
+  needsShell: boolean;
+  needsGit: boolean;
+  needsBrowser: boolean;
+  needsRuntimeInspection: boolean;
+  needsLongRunning: boolean;
+  createsPersistentOutput: boolean;
   confidence: number;
   reason: string;
-  matchedSignals: string[];
-  riskFlags: string[];
 }
 ```
 
 ### 第二层：LLM Classifier
 
-LLM classifier 是必备组件，但不需要每条消息都调用。明显 chat 或明显 task 可以由启发式直接决策；模糊场景、启发式冲突、低置信度高风险场景必须调用 LLM classifier。
+LLM classifier 是 capability classifier，不直接输出 `chat/task`。明显 chat 或明显 task 可以由启发式短路；模糊场景、普通 URL、当前信息、外部活动分析、启发式冲突和低置信度场景才调用 LLM classifier。
 
 classifier 应被约束为 JSON 输出：
 
 ```json
 {
-  "intent": "chat | task_suggest | task_confirm | task_auto",
+  "needs_current_info": false,
+  "needs_multi_step_research": false,
+  "needs_file_write": false,
+  "needs_shell": false,
+  "needs_git": false,
+  "needs_browser": false,
+  "needs_runtime_inspection": false,
+  "needs_long_running": false,
+  "creates_persistent_output": false,
+  "estimated_effort": "short",
   "confidence": 0.0,
   "reason": "short explanation",
-  "riskFlags": ["writes_files", "runs_tests", "git_operation"]
+  "evidence": ["short signal"],
+  "risk_flags": ["short_risk"]
 }
 ```
 
 classifier 不应该看到超过路由判断所需的敏感数据。不应传入完整 chat history，除非这次判断确实依赖本地上下文。
+
+### 第三层：Policy Resolver
+
+Policy resolver 是 MiniClaw 本地策略，不交给 LLM：
+
+- `needs_file_write`、`needs_shell`、`needs_git`、`needs_runtime_inspection`、`creates_persistent_output` → `task_confirm`。
+- `needs_current_info + needs_multi_step_research`、`needs_browser`、`needs_long_running` → `task_suggest`。
+- 纯解释、概念问答、短总结 → `chat`。
+- trusted auto-task channel 只在 policy 允许且满足置信条件时升级为 `task_auto`。
 
 ## Discord UX
 

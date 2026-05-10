@@ -4,7 +4,7 @@ import { dirname } from "path";
 import { config } from "../config.js";
 
 let db: Database.Database;
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export function getDb(): Database.Database {
   return db;
@@ -105,6 +105,7 @@ export function initDb(): void {
       reason TEXT,
       matched_signals TEXT NOT NULL DEFAULT '[]',
       risk_flags TEXT NOT NULL DEFAULT '[]',
+      capabilities_json TEXT,
       action_result TEXT,
       created_task_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -199,6 +200,7 @@ function runMigrations(): void {
         reason TEXT,
         matched_signals TEXT NOT NULL DEFAULT '[]',
         risk_flags TEXT NOT NULL DEFAULT '[]',
+        capabilities_json TEXT,
         action_result TEXT,
         created_task_id TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -268,6 +270,12 @@ function runMigrations(): void {
       CREATE INDEX IF NOT EXISTS idx_repair_runs_incident ON repair_runs(incident_id, created_at);
     `);
     setSchemaVersion(4);
+  }
+
+  // v5: persist capability-router details for false-positive/negative review.
+  if (current < 5) {
+    ensureColumn("smart_router_decisions", "capabilities_json", "TEXT");
+    setSchemaVersion(5);
   }
 
   const after = getSchemaVersion();
@@ -430,6 +438,7 @@ export interface SmartRouterDecisionRow {
   reason: string | null;
   matched_signals: string;
   risk_flags: string;
+  capabilities_json: string | null;
   action_result: string | null;
   created_task_id: string | null;
   created_at: string;
@@ -447,16 +456,17 @@ export function recordSmartRouterDecision(row: {
   reason?: string;
   matched_signals?: string[];
   risk_flags?: string[];
+  capabilities_json?: string;
   action_result?: string;
   created_task_id?: string;
 }): number {
   const result = db.prepare(
     `INSERT INTO smart_router_decisions (
       message_id, channel_id, user_id, prompt_hash, prompt_preview, full_prompt,
-      intent, confidence, reason, matched_signals, risk_flags, action_result, created_task_id
+      intent, confidence, reason, matched_signals, risk_flags, capabilities_json, action_result, created_task_id
     ) VALUES (
       @message_id, @channel_id, @user_id, @prompt_hash, @prompt_preview, @full_prompt,
-      @intent, @confidence, @reason, @matched_signals, @risk_flags, @action_result, @created_task_id
+      @intent, @confidence, @reason, @matched_signals, @risk_flags, @capabilities_json, @action_result, @created_task_id
     )`
   ).run({
     message_id: row.message_id,
@@ -470,6 +480,7 @@ export function recordSmartRouterDecision(row: {
     reason: row.reason ?? null,
     matched_signals: JSON.stringify(row.matched_signals ?? []),
     risk_flags: JSON.stringify(row.risk_flags ?? []),
+    capabilities_json: row.capabilities_json ?? null,
     action_result: row.action_result ?? null,
     created_task_id: row.created_task_id ?? null,
   });

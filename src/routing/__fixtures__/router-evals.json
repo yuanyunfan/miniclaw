@@ -1,0 +1,38 @@
+[
+  {
+    "name": "simple concept explanation",
+    "prompt": "GitHub contribution 是什么意思？",
+    "expectedRoute": "chat",
+    "expectedCapabilities": []
+  },
+  {
+    "name": "current GitHub activity investigation",
+    "prompt": "steipete 他做了什么事情？为什么今天有那么多的 contribution？你帮我分析一下",
+    "expectedRoute": "task_suggest",
+    "expectedCapabilities": ["needsCurrentInfo", "needsMultiStepResearch"]
+  },
+  {
+    "name": "file edit and validation",
+    "prompt": "修改 README 并跑测试",
+    "expectedRoute": "task_confirm",
+    "expectedCapabilities": ["needsFileWrite", "needsShell"]
+  },
+  {
+    "name": "wechat browser-dependent summary",
+    "prompt": "链接：https://mp.weixin.qq.com/s/43wPVMKzNxC_R0ZYmUn0Rg 给我总结一下",
+    "expectedRoute": "task_suggest",
+    "expectedCapabilities": ["needsBrowser"]
+  },
+  {
+    "name": "runtime failure diagnosis",
+    "prompt": "为什么会任务失败呢? 给我分析一下",
+    "expectedRoute": "task_confirm",
+    "expectedCapabilities": ["needsRuntimeInspection"]
+  },
+  {
+    "name": "ordinary read-only summary",
+    "prompt": "总结一下这段文字的核心观点",
+    "expectedRoute": "chat",
+    "expectedCapabilities": []
+  }
+]

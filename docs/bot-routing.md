@@ -165,13 +165,14 @@ if (!isAutoChannel && !isMentioned) return;
 处理顺序：
 
 1. 先处理空消息和显式记忆指令。
-2. `classifyMessageIntent()` 用 deterministic heuristics 判断 `chat` / `task_suggest` / `task_confirm`。
-3. ambiguous、冲突或低置信高风险场景调用 LLM classifier；失败时回退到 heuristic，不让路由失败阻断 chat。
-4. `resolveSmartRouterAction()` 根据频道配置决定最终动作：
+2. `classifyMessageCapabilities()` 用 deterministic heuristics 识别硬边界和 cheap capability hints，例如 file write、shell、Git、browser、current info、multi-step research。
+3. 模糊场景调用 LLM capability classifier；它只输出需要哪些能力，不直接决定 chat/task。失败时回退到 heuristic，不让路由失败阻断 chat。
+4. `resolveCapabilitiesToRouteDecision()` 把 capability 映射为 `chat` / `task_suggest` / `task_confirm`。
+5. `resolveSmartRouterAction()` 根据频道配置决定最终动作：
    - `chat`：继续原 chat 流程；
    - `task_suggest` / `task_confirm`：发送 `转为 task` / `继续 chat` / `取消` 按钮；
    - `task_auto`：仅在 `routing.smart_router.auto_task_channels` 中直接创建 task。
-5. route decision 写入 SQLite `smart_router_decisions`，默认只存 prompt hash 和 capped preview，不存完整 prompt。
+6. route decision 写入 SQLite `smart_router_decisions`，默认只存 prompt hash、capped preview、capability JSON 和 action result，不存完整 prompt。
 
 确认按钮状态是 10 分钟内存态。按钮 `custom_id` 只包含短 token，不携带 prompt；重启后旧按钮会过期，用户重新发送即可。
 

@@ -74,6 +74,7 @@ function recordRouteDecisionForMessage(
       reason: decision.reason,
       matched_signals: decision.matchedSignals,
       risk_flags: decision.riskFlags,
+      ...(decision.capabilities ? { capabilities_json: JSON.stringify(decision.capabilities) } : {}),
       action_result: actionResult,
       ...(createdTaskId ? { created_task_id: createdTaskId } : {}),
     });
