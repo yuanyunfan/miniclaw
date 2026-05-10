@@ -328,6 +328,31 @@ storage:
     expect(config.doctor.summaryChannelId).toBeUndefined();
     expect(config.doctor.summaryChannelName).toBe("miniclaw-auto-improve");
     expect(config.doctor.scanIntervalMs).toBe(7200000);
+    expect(config.autoReplyChannelIds).toEqual(["*"]);
+  });
+
+  it("allows explicitly disabling no-mention channel replies", async () => {
+    const cfg = join(tmpDir, "config.yaml");
+    writeFileSync(cfg, `
+discord:
+  client_id: "client-yaml"
+  guild_id: "guild-yaml"
+  allowed_user_id: "user-yaml"
+routing:
+  auto_reply_channels: []
+agent:
+  provider: codex
+  default_cwd: "${tmpDir}"
+storage:
+  db_path: "${join(tmpDir, "data.db")}"
+  memory_path: "${join(tmpDir, "MEMORY.md")}"
+`);
+    process.env.MINICLAW_CONFIG = cfg;
+    process.env.DISCORD_TOKEN = "token-env";
+
+    const { config } = await import("../config.js");
+
+    expect(config.autoReplyChannelIds).toEqual([]);
   });
 
   it("supports doctor summary channel name env override", async () => {

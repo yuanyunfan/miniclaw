@@ -132,12 +132,14 @@ const isTaskChannel = config.taskChannelIds.includes(message.channel.id);
 
 这个路径和 `/task` 使用同一套 `executeTask()`、progress message、完成 embed 和最终 Markdown 输出。它只改变触发方式，不改变 provider、sandbox、cwd、附件处理和 session 存储。
 
-如果一个频道同时出现在 `MINICLAW_TASK_CHANNELS` 和 `MINICLAW_AUTO_REPLY_CHANNELS`，task channel 优先，避免写权限任务被误走 chat，也避免同一条消息双处理。
+`MINICLAW_AUTO_REPLY_CHANNELS` 默认等价于 `*`，即所有允许用户可见的 guild channel 普通消息都会进入 chat；设为 `none` 或 YAML `auto_reply_channels: []` 可恢复为只响应 @mention。若一个频道同时出现在 `MINICLAW_TASK_CHANNELS` 和 `MINICLAW_AUTO_REPLY_CHANNELS`，task channel 优先，避免写权限任务被误走 chat，也避免同一条消息双处理。
 
 ### 闸 3+4：Path 3 Chat 入口
 
 ```ts
-const isAutoChannel = config.autoReplyChannelIds.includes(message.channel.id);
+const isAutoChannel =
+  config.autoReplyChannelIds.includes("*") ||
+  config.autoReplyChannelIds.includes(message.channel.id);
 const isMentioned = message.mentions.has(client.user!);
 if (!isAutoChannel && !isMentioned) return;
 // 然后 processed 去重 Map（5 分钟 TTL，500 条做老化）
@@ -269,7 +271,7 @@ cron retry 按钮先于 smart router 按钮处理，避免误落到普通 slash 
 | 想做什么 | 改哪里 |
 |----------|--------|
 | 加**新触发词**（如 `/search`） | `register.ts` 加定义 → `handlers.ts` 加 handler → `bot.ts:158+` 加 case |
-| 让 bot **不响应某频道** | 把该频道 ID 从 `MINICLAW_AUTO_REPLY_CHANNELS` 拿掉，且别 @ 它 |
+| 让 bot **只响应 @mention** | 设置 `MINICLAW_AUTO_REPLY_CHANNELS=none` 或 YAML `routing.auto_reply_channels: []` |
 | 新增**免 @ task 频道** | 创建 Discord 频道 → 把频道 ID 加到 `MINICLAW_TASK_CHANNELS` → 重启 bot |
 | 在 chat 入口启用自然语言 task 识别 | `routing.smart_router.enabled: true`，必要时配置 `confirm_channels` / `auto_task_channels` |
 | 加**多用户支持** | 把 `config.allowedUserId` 改成数组，`:34` 改 `includes` |

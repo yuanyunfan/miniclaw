@@ -14,7 +14,7 @@ MiniClaw 当前路由把“输入入口”当成“用户意图”：
 
 - 已知 task thread 里的消息会 resume 上一次 task session。
 - `routing.task_channels` 里的普通消息会直接创建 task thread。
-- `routing.auto_reply_channels` 里的消息，或 `@MiniClaw` 的消息，会进入 chat。
+- `routing.auto_reply_channels` 里的消息，或 `@MiniClaw` 的消息，会进入 chat；默认 `auto_reply_channels: ["*"]`，表示所有允许用户可见的 guild channel 都不需要 @mention。
 - Slash command `/task` 会显式创建 task。
 
 这个模型可预测，但有一个明显失败模式：用户把真实 task prompt 发到 auto-reply chat channel，MiniClaw 会进入轻量 chat 路径。chat 路径被刻意限制，不能安全地完成写文件、重构、长时间验证、Git 操作或多步骤 coding task。
@@ -33,7 +33,7 @@ MiniClaw 在 `src/bot.ts` 里路由普通 Discord 消息。
 
 - auto-reply channel 和 mention 会进入 chat。
   - 文件：`src/bot.ts`
-  - 关键逻辑：`config.autoReplyChannelIds.includes(message.channel.id)` 或 `message.mentions.has(client.user!)`。
+  - 关键逻辑：`config.autoReplyChannelIds.includes("*")`、`config.autoReplyChannelIds.includes(message.channel.id)` 或 `message.mentions.has(client.user!)`。
 
 - chat 被刻意设计为 read-oriented。
   - 文件：`src/agent/identity.ts`

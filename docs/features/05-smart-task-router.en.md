@@ -14,7 +14,7 @@ Current MiniClaw routing treats the input surface as the user intent:
 
 - Messages in a known task thread resume the previous task session.
 - Messages in `routing.task_channels` create a task thread directly.
-- Messages in `routing.auto_reply_channels` or messages mentioning MiniClaw enter chat.
+- Messages in `routing.auto_reply_channels` or messages mentioning MiniClaw enter chat. The default is `auto_reply_channels: ["*"]`, so every allowed guild channel can chat without @mention.
 - Slash command `/task` creates a task explicitly.
 
 This is predictable, but it creates a bad failure mode: a user can send a real task prompt into an auto-reply chat channel, and MiniClaw will enter the lightweight chat path. The chat path is intentionally constrained and cannot safely complete writes, refactors, long-running validation, Git operations, or multi-step coding tasks.
@@ -33,7 +33,7 @@ MiniClaw routes ordinary Discord messages in `src/bot.ts`.
 
 - Auto-reply channels and mentions enter chat.
   - File: `src/bot.ts`
-  - Key logic: `config.autoReplyChannelIds.includes(message.channel.id)` or `message.mentions.has(client.user!)`.
+  - Key logic: `config.autoReplyChannelIds.includes("*")`, `config.autoReplyChannelIds.includes(message.channel.id)`, or `message.mentions.has(client.user!)`.
 
 - Chat is intentionally read-oriented.
   - File: `src/agent/identity.ts`

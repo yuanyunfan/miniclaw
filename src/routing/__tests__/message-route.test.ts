@@ -39,6 +39,10 @@ describe("resolveDiscordMessageRoute", () => {
     expect(resolveDiscordMessageRoute({ ...base, channelId: "other", isMentioned: true })).toBe("chat");
   });
 
+  it("routes every allowed ordinary channel to chat when auto-reply wildcard is configured", () => {
+    expect(resolveDiscordMessageRoute({ ...base, channelId: "other", autoReplyChannelIds: ["*"] })).toBe("chat");
+  });
+
   it("ignores ordinary messages outside configured channels", () => {
     expect(resolveDiscordMessageRoute({ ...base, channelId: "other" })).toBe("ignore");
   });

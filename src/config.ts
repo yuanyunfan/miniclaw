@@ -318,7 +318,7 @@ const agentProvider = oneOf<AgentProvider>(["agent", "provider"], "MINICLAW_AGEN
 ]);
 const claudeModel = requiredString(["claude", "model"], ["MINICLAW_CLAUDE_MODEL", "MINICLAW_MODEL"], "claude-opus-4-7");
 const codexModel = stringOrInherit(["codex", "model"], "MINICLAW_CODEX_MODEL", "gpt-5.5");
-const autoReplyChannelIds = stringArray(["routing", "auto_reply_channels"], "MINICLAW_AUTO_REPLY_CHANNELS");
+const autoReplyChannelIds = stringArray(["routing", "auto_reply_channels"], "MINICLAW_AUTO_REPLY_CHANNELS", ["*"]);
 const taskChannelIds = stringArray(["routing", "task_channels"], "MINICLAW_TASK_CHANNELS");
 const channelDefaultConfig = channelDefaults(["routing", "channel_defaults"], []);
 const anthropicBaseUrl = optionalString(["anthropic", "base_url"], "ANTHROPIC_BASE_URL");
@@ -399,7 +399,7 @@ if (anthropicBaseUrl && !process.env.ANTHROPIC_BASE_URL) process.env.ANTHROPIC_B
 if (openaiBaseUrl && !process.env.OPENAI_BASE_URL) process.env.OPENAI_BASE_URL = openaiBaseUrl;
 
 if (!autoReplyChannelIds.length) {
-  log.warn("auto_reply_channels 未配置，所有频道需 @mention 触发");
+  log.warn("auto_reply_channels 已禁用，普通频道消息需 @mention 触发");
 }
 
 function isUnderDir(path: string, parent: string): boolean {

@@ -9,7 +9,9 @@ discord:
 
 routing:
   # Plain messages in these channels become lightweight chat replies.
-  auto_reply_channels: []
+  # Default is ["*"], meaning every allowed guild channel can chat without @mention.
+  # Use [] or env MINICLAW_AUTO_REPLY_CHANNELS=none to require @mention outside task threads/channels.
+  auto_reply_channels: ["*"]
   # Plain messages in these channels create /task-style task threads.
   # Task channels take precedence over auto-reply channels.
   task_channels: []

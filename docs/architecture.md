@@ -156,7 +156,7 @@ flowchart LR
 - **可控继承本机 Agent 配置**：Codex 可用 `inherit` 回落到 `~/.codex/config.toml`；Claude task 显式加载 `user/project/local` settings，默认禁用 hooks；MCP 仍通过 `mcp.allowlist` 控制
 - **Discord task 三层输出**：状态 embed 只放元数据；progress message 执行中持续 edit、完成后保留 Execution Summary；最终结果走普通 Markdown 分片
 - **pre-provider 扩展点**：cron `task` 可先运行 provider 采集结构化数据，再把 JSON 注入 prompt；微信公众号日报通过 `wechat-mp` provider 落地，邮件类任务通过通用 `email` capability + `email-query` / `cmb-credit-card-email` provider 复用同一只读邮箱基础能力
-- **白名单两道闸**：`discord.allowed_user_id` 限制谁能用，`routing.auto_reply_channels` 决定哪些频道无需 @mention 进入 chat，`routing.task_channels` 决定哪些频道无需 @mention 直接创建 task；旧 `MINICLAW_*` env 仍可覆盖
+- **白名单两道闸**：`discord.allowed_user_id` 限制谁能用，`routing.auto_reply_channels` 决定哪些频道无需 @mention 进入 chat，默认 `["*"]` 表示全部 guild channel；`routing.task_channels` 决定哪些频道无需 @mention 直接创建 task；旧 `MINICLAW_*` env 仍可覆盖
 - **Smart Task Router 是 chat/task 边界上的升级层**：启用后只在本来会响应的 chat 入口运行，先用 heuristic + LLM classifier 判断自然语言 prompt，必要时用按钮确认后复用 `/task` 的线程、DB、progress 和 final output 链路；决策默认以 hash + capped preview 写入 SQLite
 - **LLM 流量全部经过 raven**：`ANTHROPIC_BASE_URL=http://localhost:7024` 让两个 SDK 都走本地代理
 

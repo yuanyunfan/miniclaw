@@ -18,6 +18,8 @@ export function resolveDiscordMessageRoute(input: DiscordMessageRouteInput): Dis
   if (!input.authorAllowed) return "ignore";
   if (input.isThread && input.hasContinuableTask) return "thread_continuation";
   if (input.taskChannelIds.includes(input.channelId)) return "task_channel";
-  if (input.autoReplyChannelIds.includes(input.channelId) || input.isMentioned) return "chat";
+  if (input.autoReplyChannelIds.includes("*") || input.autoReplyChannelIds.includes(input.channelId) || input.isMentioned) {
+    return "chat";
+  }
   return "ignore";
 }
