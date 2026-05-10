@@ -34,7 +34,7 @@ function resolveHome(p: string): string {
 }
 
 const SCRIPTS_DIR = process.env.MINICLAW_SCRIPTS_DIR ?? join(homedir(), ".miniclaw/scripts");
-const PRE_SCRIPT_CONTEXT_MAX_CHARS = 8000;
+const PRE_SCRIPT_CONTEXT_MAX_CHARS = 50000;
 const PRE_PROVIDER_CONTEXT_MAX_CHARS = 50000;
 
 function buildCronPreScriptBlock(scriptName: string, stdout: string): string {
