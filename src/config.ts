@@ -14,6 +14,7 @@ export type CodexReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhig
 export type CodexWebSearchMode = "disabled" | "cached" | "live";
 export type ClaudeSettingSource = "user" | "project" | "local";
 export type SmartRouterDefaultMode = "suggest" | "confirm" | "auto";
+export type AudioTranscriptionProvider = "auto" | "openai" | "openai_compatible" | "local_faster_whisper";
 
 export interface SmtpEmailNotificationConfig {
   enabled: boolean;
@@ -689,15 +690,46 @@ export const config = {
       "MINICLAW_AUDIO_TRANSCRIPTION_ENABLED",
       true
     ),
+    provider: oneOf<AudioTranscriptionProvider>(
+      ["attachments", "audio_transcription", "provider"],
+      "MINICLAW_AUDIO_TRANSCRIPTION_PROVIDER",
+      "auto",
+      ["auto", "openai", "openai_compatible", "local_faster_whisper"]
+    ),
     model: requiredString(
       ["attachments", "audio_transcription", "model"],
       "MINICLAW_AUDIO_TRANSCRIPTION_MODEL",
       "gpt-4o-mini-transcribe"
     ),
+    localModel: requiredString(
+      ["attachments", "audio_transcription", "local_model"],
+      "MINICLAW_AUDIO_TRANSCRIPTION_LOCAL_MODEL",
+      "base"
+    ),
+    localPython: requiredString(
+      ["attachments", "audio_transcription", "local_python"],
+      "MINICLAW_AUDIO_TRANSCRIPTION_LOCAL_PYTHON",
+      "python3"
+    ),
+    localDevice: requiredString(
+      ["attachments", "audio_transcription", "local_device"],
+      "MINICLAW_AUDIO_TRANSCRIPTION_LOCAL_DEVICE",
+      "cpu"
+    ),
+    localComputeType: requiredString(
+      ["attachments", "audio_transcription", "local_compute_type"],
+      "MINICLAW_AUDIO_TRANSCRIPTION_LOCAL_COMPUTE_TYPE",
+      "int8"
+    ),
     maxMb: positiveNumber(
       ["attachments", "audio_transcription", "max_mb"],
       "MINICLAW_AUDIO_TRANSCRIPTION_MAX_MB",
       25
+    ),
+    timeoutMs: positiveNumber(
+      ["attachments", "audio_transcription", "timeout_ms"],
+      "MINICLAW_AUDIO_TRANSCRIPTION_TIMEOUT_MS",
+      120_000
     ),
     language: optionalString(
       ["attachments", "audio_transcription", "language"],

@@ -514,7 +514,7 @@ classify by mime + ext
 
 **清理**：task 路径附件落到 `<cwd>/.miniclaw-attachments/<taskId>/`，executeTask `finally` 块 `rmSync` 整目录。chat 路径走 `os.tmpdir()`，靠 OS 周期清理。
 
-**配置**：推荐写在 `attachments.max_mb` / `attachments.max_count`；旧 `MINICLAW_MAX_ATTACHMENT_MB` / `MINICLAW_MAX_ATTACHMENTS` env 仍可覆盖。语音转写配置在 `attachments.audio_transcription.*`，env 覆盖为 `MINICLAW_AUDIO_TRANSCRIPTION_ENABLED` / `MINICLAW_AUDIO_TRANSCRIPTION_MODEL` / `MINICLAW_AUDIO_TRANSCRIPTION_MAX_MB` / `MINICLAW_AUDIO_TRANSCRIPTION_LANGUAGE`；转写调用 OpenAI Audio Transcriptions API，需要 `OPENAI_API_KEY`。Discord `.ogg` voice message 会先用本机 `ffmpeg` 转成 `.webm` 再上传。
+**配置**：推荐写在 `attachments.max_mb` / `attachments.max_count`；旧 `MINICLAW_MAX_ATTACHMENT_MB` / `MINICLAW_MAX_ATTACHMENTS` env 仍可覆盖。语音转写配置在 `attachments.audio_transcription.*`，env 覆盖为 `MINICLAW_AUDIO_TRANSCRIPTION_ENABLED` / `MINICLAW_AUDIO_TRANSCRIPTION_PROVIDER` / `MINICLAW_AUDIO_TRANSCRIPTION_MODEL` / `MINICLAW_AUDIO_TRANSCRIPTION_LOCAL_MODEL` / `MINICLAW_AUDIO_TRANSCRIPTION_LOCAL_PYTHON` / `MINICLAW_AUDIO_TRANSCRIPTION_LOCAL_DEVICE` / `MINICLAW_AUDIO_TRANSCRIPTION_LOCAL_COMPUTE_TYPE` / `MINICLAW_AUDIO_TRANSCRIPTION_MAX_MB` / `MINICLAW_AUDIO_TRANSCRIPTION_TIMEOUT_MS` / `MINICLAW_AUDIO_TRANSCRIPTION_LANGUAGE`。`provider: auto` 在存在 `OPENAI_API_KEY` 时调用 OpenAI Audio Transcriptions API，否则走本机 `local_faster_whisper`；Raven/Codex 代理不提供 `/audio/transcriptions`，所以无 OpenAI key 的 Raven 环境应使用本地 faster-whisper。OpenAI 路径会把 Discord `.ogg` voice message 先用本机 `ffmpeg` 转成 `.webm` 再上传；本地 faster-whisper 路径会用 `ffmpeg` 转成 16kHz mono wav 后再调用配置的 Python。
 
 **chat_history 取舍**：附件不写入 chat_history（只写文字 prompt），续话需要重新上传——避免 base64 反复进 context。
 

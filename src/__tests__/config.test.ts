@@ -64,8 +64,14 @@ const ENV_KEYS = [
   "MINICLAW_MAX_ATTACHMENT_MB",
   "MINICLAW_MAX_ATTACHMENTS",
   "MINICLAW_AUDIO_TRANSCRIPTION_ENABLED",
+  "MINICLAW_AUDIO_TRANSCRIPTION_PROVIDER",
   "MINICLAW_AUDIO_TRANSCRIPTION_MODEL",
+  "MINICLAW_AUDIO_TRANSCRIPTION_LOCAL_MODEL",
+  "MINICLAW_AUDIO_TRANSCRIPTION_LOCAL_PYTHON",
+  "MINICLAW_AUDIO_TRANSCRIPTION_LOCAL_DEVICE",
+  "MINICLAW_AUDIO_TRANSCRIPTION_LOCAL_COMPUTE_TYPE",
   "MINICLAW_AUDIO_TRANSCRIPTION_MAX_MB",
+  "MINICLAW_AUDIO_TRANSCRIPTION_TIMEOUT_MS",
   "MINICLAW_AUDIO_TRANSCRIPTION_LANGUAGE",
   "MINICLAW_CONNECTIVITY_MONITOR_ENABLED",
   "MINICLAW_CONNECTIVITY_INTERVAL_MS",
@@ -199,8 +205,14 @@ attachments:
   max_count: 3
   audio_transcription:
     enabled: true
+    provider: local_faster_whisper
     model: gpt-4o-transcribe
+    local_model: small
+    local_python: python-test
+    local_device: cpu
+    local_compute_type: int8
     max_mb: 20
+    timeout_ms: 45000
     language: zh
 connectivity:
   enabled: true
@@ -316,8 +328,14 @@ notifications:
     expect(config.maxAttachmentMb).toBe(16);
     expect(config.audioTranscription).toEqual({
       enabled: true,
+      provider: "local_faster_whisper",
       model: "gpt-4o-transcribe",
+      localModel: "small",
+      localPython: "python-test",
+      localDevice: "cpu",
+      localComputeType: "int8",
       maxMb: 20,
+      timeoutMs: 45000,
       language: "zh",
     });
   });
@@ -347,8 +365,14 @@ storage:
     expect(config.autoReplyChannelIds).toEqual(["*"]);
     expect(config.audioTranscription).toEqual({
       enabled: true,
+      provider: "auto",
       model: "gpt-4o-mini-transcribe",
+      localModel: "base",
+      localPython: "python3",
+      localDevice: "cpu",
+      localComputeType: "int8",
       maxMb: 25,
+      timeoutMs: 120000,
       language: undefined,
     });
   });
@@ -394,16 +418,28 @@ storage:
     process.env.MINICLAW_CONFIG = cfg;
     process.env.DISCORD_TOKEN = "token-env";
     process.env.MINICLAW_AUDIO_TRANSCRIPTION_ENABLED = "false";
+    process.env.MINICLAW_AUDIO_TRANSCRIPTION_PROVIDER = "openai_compatible";
     process.env.MINICLAW_AUDIO_TRANSCRIPTION_MODEL = "whisper-1";
+    process.env.MINICLAW_AUDIO_TRANSCRIPTION_LOCAL_MODEL = "medium";
+    process.env.MINICLAW_AUDIO_TRANSCRIPTION_LOCAL_PYTHON = "/opt/python";
+    process.env.MINICLAW_AUDIO_TRANSCRIPTION_LOCAL_DEVICE = "cuda";
+    process.env.MINICLAW_AUDIO_TRANSCRIPTION_LOCAL_COMPUTE_TYPE = "float16";
     process.env.MINICLAW_AUDIO_TRANSCRIPTION_MAX_MB = "12";
+    process.env.MINICLAW_AUDIO_TRANSCRIPTION_TIMEOUT_MS = "90000";
     process.env.MINICLAW_AUDIO_TRANSCRIPTION_LANGUAGE = "en";
 
     const { config } = await import("../config.js");
 
     expect(config.audioTranscription).toEqual({
       enabled: false,
+      provider: "openai_compatible",
       model: "whisper-1",
+      localModel: "medium",
+      localPython: "/opt/python",
+      localDevice: "cuda",
+      localComputeType: "float16",
       maxMb: 12,
+      timeoutMs: 90000,
       language: "en",
     });
   });

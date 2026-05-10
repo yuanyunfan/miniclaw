@@ -143,7 +143,18 @@ attachments:
   max_count: 10
   audio_transcription:
     enabled: true
+    # auto: OPENAI_API_KEY exists -> OpenAI; otherwise local faster-whisper.
+    # Raven/Codex proxy does not provide /audio/transcriptions, so local_faster_whisper
+    # is the recommended provider when using Raven without an OpenAI key.
+    provider: auto # auto | openai | openai_compatible | local_faster_whisper
+    # OpenAI/OpenAI-compatible transcription model.
     model: gpt-4o-mini-transcribe
+    # Local faster-whisper runtime options.
+    local_model: base
+    local_python: python3
+    local_device: cpu
+    local_compute_type: int8
     max_mb: 25
+    timeout_ms: 120000
     # Optional ISO-639-1 language hint, for example zh or en.
     language: ""
