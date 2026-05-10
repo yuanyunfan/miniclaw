@@ -1,6 +1,21 @@
 import { describe, expect, it } from "vitest";
 import { runMarketIntelProvider } from "../index.js";
-import type { MarketIntelProviderConfig } from "../types.js";
+import type { MarketIntelProviderConfig, MarketIntelQuoteClient, MarketIntelQuoteRequest, MarketIntelQuoteSnapshotInput } from "../types.js";
+
+const quoteClient: MarketIntelQuoteClient = {
+  source: "mock_quotes",
+  source_tier: "official",
+  async getSnapshot(request: MarketIntelQuoteRequest): Promise<MarketIntelQuoteSnapshotInput> {
+    return {
+      symbol: request.symbol,
+      provider_symbol: request.provider_symbol,
+      latest_at: "2026-05-08T12:44:00.000Z",
+      latest_price: request.bucket === "indices" ? 101 : 50,
+      previous_close: request.bucket === "indices" ? 100 : 50,
+      currency: "USD",
+    };
+  },
+};
 
 function testConfig(overrides: Partial<MarketIntelProviderConfig> = {}): MarketIntelProviderConfig {
   return {
@@ -62,6 +77,7 @@ describe("runMarketIntelProvider", () => {
       runAt: new Date("2026-05-08T12:45:00.000Z"),
     }, {
       loadProviderConfig: () => testConfig(),
+      quoteClient,
     });
 
     const parsed = JSON.parse(result.text);
@@ -69,6 +85,9 @@ describe("runMarketIntelProvider", () => {
     expect(parsed.source).toBe("market-intel");
     expect(parsed.profile).toBe("us-pre-market");
     expect(parsed.run_context.calendar_status).toBe("pre_market");
+    expect(parsed.market_snapshot.indices.items).toHaveLength(2);
+    expect(parsed.evidence.map((item: { id: string }) => item.id)).toContain("quote.indices.1");
+    expect(parsed.scores.index_direction.direction).toBe("bullish");
     expect(parsed.role_protocol.roles).toContain("Risk, Scenario & Devil's Advocate");
   });
 
@@ -82,6 +101,7 @@ describe("runMarketIntelProvider", () => {
       runAt: new Date("2026-05-08T12:45:00.000Z"),
     }, {
       loadProviderConfig: () => testConfig({ portfolio_provider_config: "us-stock" }),
+      quoteClient,
       portfolioRunner: async (args) => {
         calledConfig = args.configName;
         return {
@@ -179,6 +199,7 @@ describe("runMarketIntelProvider", () => {
           skip_closed_market: false,
         },
       }),
+      quoteClient,
     });
 
     const parsed = JSON.parse(result.text);

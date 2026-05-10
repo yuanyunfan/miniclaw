@@ -13,6 +13,7 @@ import type {
 import { buildMarketIntelScores } from "./scoring.js";
 import type { PreProviderRunArgs } from "../types.js";
 import { buildNotConfiguredPortfolioContext } from "./portfolio.js";
+import { buildEmptyMarketIntelSnapshot } from "./quotes.js";
 import { sanitizeMarketIntelError } from "./redaction.js";
 
 export { sanitizeMarketIntelError };
@@ -34,27 +35,11 @@ function placeholder(notes: string[]): MarketIntelPlaceholderSection {
   };
 }
 
-export function buildMarketIntelMarketSnapshot(config: MarketIntelProviderConfig): MarketIntelMarketSnapshot {
-  return {
-    indices: placeholder([
-      `Index watchlist configured: ${config.watchlists.indices.join(", ") || "none"}. Quote collector is not implemented in phase 1.`,
-    ]),
-    sectors: placeholder([
-      `Sector watchlist configured: ${config.watchlists.sectors.join(", ") || "none"}. Sector collector is not implemented in phase 1.`,
-    ]),
-    macro: placeholder([
-      `Macro watchlist configured: ${config.watchlists.macro.join(", ") || "none"}. Macro snapshot collector is not implemented in phase 1.`,
-    ]),
-    cross_market: placeholder([
-      `Cross-market watchlist configured: ${config.watchlists.cross_market.join(", ") || "none"}. Cross-market collector is not implemented in phase 1.`,
-    ]),
-  };
-}
-
 function buildSourceQuality(
   config: MarketIntelProviderConfig,
   calendar: MarketIntelCalendarSnapshot,
   portfolioContext: MarketIntelPortfolioContext,
+  marketSnapshot: MarketIntelMarketSnapshot,
 ): MarketIntelDataQualitySource[] {
   const quoteSources = [
     config.sources.quotes.us_primary,
@@ -64,6 +49,28 @@ function buildSourceQuality(
     ...config.sources.quotes.optional_paid,
   ].filter((source): source is string => Boolean(source));
   const macroSources = Object.values(config.sources.macro).filter((source): source is string => Boolean(source));
+  const quoteItems = [
+    ...marketSnapshot.indices.items,
+    ...marketSnapshot.sectors.items,
+    ...marketSnapshot.macro.items,
+    ...marketSnapshot.cross_market.items,
+    ...marketSnapshot.symbols.items,
+  ];
+  const quoteFailures = [
+    ...marketSnapshot.indices.failures,
+    ...marketSnapshot.sectors.failures,
+    ...marketSnapshot.macro.failures,
+    ...marketSnapshot.cross_market.failures,
+    ...marketSnapshot.symbols.failures,
+  ].filter((failure) => !failure.skipped);
+  const quoteStale = quoteItems.filter((item) => item.stale);
+  const quoteStatus = quoteItems.length && !quoteFailures.length && !quoteStale.length
+    ? "ok"
+    : quoteItems.length
+      ? "partial"
+      : quoteFailures.length
+        ? "failed"
+        : "skipped";
   const sources: MarketIntelDataQualitySource[] = [
     {
       id: "calendar.static",
@@ -74,12 +81,12 @@ function buildSourceQuality(
       message: calendar.status === "closed" ? "All configured markets are closed for this run date." : "Static calendar guard completed.",
     },
     {
-      id: "quotes.placeholder",
+      id: "quotes.market-snapshot",
       collector: "quotes",
-      source: quoteSources.join(", ") || "none",
-      tier: "placeholder",
-      status: "not_implemented",
-      message: "Quote snapshot collector is planned for phase 3.",
+      source: quoteItems[0]?.source ?? (quoteSources.join(", ") || "none"),
+      tier: quoteItems[0]?.source_tier ?? "placeholder",
+      status: quoteStatus,
+      message: `Quote snapshot completed: items=${quoteItems.length}, failures=${quoteFailures.length}, stale=${quoteStale.length}.`,
     },
     {
       id: "macro.placeholder",
@@ -135,11 +142,14 @@ function buildDataQuality(
   config: MarketIntelProviderConfig,
   calendar: MarketIntelCalendarSnapshot,
   portfolioContext: MarketIntelPortfolioContext,
+  marketSnapshot: MarketIntelMarketSnapshot,
+  quoteWarnings: string[],
 ): MarketIntelDataQuality {
-  const sources = buildSourceQuality(config, calendar, portfolioContext);
+  const sources = buildSourceQuality(config, calendar, portfolioContext, marketSnapshot);
   const warnings = sources
     .filter((source) => source.status === "not_implemented" || source.status === "failed" || source.status === "missing_config")
     .map((source) => `${source.collector}: ${source.message ?? source.status}`);
+  warnings.push(...quoteWarnings);
   warnings.push(...portfolioContext.warnings.map((warning) => `portfolio: ${warning}`));
   return {
     status: warnings.length ? "partial" : "ok",
@@ -194,12 +204,17 @@ export function buildMarketIntelPayload(params: {
   config: MarketIntelProviderConfig;
   calendar: MarketIntelCalendarSnapshot;
   portfolioContext?: MarketIntelPortfolioContext;
+  marketSnapshot?: MarketIntelMarketSnapshot;
+  quoteEvidence?: MarketIntelEvidenceItem[];
+  quoteWarnings?: string[];
   skipReason?: string;
 }): MarketIntelPayload {
   const portfolioContext = params.portfolioContext ?? buildNotConfiguredPortfolioContext();
+  const marketSnapshot = params.marketSnapshot ?? buildEmptyMarketIntelSnapshot();
   const evidence = [
     buildCalendarEvidence(params.args, params.calendar),
     buildPortfolioEvidence(params.args, portfolioContext),
+    ...(params.quoteEvidence ?? []),
   ].filter((item): item is MarketIntelEvidenceItem => item !== undefined);
   return {
     generated_at: params.args.runAt.toISOString(),
@@ -220,19 +235,19 @@ export function buildMarketIntelPayload(params: {
       closed_markets: params.calendar.closed_markets,
     },
     calendar: params.calendar,
-    data_quality: buildDataQuality(params.config, params.calendar, portfolioContext),
+    data_quality: buildDataQuality(params.config, params.calendar, portfolioContext, marketSnapshot, params.quoteWarnings ?? []),
     portfolio_context: portfolioContext,
-    market_snapshot: buildMarketIntelMarketSnapshot(params.config),
+    market_snapshot: marketSnapshot,
     macro_policy: placeholder(["Macro/policy collector is not implemented in phase 1. Do not infer policy changes from this placeholder."]),
     news: placeholder(["News collector is not implemented in phase 1. Do not invent headlines."]),
     earnings: placeholder(["Earnings collector is not implemented in phase 1. Do not invent earnings dates or surprises."]),
     filings: placeholder(["Filings collector is not implemented in phase 1. Do not invent SEC/exchange filings."]),
     risks: placeholder(["Risk collector is not implemented in phase 1. Use this payload only as a skeleton until risk evidence exists."]),
-    scores: buildMarketIntelScores({ marketScope: params.config.market_scope, evidence }),
+    scores: buildMarketIntelScores({ marketScope: params.config.market_scope, evidence, snapshot: marketSnapshot }),
     evidence,
     role_protocol: roleProtocol(),
     usage_notes: [
-      "This market-intel payload contains implemented calendar and optional portfolio evidence plus structured placeholders for later market collectors.",
+      "This market-intel payload contains implemented calendar, optional portfolio, and quote snapshot evidence plus structured placeholders for later macro/news collectors.",
       "Portfolio context, when configured, is read-only and already redacted by stock-portfolio before this payload is built.",
       "The downstream LLM must cite evidence IDs for factual claims and mark unsupported market views as hypotheses.",
       "No automatic trading, order placement, broker unlock, raw account ID, token, cookie, validatekey, or session data is allowed.",

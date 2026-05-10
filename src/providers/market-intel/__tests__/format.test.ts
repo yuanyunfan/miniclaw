@@ -102,7 +102,7 @@ describe("market-intel formatting", () => {
 
     expect(payload.run_context.calendar_status).toBe("pre_market");
     expect(payload.data_quality.status).toBe("partial");
-    expect(payload.market_snapshot.indices.status).toBe("not_implemented");
+    expect(payload.market_snapshot.indices.status).toBe("empty");
     expect(payload.portfolio_context.status).toBe("ok");
     expect(payload.portfolio_context.cny_summary?.net_pnl_cny).toBe(80);
     expect(payload.evidence.map((item) => item.id)).toContain("portfolio.stock-portfolio.1");

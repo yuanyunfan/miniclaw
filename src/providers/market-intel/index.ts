@@ -4,11 +4,13 @@ import { buildMarketIntelCalendarSnapshot } from "./calendar.js";
 import { loadMarketIntelProviderConfig } from "./config.js";
 import { buildMarketIntelPayload, formatMarketIntelPayload } from "./format.js";
 import { buildNotConfiguredPortfolioContext, collectMarketIntelPortfolio } from "./portfolio.js";
-import type { MarketIntelPortfolioRunner, MarketIntelProviderConfig } from "./types.js";
+import { buildEmptyMarketIntelSnapshot, collectMarketIntelMarketSnapshot, YahooMarketIntelQuoteClient } from "./quotes.js";
+import type { MarketIntelQuoteClient, MarketIntelPortfolioRunner, MarketIntelProviderConfig } from "./types.js";
 
 export interface MarketIntelProviderDeps {
   loadProviderConfig?: (name?: string) => MarketIntelProviderConfig;
   portfolioRunner?: MarketIntelPortfolioRunner;
+  quoteClient?: MarketIntelQuoteClient;
 }
 
 export async function runMarketIntelProvider(
@@ -30,12 +32,26 @@ export async function runMarketIntelProvider(
       config,
       runner: deps.portfolioRunner ?? runStockPortfolioProvider,
     });
+  const marketSnapshot = skipReason
+    ? {
+      snapshot: buildEmptyMarketIntelSnapshot(),
+      evidence: [],
+      warnings: [],
+    }
+    : await collectMarketIntelMarketSnapshot({
+      args,
+      config,
+      client: deps.quoteClient ?? new YahooMarketIntelQuoteClient(),
+    });
   const payload = buildMarketIntelPayload({
     args,
     configName,
     config,
     calendar,
     portfolioContext: portfolio.context,
+    marketSnapshot: marketSnapshot.snapshot,
+    quoteEvidence: marketSnapshot.evidence,
+    quoteWarnings: marketSnapshot.warnings,
     skipReason,
   });
   const text = formatMarketIntelPayload(payload);

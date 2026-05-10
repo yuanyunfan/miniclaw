@@ -11,6 +11,8 @@ export type MarketIntelDataQualityStatus = "ok" | "partial" | "blocked";
 export type MarketIntelSourceTier = "official" | "local_readonly" | "optional" | "fallback" | "placeholder";
 export type MarketIntelSourceStatus = "ok" | "partial" | "missing_config" | "failed" | "not_implemented" | "skipped";
 export type MarketIntelDirection = "bullish" | "bearish" | "neutral" | "mixed" | "insufficient_data";
+export type MarketIntelSnapshotSectionStatus = "ok" | "partial" | "empty" | "not_implemented";
+export type MarketIntelQuoteWatchBucket = "indices" | "sectors" | "macro" | "cross_market" | "symbols";
 
 export interface MarketIntelTimeWindow {
   start: string;
@@ -159,11 +161,45 @@ export interface MarketIntelPlaceholderSection {
   notes: string[];
 }
 
+export interface MarketIntelSnapshotItem {
+  symbol: string;
+  provider_symbol: string;
+  bucket: MarketIntelQuoteWatchBucket;
+  source: string;
+  source_tier: MarketIntelSourceTier;
+  captured_at: string;
+  latest_at: string;
+  latest_price: number;
+  previous_close?: number;
+  change_pct?: number;
+  currency?: string;
+  freshness_minutes?: number;
+  stale: boolean;
+}
+
+export interface MarketIntelSnapshotFailure {
+  symbol: string;
+  provider_symbol?: string;
+  bucket: MarketIntelQuoteWatchBucket;
+  source: string;
+  source_tier: MarketIntelSourceTier;
+  error: string;
+  skipped: boolean;
+}
+
+export interface MarketIntelSnapshotSection {
+  status: MarketIntelSnapshotSectionStatus;
+  items: MarketIntelSnapshotItem[];
+  failures: MarketIntelSnapshotFailure[];
+  notes: string[];
+}
+
 export interface MarketIntelMarketSnapshot {
-  indices: MarketIntelPlaceholderSection;
-  sectors: MarketIntelPlaceholderSection;
-  macro: MarketIntelPlaceholderSection;
-  cross_market: MarketIntelPlaceholderSection;
+  indices: MarketIntelSnapshotSection;
+  sectors: MarketIntelSnapshotSection;
+  macro: MarketIntelSnapshotSection;
+  cross_market: MarketIntelSnapshotSection;
+  symbols: MarketIntelSnapshotSection;
 }
 
 export interface MarketIntelPortfolioSourceSummary {
@@ -243,3 +279,24 @@ export interface MarketIntelPayload {
 }
 
 export type MarketIntelPortfolioRunner = (args: PreProviderRunArgs) => Promise<PreProviderResult>;
+
+export interface MarketIntelQuoteRequest {
+  symbol: string;
+  provider_symbol: string;
+  bucket: MarketIntelQuoteWatchBucket;
+}
+
+export interface MarketIntelQuoteSnapshotInput {
+  symbol: string;
+  provider_symbol: string;
+  latest_at: string;
+  latest_price: number;
+  previous_close?: number;
+  currency?: string;
+}
+
+export interface MarketIntelQuoteClient {
+  source: string;
+  source_tier: MarketIntelSourceTier;
+  getSnapshot(request: MarketIntelQuoteRequest): Promise<MarketIntelQuoteSnapshotInput>;
+}
