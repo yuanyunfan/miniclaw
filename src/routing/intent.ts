@@ -59,8 +59,12 @@ const CHAT_SIGNALS: SignalDef[] = [
   { label: "knowledge", pattern: /(如何理解|怎么理解|补充背景|概念|设计是什么样|what can|how does|can it)/i, weight: 2 },
 ];
 
+const EXTERNAL_ACTIVITY_RESEARCH_PATTERN =
+  /((github|contributions?|commits?|pull requests?|prs?|issues?|releases?|repos?|repositories?|仓库|开发动态|开源动态).*(今天|今日|昨天|最近|这两天|过去|这周|本周|latest|recent|today|yesterday|this\s+week|last\s+\d+|做了什么|发生了什么|为什么|分析一下|分析下|查一下|看一下|看看)|(?:今天|今日|昨天|最近|这两天|过去|这周|本周|latest|recent|today|yesterday|this\s+week|last\s+\d+).*(github|contributions?|commits?|pull requests?|prs?|issues?|releases?|repos?|repositories?|仓库|开发动态|开源动态))/i;
+
 const AMBIGUOUS_SIGNALS: SignalDef[] = [
   { label: "repo_analysis", pattern: /(分析.*(repo|仓库|项目)|看看.*项目|review.*repo|deep dive)/i, weight: 1 },
+  { label: "external_activity_research", pattern: EXTERNAL_ACTIVITY_RESEARCH_PATTERN, weight: 2, risk: "long_running_research" },
   { label: "research", pattern: /(调研|研究一下|找.*方案|research|investigate)/i, weight: 1 },
   { label: "test_word", pattern: /(测试一下|test this|try it)/i, weight: 1 },
 ];
@@ -123,6 +127,7 @@ export function classifyMessageIntent(input: RouteClassifierInput): RouteDecisio
   const riskFlags = [
     ...new Set([
       ...task.risks,
+      ...ambiguous.risks,
       ...(hasAttachments ? ["attachments"] : []),
       ...(url.hasUrl ? ["external_url"] : []),
       ...(url.needsBrowser ? ["browser_required"] : []),
@@ -245,7 +250,8 @@ export function shouldUseLlmClassifier(decision: RouteDecision, policy: SmartRou
   if (
     decision.intent === "task_suggest" &&
     (decision.matchedSignals.includes("wechat_article") ||
-      (decision.matchedSignals.includes("external_url") && decision.riskFlags.includes("browser_required")))
+      (decision.matchedSignals.includes("external_url") && decision.riskFlags.includes("browser_required")) ||
+      decision.riskFlags.includes("long_running_research"))
   ) {
     return false;
   }

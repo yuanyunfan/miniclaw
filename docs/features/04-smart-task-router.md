@@ -132,6 +132,7 @@ router 创建出来的 task 应该和 `/task` 完全一致：
 - “看看这个项目有没有问题”
 - “帮我深入分析这个 repo”
 - “研究一下有没有方案”
+- “某个 GitHub 用户今天为什么 contribution 变多，帮我分析一下”
 
 `task_confirm`
 
@@ -188,6 +189,7 @@ router 应该保守。false positive 比 false negative 更危险，因为 task 
 - `分析这个项目` 可能是 read-only chat，也可能是深度 task。
 - `调研一下` 可能只是解释，也可能需要 repo 改动或 web/API 执行。
 - `测试一下` 通常偏 task，但也可能是在问“如何测试”。
+- `今天/最近的 GitHub contribution、commits、releases、开发动态分析` 偏 task_suggest，因为它常常需要多轮 live lookup，容易超过 chat timeout。
 
 启发式层应该返回：
 

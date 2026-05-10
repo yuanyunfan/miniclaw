@@ -33,6 +33,7 @@ function classifierPrompt(content: string, heuristic: RouteDecision): string {
     "- Static public webpage summary can stay chat when it is likely one quick fetch.",
     "- mp.weixin.qq.com, WeChat public-account articles, login/cookie pages, anti-bot pages, dynamic pages, or browser-required pages should be task_suggest.",
     "- Explicit fetch/crawl/collect/monitor/save/export/write-to-file/Obsidian note requests should be task_confirm.",
+    "- Current or recent public-activity investigations, such as GitHub contributions, commits, releases, PRs, or developer activity, should be task_suggest because they often need multiple live lookups and can exceed chat timeout.",
     "",
     "Be conservative. Prefer chat or task_suggest when unsure. Do not invent facts.",
     "",

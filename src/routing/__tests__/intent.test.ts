@@ -110,6 +110,26 @@ describe("classifyMessageIntent", () => {
     expect(d.matchedSignals).toContain("runtime_diagnostics");
     expect(d.riskFlags).toContain("runtime_diagnostics");
   });
+
+  it("suggests task mode for current GitHub contribution investigations", () => {
+    const d = classifyMessageIntent({
+      content: "steipete 他做了什么事情？为什么今天有那么多的 contribution？你帮我分析一下",
+      channelId: "chat-1",
+    });
+    expect(d.intent).toBe("task_suggest");
+    expect(d.matchedSignals).toContain("external_activity_research");
+    expect(d.riskFlags).toContain("long_running_research");
+    expect(shouldUseLlmClassifier(d, policy)).toBe(false);
+
+    const resolved = resolveSmartRouterAction(d, policy, "chat-1");
+    expect(resolved.intent).toBe("task_suggest");
+  });
+
+  it("keeps basic GitHub concept questions in chat", () => {
+    const d = classifyMessageIntent({ content: "GitHub contribution 是什么意思？", channelId: "chat-1" });
+    expect(d.intent).toBe("chat");
+    expect(d.matchedSignals).not.toContain("external_activity_research");
+  });
 });
 
 describe("LLM classifier decision points", () => {
