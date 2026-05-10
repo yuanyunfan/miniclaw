@@ -4,7 +4,7 @@ import { existsSync, statSync } from "node:fs";
 import { AttachmentBuilder, type Client, type SendableChannels } from "discord.js";
 import { config } from "../config.js";
 import { createTask } from "../store/db.js";
-import { recordMarketForecastFromPayload, updateMarketForecastReport } from "../store/market-forecasts.js";
+import { recordMarketForecastFromPayload, stripMarketForecastJsonForDisplay, updateMarketForecastReport } from "../store/market-forecasts.js";
 import { executeTask, getActiveTaskCount, type TaskResult } from "../agent/task.js";
 import { TaskReporter } from "../agent/task-reporter.js";
 import { loadPrompt } from "../agent/prompts.js";
@@ -284,7 +284,14 @@ export async function runTask(job: CronJobTask, client: Client): Promise<void> {
     source_channel_id: job.channel,
     prepended_context_chars: prependedContext.length,
   });
-  const result = await executeTask({ taskId, prompt, cwd, channel, outputMode: "raw" });
+  const result = await executeTask({
+    taskId,
+    prompt,
+    cwd,
+    channel,
+    outputMode: "raw",
+    ...(marketForecastId ? { rawOutputTextTransform: stripMarketForecastJsonForDisplay } : {}),
+  });
   if (marketForecastId) {
     const extraction = updateMarketForecastReport(marketForecastId, result.result);
     reporter.contextCaptured({

@@ -8,6 +8,7 @@ import {
   listMarketForecastItems,
   recordMarketForecastEvaluation,
   recordMarketForecastFromPayload,
+  stripMarketForecastJsonForDisplay,
   updateMarketForecastReport,
 } from "../market-forecasts.js";
 import type { MarketIntelPayload } from "../../providers/market-intel/types.js";
@@ -165,6 +166,26 @@ Base case...
     ].join("\n"));
 
     expect(parsed?.index_probabilities).toBeDefined();
+  });
+
+  it("strips compact forecast JSON from user-facing display text", () => {
+    const report = [
+      "## Executive View",
+      "Market up case is conditional.",
+      "",
+      "## Forecast JSON",
+      "<market_forecast_json>",
+      "{\"index_probabilities\":[{\"target\":\"SPY\",\"up\":0.4,\"range_bound\":0.4,\"down\":0.2}]}",
+      "</market_forecast_json>",
+    ].join("\n");
+
+    const display = stripMarketForecastJsonForDisplay(report);
+
+    expect(display).toContain("## Executive View");
+    expect(display).toContain("Market up case is conditional.");
+    expect(display).not.toContain("Forecast JSON");
+    expect(display).not.toContain("market_forecast_json");
+    expect(display).not.toContain("index_probabilities");
   });
 
   it("records evaluation rows for the post-market phase", () => {

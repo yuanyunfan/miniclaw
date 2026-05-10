@@ -20,6 +20,7 @@ vi.mock("../../store/db.js", () => ({
 
 vi.mock("../../store/market-forecasts.js", () => ({
   recordMarketForecastFromPayload: mocks.recordMarketForecastFromPayload,
+  stripMarketForecastJsonForDisplay: (text: string) => text.replace(/<market_forecast_json>[\s\S]*?<\/market_forecast_json>/g, "").trim(),
   updateMarketForecastReport: mocks.updateMarketForecastReport,
 }));
 
@@ -224,6 +225,10 @@ describe("cron task runner", () => {
       }),
     });
     expect(mocks.updateMarketForecastReport).toHaveBeenCalledWith("forecast-1", expect.stringContaining("market_forecast_json"));
+    expect(mocks.executeTask).toHaveBeenCalledWith(expect.objectContaining({
+      outputMode: "raw",
+      rawOutputTextTransform: expect.any(Function),
+    }));
   });
 
   it("passes MINICLAW_CRON_TEST_RUN_AT to pre_provider for controlled cron tests", async () => {

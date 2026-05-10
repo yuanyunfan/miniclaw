@@ -212,6 +212,22 @@ export function extractMarketForecastJsonFromReport(reportText: string): Forecas
   return undefined;
 }
 
+export function stripMarketForecastJsonForDisplay(reportText: string): string {
+  const taggedBlock = /(?:^|\n)[ \t]*(?:#{1,6}[ \t]+)?Forecast JSON[ \t]*\n+(?:[ \t]*\n)*<market_forecast_json>\s*[\s\S]*?\s*<\/market_forecast_json>[ \t]*(?=\n|$)/gi;
+  const taggedOnly = /<market_forecast_json>\s*[\s\S]*?\s*<\/market_forecast_json>/gi;
+  const fencedBlock = /(?:^|\n)[ \t]*(?:#{1,6}[ \t]+)?Forecast JSON[ \t]*\n+(?:[ \t]*\n)*```(?:market-forecast-json|forecast_json|json)\s*[\s\S]*?```[ \t]*(?=\n|$)/gi;
+  const fencedOnly = /```(?:market-forecast-json|forecast_json)\s*[\s\S]*?```/gi;
+
+  return reportText
+    .replace(taggedBlock, "\n")
+    .replace(taggedOnly, "")
+    .replace(fencedBlock, "\n")
+    .replace(fencedOnly, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function probabilityValue(row: Record<string, unknown>, direction: "up" | "range_bound" | "down"): number | undefined {
   if (direction === "range_bound") {
     return optionalNumber(row.range_bound ?? row.range ?? row.range_probability ?? row.range_bound_probability);

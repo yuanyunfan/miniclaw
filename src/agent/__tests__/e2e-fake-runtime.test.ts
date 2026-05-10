@@ -125,4 +125,49 @@ describe("E2E fake runtime", () => {
     });
     expect(sent.some((message) => message.includes("E2E_TASK_OK runtime-1"))).toBe(true);
   });
+
+  it("applies raw output transform only to the Discord display text", async () => {
+    const sent: string[] = [];
+    const fakeChannel = {
+      send: async (payload: unknown) => {
+        const content = typeof payload === "string"
+          ? payload
+          : payload && typeof payload === "object" && "content" in payload
+            ? String((payload as { content?: unknown }).content ?? "")
+            : "";
+        sent.push(content);
+        return {
+          id: `message-${sent.length}`,
+          content,
+          edit: async (next: unknown) => {
+            sent.push(typeof next === "string" ? next : JSON.stringify(next));
+          },
+          delete: async () => undefined,
+        };
+      },
+    };
+    const { createTask, initDb } = await import("../../store/db.js");
+    const { executeTask } = await import("../task.js");
+    initDb();
+    createTask({
+      id: "task-runtime-2",
+      discord_thread_id: "thread-1",
+      discord_user_id: "test-user",
+      prompt: "e2e task runtime-2",
+      cwd: tmp,
+    });
+
+    const result = await executeTask({
+      taskId: "task-runtime-2",
+      prompt: "e2e task runtime-2",
+      cwd: tmp,
+      channel: fakeChannel as never,
+      outputMode: "raw",
+      rawOutputTextTransform: (text) => text.replace("E2E_TASK_OK", "DISPLAY_OK"),
+    });
+
+    expect(result.result).toBe("E2E_TASK_OK runtime-2");
+    expect(sent).toContain("DISPLAY_OK runtime-2");
+    expect(sent).not.toContain("E2E_TASK_OK runtime-2");
+  });
 });

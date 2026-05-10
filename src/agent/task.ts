@@ -241,6 +241,11 @@ function rawTaskMessages(taskId: string, result: TaskResult): string[] {
   return [`❌ \`${taskId.slice(0, 8)}\` 失败: ${text.slice(0, 1900)}`];
 }
 
+function rawDisplayTaskResult(params: ExecuteTaskParams, result: TaskResult): TaskResult {
+  if (!result.success || !params.rawOutputTextTransform) return result;
+  return { ...result, result: params.rawOutputTextTransform(result.result) };
+}
+
 async function sendRawTaskResult(channel: SendableChannels, taskId: string, result: TaskResult): Promise<void> {
   for (const message of rawTaskMessages(taskId, result)) {
     await channel.send(message);
@@ -393,7 +398,7 @@ async function executeFakeTask(
 
   if ((params.outputMode ?? "embed") === "raw") {
     await progress.complete(params.channel);
-    await sendRawTaskResult(params.channel, params.taskId, result);
+    await sendRawTaskResult(params.channel, params.taskId, rawDisplayTaskResult(params, result));
     return result;
   }
 
@@ -414,6 +419,7 @@ interface ExecuteTaskParams {
    * "raw"：直接发 LLM 输出文本，无任何元数据装饰（cron / 程序化触发用）
    */
   outputMode?: "embed" | "raw";
+  rawOutputTextTransform?: (text: string) => string;
   statusMessage?: Message;
 }
 
@@ -586,7 +592,7 @@ async function executeCodexTask(
   const outputMode = params.outputMode ?? "embed";
   if (outputMode === "raw") {
     await progress.complete(params.channel, lastResult.success ? undefined : { keepAsError: true });
-    await sendRawTaskResult(params.channel, params.taskId, lastResult);
+    await sendRawTaskResult(params.channel, params.taskId, rawDisplayTaskResult(params, lastResult));
     return lastResult;
   }
 
@@ -885,7 +891,7 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
     if (outputMode === "raw") {
       // 程序化触发（cron 等）：直接发结果文本，不带任何元数据装饰
       await progress.complete(params.channel, lastResult.success ? undefined : { keepAsError: true });
-      await sendRawTaskResult(params.channel, params.taskId, lastResult);
+      await sendRawTaskResult(params.channel, params.taskId, rawDisplayTaskResult(params, lastResult));
       return lastResult;
     }
 
