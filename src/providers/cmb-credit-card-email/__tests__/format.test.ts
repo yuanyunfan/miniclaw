@@ -43,6 +43,11 @@ describe("formatCmbCreditCardCollectResult", () => {
     });
 
     expect(JSON.parse(text)).toMatchObject({ transaction_count: 1, net_spend: 68.5 });
+    expect(JSON.parse(text).transactions[0]).toMatchObject({
+      occurred_at: "2026-05-07 19:31:00",
+      occurred_at_utc: "2026-05-07T11:31:00.000Z",
+      occurred_timezone: "Asia/Shanghai",
+    });
     expect(text).not.toContain("1234");
     expect(text).not.toContain("原始邮件");
   });

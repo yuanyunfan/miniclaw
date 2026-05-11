@@ -1,9 +1,22 @@
 import type { CmbCreditCardCollectResult, CmbCreditCardTransaction } from "./types.js";
 
+const CHINA_TIME_OFFSET_MS = 8 * 3600_000;
+
+function formatChinaLocalTime(iso: string): string {
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return iso;
+  return new Date(parsed.getTime() + CHINA_TIME_OFFSET_MS)
+    .toISOString()
+    .replace("T", " ")
+    .slice(0, 19);
+}
+
 function compactTransaction(transaction: CmbCreditCardTransaction): Record<string, unknown> {
   return {
     id: transaction.id,
-    occurred_at: transaction.occurred_at,
+    occurred_at: formatChinaLocalTime(transaction.occurred_at),
+    occurred_at_utc: transaction.occurred_at,
+    occurred_timezone: "Asia/Shanghai",
     direction: transaction.direction,
     amount: transaction.amount,
     currency: transaction.currency,

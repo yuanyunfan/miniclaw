@@ -75,15 +75,34 @@ function parseDateWithYear(text: string): Date | undefined {
   const match = /(\d{4})[年/-](\d{1,2})[月/-](\d{1,2})日?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/.exec(text);
   if (!match) return undefined;
   const [, year, month, day, hour, minute, second = "0"] = match;
-  return new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second));
+  return new Date(Date.UTC(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour) - 8,
+    Number(minute),
+    Number(second),
+  ));
+}
+
+function chinaLocalYear(iso: string): number {
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return new Date().getFullYear();
+  return new Date(parsed.getTime() + 8 * 3600_000).getUTCFullYear();
 }
 
 function parseDateWithoutYear(text: string, receivedAt: string): Date | undefined {
   const match = /(\d{1,2})月(\d{1,2})日?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/.exec(text);
   if (!match) return undefined;
-  const base = new Date(receivedAt);
   const [, month, day, hour, minute, second = "0"] = match;
-  return new Date(base.getFullYear(), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second));
+  return new Date(Date.UTC(
+    chinaLocalYear(receivedAt),
+    Number(month) - 1,
+    Number(day),
+    Number(hour) - 8,
+    Number(minute),
+    Number(second),
+  ));
 }
 
 function findOccurredAt(text: string, message: EmailMessage): string {
@@ -119,7 +138,7 @@ function attachmentTexts(message: EmailMessage): string[] {
 }
 
 function nearestDateToken(lines: string[], index: number): string | undefined {
-  const start = Math.max(0, index - 12);
+  const start = Math.max(0, index - 80);
   for (let i = index; i >= start; i -= 1) {
     const token = findDateToken(lines[i] ?? "");
     if (token) return token;
