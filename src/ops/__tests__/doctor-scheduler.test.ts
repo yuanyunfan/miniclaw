@@ -316,9 +316,9 @@ describe("doctor scheduler", () => {
       severityEscalated: false,
     }));
     const appendEvent = vi.fn(() => 1);
-    const notifiedGroups: DoctorNotificationGroup[] = [];
-    const notify = vi.fn(async (_client: Client, group: DoctorNotificationGroup) => {
-      notifiedGroups.push(group);
+    const notifiedBatches: DoctorNotificationGroup[][] = [];
+    const notify = vi.fn(async (_client: Client, groups: DoctorNotificationGroup[]) => {
+      notifiedBatches.push(groups);
     });
     const scheduler = createDoctorScheduler({} as Client, {
       runDoctorFn: vi.fn(async () => report),
@@ -331,7 +331,7 @@ describe("doctor scheduler", () => {
     const result = await scheduler.runOnce("test");
 
     expect(notify).toHaveBeenCalledTimes(1);
-    const group = notifiedGroups[0]!;
+    const group = notifiedBatches[0]![0]!;
     expect(group.items).toHaveLength(2);
     const text = __testables.formatDoctorNotificationGroup(group, report);
     expect(text).toContain("2 similar task failures");
@@ -342,23 +342,28 @@ describe("doctor scheduler", () => {
     expect(appendEvent).toHaveBeenCalledWith("incident-cdcbc955", "doctor_notified", expect.objectContaining({
       grouped: true,
       group_size: 2,
+      group_count: 1,
     }));
     expect(appendEvent).toHaveBeenCalledWith("incident-a36bc841", "doctor_notified", expect.objectContaining({
       grouped: true,
       group_size: 2,
+      group_count: 1,
     }));
   });
 
-  it("keeps different task failure signatures in separate notifications", async () => {
+  it("summarizes different task failure signatures in one digest notification", async () => {
     process.env.MINICLAW_DOCTOR_AUTO_DIAGNOSE_ENABLED = "true";
-    const { createDoctorScheduler } = await import("../doctor-scheduler.js");
+    const { createDoctorScheduler, __testables } = await import("../doctor-scheduler.js");
     const report = reportWithRepeatedNetworkTasks();
     report.evidence.taskCandidates[1]!.result_summary = "TypeError: Cannot read properties of undefined";
     const rows = new Map<string, IncidentRow>([
       ["cdcbc955-ffe0-4d73-aca2-db67d72e57bc", incidentRow({ id: "incident-cdcbc955", subject_id: "cdcbc955-ffe0-4d73-aca2-db67d72e57bc" })],
       ["a36bc841-087a-45f2-9d2f-6902a118f002", incidentRow({ id: "incident-a36bc841", subject_id: "a36bc841-087a-45f2-9d2f-6902a118f002" })],
     ]);
-    const notify = vi.fn(async () => undefined);
+    const notifiedBatches: DoctorNotificationGroup[][] = [];
+    const notify = vi.fn(async (_client: Client, groups: DoctorNotificationGroup[]) => {
+      notifiedBatches.push(groups);
+    });
     const scheduler = createDoctorScheduler({} as Client, {
       runDoctorFn: vi.fn(async () => report),
       createOrUpdateIncidentFn: vi.fn((candidate) => ({
@@ -373,7 +378,14 @@ describe("doctor scheduler", () => {
 
     await scheduler.runOnce("test");
 
-    expect(notify).toHaveBeenCalledTimes(2);
+    expect(notify).toHaveBeenCalledTimes(1);
+    const groups = notifiedBatches[0]!;
+    expect(groups).toHaveLength(2);
+    const text = __testables.formatDoctorNotificationGroups(groups, report);
+    expect(text).toContain("2 incidents in 2 groups");
+    expect(text).toContain("Groups:");
+    expect(text).toContain("stream disconnected");
+    expect(text).toContain("TypeError");
   });
 
   it("runs guarded auto repair and posts a repair summary when enabled", async () => {

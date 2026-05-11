@@ -67,7 +67,7 @@ type DoctorSchedulerDeps = {
   appendIncidentEventFn?: typeof appendIncidentEvent;
   countRepairRunsSinceFn?: typeof countRepairRunsSince;
   countRepairRunsByStatusFn?: typeof countRepairRunsByStatus;
-  sendNotificationFn?: (client: Client, group: DoctorNotificationGroup, report: DoctorReport) => Promise<void>;
+  sendNotificationFn?: (client: Client, groups: DoctorNotificationGroup[], report: DoctorReport) => Promise<void>;
   sendRepairNotificationFn?: (client: Client, result: DoctorRepairResult) => Promise<void>;
   drainingFn?: () => boolean;
   nowFn?: () => Date;
@@ -419,14 +419,91 @@ function formatDoctorNotificationGroup(group: DoctorNotificationGroup, report: D
   return formatGroupedIncidentNotification(group, report);
 }
 
+function groupCategory(group: DoctorNotificationGroup, report: DoctorReport): string {
+  const primary = group.items[0];
+  const diagnosis = parseDiagnosisJson(primary.incident.diagnosis_json);
+  return candidateDiagnosis(primary.candidate).category ?? diagnosis.category ?? report.diagnosis.category;
+}
+
+function groupRoute(group: DoctorNotificationGroup): string {
+  return sourceRoute(group.items[0].candidate) ?? group.items[0].incident.subject_type ?? "unknown";
+}
+
+function groupSubjectIds(group: DoctorNotificationGroup): string[] {
+  return group.items
+    .map((item) => item.incident.subject_id)
+    .filter((id): id is string => Boolean(id));
+}
+
+function formatDigestGroupLine(group: DoctorNotificationGroup, report: DoctorReport): string {
+  const primary = group.items[0];
+  const ids = groupSubjectIds(group);
+  const subjectLabel = primary.incident.subject_type === "task"
+    ? "tasks"
+    : primary.incident.subject_type === "cron"
+      ? "cron"
+      : primary.incident.subject_type ?? "subjects";
+  const repeatedError = notificationProblemText(primary.candidate, report)
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 110);
+  return [
+    `- ${primary.incident.type}/${primary.incident.severity}`,
+    `${groupCategory(group, report)}`,
+    `x${group.items.length}`,
+    `route=${groupRoute(group)}`,
+    `${subjectLabel}=${ids.length ? listShortIds(ids, 4) : "(unknown)"}`,
+    repeatedError ? `error=${repeatedError}` : "",
+  ].filter(Boolean).join(" ");
+}
+
+function formatDoctorNotificationDigest(groups: DoctorNotificationGroup[], report: DoctorReport): string {
+  const incidents = groups.flatMap((group) => group.items);
+  const largestGroups = [...groups].sort((a, b) => b.items.length - a.items.length);
+  const categoryCounts = new Map<string, number>();
+  for (const group of groups) {
+    categoryCounts.set(groupCategory(group, report), (categoryCounts.get(groupCategory(group, report)) ?? 0) + group.items.length);
+  }
+  const categorySummary = [...categoryCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([category, count]) => `${category}=${count}`)
+    .join(", ");
+  const lines = [
+    `🩺 MiniClaw Doctor: ${incidents.length} incidents in ${groups.length} groups`,
+    "",
+    `Generated: \`${report.evidence.generatedAt}\``,
+    `Categories: ${categorySummary || "unknown"}`,
+    `Incidents: ${listShortIds(incidents.map((item) => item.incident.id), 10)}`,
+    "",
+    "Groups:",
+    ...largestGroups.slice(0, 8).map((group) => formatDigestGroupLine(group, report)),
+  ];
+
+  if (largestGroups.length > 8) {
+    lines.push(`- (+${largestGroups.length - 8} more group(s))`);
+  }
+
+  lines.push(
+    "",
+    "Next action:",
+    report.diagnosis.recommendedAction
+  );
+  return lines.join("\n").slice(0, 1900);
+}
+
+function formatDoctorNotificationGroups(groups: DoctorNotificationGroup[], report: DoctorReport): string {
+  if (groups.length === 1) return formatDoctorNotificationGroup(groups[0], report);
+  return formatDoctorNotificationDigest(groups, report);
+}
+
 async function sendDoctorNotification(
   client: Client,
-  group: DoctorNotificationGroup,
+  groups: DoctorNotificationGroup[],
   report: DoctorReport
 ): Promise<void> {
   const channel = await resolveDoctorSummaryChannel(client);
   if (!channel) return;
-  await channel.send(formatDoctorNotificationGroup(group, report));
+  await channel.send(formatDoctorNotificationGroups(groups, report));
 }
 
 function formatRepairNotification(result: DoctorRepairResult): string {
@@ -600,14 +677,18 @@ export function createDoctorScheduler(
           repairTargets.push(result.row);
         }
 
-        for (const group of groupDoctorNotifications(notificationItems, report)) {
-          await sendNotificationFn(client, group, report);
+        const notificationGroups = groupDoctorNotifications(notificationItems, report);
+        if (notificationGroups.length > 0) {
+          await sendNotificationFn(client, notificationGroups, report);
+        }
+        for (const group of notificationGroups) {
           for (const item of group.items) {
             appendIncidentEventFn(item.incident.id, "doctor_notified", {
               ...doctorSummaryChannelEventTarget(),
               reason,
               grouped: group.items.length > 1,
               group_size: group.items.length,
+              group_count: notificationGroups.length,
             });
             notified.push(item.incident);
           }
@@ -687,6 +768,7 @@ export function startDoctorScheduler(client: Client): DoctorSchedulerHandle | nu
 export const __testables = {
   formatIncidentNotification,
   formatDoctorNotificationGroup,
+  formatDoctorNotificationGroups,
   groupDoctorNotifications,
   formatRepairNotification,
   startOfUtcDayIso,
