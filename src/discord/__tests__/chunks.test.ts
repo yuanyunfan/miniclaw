@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { chunkMessage } from "../chunks.js";
+import {
+  chunkMessage,
+  chunkMessageWithDeferredLinkPreviews,
+  extractPreviewLinks,
+} from "../chunks.js";
 
 describe("chunkMessage", () => {
   it("returns single chunk when ≤ 2000 chars", () => {
@@ -44,5 +48,34 @@ describe("chunkMessage", () => {
     const chunks = chunkMessage(text);
     expect(chunks.length).toBeGreaterThan(1);
     chunks.forEach((c) => expect(c.length).toBeLessThanOrEqual(2000));
+  });
+
+  it("extracts unique preview links and trims markdown punctuation", () => {
+    expect(extractPreviewLinks([
+      "A [link](https://example.com/a).",
+      "B https://example.com/b,",
+      "Again https://example.com/a",
+    ].join("\n"))).toEqual([
+      "https://example.com/a",
+      "https://example.com/b",
+    ]);
+  });
+
+  it("defers link previews to a final footer chunk", () => {
+    const chunks = chunkMessageWithDeferredLinkPreviews(
+      "正文保留 https://example.com/a 和 [B](https://example.com/b)。",
+    );
+
+    expect(chunks[0]).toMatchObject({
+      kind: "body",
+      suppressEmbeds: true,
+    });
+    expect(chunks[chunks.length - 1]).toMatchObject({
+      kind: "link_preview_footer",
+      suppressEmbeds: false,
+    });
+    expect(chunks[chunks.length - 1]?.content).toContain("链接预览集中区");
+    expect(chunks[chunks.length - 1]?.content).toContain("https://example.com/a");
+    expect(chunks[chunks.length - 1]?.content).toContain("https://example.com/b");
   });
 });

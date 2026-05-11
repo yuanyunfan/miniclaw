@@ -15,7 +15,10 @@ import {
 import { config } from "./config.js";
 import { chat, type ChatCallbacks } from "./agent/chat.js";
 import { TaskReporter } from "./agent/task-reporter.js";
-import { chunkMessage } from "./discord/chunks.js";
+import {
+  replyChunkedTextWithDeferredLinkPreviews,
+  sendChunkedTextWithDeferredLinkPreviews,
+} from "./discord/text.js";
 import { handleTask, handleStatus, handleHealth, handleDoctor, handleIncidents, handleIncident, handleAgentConfig, handleCancel, handleResume, handleRemember, handleForget, handleMemories } from "./commands/handlers.js";
 import { executeTask } from "./agent/task.js";
 import { recoverInterruptedTasks } from "./agent/recovery.js";
@@ -199,9 +202,7 @@ async function continueChatFromConfirmation(
       attachmentCodexInputs,
       buildChatRuntimeContext(confirmation.taskContext)
     );
-    for (const chunk of chunkMessage(reply)) {
-      await channel.send(chunk);
-    }
+    await sendChunkedTextWithDeferredLinkPreviews(channel, reply);
   } finally {
     if (attachmentScope) cleanupAttachmentScope(attachmentScope);
   }
@@ -690,10 +691,7 @@ export function createBot(): Client {
         if (typingInterval) clearInterval(typingInterval);
         await flushSteps();
 
-        const chunks = chunkMessage(reply);
-        for (const chunk of chunks) {
-          await message.reply(chunk);
-        }
+        await replyChunkedTextWithDeferredLinkPreviews(message, reply);
         await message.reactions.cache.get("👀")?.users.remove(client.user!.id).catch(() => {});
         await message.react("✅").catch(() => {});
       } catch (err) {

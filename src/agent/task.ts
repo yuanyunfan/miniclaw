@@ -7,6 +7,7 @@ import { updateTask } from "../store/db.js";
 import { ProgressReporter } from "../discord/progress.js";
 import { taskCompleteEmbed, taskErrorEmbed, taskStartEmbed } from "../discord/formatter.js";
 import { chunkMessage } from "../discord/chunks.js";
+import { sendChunkedTextWithDeferredLinkPreviews } from "../discord/text.js";
 import { buildMemoryPrompt } from "../memory/inject.js";
 import { loadSubagents, listSubagentNames } from "./subagents.js";
 import { loadMcpServers } from "./mcp.js";
@@ -247,17 +248,18 @@ function rawDisplayTaskResult(params: ExecuteTaskParams, result: TaskResult): Ta
 }
 
 async function sendRawTaskResult(channel: SendableChannels, taskId: string, result: TaskResult): Promise<void> {
-  for (const message of rawTaskMessages(taskId, result)) {
-    await channel.send(message);
+  if (result.success) {
+    const text = result.result.trim() ? result.result : "[无文字回复]";
+    await sendChunkedTextWithDeferredLinkPreviews(channel, text);
+    return;
   }
+  await sendChunkedTextWithDeferredLinkPreviews(channel, rawTaskMessages(taskId, result)[0] ?? `❌ \`${taskId.slice(0, 8)}\` 失败`);
 }
 
 async function sendMarkdownTaskResult(channel: SendableChannels, result: TaskResult): Promise<void> {
   const fallback = result.success ? "[无文字回复]" : "任务失败且无错误详情";
   const prefix = result.success ? "" : "❌ **任务失败**\n\n";
-  for (const message of chunkMessage(prefix + (result.result.trim() || fallback))) {
-    await channel.send(message);
-  }
+  await sendChunkedTextWithDeferredLinkPreviews(channel, prefix + (result.result.trim() || fallback));
 }
 
 function formatSeconds(ms: number): string {
