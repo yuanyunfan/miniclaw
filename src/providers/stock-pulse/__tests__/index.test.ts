@@ -112,6 +112,7 @@ describe("runStockPulseProvider", () => {
     expect(parsed.universe.portfolio_symbols).toBe(4);
     expect(parsed.universe.universe_source_symbols).toBe(1);
     expect(parsed.universe.scanned_symbols).toBe(6);
+    expect(parsed.usage_notes.join("\n")).toContain("do not render latest_price or price_currency");
     expect(parsed.positions).toEqual(expect.arrayContaining([
       expect.objectContaining({
         symbol: "AAPL",
