@@ -334,9 +334,9 @@ describe("doctor scheduler", () => {
     const group = notifiedBatches[0]![0]!;
     expect(group.items).toHaveLength(2);
     const text = __testables.formatDoctorNotificationGroup(group, report);
-    expect(text).toContain("2 similar task failures");
-    expect(text).toContain("Tasks: `cdcbc955`, `a36bc841`");
-    expect(text).toContain("Repeated error:");
+    expect(text).toContain("2 个相似任务失败");
+    expect(text).toContain("任务：`cdcbc955`, `a36bc841`");
+    expect(text).toContain("重复错误：");
     expect(text).toContain("stream disconnected");
     expect(result.notified.map((row) => row.id)).toEqual(["incident-cdcbc955", "incident-a36bc841"]);
     expect(appendEvent).toHaveBeenCalledWith("incident-cdcbc955", "doctor_notified", expect.objectContaining({
@@ -382,8 +382,8 @@ describe("doctor scheduler", () => {
     const groups = notifiedBatches[0]!;
     expect(groups).toHaveLength(2);
     const text = __testables.formatDoctorNotificationGroups(groups, report);
-    expect(text).toContain("2 incidents in 2 groups");
-    expect(text).toContain("Groups:");
+    expect(text).toContain("发现 2 个 incident，分布在 2 个分组中");
+    expect(text).toContain("分组：");
     expect(text).toContain("stream disconnected");
     expect(text).toContain("TypeError");
   });
@@ -442,7 +442,7 @@ describe("doctor scheduler", () => {
 
     const text = __testables.formatRepairNotification(repair);
 
-    expect(text).toContain("Ship approval:");
+    expect(text).toContain("Ship 审批：");
     expect(text).toContain("pnpm run doctor:ship -- --incident incident-123456");
     expect(text).toContain("--execute --approve-main --restart");
   });
