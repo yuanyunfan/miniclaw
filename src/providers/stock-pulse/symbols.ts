@@ -54,17 +54,23 @@ function inferInstrumentType(code: string, name?: string, raw?: unknown): StockP
 export function toYahooSymbol(code: string, market: StockPulseMarket): string {
   const normalized = code.trim().toUpperCase();
   if (!normalized) return normalized;
-  if (normalized.endsWith(".SS") || normalized.endsWith(".SZ") || normalized.endsWith(".HK")) return normalized;
+  if (normalized.endsWith(".SS") || normalized.endsWith(".SZ")) return normalized;
+  if (normalized.endsWith(".HK")) return `${toYahooHongKongCode(normalized.slice(0, -3))}.HK`;
   if (normalized.startsWith("US.")) return normalized.slice(3).replace(/\./g, "-");
-  if (normalized.startsWith("HK.")) return `${normalized.slice(3).padStart(4, "0")}.HK`;
+  if (normalized.startsWith("HK.")) return `${toYahooHongKongCode(normalized.slice(3))}.HK`;
   if (normalized.startsWith("SH.")) return `${normalized.slice(3)}.SS`;
   if (normalized.startsWith("SZ.")) return `${normalized.slice(3)}.SZ`;
-  if (market === "hk") return `${normalized.padStart(4, "0")}.HK`;
+  if (market === "hk") return `${toYahooHongKongCode(normalized)}.HK`;
   if (market === "cn-a") {
     if (/^[56]/.test(normalized)) return `${normalized}.SS`;
     return `${normalized}.SZ`;
   }
   return market === "us" ? normalized.replace(/\./g, "-") : normalized;
+}
+
+function toYahooHongKongCode(code: string): string {
+  if (!/^\d+$/.test(code)) return code;
+  return (code.replace(/^0+/, "") || "0").padStart(4, "0");
 }
 
 function normalizeSymbol(

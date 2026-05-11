@@ -11,4 +11,12 @@ describe("stock-pulse symbol mapping", () => {
     expect(toYahooSymbol("SH.600000", "cn-a")).toBe("600000.SS");
     expect(toYahooSymbol("HK.700", "hk")).toBe("0700.HK");
   });
+
+  it("normalizes HKEX five-digit codes to Yahoo four-digit tickers", () => {
+    expect(toYahooSymbol("HK.01810", "hk")).toBe("1810.HK");
+    expect(toYahooSymbol("01810", "hk")).toBe("1810.HK");
+    expect(toYahooSymbol("01810.HK", "hk")).toBe("1810.HK");
+    expect(toYahooSymbol("HK.00700", "hk")).toBe("0700.HK");
+    expect(toYahooSymbol("HK.00005", "hk")).toBe("0005.HK");
+  });
 });
