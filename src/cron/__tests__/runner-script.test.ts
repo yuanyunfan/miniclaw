@@ -127,6 +127,21 @@ exit 0
     expect(sent).toEqual([]);
   });
 
+  it.each([
+    ["skipped flag", `{"skipped": true, "reason": "display_asleep"}`],
+    ["skipped status", `{"status": "skipped", "reason": "display_asleep"}`],
+  ])("%s stdout does not send a Discord message", async (_name, output) => {
+    writeScript("script.sh", `#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\\n' '${output}'
+`);
+    const sent: unknown[] = [];
+
+    await runScript(scriptJob({ name: "hourly-token-report" }), fakeClient(sent));
+
+    expect(sent).toEqual([]);
+  });
+
   it("多个 DISCORD_MESSAGE 会拆成多条消息，附件放在最后一条", async () => {
     writeScript("script.sh", `#!/usr/bin/env bash
 set -euo pipefail

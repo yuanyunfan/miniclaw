@@ -50,6 +50,25 @@ function firstLine(text: string): string {
   return text.trim().split(/\r?\n/)[0]?.slice(0, 300) ?? "";
 }
 
+function isSkippedPayload(obj: Record<string, unknown>): boolean {
+  return obj.skipped === true || obj.status === "skipped";
+}
+
+function isSkippedScriptOutput(stdout: string): boolean {
+  const lines = stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (lines.length === 0) return false;
+
+  return lines.every((line) => {
+    if (!line.startsWith("{") || !line.endsWith("}")) return false;
+    try {
+      const obj = JSON.parse(line) as Record<string, unknown>;
+      return isSkippedPayload(obj);
+    } catch {
+      return false;
+    }
+  });
+}
+
 // 解析 stdout 找出 runner 指令：
 // 1) JSON 行含 "png_path" / "image_path" / "media_path" 字段
 // 2) 行首 `MEDIA:<absolute path>` 语法（兼容 hermes）
@@ -85,7 +104,7 @@ function extractScriptDirectives(stdout: string): { paths: string[]; remaining: 
     if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
       try {
         const obj = JSON.parse(trimmed) as Record<string, unknown>;
-        if (obj.skipped === true) {
+        if (isSkippedPayload(obj)) {
           // 显示器休眠等：保留原样
           remainingLines.push(line);
           continue;
@@ -192,6 +211,11 @@ export async function runScript(job: CronJobScript, client: Client): Promise<voi
     : success
       ? undefined
       : `script exited with code ${exitCode}${failureDetail ? `: ${failureDetail}` : ""}`;
+
+  if (success && !stderr.trim() && isSkippedScriptOutput(stdout)) {
+    log.info(`${job.name} skipped by script output`);
+    return;
+  }
 
   // 解析附件（PNG / image / media）
   const { paths: attachmentPaths, remaining, messages } = success
