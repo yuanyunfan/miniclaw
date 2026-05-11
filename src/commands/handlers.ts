@@ -16,7 +16,7 @@ import { createLogger } from "../lib/log.js";
 import { assertProviderSession } from "../agent/session.js";
 import { listScheduled } from "../cron/scheduler.js";
 import { formatAgentRuntimeSummary } from "../agent/runtime-config.js";
-import { createAndRunDiscordTask, taskCapacityError } from "../discord/task-intake.js";
+import { createAndRunDiscordTask, formatTaskCompletionNotice, taskCapacityError } from "../discord/task-intake.js";
 import { buildTaskSourceFromInteraction, withTaskThreadMetadata } from "../discord/task-context.js";
 import { resolveTaskCwd } from "../routing/cwd.js";
 import { buildTaskPromptWithContext } from "../routing/task-context.js";
@@ -90,6 +90,11 @@ export async function handleTask(interaction: ChatInputCommandInteraction): Prom
     }),
     onCreated: async (result) => {
       await interaction.editReply(`✅ 任务已创建，请查看线程 <#${result.threadId}>`);
+    },
+    onCompleted: async (result, taskResult) => {
+      if ("send" in parentChannel) {
+        await parentChannel.send(formatTaskCompletionNotice(result, taskResult));
+      }
     },
   });
 }

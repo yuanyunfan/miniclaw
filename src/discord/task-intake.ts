@@ -1,7 +1,7 @@
 import type { AnyThreadChannel, Attachment, Message } from "discord.js";
 import { v4 as uuid } from "uuid";
 import { config } from "../config.js";
-import { executeTask, getActiveTaskCount } from "../agent/task.js";
+import { executeTask, getActiveTaskCount, type TaskResult } from "../agent/task.js";
 import { TaskReporter } from "../agent/task-reporter.js";
 import { createTask } from "../store/db.js";
 import { processAttachments } from "./attachments.js";
@@ -31,6 +31,7 @@ export interface DiscordTaskIntakeParams {
   taskContext?: TaskContextEnvelope;
   createThread: (name: string) => Promise<CreatedThread>;
   onCreated?: (result: DiscordTaskIntakeResult) => Promise<void>;
+  onCompleted?: (result: DiscordTaskIntakeResult, taskResult: TaskResult) => Promise<void>;
 }
 
 export function taskCapacityError(): string | undefined {
@@ -42,6 +43,17 @@ export function taskCapacityError(): string | undefined {
 export function taskThreadName(prompt: string, prefix = "🤖"): string {
   const clean = prompt.replace(/\s+/g, " ").trim() || "MiniClaw task";
   return `${prefix} ${clean.slice(0, 90)}`;
+}
+
+export function formatTaskCompletionNotice(
+  result: Pick<DiscordTaskIntakeResult, "taskId" | "threadId">,
+  taskResult: Pick<TaskResult, "success" | "durationMs">
+): string {
+  const status = taskResult.success ? "✅ 任务已完成" : "❌ 任务未成功完成";
+  const elapsed = Number.isFinite(taskResult.durationMs)
+    ? `，耗时 ${(taskResult.durationMs / 1000).toFixed(1)}s`
+    : "";
+  return `${status}: \`${result.taskId.slice(0, 8)}\`${elapsed}，结果见线程 <#${result.threadId}>`;
 }
 
 export async function createAndRunDiscordTask(params: DiscordTaskIntakeParams): Promise<DiscordTaskIntakeResult> {
@@ -131,6 +143,12 @@ export async function createAndRunDiscordTask(params: DiscordTaskIntakeParams): 
     attachmentBlocks,
     attachmentCodexInputs,
     statusMessage,
+  }).then(async (taskResult) => {
+    try {
+      await params.onCompleted?.(result, taskResult);
+    } catch (err) {
+      log.error(`Task ${taskId} completion notification failed:`, err);
+    }
   }).catch((err) => {
     log.error(`Task ${taskId} error:`, err);
     void thread.send(`❌ task error: ${err?.message ?? err}`).catch(() => {});

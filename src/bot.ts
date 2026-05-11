@@ -29,7 +29,7 @@ import { addMemory } from "./store/memory.js";
 import { cleanupAttachmentScope, processAttachments } from "./discord/attachments.js";
 import { createLogger } from "./lib/log.js";
 import { assertProviderSession } from "./agent/session.js";
-import { createAndRunDiscordTask, taskCapacityError } from "./discord/task-intake.js";
+import { createAndRunDiscordTask, formatTaskCompletionNotice, taskCapacityError } from "./discord/task-intake.js";
 import {
   buildTaskSourceFromMessage,
   resolveReplyParentContext,
@@ -281,6 +281,9 @@ async function handleSmartRouterButton(interaction: ButtonInteraction): Promise<
       onCreated: async (created) => {
         await interaction.followUp(`✅ 任务已创建，请查看线程 <#${created.threadId}>`);
       },
+      onCompleted: async (created, taskResult) => {
+        await interaction.message.reply(formatTaskCompletionNotice(created, taskResult));
+      },
     });
     updateDecision("confirmed_task_created", result.taskId);
   } catch (err) {
@@ -509,6 +512,9 @@ export function createBot(): Client {
           onCreated: async (result) => {
             await message.reply(`✅ 任务已创建，请查看线程 <#${result.threadId}>`);
           },
+          onCompleted: async (result, taskResult) => {
+            await message.reply(formatTaskCompletionNotice(result, taskResult));
+          },
         });
       } catch (err) {
         log.error("Task channel message failed:", err);
@@ -598,6 +604,9 @@ export function createBot(): Client {
                 }),
                 onCreated: async (created) => {
                   await message.reply(`✅ 任务已创建，请查看线程 <#${created.threadId}>`);
+                },
+                onCompleted: async (created, taskResult) => {
+                  await message.reply(formatTaskCompletionNotice(created, taskResult));
                 },
               });
               if (decisionLogId !== undefined) {
