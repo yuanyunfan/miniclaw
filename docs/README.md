@@ -6,6 +6,7 @@
 
 - [`architecture.md`](architecture.md): MiniClaw 全局架构、数据流、cron、DB、用户级目录。
 - [`bot-routing.md`](bot-routing.md): Discord Gateway、message、slash command、thread continuation、chat/task routing。
+- [`chat-router-current-logic.md`](chat-router-current-logic.md): 当前 chat router 的代码级判断逻辑、capability 映射、确认按钮和真实误分流边界。
 - [`continuous-improvement-report.md`](continuous-improvement-report.md): MiniClaw 当前架构审计、持续优化方向和 30/60/90 天路线图。
 - [`prompts.md`](prompts.md): 框架级 prompt 资产管理。
 - [`quality-gates.md`](quality-gates.md): 测试分层、质量门禁、Discord E2E 方案。
