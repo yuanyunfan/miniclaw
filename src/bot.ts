@@ -79,6 +79,15 @@ function recordRouteDecisionForMessage(
       matched_signals: decision.matchedSignals,
       risk_flags: decision.riskFlags,
       ...(decision.capabilities ? { capabilities_json: JSON.stringify(decision.capabilities) } : {}),
+      ...(decision.capabilities?.classifierElapsedMs !== undefined
+        ? { classifier_elapsed_ms: decision.capabilities.classifierElapsedMs }
+        : {}),
+      ...(decision.capabilities?.classifierErrorType
+        ? { classifier_error_type: decision.capabilities.classifierErrorType }
+        : {}),
+      ...(decision.capabilities?.classifierErrorMessage
+        ? { classifier_error_message: decision.capabilities.classifierErrorMessage }
+        : {}),
       action_result: actionResult,
       ...(createdTaskId ? { created_task_id: createdTaskId } : {}),
     });

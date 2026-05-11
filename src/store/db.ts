@@ -4,7 +4,7 @@ import { dirname } from "path";
 import { config } from "../config.js";
 
 let db: Database.Database;
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 export function getDb(): Database.Database {
   return db;
@@ -106,6 +106,9 @@ export function initDb(): void {
       matched_signals TEXT NOT NULL DEFAULT '[]',
       risk_flags TEXT NOT NULL DEFAULT '[]',
       capabilities_json TEXT,
+      classifier_elapsed_ms INTEGER,
+      classifier_error_type TEXT,
+      classifier_error_message TEXT,
       action_result TEXT,
       created_task_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -259,6 +262,9 @@ function runMigrations(): void {
         matched_signals TEXT NOT NULL DEFAULT '[]',
         risk_flags TEXT NOT NULL DEFAULT '[]',
         capabilities_json TEXT,
+        classifier_elapsed_ms INTEGER,
+        classifier_error_type TEXT,
+        classifier_error_message TEXT,
         action_result TEXT,
         created_task_id TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -406,6 +412,14 @@ function runMigrations(): void {
       CREATE INDEX IF NOT EXISTS idx_market_forecast_evaluations_forecast ON market_forecast_evaluations(forecast_id, evaluated_at);
     `);
     setSchemaVersion(7);
+  }
+
+  // v8: persist classifier timing and failure details for router debugging.
+  if (current < 8) {
+    ensureColumn("smart_router_decisions", "classifier_elapsed_ms", "INTEGER");
+    ensureColumn("smart_router_decisions", "classifier_error_type", "TEXT");
+    ensureColumn("smart_router_decisions", "classifier_error_message", "TEXT");
+    setSchemaVersion(8);
   }
 
   const after = getSchemaVersion();
@@ -569,6 +583,9 @@ export interface SmartRouterDecisionRow {
   matched_signals: string;
   risk_flags: string;
   capabilities_json: string | null;
+  classifier_elapsed_ms: number | null;
+  classifier_error_type: string | null;
+  classifier_error_message: string | null;
   action_result: string | null;
   created_task_id: string | null;
   created_at: string;
@@ -587,16 +604,23 @@ export function recordSmartRouterDecision(row: {
   matched_signals?: string[];
   risk_flags?: string[];
   capabilities_json?: string;
+  classifier_elapsed_ms?: number;
+  classifier_error_type?: string;
+  classifier_error_message?: string;
   action_result?: string;
   created_task_id?: string;
 }): number {
   const result = db.prepare(
     `INSERT INTO smart_router_decisions (
       message_id, channel_id, user_id, prompt_hash, prompt_preview, full_prompt,
-      intent, confidence, reason, matched_signals, risk_flags, capabilities_json, action_result, created_task_id
+      intent, confidence, reason, matched_signals, risk_flags, capabilities_json,
+      classifier_elapsed_ms, classifier_error_type, classifier_error_message,
+      action_result, created_task_id
     ) VALUES (
       @message_id, @channel_id, @user_id, @prompt_hash, @prompt_preview, @full_prompt,
-      @intent, @confidence, @reason, @matched_signals, @risk_flags, @capabilities_json, @action_result, @created_task_id
+      @intent, @confidence, @reason, @matched_signals, @risk_flags, @capabilities_json,
+      @classifier_elapsed_ms, @classifier_error_type, @classifier_error_message,
+      @action_result, @created_task_id
     )`
   ).run({
     message_id: row.message_id,
@@ -611,6 +635,9 @@ export function recordSmartRouterDecision(row: {
     matched_signals: JSON.stringify(row.matched_signals ?? []),
     risk_flags: JSON.stringify(row.risk_flags ?? []),
     capabilities_json: row.capabilities_json ?? null,
+    classifier_elapsed_ms: row.classifier_elapsed_ms ?? null,
+    classifier_error_type: row.classifier_error_type ?? null,
+    classifier_error_message: row.classifier_error_message ?? null,
     action_result: row.action_result ?? null,
     created_task_id: row.created_task_id ?? null,
   });

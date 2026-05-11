@@ -3,6 +3,7 @@ import {
   classifyMessageCapabilities,
   classifyMessageIntent,
   classifySmartRoute,
+  __testables as intentTestables,
   resolveCapabilitiesToRouteDecision,
   resolveSmartRouterAction,
   shouldUseCapabilityClassifier,
@@ -136,6 +137,7 @@ describe("LLM-first classifier decision points", () => {
     expect(d.intent).toBe("chat");
     expect(d.matchedSignals).toContain("llm_classifier");
     expect(d.capabilities?.needsMultiStepResearch).toBe(false);
+    expect(d.capabilities?.classifierElapsedMs).toBeGreaterThanOrEqual(0);
   });
 
   it("suggests task mode for the steipete contribution-spike prompt", async () => {
@@ -226,18 +228,31 @@ describe("LLM-first classifier decision points", () => {
     expect(d.matchedSignals).toContain("llm_classifier");
   });
 
-  it("falls back to objective facts when the classifier throws", async () => {
+  it("records classifier failure details when the classifier throws", async () => {
     const d = await classifySmartRoute(
       { content: "调研一下有没有方案", channelId: "chat-1" },
       policy,
       async () => {
-        throw new Error("classifier unavailable");
+        throw new Error("Codex timeout after 30000ms");
       }
     );
 
     expect(d.intent).toBe("chat");
     expect(d.riskFlags).toContain("classifier_failed");
     expect(d.capabilities?.needsMultiStepResearch).toBe(false);
+    expect(d.capabilities?.classifierElapsedMs).toBeGreaterThanOrEqual(0);
+    expect(d.capabilities?.classifierErrorType).toBe("timeout");
+    expect(d.capabilities?.classifierErrorMessage).toBe("Codex timeout after 30000ms");
+  });
+
+  it("classifies common classifier error families", () => {
+    expect(intentTestables.classifyRouteClassifierError(new Error("stream disconnected before completion"))).toBe(
+      "stream_closed"
+    );
+    expect(intentTestables.classifyRouteClassifierError(new SyntaxError("Unexpected token < in JSON"))).toBe(
+      "json_parse"
+    );
+    expect(intentTestables.classifyRouteClassifierError(new Error("Anthropic API status 529"))).toBe("sdk_error");
   });
 });
 

@@ -2,6 +2,13 @@ import type { SmartRouterDefaultMode } from "../config.js";
 
 export type RouteIntent = "chat" | "task_suggest" | "task_confirm" | "task_auto" | "ignore";
 export type EstimatedEffort = "short" | "medium" | "long";
+export type RouteClassifierErrorType =
+  | "timeout"
+  | "stream_closed"
+  | "json_parse"
+  | "sdk_error"
+  | "unavailable"
+  | "unknown";
 
 export interface RouteDecision {
   intent: RouteIntent;
@@ -33,6 +40,9 @@ export interface RouteCapabilityDecision {
   riskFlags: string[];
   userIntent?: string;
   ambiguity?: string;
+  classifierElapsedMs?: number;
+  classifierErrorType?: RouteClassifierErrorType;
+  classifierErrorMessage?: string;
 }
 
 export interface RouteClassifierInput {
@@ -269,9 +279,43 @@ export function mergeCapabilityDecisions(
   return merged;
 }
 
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return String(err);
+  }
+}
+
+function classifyRouteClassifierError(err: unknown): RouteClassifierErrorType {
+  if (!err) return "unknown";
+  const message = errorMessage(err);
+  const name = err instanceof Error ? err.name : "";
+  const text = `${name} ${message}`.toLowerCase();
+
+  if (/timeout|timed out|aborterror|aborted|codex timeout/.test(text)) return "timeout";
+  if (/stream disconnected|stream closed|response\.completed|connection closed|socket hang up/.test(text)) {
+    return "stream_closed";
+  }
+  if (err instanceof SyntaxError || /json|parse|unexpected token|did not return json/.test(text)) return "json_parse";
+  if (err instanceof Error) return "sdk_error";
+  return "unknown";
+}
+
+function truncateErrorMessage(message: string): string {
+  return message.replace(/\s+/g, " ").trim().slice(0, 500);
+}
+
 function withClassifierFailure(
   capabilities: RouteCapabilityDecision,
-  riskFlag: "classifier_failed" | "classifier_unavailable"
+  riskFlag: "classifier_failed" | "classifier_unavailable",
+  details: {
+    elapsedMs?: number;
+    errorType?: RouteClassifierErrorType;
+    errorMessage?: string;
+  } = {}
 ): RouteCapabilityDecision {
   return {
     ...capabilities,
@@ -280,6 +324,9 @@ function withClassifierFailure(
     evidence: uniqueStrings([...capabilities.evidence, riskFlag]),
     matchedSignals: uniqueStrings([...capabilities.matchedSignals, riskFlag]),
     riskFlags: uniqueStrings([...capabilities.riskFlags, riskFlag]),
+    ...(details.elapsedMs !== undefined ? { classifierElapsedMs: details.elapsedMs } : {}),
+    ...(details.errorType ? { classifierErrorType: details.errorType } : {}),
+    ...(details.errorMessage ? { classifierErrorMessage: truncateErrorMessage(details.errorMessage) } : {}),
   };
 }
 
@@ -293,15 +340,26 @@ export async function classifySmartRoute(
 
   if (shouldUseCapabilityClassifier(baseline, policy)) {
     if (!llmClassifier) {
-      capabilities = withClassifierFailure(baseline, "classifier_unavailable");
+      capabilities = withClassifierFailure(baseline, "classifier_unavailable", {
+        errorType: "unavailable",
+        errorMessage: "LLM classifier is not configured",
+      });
       return resolveCapabilitiesToRouteDecision(capabilities);
     }
 
+    const classifierStartedAt = Date.now();
     try {
       const llm = await llmClassifier(input);
-      capabilities = mergeCapabilityDecisions(baseline, llm);
-    } catch {
-      capabilities = withClassifierFailure(baseline, "classifier_failed");
+      capabilities = mergeCapabilityDecisions(baseline, {
+        ...llm,
+        classifierElapsedMs: Date.now() - classifierStartedAt,
+      });
+    } catch (err) {
+      capabilities = withClassifierFailure(baseline, "classifier_failed", {
+        elapsedMs: Date.now() - classifierStartedAt,
+        errorType: classifyRouteClassifierError(err),
+        errorMessage: errorMessage(err),
+      });
     }
   }
 
@@ -348,3 +406,5 @@ export function resolveSmartRouterAction(
 
   return { ...decision, intent: "task_suggest" };
 }
+
+export const __testables = { classifyRouteClassifierError };

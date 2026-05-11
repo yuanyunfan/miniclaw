@@ -100,6 +100,9 @@ describe("schema migrations", () => {
     expect(__testables.columnExists("smart_router_decisions", "prompt_hash")).toBe(true);
     expect(__testables.columnExists("smart_router_decisions", "action_result")).toBe(true);
     expect(__testables.columnExists("smart_router_decisions", "capabilities_json")).toBe(true);
+    expect(__testables.columnExists("smart_router_decisions", "classifier_elapsed_ms")).toBe(true);
+    expect(__testables.columnExists("smart_router_decisions", "classifier_error_type")).toBe(true);
+    expect(__testables.columnExists("smart_router_decisions", "classifier_error_message")).toBe(true);
   });
 
   it("ensures task source context columns exist", () => {
@@ -190,7 +193,16 @@ describe("smart router decisions", () => {
       reason: "strong task signal",
       matched_signals: ["modify", "validation"],
       risk_flags: ["writes_files", "runs_tests"],
-      capabilities_json: JSON.stringify({ needsFileWrite: true, needsShell: true }),
+      capabilities_json: JSON.stringify({
+        needsFileWrite: true,
+        needsShell: true,
+        classifierElapsedMs: 30012,
+        classifierErrorType: "timeout",
+        classifierErrorMessage: "Codex timeout after 30000ms",
+      }),
+      classifier_elapsed_ms: 30012,
+      classifier_error_type: "timeout",
+      classifier_error_message: "Codex timeout after 30000ms",
       action_result: "confirmation_pending",
     });
 
@@ -205,7 +217,15 @@ describe("smart router decisions", () => {
     expect(row?.full_prompt).toBeNull();
     expect(row?.action_result).toBe("confirmed_task_created");
     expect(row?.created_task_id).toBe("task-1");
+    expect(row?.classifier_elapsed_ms).toBe(30012);
+    expect(row?.classifier_error_type).toBe("timeout");
+    expect(row?.classifier_error_message).toBe("Codex timeout after 30000ms");
     expect(JSON.parse(row?.matched_signals ?? "[]")).toEqual(["modify", "validation"]);
-    expect(JSON.parse(row?.capabilities_json ?? "{}")).toEqual({ needsFileWrite: true, needsShell: true });
+    expect(JSON.parse(row?.capabilities_json ?? "{}")).toMatchObject({
+      needsFileWrite: true,
+      needsShell: true,
+      classifierElapsedMs: 30012,
+      classifierErrorType: "timeout",
+    });
   });
 });
