@@ -1,6 +1,6 @@
 # MiniClaw 架构图册
 
-> 三张图 + 用户级扩展全景，由外到内，10 分钟看懂全局。
+> 核心图册 + 用户级扩展全景，由外到内，10 分钟看懂全局。
 > 所有图用 Mermaid 渲染，GitHub 直接显示。
 
 ---
@@ -13,7 +13,7 @@ flowchart LR
 
     subgraph Discord["Discord 平台"]
         DC["#常规 / #chat<br/>4 分类频道（AI/PERSONAL/STOCK/NEWS）"]
-        SC["/task /status /health /agent-config<br/>/cancel /resume /remember /forget /memories"]
+        SC["/task /status /health /doctor /incidents /incident<br/>/agent-config /cancel /resume /remember /forget /memories"]
     end
 
     subgraph LocalMac["本机 (Mac)"]
@@ -30,6 +30,8 @@ flowchart LR
             RCFG["agent/runtime-config.ts<br/>/agent-config 继承摘要"]
             MON["monitoring/connectivity-monitor.ts<br/>Discord/HTTPS/SMTP 链路探测"]
             NOTIFY["notifications/smtp-email.ts<br/>Email fallback 告警"]
+            DOCTOR["ops/doctor*.ts<br/>只读诊断 + incident + guarded repair/ship"]
+            SAFE["ops/safe-restart.ts<br/>active task/chat restart guard"]
         end
 
         subgraph Stage["Stage 子系统进程 (pnpm stage)"]
@@ -54,7 +56,7 @@ flowchart LR
             UC10["providers/wechat-mp/*.yaml<br/>公众号采集配置 + state"]
             UC11["secrets/wechat-mp-session.json<br/>公众号后台登录态"]
             UC12["runtime/connectivity.json<br/>链路探测状态"]
-            DB[("data.db<br/>SQLite WAL<br/>tasks · chat_history · scenes · scene_messages")]
+            DB[("data.db<br/>SQLite WAL<br/>tasks · task_events · incidents · repair_runs · market_forecasts")]
         end
 
         subgraph Raven["raven 反代 (:7024)<br/>Claude provider 可选"]
@@ -85,6 +87,12 @@ flowchart LR
     MON -->|"Discord REST / gateway 探测"| DC
     MON -->|"Discord 不通但 SMTP 可用"| NOTIFY
     NOTIFY -->|"SMTP"| SMTP
+    DOCTOR -->|"读 tasks/task_events/incidents/repair_runs"| DB
+    DOCTOR -->|"读 cron state"| UC2
+    DOCTOR -->|"读 connectivity state"| UC12
+    DOCTOR -->|"读 PM2 日志"| UC9
+    DOCTOR -->|"summary / operator commands"| DC
+    DOCTOR -.->|"guarded restart request"| SAFE
     CRON -->|"type=script"| UC3
 
     CHAT -->|"Claude: messages.stream"| Raven
@@ -103,8 +111,10 @@ flowchart LR
     CHAT -->|"读"| UC5
     TASK -->|"读"| UC5
     HANDLERS --> DB
+    HANDLERS --> DOCTOR
     CRON --> UC1
     CRON --> UC2
+    MON --> UC12
 
     Raven -->|"HTTPS<br/>/v1/messages"| COPILOT
     COPILOT -->|"SSE stream"| Raven
@@ -137,9 +147,9 @@ flowchart LR
     classDef cloud fill:#f6ffed,stroke:#52c41a
     class User,Term user
     class DC,SC discord
-    class BOT,CHAT,TASK,HANDLERS,SUBA,CRON,MCP,RCFG miniclaw
+    class BOT,CHAT,TASK,HANDLERS,SUBA,CRON,MCP,RCFG,MON,NOTIFY,DOCTOR,SAFE miniclaw
     class STG_UI,STG_ORCH,STG_AGT,STG_SM,STG_PERS stage
-    class UC0,UC1,UC2,UC3,UC4,UC5,UC6,UC7,UC8,UC9,UC10,UC11,DB,AGENTS,MCPCFG,CODEXCFG,CLAUDECFG,PERSREPO usercfg
+    class UC0,UC1,UC2,UC3,UC4,UC5,UC6,UC7,UC8,UC9,UC10,UC11,UC12,DB,AGENTS,MCPCFG,CODEXCFG,CLAUDECFG,PERSREPO usercfg
     class RAVEN raven
     class COPILOT,EXA,CTX7 cloud
 ```
@@ -155,7 +165,9 @@ flowchart LR
 - **分层配置**：结构化设置优先放 `~/.miniclaw/config.yaml`；`.env` 保留 secrets、代理和临时 override；优先级是内置默认值 < YAML < env
 - **可控继承本机 Agent 配置**：Codex 可用 `inherit` 回落到 `~/.codex/config.toml`；Claude task 显式加载 `user/project/local` settings，默认禁用 hooks；MCP 仍通过 `mcp.allowlist` 控制
 - **Discord task 三层输出**：状态 embed 只放元数据；progress message 执行中持续 edit、完成后保留 Execution Summary；最终结果走普通 Markdown 分片
+- **Task trace 观测层**：`src/agent/task-reporter.ts` 把 task lifecycle、provider/tool event、Discord delivery failure 写入 `task_events`，Auto Doctor 优先读结构化 trace 再回退日志
 - **pre-provider 扩展点**：cron `task` 可先运行 provider 采集结构化数据，再把 JSON 注入 prompt；微信公众号日报通过 `wechat-mp` provider 落地，邮件类任务通过通用 `email` capability + `email-query` / `cmb-credit-card-email` provider 复用同一只读邮箱基础能力
+- **Auto Doctor / guarded repair**：`/doctor` 和 scheduled scan 聚合 DB、cron state、connectivity、PM2、日志与 Git 证据；自动修复只允许隔离 worktree/repair branch，ship 到 `main` 必须走显式 operator approval 和 safe-restart guard
 - **白名单两道闸**：`discord.allowed_user_id` 限制谁能用，`routing.auto_reply_channels` 决定哪些频道无需 @mention 进入 chat，默认 `["*"]` 表示全部 guild channel；`routing.task_channels` 决定哪些频道无需 @mention 直接创建 task；旧 `MINICLAW_*` env 仍可覆盖
 - **Smart Task Router 是 chat/task 边界上的升级层**：启用后只在本来会响应的 chat 入口运行，先用 heuristic + LLM classifier 判断自然语言 prompt，必要时用按钮确认后复用 `/task` 的线程、DB、progress 和 final output 链路；决策默认以 hash + capped preview 写入 SQLite
 - **LLM 流量全部经过 raven**：`ANTHROPIC_BASE_URL=http://localhost:7024` 让两个 SDK 都走本地代理
@@ -418,12 +430,24 @@ flowchart LR
 
 ---
 
-## 6. 用户级目录布局（`~/.miniclaw/`）
+## 6. Auto Doctor 与 Guarded Repair
+
+`ops/doctor.ts` 是只读诊断入口，CLI 通过 `pnpm run doctor`，Discord 通过 `/doctor`、`/incidents` 和 `/incident` 操作。它读取 SQLite task / task_events / incidents / repair_runs、cron state、connectivity state、PM2 状态、MiniClaw 日志和 Git 状态，然后输出 incident type、severity、likely category、repairAllowed 和 recommended action。
+
+`ops/doctor-scheduler.ts` 在 Discord `ClientReady` 后启动，但自动扫描默认需要显式打开 `doctor.auto_diagnose_enabled`。scheduled scan 会把 actionable symptom 持久化到 `incidents` / `incident_events`；如果 `doctor.auto_repair_enabled` 打开，才会把 repair-eligible incident 交给 `doctor:repair`。
+
+`ops/doctor-repair.ts` 的执行边界是隔离 worktree + `doctor-repair/<incident-id>` 分支。它拒绝 provider auth、provider data、network、Discord、third-party 类问题，检查 allowed/blocked paths，运行质量门禁，验证通过后可按配置 commit/push repair branch；它不会直接改 live main worktree。
+
+`ops/doctor-ship.ts` 是 repair branch 进入 live `main` 的显式审批边界。只有 `doctor:ship --execute --approve-main` 或 Discord `/incident approve-ship` 会尝试 fast-forward `main`，且必须验证 recorded repair commit SHA。restart 也必须走 `ops/safe-restart.ts`，它会拒绝有 active task/chat 的 PM2 restart，除非操作者显式 force。
+
+---
+
+## 7. 用户级目录布局（`~/.miniclaw/`）
 
 ```
 ~/.miniclaw/
 ├── config.yaml              # MiniClaw 分层配置（非 secret）
-├── data.db                  # SQLite: tasks + chat_history + scenes + scene_messages
+├── data.db                  # SQLite: tasks / task_events / incidents / repair_runs / market_forecasts 等
 ├── memories/
 │   └── MEMORY.md            # 长期记忆（4 section + § 分隔，可 vim 编辑）
 ├── cron/
@@ -446,8 +470,14 @@ flowchart LR
 │   ├── futu-stock/
 │   │   ├── config.yaml      # 富途 OpenD profile 配置（无密码、无 token）
 │   │   └── *.yaml           # 股票日报 provider 配置（脱敏级别、market_session）
-│   └── stock-portfolio/
-│       └── *.yaml           # 聚合多个只读股票账户 provider，并配置 CNY 汇率/Top movers
+│   ├── stock-portfolio/
+│   │   └── *.yaml           # 聚合多个只读股票账户 provider，并配置 CNY 汇率/Top movers
+│   ├── stock-pulse/
+│   │   └── *.yaml           # 盘中 hourly 异动扫描 provider 配置
+│   ├── market-intel/
+│   │   └── *.yaml           # CN/US 盘前市场情报 provider 配置
+│   └── market-forecast-evaluation/
+│       └── *.yaml           # 盘后 forecast 评价与 calibration 配置
 ├── capabilities/
 │   └── email/               # 通用只读邮箱能力（IMAP adapter、MIME 解析、dedupe state）
 │       ├── config.yaml      # 邮箱 profile 配置（非 secret）
@@ -474,7 +504,7 @@ flowchart LR
 
 ---
 
-## 7. 附件流（多模态）
+## 8. 附件流（多模态）
 
 源文件：`src/discord/attachments.ts`。`bot.ts` MessageCreate 和 `handlers.ts` `/task` 都在调它。
 
@@ -520,15 +550,15 @@ classify by mime + ext
 
 ---
 
-## 数据库 schema
+## 9. 数据库 schema
 
-`~/.miniclaw/data.db`（SQLite WAL 模式）。schema 版本使用 SQLite `PRAGMA user_version` 管理，当前版本由 `src/store/db.ts` 的 `SCHEMA_VERSION` 定义。
+`~/.miniclaw/data.db`（SQLite WAL 模式）。schema 版本使用 SQLite `PRAGMA user_version` 管理，当前版本由 `src/store/db.ts` 的 `SCHEMA_VERSION = 7` 定义。
 
 ```mermaid
 erDiagram
     tasks {
         TEXT id PK
-        TEXT discord_thread_id "空字符串 = 非 thread (cron 写入)"
+        TEXT discord_thread_id "Discord thread id 或空"
         TEXT discord_user_id "user_id 或 'cron'"
         TEXT prompt
         TEXT cwd
@@ -540,6 +570,12 @@ erDiagram
         TEXT created_at
         TEXT completed_at
         TEXT progress_message_id "用于跨进程恢复"
+        TEXT source_route_type "task_channel/cron_task/cron_skill/smart_router 等"
+        TEXT source_channel_id
+        TEXT source_message_id
+        TEXT source_message_url
+        TEXT source_metadata_json
+        TEXT parent_context_json
     }
     chat_history {
         INTEGER id PK
@@ -549,8 +585,65 @@ erDiagram
         TEXT content
         TEXT created_at
     }
-    memories_LEGACY {
-        TEXT NOTE "已迁移到 ~/.miniclaw/memories/MEMORY.md，表保留作冷备不再读写"
+    smart_router_decisions {
+        INTEGER id PK
+        TEXT message_id
+        TEXT channel_id
+        TEXT user_id
+        TEXT prompt_hash
+        TEXT prompt_preview
+        TEXT full_prompt
+        TEXT intent
+        REAL confidence
+        TEXT capabilities_json
+        TEXT action_result
+        TEXT created_task_id
+        TEXT created_at
+    }
+    task_events {
+        INTEGER id PK
+        TEXT task_id FK
+        TEXT event_type
+        TEXT severity
+        TEXT message
+        TEXT payload_json
+        TEXT created_at
+    }
+    incidents {
+        TEXT id PK
+        TEXT dedupe_key
+        TEXT type
+        TEXT severity
+        TEXT status
+        TEXT title
+        TEXT subject_id
+        TEXT subject_type
+        TEXT source_json
+        TEXT evidence_json
+        TEXT diagnosis_json
+        TEXT created_at
+        TEXT updated_at
+        TEXT resolved_at
+    }
+    incident_events {
+        INTEGER id PK
+        TEXT incident_id FK
+        TEXT event_type
+        TEXT payload_json
+        TEXT created_at
+    }
+    repair_runs {
+        TEXT id PK
+        TEXT incident_id FK
+        TEXT status
+        TEXT workspace_path
+        TEXT branch
+        TEXT base_sha
+        TEXT commit_sha
+        TEXT verification_json
+        TEXT report_json
+        TEXT created_at
+        TEXT completed_at
     }
     scenes {
         TEXT id PK "uuid"
@@ -571,14 +664,63 @@ erDiagram
         TEXT tool_calls_json "ToolCallRecord[]"
         REAL cost_usd
     }
+    market_forecasts {
+        TEXT id PK
+        TEXT task_id FK
+        TEXT job_name
+        TEXT channel_id
+        TEXT market_scope
+        TEXT trade_date
+        TEXT session
+        TEXT generated_at
+        TEXT calendar_status
+        TEXT data_quality_status
+        TEXT payload_json
+        TEXT report_text
+        TEXT created_at
+        TEXT updated_at
+    }
+    market_forecast_items {
+        TEXT id PK
+        TEXT forecast_id FK
+        TEXT item_type
+        TEXT target
+        TEXT direction
+        REAL probability
+        REAL confidence
+        TEXT evidence_ids_json
+        TEXT invalidation
+        TEXT rationale
+        TEXT source
+        TEXT created_at
+    }
+    market_forecast_evaluations {
+        TEXT id PK
+        TEXT forecast_id FK
+        TEXT evaluated_at
+        TEXT outcome_json
+        TEXT score_json
+        TEXT notes
+        TEXT created_at
+    }
+    memories_LEGACY {
+        TEXT NOTE "已迁移到 ~/.miniclaw/memories/MEMORY.md，表保留作冷备不再读写"
+    }
+
+    tasks ||--o{ task_events : "records"
+    tasks ||--o{ market_forecasts : "produces"
+    incidents ||--o{ incident_events : "has"
+    incidents ||--o{ repair_runs : "has"
     scenes ||--o{ scene_messages : "has"
+    market_forecasts ||--o{ market_forecast_items : "has"
+    market_forecasts ||--o{ market_forecast_evaluations : "evaluated_by"
 ```
 
 ---
 
 ## 阅读建议
 
-1. **第一次接触** → 看图 1 + 图 5（用户级目录），对照 `src/index.ts` + `src/bot.ts` 通读
+1. **第一次接触** → 看图 1 + 用户级目录布局，对照 `src/index.ts` + `src/bot.ts` 通读
 2. **想改 chat 行为** → 看图 2，集中改 `src/agent/chat.ts`
 3. **想加新 subagent** → 看图 3 + Supervisor 表，新增 `agents/<name>.md`（repo） 或 `~/.miniclaw/skills/<name>.md`（user）
 4. **想加新 cron** → 看图 4，写 `~/.miniclaw/cron/<name>.yaml` 重启 bot

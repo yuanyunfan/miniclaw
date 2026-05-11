@@ -47,6 +47,11 @@ flowchart TD
     IS -->|是| SW{"commandName<br/>switch"}
     SW --> T["/task → handleTask"]
     SW --> S["/status → handleStatus"]
+    SW --> H["/health → handleHealth"]
+    SW --> DR["/doctor → handleDoctor"]
+    SW --> INCS["/incidents → handleIncidents"]
+    SW --> INC["/incident → handleIncident"]
+    SW --> AC["/agent-config → handleAgentConfig"]
     SW --> C["/cancel → handleCancel"]
     SW --> RS["/resume → handleResume"]
     SW --> RM["/remember → handleRemember"]
@@ -55,13 +60,13 @@ flowchart TD
     SW --> UN["未知 → 回复未知命令"]
 
     CR --> RECOV[recoverInterruptedTasks]
-    CR --> SCHED[startScheduler<br/>注册 ~/.miniclaw/cron/*.yaml]
+    CR --> IDX[index.ts ClientReady<br/>connectivity monitor + doctor scheduler + cron scheduler]
 
     classDef filter fill:#fff7e6,stroke:#fa8c16
     classDef route fill:#e6f7ff,stroke:#1890ff
     classDef drop fill:#fff1f0,stroke:#cf1322,color:#a8071a
     class F1,F2,F3,F4,P1,TCH,R0,R1,IS,SW filter
-    class CHAT,RES,TASKMSG,MEM,GREET,SMART,BTN,AUTOTASK,CRT,BACT,T,S,C,RS,RM,FG,MM,RECOV,SCHED route
+    class CHAT,RES,TASKMSG,MEM,GREET,SMART,BTN,AUTOTASK,CRT,BACT,T,S,H,DR,INCS,INC,AC,C,RS,RM,FG,MM,RECOV,IDX route
     class X1,X2,X3,X4,X5 drop
 ```
 
@@ -69,24 +74,26 @@ flowchart TD
 
 ## 三个监听器分别在哪
 
-| 行号 | 事件 | 干什么 |
+| 位置 | 事件 | 干什么 |
 |------|------|--------|
-| `bot.ts:32` | `MessageCreate` | 处理普通消息（thread 续话 / task intake 频道 / @mention / 自动 chat 频道 / 记忆指令） |
-| `bot.ts:158` | `InteractionCreate` | 先处理 cron retry 按钮，再处理 smart router 按钮，最后处理 slash commands |
-| `bot.ts:203` | `ClientReady` | 启动 scheduler + 恢复中断任务 |
+| `createBot()` | `MessageCreate` | 处理普通消息（thread 续话 / task intake 频道 / @mention / 自动 chat 频道 / 记忆指令） |
+| `createBot()` | `InteractionCreate` | 先处理 cron retry 按钮，再处理 smart router 按钮，最后处理 slash commands |
+| `createBot()` | `ClientReady` | 登录成功后恢复中断任务 |
+
+另外 `src/index.ts` 也在同一个 Discord client 上注册 `ClientReady`，用于启动 connectivity monitor、Auto Doctor scheduler 和 cron scheduler。
 
 ---
 
 ## MessageCreate 决策链
 
-### 闸 1+2：硬过滤（行 33-34）
+### 闸 1+2：硬过滤
 
 ```ts
 if (message.author.bot) return;                       // bot 不互回
 if (message.author.id !== config.allowedUserId) return; // 单用户白名单
 ```
 
-### Path 1: Thread Continuation（行 36-66）
+### Path 1: Thread Continuation
 
 > 设计意图：你 `/task` 创建过的 thread 里，再发任何文字 = 续话。
 
@@ -147,12 +154,12 @@ if (!isAutoChannel && !isMentioned) return;
 
 ### Path 3 内部分流（按优先级 if-else）
 
-| 优先级 | 行 | 判断 | 走向 |
-|--------|----|------|------|
-| **预处理** | `:104-112` | `message.attachments` 非空 | `processAttachments()` → `attachmentBlocks: ContentBlockParam[]`，notices 直发频道 |
-| **高** | `:114-117` | content 为空 **且** attachmentBlocks 为空 | `reply("你好！...")` → return |
-| **中** | `:120-124` | `parseExplicitMemory` 命中"记住:" / "remember" / "/memory" | `addMemory` + reply ✅ → return |
-| **低** | `:127+` | 其他所有内容（含纯附件 → 默认 prompt"请分析这些附件"） | smart router（如果启用）→ chat / 按钮确认 / task_auto |
+| 优先级 | 判断 | 走向 |
+|--------|------|------|
+| **预处理** | `message.attachments` 非空 | `processAttachments()` → `attachmentBlocks: ContentBlockParam[]`，notices 直发频道 |
+| **高** | content 为空 **且** attachmentBlocks 为空 | `reply("你好！...")` → return |
+| **中** | `parseExplicitMemory` 命中"记住:" / "remember" / "/memory" | `addMemory` + reply ✅ → return |
+| **低** | 其他所有内容（含纯附件 → 默认 prompt"请分析这些附件"） | smart router（如果启用）→ chat / 按钮确认 / task_auto |
 
 ### Smart Task Router
 
@@ -213,17 +220,30 @@ chunkMessage 切 2000 字  ← Discord 单消息上限
 
 ---
 
-## InteractionCreate 的简单 switch（`:158`-）
+## InteractionCreate 的简单 switch
 
-现在先处理 `interaction.isButton()` 的 smart router 确认按钮，再处理 `isChatInputCommand`（slash command）。其他按钮或菜单仍忽略。
+现在先处理 `interaction.isButton()` 的 cron retry 按钮和 smart router 确认按钮，再处理 `isChatInputCommand`（slash command）。其他按钮或菜单仍忽略。
 
-9 个 case **直接转发到 `commands/handlers.ts`** 的对应 handler，`bot.ts` 不做业务逻辑。
+12 个 top-level slash command **直接转发到 `commands/handlers.ts`** 的对应 handler，`bot.ts` 不做业务逻辑：
 
-错误处理（`:204+`）有个细节：要根据 `cmd.deferred || cmd.replied` 决定用 `editReply` 还是 `reply` —— 因为 handler 可能已经 `deferReply()` 过了（耗时任务必须在 3 秒内 defer）。包了 `try-catch` 防错误回复本身又抛异常导致进程崩。
+- `/task`
+- `/status`
+- `/health`
+- `/doctor`
+- `/incidents`
+- `/incident`
+- `/agent-config`
+- `/cancel`
+- `/resume`
+- `/remember`
+- `/forget`
+- `/memories`
+
+错误处理有个细节：要根据 `cmd.deferred || cmd.replied` 决定用 `editReply` 还是 `reply` —— 因为 handler 可能已经 `deferReply()` 过了（耗时任务必须在 3 秒内 defer）。包了 `try-catch` 防错误回复本身又抛异常导致进程崩。
 
 ---
 
-## ClientReady 启动逻辑（`:203-205`）
+## ClientReady 启动逻辑
 
 ```ts
 client.once(Events.ClientReady, (c) => {
@@ -234,9 +254,20 @@ client.once(Events.ClientReady, (c) => {
 
 另外 `src/index.ts` 也注册了一个 `ClientReady`：
 ```ts
-bot.once(Events.ClientReady, (client) => startScheduler(client));
+bot.once("clientReady", (client) => {
+  connectivityMonitor = startConnectivityMonitor(client);
+  doctorScheduler = startDoctorScheduler(client);
+  if (!config.e2e.disableScheduler) startScheduler(client);
+});
 ```
-启动时载入 `~/.miniclaw/cron/*.yaml`，注册到 `node-cron`，到点自动 dispatch。SIGTERM 时 `stopScheduler()` 优雅退出。
+
+启动时：
+
+- `startConnectivityMonitor(client)` 写 `~/.miniclaw/runtime/connectivity.json`，必要时触发 Email fallback。
+- `startDoctorScheduler(client)` 在启用 `doctor.auto_diagnose_enabled` 后做定时只读诊断、incident persistence 和可选 guarded repair。
+- `startScheduler(client)` 载入 `~/.miniclaw/cron/*.yaml`，注册到 `node-cron`，到点自动 dispatch；E2E 模式可通过 `MINICLAW_DISABLE_SCHEDULER=true` 禁用。
+
+SIGINT / SIGTERM 由 `src/index.ts` 的 graceful shutdown 处理：先停止 monitor / doctor scheduler / cron scheduler，再等待 active task/chat drain，超时后标记 interrupted。
 
 ---
 
@@ -271,13 +302,13 @@ cron retry 按钮先于 smart router 按钮处理，避免误落到普通 slash 
 
 | 想做什么 | 改哪里 |
 |----------|--------|
-| 加**新触发词**（如 `/search`） | `register.ts` 加定义 → `handlers.ts` 加 handler → `bot.ts:158+` 加 case |
+| 加**新触发词**（如 `/search`） | `register.ts` 加定义 → `handlers.ts` 加 handler → `bot.ts` 的 slash command switch 加 case |
 | 让 bot **只响应 @mention** | 设置 `MINICLAW_AUTO_REPLY_CHANNELS=none` 或 YAML `routing.auto_reply_channels: []` |
 | 新增**免 @ task 频道** | 创建 Discord 频道 → 把频道 ID 加到 `MINICLAW_TASK_CHANNELS` → 重启 bot |
 | 在 chat 入口启用自然语言 task 识别 | `routing.smart_router.enabled: true`，必要时配置 `confirm_channels` / `auto_task_channels` |
-| 加**多用户支持** | 把 `config.allowedUserId` 改成数组，`:34` 改 `includes` |
+| 加**多用户支持** | 把 `config.allowedUserId` 改成数组，并同步 hard filter 的判断 |
 | 让 bot 响应**新按钮点击** | `InteractionCreate` 现已有 `interaction.isButton()` 分支，新增按钮需避免和 `miniclaw:smart:*` custom id 冲突 |
-| **关掉 thread 续话** | `bot.ts:36+` 整段 if 注释掉（保留 Path 2） |
+| **关掉 thread 续话** | 调整 Path 1 的 thread continuation 分支（保留 Path 2） |
 | 加**新 cron job** | 不改代码，写 `~/.miniclaw/cron/<name>.yaml` 重启 bot |
 
 ---
@@ -288,4 +319,4 @@ cron retry 按钮先于 smart router 按钮处理，避免误落到普通 slash 
 - `src/agent/chat.ts` — chat 主流程的 LLM 调用细节
 - `src/agent/task.ts` — `/task` Supervisor 模式细节
 - `src/cron/scheduler.ts` — cron 调度引擎
-- `src/commands/handlers.ts` — 7 个 slash command 的实现
+- `src/commands/handlers.ts` — 12 个 top-level slash command 的实现

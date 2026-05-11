@@ -1,6 +1,6 @@
 # MiniClaw 测试与质量门禁方案
 
-> 结论：MiniClaw 需要采用 `G0/G1/G2 + L1/L2/L3/L4 + D1` 的分层体系。`L*` 负责验证行为，`G*` 负责阻止坏改动进入 commit/push/CI，`D1` 负责阻止架构文档漂移。真实 Discord E2E 是 MiniClaw 必须补上的能力，但日常 gate 默认应使用 fake agent，真实 Claude/Codex 只放在 manual/nightly。
+> 结论：MiniClaw 采用 `G0/G1/G2 + L1/L2/L3/L4 + D1` 的分层体系。`L*` 负责验证行为，`G*` 负责阻止坏改动进入 commit/push/CI，`D1` 负责阻止架构文档漂移。真实 Discord E2E 已有 harness 和 workflow，但日常 gate 默认只跑 deterministic fake/fixture；真实 Claude/Codex 仍只放在 manual/nightly。
 
 ## 背景
 
@@ -19,20 +19,19 @@ MiniClaw 不是普通 TypeScript library。它同时包含：
 
 当前已经具备的基础：
 
-- `package.json` 已有 `build`、`test`、`test:cov`。
-- `vitest.config.ts` 已配置 Vitest 和 V8 coverage。
-- TypeScript `strict` 已开启。
-- 全量单元测试当前约 6 秒量级，适合进入 pre-commit。
-- `scripts/git-hooks/pre-commit` 当前只运行 `pnpm exec tsc --noEmit`。
+- `package.json` 已有 `build`、`lint`、`typecheck`、`test`、`test:cov`、`quality:commit`、`quality:push`、`quality:g0`、`quality:secrets`、`quality:deps`、`quality:coverage`、`e2e:cron` 和 `e2e:discord`。
+- `scripts/git-hooks/pre-commit` 调用 `pnpm run quality:commit`；实际顺序是 staged G0、staged secret scan、lint、typecheck、Vitest。
+- `scripts/git-hooks/pre-push` 调用 `pnpm run quality:push`；实际顺序是 build、coverage、coverage ratchet、lint、cron E2E、full-tree G0、full-tree secret scan、dependency scan，并可用 `MINICLAW_RUN_DISCORD_E2E=1` 显式开启真实 Discord E2E。
+- `.github/workflows/quality.yml` 在 push / pull request 上运行 Node 22、frozen install、G0、gitleaks、typecheck、lint、coverage、coverage ratchet、cron E2E、dependency scan 和 build。
+- `.github/workflows/discord-e2e.yml` 是独立 manual/nightly workflow；默认 fake agent，可通过 input/nightly 配置扩展 cases 或跑真实 agent。
+- `eslint.config.js` 对 `src/**/*.ts` 强制 `no-console` 和 `@typescript-eslint/no-floating-promises`，CLI/stdio 入口按例外处理。
+- `scripts/quality-coverage-ratchet.ts` 已设置分模块 coverage ratchet，不设置全局 80%。
 
-当前缺口：
+当前仍需注意：
 
-- 没有 `pre-push` hook。
-- 没有 GitHub Actions CI。
-- 没有 lint gate，文档里禁止源码直接 `console.*` 但没有工具强制。
-- 没有 secret scan / dependency scan。
-- 没有真实 Discord transport 的 E2E。
-- coverage 没有 threshold；总体覆盖率被 `bot.ts`、真实 SDK/client、I/O entry path 拉低，不适合立刻设全局 80%。
+- D1 文档漂移目前是人工/process gate；`package.json` 和 GitHub Actions 还没有独立的 `quality:docs` 或 changed-path docs drift 脚本。
+- 真实 Discord E2E 依赖 test Discord secrets 和网络稳定性，不进入普通 pre-commit / pre-push / CI 默认路径。
+- coverage ratchet 只覆盖第一批纯逻辑/formatter/provider 模块；I/O-heavy 入口仍以 targeted tests + E2E fixture 保护。
 
 ## 命名原则
 
@@ -91,11 +90,11 @@ MiniClaw 特有 lint 规则：
 - 禁止把 secrets、full prompt、raw email、token-like 字段写入日志。
 - 对测试文件可以放宽部分规则，但不能放宽 secret 规则。
 
-建议执行位置：
+实际执行位置：
 
-- pre-commit 跑 `typecheck`。
+- pre-commit 跑 `lint + typecheck`。
 - pre-push 跑 `build + lint`。
-- CI 跑完整 G1。
+- CI 跑 `typecheck + lint + build`。
 
 ## L1：快速单元测试
 
@@ -223,10 +222,11 @@ MiniClaw 特有 lint 规则：
 - 禁止提交 `.env`、`*.db`、`*.sqlite`、`~/.miniclaw` dump、Discord transcript 中的 token。
 - 对 JSON logs / E2E artifact 做 redaction 检查。
 
-建议执行位置：
+实际执行位置：
 
-- pre-push 必跑 staged secret scan。
-- CI 必跑 full secret scan 和 dependency scan。
+- pre-commit 跑 staged secret scan。
+- pre-push 跑 full-tree secret scan 和 dependency scan。
+- CI 用 `gitleaks/gitleaks-action@v2` 跑 full secret scan，并跑 `pnpm run quality:deps`。
 
 ## D1：文档漂移门禁
 
@@ -243,38 +243,39 @@ MiniClaw 是 docs-first 项目，长期维护依赖 `docs/architecture.md`、`do
 - 改 DB schema：必须同步 `docs/architecture.md` ER 图。
 - 改 `~/.miniclaw/` 文件布局：必须同步 `docs/architecture.md` 用户级目录布局。
 
-执行方式：
+当前执行方式：
 
-- 第一阶段用脚本检查 changed paths 与 docs changed paths 的对应关系。
-- 第二阶段再接入 pre-push/CI。
-- 对紧急修复可以允许 override，但必须在 PR/commit body 写明原因。
+- 目前还没有脚本化 changed-path docs drift check；执行者需要在改动完成前按下面映射人工核对。
+- 对紧急修复可以允许暂不改文档，但必须在 commit body、PR 或后续 plan 中写明原因和补文档路径。
+- 后续如果新增 `quality:docs`，应先实现 changed paths 到 docs paths 的轻量映射，再接入 pre-push/CI。
 
 ## 推荐执行矩阵
 
 pre-commit：
 
 - G0 staged safety check
-- G1 `typecheck`
+- G2 staged secret scan
+- G1 `lint + typecheck`
 - L1 `pnpm test`
-- prompt snapshot path guard
 
 pre-push：
 
 - G1 `build + lint`
-- L2 integration tests
 - `test:cov`
-- G2 staged secret scan / dependency scan
+- coverage ratchet
+- cron E2E fixture
+- G0 full-tree safety check
+- G2 full-tree secret scan / dependency scan
 - 可选 L3 Discord E2E，通过 env 显式开启
 
 CI：
 
 - G0 install / lockfile / environment
-- G1 typecheck / build / lint
-- L1 unit tests
-- L2 integration tests
-- coverage report
+- G1 typecheck / lint / build
+- coverage run + coverage ratchet
+- cron E2E fixture
 - G2 full secret scan / dependency scan
-- D1 docs drift check
+- D1 docs drift 仍为人工/process gate，尚未脚本化
 
 manual/nightly：
 
@@ -298,14 +299,21 @@ manual/nightly：
 - 对 I/O-heavy 模块先拆出可测逻辑，再逐步 ratchet。
 - coverage gate 采用“不得下降 + 关键模块阈值”的组合。
 
-第一批适合设阈值的模块：
+当前已设 ratchet 的模块：
+
+- `src/store/memory-md.ts`
+- `src/discord/chunks.ts`
+- `src/cron/template.ts`
+- `src/lib/markdown.ts`
+- `src/routing/intent.ts`
+- `src/providers/futu-stock/format.ts`
+- `src/providers/stock-portfolio/index.ts`
+
+下一批适合纳入 ratchet 的模块：
 
 - `src/cron/loader.ts`
 - `src/cron/state.ts`
-- `src/cron/template.ts`
-- `src/routing/intent.ts`
 - `src/routing/context.ts`
-- `src/discord/chunks.ts`
 - `src/discord/formatter.ts`
 - `src/store/db.ts`
 - provider parser/formatter/redaction 模块

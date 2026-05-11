@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-截至 2026-05-07，Phase 1 和 Phase 2 已经落地：
+截至 2026-05-11，Phase 1、Phase 2 和观测侧 trace 已经落地：
 
 - `/task` 开始时发送短 embed 状态卡片，完成时 edit 为 completed / failed 元数据卡片。
 - 完整最终结果不再放入 embed description，而是始终通过普通 Markdown 消息分片发送。
@@ -12,11 +12,13 @@
 - Codex provider 已把 `command_execution`、`file_change`、`mcp_tool_call`、`web_search`、`todo_list` 等 SDK item 映射为 Discord 进度行。
 - progress 更新节流为约 2s，降低 Discord edit rate limit 风险。
 - `tasks.progress_message_id` 已持久化，用于进程重启后把悬挂任务标记为 interrupted。
+- `src/agent/task-reporter.ts` 已作为观测边界落地，把 task lifecycle、provider/tool event、Discord delivery failure 等规范化写入 SQLite `task_events`。
+- Auto Doctor 已读取 `task_events`，用于区分 provider、Discord delivery、network 和 MiniClaw runtime 类问题。
 
 仍未落地的扩展：
 
-- 统一 `TaskViewEvent` / `TaskReporter` 抽象尚未拆出，当前映射逻辑仍主要在 `src/agent/task.ts`。
-- 完整 trace 附件尚未实现，Discord 主消息只保留最近步骤摘要。
+- SDK event → Discord renderer 的完整 `TaskViewEvent` 解耦尚未完成，进度行格式化仍主要在 `src/agent/task.ts`。
+- 完整 trace 附件尚未实现；当前完整结构化 trace 先进 `task_events`，Discord 主消息只保留最近步骤摘要。
 
 ## 背景
 
@@ -31,6 +33,8 @@
 
 - `src/commands/handlers.ts`: `/task` 入口、创建 thread、发送开始 embed。
 - `src/agent/task.ts`: 执行 Codex / Claude task，消费 SDK 事件，发送最终结果。
+- `src/agent/task-reporter.ts`: 规范化 task lifecycle / provider / tool / Discord delivery 事件，写入 `task_events`。
+- `src/store/task-events.ts`: `task_events` 表的 append/list/count store API。
 - `src/discord/progress.ts`: 维护一条实时进度消息。
 - `src/discord/formatter.ts`: 构造 task start / complete / error embed。
 - `src/discord/chunks.ts`: 普通 Discord 消息分片。
@@ -243,33 +247,47 @@ Codex / Claude 适配层负责把 SDK 原始事件转换为 `TaskViewEvent`。Di
 - 成功后 progress message 保留。
 - 失败后 progress message 仍保留，并标记失败。
 
-### Phase 3: 引入 TaskReporter（待实现）
+### Phase 3: 引入 TaskReporter / Task Events（部分完成）
 
-目标：把 SDK 执行逻辑和 Discord 展示逻辑解耦。
+目标：先把可诊断 trace 从 `task.ts` 中规范化出来，再逐步把 SDK 执行逻辑和 Discord 展示逻辑解耦。
 
-建议新增：
+已新增：
 
-- `src/discord/task-reporter.ts`
-- `src/agent/task-events.ts`
+- `src/agent/task-reporter.ts`
+- `src/store/task-events.ts`
+- SQLite `task_events` 表
 
-`TaskReporter` 负责：
+当前 `TaskReporter` 负责：
+
+- 写入 task accepted / context captured / session / turn / tool / provider error / Discord delivery failure / final status。
+- 保证观测写入 best-effort，失败时只记录 warn，不影响 task 执行、取消或 shutdown drain。
+- 为 Auto Doctor 提供结构化 trace evidence。
+
+尚未完成的 Discord renderer 解耦：
+
+- `ProgressReporter` 仍负责 Discord progress message 的 send/edit/delete。
+- `taskStartEmbed` / `taskCompleteEmbed` / `taskErrorEmbed` 仍在 `src/discord/formatter.ts`。
+- SDK 原始事件到 progress line 的映射仍在 `src/agent/task.ts`。
+
+未来如果继续抽象，新的 Discord view reporter 应负责：
 
 - 创建 / 更新状态 embed。
 - 创建 / 更新 progress message。
 - 发送最终 Markdown 结果。
 - 发送 trace 摘要或附件。
 
-`executeTask` 负责：
+届时 `executeTask` 应只负责：
 
 - 执行 SDK。
 - 把 SDK 原始事件转换为 `TaskViewEvent`。
-- 调用 `TaskReporter.onEvent(event)`。
+- 调用 Discord view reporter 和 observability `TaskReporter`。
 
 验证：
 
-- Codex provider 和 Claude provider 输出形态一致。
-- Codex provider 保留更丰富的 command / file / todo / search trace。
-- Claude provider 至少保留 tool_use trace。
+- `src/agent/__tests__/task-reporter.test.ts` 覆盖事件写入。
+- `src/store/__tests__/task-events.test.ts` 覆盖 task event store。
+- `src/ops/__tests__/doctor.test.ts` / `doctor-incidents.test.ts` 覆盖 Auto Doctor 读取 trace。
+- 后续完整解耦时再验证 Codex provider 和 Claude provider 输出形态一致。
 
 ### Phase 4: 完整 trace 附件（待实现）
 
@@ -317,6 +335,7 @@ MiniClaw 应迁移的是 Codex CLI 背后的信息结构：
 - 实时进度消息在任务完成后仍可回看。
 - Codex SDK 的 command / file / web / todo 事件能在进度区体现。
 - Claude provider 仍能显示基本 tool trace。
+- 结构化 task trace 能写入 `task_events` 并被 Auto Doctor 使用。
 - 长结果不重复发送。
 - cron 的 `outputMode: raw` 不受 `/task` 展示改造影响。
 
