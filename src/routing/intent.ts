@@ -98,6 +98,7 @@ const SOFT_TASK_CAPABILITIES = new Set<RouteCapabilityName>([
   "needsBrowser",
   "needsLongRunning",
 ]);
+const CLASSIFIER_FAILURE_FLAGS = new Set(["classifier_failed", "classifier_unavailable"]);
 
 function effortRank(effort: EstimatedEffort): number {
   if (effort === "long") return 3;
@@ -151,6 +152,9 @@ function channelListMatches(channelIds: readonly string[], channelId: string): b
 }
 
 function buildReason(decision: RouteCapabilityDecision): string {
+  if (hasClassifierFailure(decision)) {
+    return "classifier failed; ask the user to choose task or chat";
+  }
   const highRisk = highRiskCapabilities(decision);
   if (highRisk.length) return `message requires task-only capabilities: ${highRisk.join(", ")}`;
   const soft = softTaskCapabilities(decision);
@@ -161,6 +165,10 @@ function buildReason(decision: RouteCapabilityDecision): string {
 
 function uniqueStrings(values: readonly string[]): string[] {
   return [...new Set(values.filter((value) => Boolean(value.trim())))];
+}
+
+function hasClassifierFailure(decision: RouteCapabilityDecision): boolean {
+  return decision.riskFlags.some((flag) => CLASSIFIER_FAILURE_FLAGS.has(flag));
 }
 
 function contentWithoutUrls(content: string): string {
@@ -222,6 +230,9 @@ export function resolveCapabilitiesToRouteDecision(capabilities: RouteCapability
   if (highRisk.length) {
     intent = "task_confirm";
     confidence = Math.max(confidence, 0.72);
+  } else if (hasClassifierFailure(capabilities)) {
+    intent = "task_suggest";
+    confidence = Math.max(confidence, 0.55);
   } else if (
     softTaskCapabilities(capabilities).length ||
     capabilities.isUrlOnly

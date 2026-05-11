@@ -208,7 +208,7 @@ Codex provider 下的 classifier 默认优先使用轻量 API，不再先创建 
 - `provider: codex` 强制使用原来的 read-only Codex thread。
 - `model: inherit` 时，Raven/Anthropic-compatible 路径继承 `claude.model`，OpenAI/OpenAI-compatible 路径使用 `gpt-4o-mini`。
 - `timeout_ms` 默认 8000。
-- `fallback_to_codex: true` 时，轻量 API 调用失败会回退到 read-only Codex thread；设为 `false` 时直接把 classifier 失败暴露给 smart router fallback。
+- `fallback_to_codex` 默认 `false`：轻量 API 调用失败会直接暴露给 smart router failure fallback，展示 task/chat 选择按钮。只有显式设为 `true` 时，才会再尝试 read-only Codex thread。
 
 Codex thread fallback 仍关闭 web search 和 network，最多 30 秒超时。
 
@@ -218,7 +218,8 @@ LLM 失败不会阻断消息：
 
 - classifier 抛错：`riskFlags` 增加 `classifier_failed`。
 - classifier 没有传入：`riskFlags` 增加 `classifier_unavailable`。
-- 继续使用客观事实能力，例如 URL-only 仍会 `task_suggest`。
+- 本地不会猜测语义能力，也不会直接进入 task；默认返回 `task_suggest`，在 Discord 中展示“转为 task / 继续 chat / 取消”，让用户决定。
+- URL-only 等客观事实仍会保留在 evidence 中，方便排查。
 - 纯自然语言语义不会再靠 fallback regex 补判；例如“加个/排序/修一下”在 classifier 失败时不会被本地 regex 升级为 task。
 
 ### Capability To Intent
@@ -415,7 +416,7 @@ sqlite3 ~/.miniclaw/data.db 'select id, message_id, channel_id, intent, confiden
 
 - 用户不需要为了 router 写固定触发词；“加个/排序/拆解一下”这类自然语言会由 LLM 判断真实能力需求。
 - LLM 只输出 capability，最终是否转 task 仍由本地 policy 决定。
-- classifier 失败时不会用旧 regex 补判语义，系统会继续 chat 或按 URL-only 等客观事实给 suggestion，并记录 `classifier_failed`。
+- classifier 失败时不会用旧 regex 补判语义；系统默认展示 task/chat 选择按钮，并记录 `classifier_failed` 或 `classifier_unavailable`。
 - 想让普通频道自动创建 task，必须配置 `routing.smart_router.auto_task_channels`，并满足 `min_auto_confidence`。
 - 只要 `auto_task_channels` 为空，smart router 最多展示按钮，不会直接执行写权限任务。
 - 当前 chat path 是轻量 read-only 体验；文件修改、运行验证、commit/push 应进入 task path。

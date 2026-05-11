@@ -584,6 +584,7 @@ storage:
     expect(config.shutdownDrainTimeoutMs).toBe(600000);
     expect(config.smartRouter.enabled).toBe(false);
     expect(config.smartRouter.llmClassifier.enabled).toBe(true);
+    expect(config.smartRouter.llmClassifier.fallbackToCodex).toBe(false);
   });
 
   it("supports Raven classifier provider with inherited model", async () => {

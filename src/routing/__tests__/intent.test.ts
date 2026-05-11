@@ -228,7 +228,7 @@ describe("LLM-first classifier decision points", () => {
     expect(d.matchedSignals).toContain("llm_classifier");
   });
 
-  it("records classifier failure details when the classifier throws", async () => {
+  it("asks the user to choose task or chat when the classifier throws", async () => {
     const d = await classifySmartRoute(
       { content: "调研一下有没有方案", channelId: "chat-1" },
       policy,
@@ -237,12 +237,29 @@ describe("LLM-first classifier decision points", () => {
       }
     );
 
-    expect(d.intent).toBe("chat");
+    expect(d.intent).toBe("task_suggest");
+    expect(d.reason).toBe("classifier failed; ask the user to choose task or chat");
     expect(d.riskFlags).toContain("classifier_failed");
     expect(d.capabilities?.needsMultiStepResearch).toBe(false);
     expect(d.capabilities?.classifierElapsedMs).toBeGreaterThanOrEqual(0);
     expect(d.capabilities?.classifierErrorType).toBe("timeout");
     expect(d.capabilities?.classifierErrorMessage).toBe("Codex timeout after 30000ms");
+
+    const resolved = resolveSmartRouterAction(d, policy, "chat-1");
+    expect(resolved.intent).toBe("task_suggest");
+  });
+
+  it("asks the user to choose task or chat when the classifier is unavailable", async () => {
+    const d = await classifySmartRoute(
+      { content: "这个帮我处理一下", channelId: "chat-1" },
+      policy
+    );
+
+    expect(d.intent).toBe("task_suggest");
+    expect(d.riskFlags).toContain("classifier_unavailable");
+
+    const resolved = resolveSmartRouterAction(d, policy, "chat-1");
+    expect(resolved.intent).toBe("task_suggest");
   });
 
   it("classifies common classifier error families", () => {

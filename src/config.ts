@@ -578,7 +578,7 @@ export const config = {
       fallbackToCodex: boolValue(
         ["routing", "smart_router", "llm_classifier", "fallback_to_codex"],
         "MINICLAW_SMART_ROUTER_LLM_FALLBACK_TO_CODEX",
-        true
+        false
       ),
     },
     confirmation: {

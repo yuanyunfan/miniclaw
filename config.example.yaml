@@ -41,7 +41,9 @@ routing:
       # inherit: raven/anthropic uses claude.model; openai/openai_compatible uses gpt-4o-mini.
       model: inherit
       timeout_ms: 8000
-      fallback_to_codex: true
+      # Keep false by default: if the lightweight API classifier fails, ask the
+      # user to choose task/chat instead of starting a slower Codex classifier.
+      fallback_to_codex: false
     confirmation:
       state: memory
       timeout_seconds: 600
