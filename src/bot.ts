@@ -544,7 +544,7 @@ export function createBot(): Client {
 
       if (config.smartRouter.enabled) {
         try {
-          const heuristicOrLlm = await classifySmartRoute(
+          const routed = await classifySmartRoute(
             {
               content: taskPrompt,
               channelId: message.channel.id,
@@ -553,12 +553,12 @@ export function createBot(): Client {
             config.smartRouter,
             classifyRouteWithLlm
           );
-          const decision = resolveSmartRouterAction(heuristicOrLlm, config.smartRouter, message.channel.id, {
+          const decision = resolveSmartRouterAction(routed, config.smartRouter, message.channel.id, {
             wasMentioned: message.mentions.has(client.user!),
           });
           log.info(
             `route decision ch=${message.channel.id.slice(-6)} intent=${decision.intent} ` +
-            `confidence=${decision.confidence} signals=${decision.matchedSignals.join(",") || "none"}`
+            `confidence=${decision.confidence} evidence=${decision.matchedSignals.join(",") || "none"}`
           );
 
           if (decision.intent === "task_auto") {

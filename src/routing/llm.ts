@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { config } from "../config.js";
 import { codexThreadOptions, getCodexClient, withCodexTimeout } from "../agent/codex.js";
-import type { EstimatedEffort, LlmRouteClassifier, RouteCapabilityDecision } from "./intent.js";
+import type { EstimatedEffort, LlmRouteClassifier, RouteCapabilityDecision, RouteClassifierInput } from "./intent.js";
 
 const VALID_EFFORTS = new Set<EstimatedEffort>(["short", "medium", "long"]);
 
@@ -18,12 +18,14 @@ function getAnthropicClient(): Anthropic {
   return anthropicClient;
 }
 
-function classifierPrompt(content: string, heuristic: RouteCapabilityDecision): string {
+function classifierPrompt(input: RouteClassifierInput): string {
+  const content = input.content.trim();
   return [
     "Classify the capabilities needed to handle a Discord message for MiniClaw. Output JSON only.",
     "",
     "Do not answer the user's request. Do not browse, fetch URLs, inspect files, or run tools.",
     "Only judge which capabilities would be needed if MiniClaw handled the request.",
+    "Do not use keyword matching. Infer the user's actual intent from the full message, including incomplete or conversational wording.",
     "",
     "Capability meanings:",
     "- needs_current_info: requires current or recently changed information, such as today's GitHub activity, latest releases, prices, news, or schedules.",
@@ -35,17 +37,25 @@ function classifierPrompt(content: string, heuristic: RouteCapabilityDecision): 
     "- needs_runtime_inspection: likely needs checking logs, DB, process state, task history, or local runtime status.",
     "- needs_long_running: likely exceeds a quick chat answer because it needs many steps, long execution, or durable work.",
     "- creates_persistent_output: likely creates durable artifacts such as files, notes, reports, docs, or scheduled outputs.",
+    "- has_external_url: message contains an external URL.",
+    "- has_attachments: message has Discord attachments.",
+    "- is_url_only: message contains only URL/link text without enough task intent.",
     "",
     "Routing policy is NOT your job. MiniClaw will map capabilities to chat/task locally.",
-    "Be conservative about write/shell/git capabilities, but do not mark every analytical question as multi-step research.",
+    "Be conservative about write/shell/git capabilities, but do not miss implicit implementation requests.",
     "A pure concept explanation or short read-only answer should keep all capability booleans false.",
+    "A named project/module change request such as 'X 中的 Y 要加个值/排序/调整展示' needs file or code changes even if the user does not say '修改' or '实现'.",
+    "A named person's current contribution spike or project activity explanation usually needs current information and multi-step research, even if the user says '简单拆解'.",
     "",
-    `Heuristic capability hints: ${JSON.stringify(heuristic)}`,
+    "Examples:",
+    `- "steipete的1099 次贡献他是如何做到的？你能给我简单拆解一下吗？" => needs_current_info=true, needs_multi_step_research=true, estimated_effort="medium".`,
+    `- "stock-pulse中的当前持仓盘中快照 盈利组/亏损组要在旁边加个总的日内盈亏的数值 盈利组/亏损组中要按照日内盈亏来排序" => needs_file_write=true, estimated_effort="medium".`,
+    `- "GitHub contribution 是什么意思？" => all task capability booleans false.`,
     "",
-    `<message>\n${content.slice(0, 4000)}\n</message>`,
+    `<message has_attachments="${Boolean(input.hasAttachments)}">\n${content.slice(0, 4000)}\n</message>`,
     "",
     `Return exactly:
-{"needs_current_info":false,"needs_multi_step_research":false,"needs_file_write":false,"needs_shell":false,"needs_git":false,"needs_browser":false,"needs_runtime_inspection":false,"needs_long_running":false,"creates_persistent_output":false,"has_external_url":false,"has_attachments":false,"estimated_effort":"short|medium|long","confidence":0.0,"reason":"short reason","evidence":["short signal"],"risk_flags":["short_risk"]}`,
+{"needs_current_info":false,"needs_multi_step_research":false,"needs_file_write":false,"needs_shell":false,"needs_git":false,"needs_browser":false,"needs_runtime_inspection":false,"needs_long_running":false,"creates_persistent_output":false,"has_external_url":false,"has_attachments":false,"is_url_only":false,"estimated_effort":"short|medium|long","confidence":0.0,"reason":"short reason","evidence":["short evidence"],"risk_flags":["short_risk"],"user_intent":"short intent","ambiguity":"none|low|medium|high"}`,
   ].join("\n");
 }
 
@@ -100,18 +110,21 @@ function parseCapabilityJson(text: string): RouteCapabilityDecision {
     createsPersistentOutput: getBoolean(raw, "createsPersistentOutput", "creates_persistent_output"),
     hasExternalUrl: getBoolean(raw, "hasExternalUrl", "has_external_url"),
     hasAttachments: getBoolean(raw, "hasAttachments", "has_attachments"),
+    isUrlOnly: getBoolean(raw, "isUrlOnly", "is_url_only"),
     estimatedEffort,
     confidence: Number.isFinite(confidence) ? confidence : 0.5,
     reason: typeof raw.reason === "string" ? raw.reason : "LLM capability classifier decision",
     evidence,
     matchedSignals: [...new Set([...evidence, "llm_classifier"])],
     riskFlags,
-    lockedCapabilities: [],
+    ...(typeof raw.user_intent === "string" ? { userIntent: raw.user_intent } : {}),
+    ...(typeof raw.userIntent === "string" ? { userIntent: raw.userIntent } : {}),
+    ...(typeof raw.ambiguity === "string" ? { ambiguity: raw.ambiguity } : {}),
   };
 }
 
-export const classifyRouteWithLlm: LlmRouteClassifier = async (input, heuristic) => {
-  const prompt = classifierPrompt(input.content, heuristic);
+export const classifyRouteWithLlm: LlmRouteClassifier = async (input) => {
+  const prompt = classifierPrompt(input);
 
   if (config.agentProvider === "claude") {
     const msg = await getAnthropicClient().messages.create({

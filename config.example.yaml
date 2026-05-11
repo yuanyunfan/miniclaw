@@ -31,6 +31,8 @@ routing:
     auto_task_channels: []
     llm_classifier:
       enabled: true
+      # Legacy compatibility field. Current LLM-first router calls the classifier
+      # for every non-empty chat-eligible message when enabled.
       only_when_ambiguous: true
     confirmation:
       state: memory

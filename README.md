@@ -112,7 +112,7 @@ agent:
 
 完整模板见 [`config.example.yaml`](config.example.yaml)。Discord ID 必须加引号，避免 YAML 把超大整数解析成不安全的 number。
 
-`routing.smart_router.enabled: true` 后，MiniClaw 会在 chat 入口执行自然语言路由：普通解释问题继续走 chat，明显需要改文件/跑测试/git 的请求会显示“转为 task / 继续 chat / 取消”按钮；`routing.smart_router.auto_task_channels` 仅适合专门的受信 task 频道。
+`routing.smart_router.enabled: true` 后，MiniClaw 会在 chat 入口执行 LLM-first capability 路由：普通解释问题继续走 chat，需要改文件、跑命令、Git、运行态排查或持久化输出的请求会显示“转为 task / 继续 chat / 取消”按钮；`routing.smart_router.auto_task_channels` 仅适合专门的受信 task 频道。
 
 配置优先级：
 

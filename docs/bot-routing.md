@@ -174,8 +174,8 @@ if (!isAutoChannel && !isMentioned) return;
 处理顺序：
 
 1. 先处理空消息和显式记忆指令。
-2. `classifyMessageCapabilities()` 用 deterministic heuristics 识别硬边界和 cheap capability hints，例如 file write、shell、Git、browser、current info、multi-step research。
-3. 模糊场景调用 LLM capability classifier；它只输出需要哪些能力，不直接决定 chat/task。失败时回退到 heuristic，不让路由失败阻断 chat。
+2. `classifyMessageCapabilities()` 只提取客观事实：空消息、附件、外部 URL、URL-only。
+3. 非空 chat eligible 消息直接调用 LLM capability classifier；它只输出需要哪些能力，不直接决定 chat/task。失败时回退到客观事实，并记录 `classifier_failed` / `classifier_unavailable`，不让路由失败阻断 chat。
 4. `resolveCapabilitiesToRouteDecision()` 把 capability 映射为 `chat` / `task_suggest` / `task_confirm`。
 5. `resolveSmartRouterAction()` 根据频道配置决定最终动作：
    - `chat`：继续原 chat 流程；

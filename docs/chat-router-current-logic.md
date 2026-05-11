@@ -10,7 +10,7 @@ MiniClaw 的 chat router 不是一个单点判断，而是两层路由：
 1. `src/routing/message-route.ts` 先做硬分流：`ignore`、`thread_continuation`、`task_channel`、`chat`。
 2. 只有已经进入 `chat` 的消息，才会在 `src/routing/intent.ts` 里走 smart router，把自然语言请求进一步判成 `chat`、`task_suggest`、`task_confirm` 或 `task_auto`。
 
-当前默认倾向是保守的：明确写文件、运行命令、Git、运行态排查、持久化输出会进 task；普通解释、总结、轻量分析留在 chat；浏览器、当前信息、多步研究、URL-only 等软信号通常只给 task suggestion。
+当前默认倾向是 LLM-first 但权限保守：自然语言语义不再靠 `TASK_SIGNALS` / `CHAT_SIGNALS` 之类 regex 判断，而是由 LLM capability classifier 判断需要哪些能力；本地 policy 再把写文件、运行命令、Git、运行态排查、持久化输出映射成 `task_confirm`，把浏览器、当前信息、多步研究、长任务、URL-only 映射成 `task_suggest`。LLM 不可用时只使用 URL、附件、空消息等客观事实，避免 regex 漏判继续扩大。
 
 ## 路由流程图
 
@@ -42,10 +42,10 @@ flowchart TD
     H -->|否| I{"smartRouter<br/>是否启用？"}
 
     I -->|否| C0["chat 路径"]
-    I -->|是| J["能力分类<br/>规则信号识别"]
-    J --> L{"是否调用 LLM<br/>能力分类器？"}
-    L -->|是| L1["合并 LLM 能力判断<br/>保留锁定能力"]
-    L -->|否| M["使用规则能力判断"]
+    I -->|是| J["客观事实提取<br/>URL / 附件 / 空消息"]
+    J --> L{"LLM 能力分类器<br/>是否启用且可调用？"}
+    L -->|是| L1["LLM 判断能力需求<br/>输出 capability JSON"]
+    L -->|否| M["仅使用客观事实<br/>标记 classifier fallback"]
     L1 --> N["能力映射为路由意图"]
     M --> N
 
@@ -80,7 +80,7 @@ flowchart TD
 
 - `src/bot.ts`: Discord `MessageCreate` / button interaction 的主编排。
 - `src/routing/message-route.ts`: 外层 message route，决定是否进入 thread continuation、task channel、chat 或 ignore。
-- `src/routing/intent.ts`: smart router 的 deterministic heuristic、capability 到 route intent 的映射、频道策略。
+- `src/routing/intent.ts`: smart router 的客观事实提取、LLM capability 到 route intent 的映射、频道策略。
 - `src/routing/llm.ts`: 可选 LLM capability classifier，只判断能力需求，不直接决定最终 route。
 - `src/routing/confirmations.ts`: smart router 按钮确认的 10 分钟内存态。
 - `src/discord/task-intake.ts`: task 创建、thread 创建、DB 写入、`executeTask()` 启动。
@@ -161,53 +161,52 @@ flowchart TD
 
 ## Smart Router: Capability Classification
 
-`classifySmartRoute()` 先运行 deterministic heuristic，再按策略决定是否调用 LLM classifier。
+`classifySmartRoute()` 现在是 LLM-first。它不再用任务/聊天/模糊三组语义 regex 先判 intent，而是先提取少量客观事实，再尽可能调用 LLM capability classifier。
 
-### Heuristic Signal Groups
+### Objective Facts
 
-`TASK_SIGNALS` 是强 task 倾向：
+`classifyMessageCapabilities()` 只做不依赖自然语言语义的事实提取：
 
-- `runtime_diagnostics`: 任务失败、报错、排查、定位问题、debug、troubleshoot。能力：`needsRuntimeInspection`、`needsShell`。这是高风险能力。
-- `modify`: 修复、修一下、改一下、修改、实现、重构、更新、加上、删除、迁移、改成、补上、落地、implement、fix、update、add、delete 等。能力：`needsFileWrite`。这是高风险能力。
-- `docs_or_file`: README、docs、文档、文件、写到、创建文件、生成页面/报告等。能力：`createsPersistentOutput`。这是高风险能力。
-- `capture_or_persist`: 抓取、采集、持续监控、输出到、落盘、导出、保存到文件/笔记/Obsidian 等。能力：`needsLongRunning`、`createsPersistentOutput`。其中持久化输出是高风险能力。
-- `validation`: 跑测试、构建、编译、build、lint、typecheck、e2e 等。能力：`needsShell`、`needsLongRunning`。shell 是高风险能力。
-- `execution`: 触发一次、部署、启动服务、重启、运行、执行、run/start/restart/deploy/trigger。能力：`needsShell`。这是高风险能力。
-- `git`: commit、push、提交、推送、merge、rebase 等。能力：`needsGit`、`needsShell`。这是高风险能力。
-- `complete_workflow`: 并验证、跑完后、完成后、end to end、实现并验证、fix test、update commit 等。能力：`needsLongRunning`。
+- 是否为空消息：`empty_message`。
+- 是否有 Discord 附件：`attachments` / `hasAttachments`。
+- 是否含外部 URL：`external_url` / `hasExternalUrl`。
+- 是否只有 URL 或“链接: URL”这类结构文本：`url_only` / `isUrlOnly`。
 
-`CHAT_SIGNALS` 是轻量 chat 倾向：
+它不会再判断“修改”“加个”“排序”“解释”“总结”“调研”等语义，也不会把这些词映射成 `needsFileWrite`、`needsShell` 或 `needsMultiStepResearch`。这些判断交给 LLM。
 
-- `explain`: 解释、简述、讲讲、是什么、为什么、why、explain、describe。
-- `summary`: 总结、概括、摘要、TLDR、summarize。
-- `analysis`: 分析一下、对比、风险、方案、怎么看、compare、analyze。
-- `knowledge`: 如何理解、补充背景、概念、设计是什么样。
+### LLM Capability Classifier
 
-`AMBIGUOUS_SIGNALS` 是软 task 倾向：
+LLM classifier 在 `src/routing/llm.ts`，只输出 capability JSON，不回答用户问题，也不直接决定最终 route。
 
-- `repo_analysis`: 深入分析 repo / 仓库 / 项目。
-- `external_activity_research`: 当前或近期 GitHub activity、contribution、repo、PR、issue、release 等动态调查。
-- `research`: 调研、研究一下、找方案、research、investigate。
-- `test_word`: 测试一下、test this、try it。
+调用条件：
 
-URL 额外规则：
+- `policy.enabled === true`。
+- `policy.llmClassifier.enabled === true`。
+- 当前消息不是“空正文且无附件”。
+- 运行时传入了 classifier 实现。
 
-- 普通 URL 增加 `external_url`。
-- 微信公众号链接或“公众号文章”增加 `wechat_article` 和 `browser_required`。
-- 出现浏览器、登录态、动态加载、反爬、验证码、cookie、opencli、browser 等词，设置 `needsBrowser`。
+`only_when_ambiguous` 字段为了配置兼容仍然存在，但当前 LLM-first 逻辑不再用它限制调用范围。只要消息已经进入 chat eligible 且非空，LLM classifier 都会被调用。
 
-### Confidence Rules
+classifier prompt 的边界：
 
-heuristic 的 confidence 规则大致如下：
+- 不允许回答用户问题。
+- 不允许浏览、抓 URL、读文件、跑命令。
+- 只判断如果 MiniClaw 要处理这条消息，需要哪些能力。
+- 明确要求不要做关键词匹配，要从完整自然语言推断真实意图。
+- 内置了两个真实样例：
+  - `steipete的1099 次贡献...` 应输出 `needs_current_info=true`、`needs_multi_step_research=true`。
+  - `stock-pulse中的当前持仓盘中快照 ... 加个 ... 排序` 应输出 `needs_file_write=true`。
 
-- 空消息无附件：`0.9`，但上层已先问候，不进入正常 chat。
-- 附件-only：`0.65`，默认仍可 chat。
-- runtime diagnostics：`0.82`。
-- 高风险能力或 task score >= 5：`0.68 + min(taskScore, 7) * 0.04`，最高 clamp 到 1。
-- browser required：`0.7`。
-- research/current/multi-step/long-running 软能力：`0.58`。
-- 只有 chat signal、没有 task/ambiguous signal：`0.72 + min(chatScore, 6) * 0.04`。
-- 其他无明显 signal：`0.55`，reason 为 `no capability signal found`。
+Codex provider 下的 classifier 使用 read-only Codex thread，关闭 web search 和 network，30 秒内超时；Claude provider 下使用 Anthropic messages API，temperature 0。
+
+### Classifier Failure Fallback
+
+LLM 失败不会阻断消息：
+
+- classifier 抛错：`riskFlags` 增加 `classifier_failed`。
+- classifier 没有传入：`riskFlags` 增加 `classifier_unavailable`。
+- 继续使用客观事实能力，例如 URL-only 仍会 `task_suggest`。
+- 纯自然语言语义不会再靠 fallback regex 补判；例如“加个/排序/修一下”在 classifier 失败时不会被本地 regex 升级为 task。
 
 ### Capability To Intent
 
@@ -224,47 +223,14 @@ heuristic 的 confidence 规则大致如下：
 软 task 能力变 `task_suggest`：
 
 - `needsBrowser`
-- `needsCurrentInfo && needsMultiStepResearch`
-- `needsLongRunning`
+- `needsCurrentInfo`
 - `needsMultiStepResearch`
-- `hasExternalUrl && !hasChatSignal`
+- `needsLongRunning`
+- `isUrlOnly`
 
 其他情况保持 `chat`。
 
-这里的关键边界是：`needsCurrentInfo`、`needsMultiStepResearch`、`needsBrowser`、`needsLongRunning` 本身不算高风险，所以它们不会直接强制确认，只会 suggestion。
-
-## Optional LLM Classifier
-
-LLM classifier 在 `src/routing/llm.ts`，只输出 capability JSON，不回答用户问题，也不直接决定最终 route。
-
-### 什么时候会调用
-
-前提：
-
-- `policy.enabled === true`
-- `policy.llmClassifier.enabled === true`
-
-如果 `onlyWhenAmbiguous === false`，只要前提满足就调用。
-
-当前默认 `onlyWhenAmbiguous === true` 时，调用条件更窄：
-
-- 没有任何 signal 且没有附件：不调用。
-- 已有高风险能力且 confidence >= `0.75`：不调用，避免 LLM 降级写文件/运行命令等硬边界。
-- `needsBrowser` 且 browser 是 locked capability：不调用，避免 LLM 降级微信/动态页面边界。
-- 有 external URL、current info、多步研究、long-running：调用。
-- confidence 低于 `minConfirmConfidence`：调用。
-- 有 risk flags 且 confidence < `0.75`：调用。
-
-### LLM 结果怎么合并
-
-`mergeCapabilityDecisions()` 会保留 heuristic 的 locked capabilities。也就是说：
-
-- heuristic 已经锁定的 `needsFileWrite`、`needsShell`、`needsGit`、`needsRuntimeInspection`、`needsBrowser`、`createsPersistentOutput` 不允许被 LLM 改成 false。
-- LLM 可以升级软判断，比如把普通 URL 总结升级成 current multi-step research。
-- LLM 也可以把未锁定的软 research 降级回 chat。
-- LLM 失败时不会阻断消息；系统使用 heuristic，并在 `riskFlags` 增加 `classifier_failed`。
-
-Codex provider 下的 classifier 使用 read-only Codex thread，关闭 web search 和 network，30 秒内超时；Claude provider 下使用 Anthropic messages API，temperature 0。
+这里的关键边界是：LLM 只给 capability，本地代码决定权限。`needsCurrentInfo`、`needsMultiStepResearch`、`needsBrowser`、`needsLongRunning` 不算高风险，所以只会 suggestion；写文件、命令、Git、运行态、持久化输出才会 confirmation。
 
 ## Final Action Policy
 
@@ -384,51 +350,45 @@ smart router decision 会写入 SQLite `smart_router_decisions`：
 - `action_result`
 - `created_task_id`
 
-这张表是排查“消息 router 到哪里”的主证据。运行日志里的 `[bot] route decision ...` 只保留 channel 尾号、intent、confidence 和 signals；完整 prompt preview 要查 SQLite。
+这张表是排查“消息 router 到哪里”的主证据。`matched_signals` 字段为历史兼容名；新逻辑里主要存 classifier evidence，例如 `llm_classifier`、`external_url`、`url_only`、`classifier_failed`。运行日志里的 `[bot] route decision ...` 只保留 channel 尾号、intent、confidence 和 evidence 列表；完整 prompt preview 要查 SQLite。
 
 ## Current Edge Cases From Real Prompts
 
 ### `steipete的1099 次贡献他是如何做到的？你能给我简单拆解一下吗？`
 
-当前 classifier 输出：
+当前 LLM-first 预期输出：
 
-- intent: `chat`
-- confidence: `0.55`
-- signals: `[]`
-- reason: `no capability signal found`
+- intent: `task_suggest`
+- capabilities: `needsCurrentInfo=true`, `needsMultiStepResearch=true`
+- evidence: `llm_classifier`, `current_contribution_activity`
 
 原因：
 
-- `external_activity_research` 现在主要识别 GitHub / contributions / commits / PR / issues / repos / 仓库 / 开发动态 / 今天 / 最近 等组合。
-- 这个 prompt 只有中文“贡献”和“1099”，没有被当前 regex 识别成 GitHub current activity research。
-- 没有 signal 且没有附件时，LLM classifier 不会被调用。
+- 语义判断交给 LLM，不再要求 prompt 包含 GitHub、today、recent、commit、PR 等固定 signal。
+- prompt 中的具体人名、异常高贡献数和“如何做到/拆解”足够让 LLM 推断需要当前活动调查。
+- 当前信息和多步研究是软 task 能力，所以给 `task_suggest`，不会直接强制执行。
 
-所以它会直接走 read-only chat。
+所以它会在允许确认的 chat channel 中展示“转为 task / 继续 chat / 取消”按钮。
 
 ### `stock-pulse中的当前持仓盘中快照 ... 加个 总的日内盈亏 ... 按照日内盈亏来排序`
 
-当前 classifier 输出：
+当前 LLM-first 预期输出：
 
-- intent: `chat`
-- confidence: `0.55`
-- signals: `[]`
-- reason: `no capability signal found`
+- intent: `task_confirm`
+- capabilities: `needsFileWrite=true`
+- evidence: `llm_classifier`, `project_change_request`, `intraday_pnl_sorting`
 
 原因：
 
-- `modify` signal 识别“修复、改一下、修改、实现、更新、加上、改成、补上”等词，但没有识别口语“加个”。
-- “排序”本身也没有映射到 file write 或 provider/template 修改。
-- 没有 signal 且没有附件时，LLM classifier 不会被调用。
+- LLM 能从 “stock-pulse 中的当前持仓盘中快照” 和 “要加个数值 / 要排序” 推断这是项目展示逻辑变更。
+- 不再要求用户说“修改/实现/更新”等固定词。
+- `needsFileWrite` 是高风险 task-only capability，所以本地 policy 映射为 `task_confirm`。
 
-所以它会进入 chat，chat agent 再在 read-only 模式下判断“需要改文件”，并要求用户改用 `/task`。
+所以它会在允许确认的 chat channel 中展示 task 确认按钮；如果处在 trusted auto-task channel 且 confidence 达标，才会自动创建 task。
 
 ## Verification Commands
 
 当前逻辑可以用这些命令验证：
-
-```bash
-pnpm exec tsx -e 'import { classifyMessageIntent } from "./src/routing/intent.ts"; const p="修改 README 并跑测试"; console.log(classifyMessageIntent({content:p, channelId:"chat-1"}));'
-```
 
 ```bash
 pnpm exec vitest run src/routing/__tests__/intent.test.ts src/routing/__tests__/message-route.test.ts src/routing/__tests__/router-eval.test.ts
@@ -440,8 +400,9 @@ sqlite3 ~/.miniclaw/data.db 'select id, message_id, channel_id, intent, confiden
 
 ## Practical Implications
 
-- 想稳定触发 task，不要只说“加个/排序/处理一下”；应明确写“修改/更新/实现/修复，并跑测试”。
-- 想触发当前 GitHub activity research，prompt 里最好包含 GitHub、今天/最近、contribution/commit/PR/release 等词。
+- 用户不需要为了 router 写固定触发词；“加个/排序/拆解一下”这类自然语言会由 LLM 判断真实能力需求。
+- LLM 只输出 capability，最终是否转 task 仍由本地 policy 决定。
+- classifier 失败时不会用旧 regex 补判语义，系统会继续 chat 或按 URL-only 等客观事实给 suggestion，并记录 `classifier_failed`。
 - 想让普通频道自动创建 task，必须配置 `routing.smart_router.auto_task_channels`，并满足 `min_auto_confidence`。
 - 只要 `auto_task_channels` 为空，smart router 最多展示按钮，不会直接执行写权限任务。
 - 当前 chat path 是轻量 read-only 体验；文件修改、运行验证、commit/push 应进入 task path。

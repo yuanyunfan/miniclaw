@@ -169,7 +169,7 @@ flowchart LR
 - **pre-provider 扩展点**：cron `task` 可先运行 provider 采集结构化数据，再把 JSON 注入 prompt；微信公众号日报通过 `wechat-mp` provider 落地，邮件类任务通过通用 `email` capability + `email-query` / `cmb-credit-card-email` provider 复用同一只读邮箱基础能力
 - **Auto Doctor / guarded repair**：`/doctor` 和 scheduled scan 聚合 DB、cron state、connectivity、PM2、日志与 Git 证据；自动修复只允许隔离 worktree/repair branch，ship 到 `main` 必须走显式 operator approval 和 safe-restart guard
 - **白名单两道闸**：`discord.allowed_user_id` 限制谁能用，`routing.auto_reply_channels` 决定哪些频道无需 @mention 进入 chat，默认 `["*"]` 表示全部 guild channel；`routing.task_channels` 决定哪些频道无需 @mention 直接创建 task；旧 `MINICLAW_*` env 仍可覆盖
-- **Smart Task Router 是 chat/task 边界上的升级层**：启用后只在本来会响应的 chat 入口运行，先用 heuristic + LLM classifier 判断自然语言 prompt，必要时用按钮确认后复用 `/task` 的线程、DB、progress 和 final output 链路；决策默认以 hash + capped preview 写入 SQLite
+- **Smart Task Router 是 chat/task 边界上的升级层**：启用后只在本来会响应的 chat 入口运行，先提取 URL/附件/空消息等客观事实，再用 LLM capability classifier 判断自然语言 prompt，必要时用按钮确认后复用 `/task` 的线程、DB、progress 和 final output 链路；决策默认以 hash + capped preview 写入 SQLite
 - **LLM 流量全部经过 raven**：`ANTHROPIC_BASE_URL=http://localhost:7024` 让两个 SDK 都走本地代理
 
 ---

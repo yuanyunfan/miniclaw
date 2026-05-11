@@ -3,36 +3,90 @@
     "name": "simple concept explanation",
     "prompt": "GitHub contribution 是什么意思？",
     "expectedRoute": "chat",
-    "expectedCapabilities": []
+    "expectedCapabilities": [],
+    "classifierCapabilities": {
+      "reason": "read-only concept explanation",
+      "evidence": ["concept_explanation"]
+    }
   },
   {
     "name": "current GitHub activity investigation",
-    "prompt": "steipete 他做了什么事情？为什么今天有那么多的 contribution？你帮我分析一下",
+    "prompt": "steipete的1099 次贡献他是如何做到的？你能给我简单拆解一下吗？",
     "expectedRoute": "task_suggest",
-    "expectedCapabilities": ["needsCurrentInfo", "needsMultiStepResearch"]
+    "expectedCapabilities": ["needsCurrentInfo", "needsMultiStepResearch"],
+    "classifierCapabilities": {
+      "needsCurrentInfo": true,
+      "needsMultiStepResearch": true,
+      "estimatedEffort": "medium",
+      "reason": "requires current contribution activity investigation",
+      "evidence": ["current_contribution_activity"],
+      "riskFlags": ["current_info"]
+    }
   },
   {
     "name": "file edit and validation",
     "prompt": "修改 README 并跑测试",
     "expectedRoute": "task_confirm",
-    "expectedCapabilities": ["needsFileWrite", "needsShell"]
+    "expectedCapabilities": ["needsFileWrite", "needsShell"],
+    "classifierCapabilities": {
+      "needsFileWrite": true,
+      "needsShell": true,
+      "needsLongRunning": true,
+      "estimatedEffort": "medium",
+      "reason": "requires file edits and running tests",
+      "evidence": ["file_edit", "validation"],
+      "riskFlags": ["writes_files", "runs_commands"]
+    }
+  },
+  {
+    "name": "project display change in conversational Chinese",
+    "prompt": "stock-pulse中的当前持仓盘中快照 盈利组/亏损组要在旁边加个总的日内盈亏的数值 盈利组/亏损组中要按照日内盈亏来排序",
+    "expectedRoute": "task_confirm",
+    "expectedCapabilities": ["needsFileWrite"],
+    "classifierCapabilities": {
+      "needsFileWrite": true,
+      "estimatedEffort": "medium",
+      "reason": "project UI/data display change requires code edits",
+      "evidence": ["project_change_request", "intraday_pnl_sorting"],
+      "riskFlags": ["writes_files"]
+    }
   },
   {
     "name": "wechat browser-dependent summary",
     "prompt": "链接：https://mp.weixin.qq.com/s/43wPVMKzNxC_R0ZYmUn0Rg 给我总结一下",
     "expectedRoute": "task_suggest",
-    "expectedCapabilities": ["needsBrowser"]
+    "expectedCapabilities": ["needsBrowser"],
+    "classifierCapabilities": {
+      "needsBrowser": true,
+      "hasExternalUrl": true,
+      "estimatedEffort": "medium",
+      "reason": "dynamic article page likely requires browser handling",
+      "evidence": ["dynamic_page"],
+      "riskFlags": ["browser_required"]
+    }
   },
   {
     "name": "runtime failure diagnosis",
     "prompt": "为什么会任务失败呢? 给我分析一下",
     "expectedRoute": "task_confirm",
-    "expectedCapabilities": ["needsRuntimeInspection"]
+    "expectedCapabilities": ["needsRuntimeInspection"],
+    "classifierCapabilities": {
+      "needsRuntimeInspection": true,
+      "needsShell": true,
+      "estimatedEffort": "medium",
+      "reason": "requires checking task history or logs",
+      "evidence": ["runtime_diagnostics"],
+      "riskFlags": ["runtime_inspection", "runs_commands"]
+    }
   },
   {
     "name": "ordinary read-only summary",
     "prompt": "总结一下这段文字的核心观点",
     "expectedRoute": "chat",
-    "expectedCapabilities": []
+    "expectedCapabilities": [],
+    "classifierCapabilities": {
+      "reason": "read-only summary request",
+      "evidence": ["summary"]
+    }
   }
 ]

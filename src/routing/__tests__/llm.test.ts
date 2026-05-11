@@ -15,48 +15,42 @@ describe("capability LLM classifier helpers", () => {
       creates_persistent_output: false,
       has_external_url: true,
       has_attachments: false,
+      is_url_only: false,
       estimated_effort: "medium",
       confidence: 0.83,
       reason: "requires current GitHub activity analysis",
       evidence: ["github_activity", "current_info"],
       risk_flags: ["long_running_research"],
+      user_intent: "explain current contribution spike",
+      ambiguity: "low",
     }));
 
     expect(parsed.needsCurrentInfo).toBe(true);
     expect(parsed.needsMultiStepResearch).toBe(true);
     expect(parsed.needsLongRunning).toBe(true);
     expect(parsed.hasExternalUrl).toBe(true);
+    expect(parsed.isUrlOnly).toBe(false);
     expect(parsed.estimatedEffort).toBe("medium");
     expect(parsed.confidence).toBe(0.83);
     expect(parsed.matchedSignals).toContain("llm_classifier");
-    expect(parsed.lockedCapabilities).toEqual([]);
+    expect(parsed.userIntent).toBe("explain current contribution spike");
+    expect(parsed.ambiguity).toBe("low");
   });
 
-  it("builds a capability prompt without asking the classifier to route directly", () => {
-    const prompt = __testables.classifierPrompt("帮我分析最近 GitHub activity", {
-      needsCurrentInfo: true,
-      needsMultiStepResearch: true,
-      needsFileWrite: false,
-      needsShell: false,
-      needsGit: false,
-      needsBrowser: false,
-      needsRuntimeInspection: false,
-      needsLongRunning: true,
-      createsPersistentOutput: false,
-      hasExternalUrl: false,
+  it("builds an LLM-first capability prompt without heuristic hints or direct routing", () => {
+    const prompt = __testables.classifierPrompt({
+      content: "帮我分析最近 GitHub activity",
+      channelId: "chat-1",
       hasAttachments: false,
-      estimatedEffort: "medium",
-      confidence: 0.58,
-      reason: "message likely needs current multi-step research",
-      evidence: ["external_activity_research"],
-      matchedSignals: ["external_activity_research"],
-      riskFlags: ["long_running_research"],
-      lockedCapabilities: [],
     });
 
     expect(prompt).toContain("Classify the capabilities needed");
     expect(prompt).toContain("Routing policy is NOT your job");
+    expect(prompt).toContain("Do not use keyword matching");
+    expect(prompt).toContain("steipete的1099 次贡献");
+    expect(prompt).toContain("stock-pulse");
     expect(prompt).toContain("needs_current_info");
+    expect(prompt).not.toContain("Heuristic capability hints");
     expect(prompt).not.toContain('"intent"');
   });
 });
