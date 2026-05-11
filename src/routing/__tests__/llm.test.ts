@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { __testables } from "../llm.js";
 
 describe("capability LLM classifier helpers", () => {
@@ -52,5 +52,95 @@ describe("capability LLM classifier helpers", () => {
     expect(prompt).toContain("needs_current_info");
     expect(prompt).not.toContain("Heuristic capability hints");
     expect(prompt).not.toContain('"intent"');
+  });
+
+  it("classifies through a lightweight OpenAI-compatible chat completion API", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{
+        message: {
+          content: JSON.stringify({
+            needs_current_info: false,
+            needs_multi_step_research: true,
+            needs_file_write: true,
+            needs_shell: true,
+            needs_git: false,
+            needs_browser: false,
+            needs_runtime_inspection: false,
+            needs_long_running: false,
+            creates_persistent_output: true,
+            has_external_url: false,
+            has_attachments: false,
+            is_url_only: false,
+            estimated_effort: "medium",
+            confidence: 0.91,
+            reason: "needs local cron config update and trigger",
+            evidence: ["cron_config_update"],
+            risk_flags: ["writes_files"],
+          }),
+        },
+      }],
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+
+    const parsed = await __testables.classifyRouteWithOpenAiChat({
+      content: "这个定时任务补充上 MiniClaw 定时任务，按执行时间排序，最后触发一下",
+      channelId: "chat-1",
+      hasAttachments: false,
+    }, {
+      provider: "openai_compatible",
+      model: "router-mini",
+      timeoutMs: 8000,
+      baseUrl: "https://llm.example.test/v1/",
+      fetchFn: fetchMock,
+    });
+
+    expect(parsed.needsFileWrite).toBe(true);
+    expect(parsed.needsShell).toBe(true);
+    expect(parsed.createsPersistentOutput).toBe(true);
+    expect(parsed.confidence).toBe(0.91);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://llm.example.test/v1/chat/completions",
+      expect.objectContaining({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: expect.any(String),
+      })
+    );
+    const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string);
+    expect(body).toMatchObject({
+      model: "router-mini",
+      temperature: 0,
+      max_tokens: 500,
+      response_format: { type: "json_object" },
+    });
+  });
+
+  it("adds authorization when the lightweight classifier uses OpenAI API", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({ confidence: 0.7 }) } }],
+    }), { status: 200 }));
+
+    await __testables.classifyRouteWithOpenAiChat({
+      content: "解释一下 RSS 是什么",
+      channelId: "chat-1",
+    }, {
+      provider: "openai",
+      model: "gpt-4o-mini",
+      timeoutMs: 8000,
+      apiKey: "test-key",
+      fetchFn: fetchMock,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.openai.com/v1/chat/completions",
+      expect.objectContaining({
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer test-key",
+        },
+      })
+    );
   });
 });

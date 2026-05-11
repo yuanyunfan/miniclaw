@@ -197,7 +197,16 @@ classifier prompt 的边界：
   - `steipete的1099 次贡献...` 应输出 `needs_current_info=true`、`needs_multi_step_research=true`。
   - `stock-pulse中的当前持仓盘中快照 ... 加个 ... 排序` 应输出 `needs_file_write=true`。
 
-Codex provider 下的 classifier 使用 read-only Codex thread，关闭 web search 和 network，30 秒内超时；Claude provider 下使用 Anthropic messages API，temperature 0。
+Codex provider 下的 classifier 默认优先使用轻量 OpenAI-compatible `chat/completions` API：
+
+- `routing.smart_router.llm_classifier.provider: auto` 时，如果配置了 `OPENAI_API_KEY`，走 OpenAI 风格 API；如果只配置了 `OPENAI_BASE_URL`，走 OpenAI-compatible API；两者都没有时回退到 Codex thread。
+- `provider: openai` 强制要求 `OPENAI_API_KEY`。
+- `provider: openai_compatible` 强制要求 `OPENAI_BASE_URL`，如同时配置 `OPENAI_API_KEY` 会带上 Bearer Authorization。
+- `provider: codex` 强制使用原来的 read-only Codex thread。
+- `model` 默认 `gpt-4o-mini`，`timeout_ms` 默认 8000。
+- `fallback_to_codex: true` 时，轻量 API 调用失败会回退到 read-only Codex thread；设为 `false` 时直接把 classifier 失败暴露给 smart router fallback。
+
+Codex thread fallback 仍关闭 web search 和 network，最多 30 秒超时。Claude provider 下仍使用 Anthropic messages API，temperature 0。
 
 ### Classifier Failure Fallback
 

@@ -14,6 +14,7 @@ export type CodexReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhig
 export type CodexWebSearchMode = "disabled" | "cached" | "live";
 export type ClaudeSettingSource = "user" | "project" | "local";
 export type SmartRouterDefaultMode = "suggest" | "confirm" | "auto";
+export type SmartRouterClassifierProvider = "auto" | "openai" | "openai_compatible" | "codex";
 export type AudioTranscriptionProvider = "auto" | "openai" | "openai_compatible" | "local_faster_whisper";
 
 export interface SmtpEmailNotificationConfig {
@@ -556,6 +557,27 @@ export const config = {
       onlyWhenAmbiguous: boolValue(
         ["routing", "smart_router", "llm_classifier", "only_when_ambiguous"],
         "MINICLAW_SMART_ROUTER_LLM_ONLY_WHEN_AMBIGUOUS",
+        true
+      ),
+      provider: oneOf<SmartRouterClassifierProvider>(
+        ["routing", "smart_router", "llm_classifier", "provider"],
+        "MINICLAW_SMART_ROUTER_LLM_PROVIDER",
+        "auto",
+        ["auto", "openai", "openai_compatible", "codex"]
+      ),
+      model: requiredString(
+        ["routing", "smart_router", "llm_classifier", "model"],
+        "MINICLAW_SMART_ROUTER_LLM_MODEL",
+        "gpt-4o-mini"
+      ),
+      timeoutMs: positiveNumber(
+        ["routing", "smart_router", "llm_classifier", "timeout_ms"],
+        "MINICLAW_SMART_ROUTER_LLM_TIMEOUT_MS",
+        8_000
+      ),
+      fallbackToCodex: boolValue(
+        ["routing", "smart_router", "llm_classifier", "fallback_to_codex"],
+        "MINICLAW_SMART_ROUTER_LLM_FALLBACK_TO_CODEX",
         true
       ),
     },

@@ -34,6 +34,12 @@ routing:
       # Legacy compatibility field. Current LLM-first router calls the classifier
       # for every non-empty chat-eligible message when enabled.
       only_when_ambiguous: true
+      # auto: use OpenAI/OpenAI-compatible chat completions when OPENAI_API_KEY
+      # or OPENAI_BASE_URL is configured; otherwise fall back to Codex.
+      provider: auto # auto | openai | openai_compatible | codex
+      model: gpt-4o-mini
+      timeout_ms: 8000
+      fallback_to_codex: true
     confirmation:
       state: memory
       timeout_seconds: 600

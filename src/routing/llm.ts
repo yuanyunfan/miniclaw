@@ -4,8 +4,28 @@ import { codexThreadOptions, getCodexClient, withCodexTimeout } from "../agent/c
 import type { EstimatedEffort, LlmRouteClassifier, RouteCapabilityDecision, RouteClassifierInput } from "./intent.js";
 
 const VALID_EFFORTS = new Set<EstimatedEffort>(["short", "medium", "long"]);
+const OPENAI_DEFAULT_BASE_URL = "https://api.openai.com/v1";
 
 let anthropicClient: Anthropic | null = null;
+
+type OpenAiClassifierProvider = "openai" | "openai_compatible";
+
+type OpenAiChatClassifierOptions = {
+  provider: OpenAiClassifierProvider;
+  model: string;
+  timeoutMs: number;
+  apiKey?: string;
+  baseUrl?: string;
+  fetchFn?: typeof fetch;
+};
+
+type OpenAiChatCompletionResponse = {
+  choices?: Array<{
+    message?: {
+      content?: string | null;
+    };
+  }>;
+};
 
 function getAnthropicClient(): Anthropic {
   if (!anthropicClient) {
@@ -123,19 +143,70 @@ function parseCapabilityJson(text: string): RouteCapabilityDecision {
   };
 }
 
-export const classifyRouteWithLlm: LlmRouteClassifier = async (input) => {
-  const prompt = classifierPrompt(input);
+function trimBaseUrl(url: string): string {
+  return url.replace(/\/+$/, "");
+}
 
-  if (config.agentProvider === "claude") {
-    const msg = await getAnthropicClient().messages.create({
-      model: config.claudeModel,
-      max_tokens: 500,
-      temperature: 0,
-      messages: [{ role: "user", content: prompt }],
-    });
-    return parseCapabilityJson(textFromAnthropicContent(msg.content));
+function resolveOpenAiApiProvider(): OpenAiClassifierProvider | null {
+  const provider = config.smartRouter.llmClassifier.provider;
+  if (provider === "codex") return null;
+  if (provider === "openai") return "openai";
+  if (provider === "openai_compatible") return "openai_compatible";
+  if (config.openaiApiKey) return "openai";
+  if (config.openaiBaseUrl) return "openai_compatible";
+  return null;
+}
+
+async function classifyRouteWithOpenAiChat(
+  input: RouteClassifierInput,
+  options: OpenAiChatClassifierOptions,
+): Promise<RouteCapabilityDecision> {
+  if (options.provider === "openai" && !options.apiKey) {
+    throw new Error("OPENAI_API_KEY is required for smart router OpenAI classifier");
+  }
+  if (options.provider === "openai_compatible" && !options.baseUrl) {
+    throw new Error("OPENAI_BASE_URL is required for smart router OpenAI-compatible classifier");
   }
 
+  const baseUrl = trimBaseUrl(options.baseUrl ?? OPENAI_DEFAULT_BASE_URL);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(new Error(`Smart router classifier timeout after ${options.timeoutMs}ms`)), options.timeoutMs);
+  timer.unref?.();
+
+  try {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (options.apiKey) headers.Authorization = `Bearer ${options.apiKey}`;
+    const response = await (options.fetchFn ?? fetch)(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers,
+      signal: ctrl.signal,
+      body: JSON.stringify({
+        model: options.model,
+        temperature: 0,
+        max_tokens: 500,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: "You classify MiniClaw smart-router capabilities. Return JSON only." },
+          { role: "user", content: classifierPrompt(input) },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenAI classifier HTTP ${response.status}: ${(await response.text()).slice(0, 500)}`);
+    }
+
+    const json = await response.json() as OpenAiChatCompletionResponse;
+    const text = json.choices?.[0]?.message?.content;
+    if (!text) throw new Error("OpenAI classifier response did not contain message content");
+    return parseCapabilityJson(text);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function classifyRouteWithCodexThread(input: RouteClassifierInput): Promise<RouteCapabilityDecision> {
+  const prompt = classifierPrompt(input);
   const codex = getCodexClient();
   const opts = {
     ...codexThreadOptions("chat", config.defaultCwd),
@@ -162,6 +233,39 @@ export const classifyRouteWithLlm: LlmRouteClassifier = async (input) => {
   } finally {
     if (!timeoutCtrl.signal.aborted) timeoutCtrl.abort();
   }
+}
+
+export const classifyRouteWithLlm: LlmRouteClassifier = async (input) => {
+  const prompt = classifierPrompt(input);
+
+  if (config.agentProvider === "claude") {
+    const msg = await getAnthropicClient().messages.create({
+      model: config.claudeModel,
+      max_tokens: 500,
+      temperature: 0,
+      messages: [{ role: "user", content: prompt }],
+    });
+    return parseCapabilityJson(textFromAnthropicContent(msg.content));
+  }
+
+  const apiProvider = resolveOpenAiApiProvider();
+  if (apiProvider) {
+    try {
+      return await classifyRouteWithOpenAiChat(input, {
+        provider: apiProvider,
+        model: config.smartRouter.llmClassifier.model,
+        timeoutMs: config.smartRouter.llmClassifier.timeoutMs,
+        apiKey: config.openaiApiKey,
+        baseUrl: config.openaiBaseUrl,
+      });
+    } catch (err) {
+      if (!config.smartRouter.llmClassifier.fallbackToCodex) {
+        throw err;
+      }
+    }
+  }
+
+  return classifyRouteWithCodexThread(input);
 };
 
-export const __testables = { parseCapabilityJson, classifierPrompt };
+export const __testables = { parseCapabilityJson, classifierPrompt, classifyRouteWithOpenAiChat };

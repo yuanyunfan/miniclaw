@@ -44,6 +44,10 @@ const ENV_KEYS = [
   "MINICLAW_SMART_ROUTER_AUTO_TASK_CHANNELS",
   "MINICLAW_SMART_ROUTER_LLM_ENABLED",
   "MINICLAW_SMART_ROUTER_LLM_ONLY_WHEN_AMBIGUOUS",
+  "MINICLAW_SMART_ROUTER_LLM_PROVIDER",
+  "MINICLAW_SMART_ROUTER_LLM_MODEL",
+  "MINICLAW_SMART_ROUTER_LLM_TIMEOUT_MS",
+  "MINICLAW_SMART_ROUTER_LLM_FALLBACK_TO_CODEX",
   "MINICLAW_SMART_ROUTER_CONFIRMATION_STATE",
   "MINICLAW_SMART_ROUTER_CONFIRMATION_TIMEOUT_SECONDS",
   "MINICLAW_SMART_ROUTER_CONTEXT_INCLUDE_RECENT_WHEN_REFERENCED",
@@ -158,6 +162,10 @@ routing:
     llm_classifier:
       enabled: true
       only_when_ambiguous: false
+      provider: openai_compatible
+      model: router-mini
+      timeout_ms: 7000
+      fallback_to_codex: false
     confirmation:
       state: memory
       timeout_seconds: 300
@@ -281,7 +289,14 @@ notifications:
       minAutoConfidence: 0.95,
       confirmChannelIds: ["chat-yaml"],
       autoTaskChannelIds: ["task-yaml"],
-      llmClassifier: { enabled: true, onlyWhenAmbiguous: false },
+      llmClassifier: {
+        enabled: true,
+        onlyWhenAmbiguous: false,
+        provider: "openai_compatible",
+        model: "router-mini",
+        timeoutMs: 7000,
+        fallbackToCodex: false,
+      },
       confirmation: { state: "memory", timeoutSeconds: 300 },
       context: { includeRecentWhenReferenced: true, recentTurns: 4, maxChars: 4000 },
       decisionLog: { enabled: true, store: "sqlite", promptPreviewChars: 120, storeFullPrompt: false },
