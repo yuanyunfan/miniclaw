@@ -90,7 +90,12 @@ describe("runStockPulseProvider", () => {
               label: "Futu US",
               payload: {
                 positions_summary: {
-                  top_positions: [{ code: "AAPL", name: "Apple", currency: "USD", instrument_type: "stock", daily_pnl: 10, pnl_value: 50, pnl_ratio: 1.25 }],
+                  top_positions: [
+                    { code: "AAPL", name: "Apple", currency: "USD", instrument_type: "stock", daily_pnl: 10, pnl_value: 50, pnl_ratio: 1.25 },
+                    { code: "TSLA", name: "Tesla", currency: "USD", instrument_type: "stock", daily_pnl: 30, pnl_value: 5, pnl_ratio: 0.5 },
+                    { code: "META", name: "Meta", currency: "USD", instrument_type: "stock", daily_pnl: -20, pnl_value: 100, pnl_ratio: 2.1 },
+                    { code: "AMZN", name: "Amazon", currency: "USD", instrument_type: "stock", daily_pnl: -5, pnl_value: -200, pnl_ratio: -3.4 },
+                  ],
                   top_gainers: [],
                   top_losers: [],
                 },
@@ -104,9 +109,9 @@ describe("runStockPulseProvider", () => {
 
     const parsed = JSON.parse(result.text);
     expect(parsed.run_context.skipped).toBe(false);
-    expect(parsed.universe.portfolio_symbols).toBe(1);
+    expect(parsed.universe.portfolio_symbols).toBe(4);
     expect(parsed.universe.universe_source_symbols).toBe(1);
-    expect(parsed.universe.scanned_symbols).toBe(3);
+    expect(parsed.universe.scanned_symbols).toBe(6);
     expect(parsed.positions).toEqual(expect.arrayContaining([
       expect.objectContaining({
         symbol: "AAPL",
@@ -122,10 +127,16 @@ describe("runStockPulseProvider", () => {
       }),
     ]));
     expect(parsed.position_groups.profitable[0]).toMatchObject({
-      symbol: "AAPL",
-      portfolio: expect.objectContaining({ unrealized_pnl_cny: 355 }),
+      symbol: "TSLA",
+      portfolio: expect.objectContaining({ daily_pnl_cny: 213, unrealized_pnl_cny: 35.5 }),
     });
-    expect(parsed.position_groups.losing).toEqual([]);
+    expect(parsed.position_groups.profitable[1]).toMatchObject({
+      symbol: "AAPL",
+      portfolio: expect.objectContaining({ daily_pnl_cny: 71, unrealized_pnl_cny: 355 }),
+    });
+    expect(parsed.position_groups.losing.map((position: { symbol: string }) => position.symbol)).toEqual(["META", "AMZN"]);
+    expect(parsed.position_groups.losing[0].portfolio).toMatchObject({ daily_pnl_cny: -142, unrealized_pnl_cny: 710 });
+    expect(parsed.position_groups.losing[1].portfolio).toMatchObject({ daily_pnl_cny: -35.5, unrealized_pnl_cny: -1420 });
     expect(parsed.alerts.map((alert: { symbol: string }) => alert.symbol)).toContain("AAPL");
     await result.commit?.();
     expect(committed).toBe(true);

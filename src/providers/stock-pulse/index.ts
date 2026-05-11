@@ -97,8 +97,8 @@ function marketTimezone(config: StockPulseProviderConfig, symbol: StockPulseSymb
   return config.markets[symbol.market]?.timezone ?? "Asia/Shanghai";
 }
 
-function unrealizedPnlCny(position: StockPulsePositionSnapshot): number | undefined {
-  const value = position.portfolio?.unrealized_pnl_cny;
+function dailyPnlCny(position: StockPulsePositionSnapshot): number | undefined {
+  const value = position.portfolio?.daily_pnl_cny;
   return value !== undefined && Number.isFinite(value) ? value : undefined;
 }
 
@@ -108,14 +108,14 @@ function sortBySymbol(a: StockPulsePositionSnapshot, b: StockPulsePositionSnapsh
 
 function buildPositionGroups(positions: StockPulsePositionSnapshot[]): StockPulsePositionGroups {
   const profitable = positions
-    .filter((position) => (unrealizedPnlCny(position) ?? 0) > 0)
-    .sort((a, b) => (unrealizedPnlCny(b) ?? 0) - (unrealizedPnlCny(a) ?? 0) || sortBySymbol(a, b));
+    .filter((position) => (dailyPnlCny(position) ?? 0) > 0)
+    .sort((a, b) => (dailyPnlCny(b) ?? 0) - (dailyPnlCny(a) ?? 0) || sortBySymbol(a, b));
   const losing = positions
-    .filter((position) => (unrealizedPnlCny(position) ?? 0) < 0)
-    .sort((a, b) => (unrealizedPnlCny(a) ?? 0) - (unrealizedPnlCny(b) ?? 0) || sortBySymbol(a, b));
+    .filter((position) => (dailyPnlCny(position) ?? 0) < 0)
+    .sort((a, b) => (dailyPnlCny(a) ?? 0) - (dailyPnlCny(b) ?? 0) || sortBySymbol(a, b));
   const flatOrUnknown = positions
     .filter((position) => {
-      const value = unrealizedPnlCny(position);
+      const value = dailyPnlCny(position);
       return value === undefined || value === 0;
     })
     .sort(sortBySymbol);

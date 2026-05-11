@@ -75,7 +75,7 @@ schedule:
 每只股票会计算：
 
 - `positions[]`: 所有成功报价的扫描股票，包含当前价、价格币种、60m/日内涨跌幅，以及 portfolio 提供的 CNY 盈亏字段。
-- `position_groups`: 按 `portfolio.unrealized_pnl_cny` 分成 `profitable`、`losing`、`flat_or_unknown`；盈利组按浮动盈利从大到小，亏损组按亏损绝对值从大到小。
+- `position_groups`: 按 `portfolio.daily_pnl_cny` 分成 `profitable`、`losing`、`flat_or_unknown`；盈利组按日内盈亏从高到低，亏损组按日内亏损从大到小。
 - `hour_return_pct`: 最近约 60 分钟涨跌幅。
 - `day_return_pct`: 当日涨跌幅。
 - `abnormal_bar_count`: 最近 60 分钟内异常 5m bar 数量。
