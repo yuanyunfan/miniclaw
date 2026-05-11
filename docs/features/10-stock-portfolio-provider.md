@@ -75,7 +75,7 @@ sources:
 - `include_cny_summary`: 关闭后只保留各券商原始脱敏 payload，不生成统一人民币口径汇总。
 - `include_asset_summary`: 仅用于可信 private channel。开启后聚合各券商 provider 的 exact `asset_summary`，生成人民币口径总资产、证券市值、现金和分类持仓金额。
 - `sources[].include_asset_totals`: 默认为 `true`。设为 `false` 时，该 source 只贡献持仓分类和 Top movers，不贡献账户总资产、证券市值或现金，用于避免同一个券商账户被多个市场 profile 重复计入。
-- `sources[].asset_account_label`: 账户汇总行显示名。用于把 `Futu US` 这种主 profile 的账户资产展示为 `Futu` 或 `Futu 合并账户`。
+- `sources[].asset_account_label`: 账户汇总行和持仓明细的账户组显示名。用于把 `Futu US` / `Futu HK` 这种市场 profile 展示为 `Futu`，并在同一账户组内按 `provider + asset_account_label + code` 去重。
 
 股票日报 cron 使用：
 
@@ -166,7 +166,7 @@ pre_provider_config: cn-stock
 
 `asset_summary` 只应在 private channel 的 exact 配置中启用。该字段会在 LLM 调用前按持仓市值和现金余额生成汇总，并且可报告金额全部是人民币字段，例如 `total_assets_cny`、`market_value_cny`、`cash_cny`。聚合输出不会把 source provider 的原币种 `total_assets`、`market_value`、`cash`、`pnl` 等金额字段继续传给 LLM；`sources[].payload` 在资产汇总模式下只保留账户别名、来源币种、汇率和 CNY 后的账户级 P&L 摘要。
 
-同一个券商账户可能需要通过多个市场 profile 查询持仓。例如 Futu HK 和 Futu US 可以拿到不同市场持仓，但 `accinfo_query` 的账户资产可能是同一个综合账户按不同币种折算后的结果。此时只能选择一个 source 贡献账户总资产/现金，其他 source 应设置 `include_asset_totals: false`，否则 `total_assets_cny` 和 `cash_cny` 会重复计算。
+同一个券商账户可能需要通过多个市场 profile 查询持仓。例如 Futu HK 和 Futu US 可以拿到不同市场持仓，但 `accinfo_query` 的账户资产可能是同一个综合账户按不同币种折算后的结果。此时只能选择一个 source 贡献账户总资产/现金，其他 source 应设置 `include_asset_totals: false`，否则 `total_assets_cny` 和 `cash_cny` 会重复计算。两个 source 如果属于同一综合账户，还应设置相同的 `asset_account_label`；聚合层会在该账户组内按股票/ETF 代码去重，并优先保留 `include_asset_totals: true` 的 source。持仓金额折算使用每条 holding 自己的 `currency`，不是 source profile 的默认币种。
 
 资产分类分两层：
 

@@ -323,6 +323,7 @@ describe("stock-portfolio formatter", () => {
           provider: "futu-stock",
           config: "daily-stock-summary-hk",
           label: "Futu HK",
+          asset_account_label: "Futu",
           include_asset_totals: false,
           status: "ok",
           payload: {
@@ -336,9 +337,13 @@ describe("stock-portfolio formatter", () => {
                 { category: "cash", label: "现金", currency: "HKD", market_value: 200, positions_count: 0, holdings: [
                   { code: "CASH", name: "Cash", currency: "HKD", category: "cash", label: "现金", market_value: 200 },
                 ] },
-                { category: "other", label: "其他", currency: "HKD", market_value: 900, positions_count: 2, holdings: [
+                { category: "other", label: "其他", currency: "HKD", market_value: 1000, positions_count: 3, holdings: [
                   { code: "HK.02800", name: "Tracker Fund ETF", currency: "HKD", category: "other", label: "其他", market_value: 800 },
                   { code: "513030", name: "德国ETF", currency: "HKD", category: "other", label: "其他", market_value: 100 },
+                  { code: "US.MSFT", name: "Microsoft", currency: "USD", category: "stock", label: "个股", market_value: 100 },
+                ] },
+                { category: "stock", label: "个股", currency: "HKD", market_value: 100, positions_count: 1, holdings: [
+                  { code: "US.BRK.B", name: "Berkshire Hathaway", currency: "USD", category: "stock", label: "个股", market_value: 100 },
                 ] },
               ],
             },
@@ -362,8 +367,9 @@ describe("stock-portfolio formatter", () => {
                 { category: "cash", label: "现金", currency: "USD", market_value: 200, positions_count: 0, holdings: [
                   { code: "CASH", name: "Cash", currency: "USD", category: "cash", label: "现金", market_value: 200 },
                 ] },
-                { category: "stock", label: "个股", currency: "USD", market_value: 800, positions_count: 1, holdings: [
+                { category: "stock", label: "个股", currency: "USD", market_value: 900, positions_count: 2, holdings: [
                   { code: "US.AAPL", name: "Apple", currency: "USD", category: "stock", label: "个股", market_value: 800 },
+                  { code: "US.BRK.B", name: "Berkshire Hathaway", currency: "USD", category: "stock", label: "个股", market_value: 100 },
                 ] },
               ],
             },
@@ -377,13 +383,16 @@ describe("stock-portfolio formatter", () => {
     expect(payload.asset_summary?.cash_cny).toBe(1440);
     expect(payload.asset_summary?.by_category).toEqual(expect.arrayContaining([
       expect.objectContaining({ category: "other", market_value_cny: 828 }),
-      expect.objectContaining({ category: "stock", market_value_cny: 5760 }),
+      expect.objectContaining({ category: "stock", market_value_cny: 7200 }),
       expect.objectContaining({ category: "cash", market_value_cny: 1440 }),
     ]));
     expect(payload.asset_summary?.holdings_for_classification).toEqual(expect.arrayContaining([
       expect.objectContaining({ code: "HK.02800", market_value_cny: 736 }),
       expect.objectContaining({ code: "513030", market_value_cny: 92 }),
       expect.objectContaining({ code: "US.AAPL", market_value_cny: 5760 }),
+      expect.objectContaining({ code: "US.MSFT", source_label: "Futu", market_value_cny: 720 }),
+      expect.objectContaining({ code: "US.BRK.B", source_label: "Futu", market_value_cny: 720 }),
     ]));
+    expect(payload.asset_summary?.holdings_for_classification.filter((holding) => holding.code === "US.BRK.B")).toHaveLength(1);
   });
 });

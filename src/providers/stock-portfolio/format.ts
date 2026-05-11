@@ -142,6 +142,31 @@ function sourceAccountAlias(source: StockPortfolioSourceOk): string | undefined 
   return str(snapshot?.account_alias, source.label ?? "");
 }
 
+function sourceAssetLabel(source: StockPortfolioSourceOk): string {
+  return source.asset_account_label ?? source.label ?? sourceAccountAlias(source) ?? `${source.provider}/${source.config}`;
+}
+
+function normalizeHoldingCode(code: string): string {
+  return code.trim().toUpperCase();
+}
+
+interface PendingAssetHolding extends StockPortfolioAssetHolding {
+  dedupe_key: string;
+  dedupe_priority: number;
+}
+
+function stripPendingHoldingMetadata(holding: PendingAssetHolding): StockPortfolioAssetHolding {
+  const { dedupe_key: _dedupeKey, dedupe_priority: _dedupePriority, ...publicHolding } = holding;
+  return publicHolding;
+}
+
+function shouldReplacePendingHolding(existing: PendingAssetHolding, candidate: PendingAssetHolding): boolean {
+  if (candidate.dedupe_priority !== existing.dedupe_priority) {
+    return candidate.dedupe_priority > existing.dedupe_priority;
+  }
+  return candidate.market_value_cny >= existing.market_value_cny;
+}
+
 const LLM_CLASSIFICATION_GUIDANCE: StockPortfolioClassificationGuidance = {
   mode: "llm",
   categories: [
@@ -259,6 +284,8 @@ function buildAssetSummary(
   const byAccount: StockPortfolioAssetSummary["by_account"] = [];
   const byCategory = new Map<AssetAllocationCategory, StockPortfolioAssetCategorySummary>();
   const holdingsForClassification: StockPortfolioClassifiableHolding[] = [];
+  const pendingHoldings = new Map<string, PendingAssetHolding>();
+  const fallbackCategoryTotals = new Map<AssetAllocationCategory, { market_value_cny: number; positions_count: number }>();
 
   function categoryBucket(category: AssetAllocationCategory): StockPortfolioAssetCategorySummary {
     const existing = byCategory.get(category);
@@ -275,7 +302,7 @@ function buildAssetSummary(
   }
 
   const okSources = sources.filter((source): source is StockPortfolioSourceOk => source.status === "ok");
-  for (const source of okSources) {
+  for (const [sourceIndex, source] of okSources.entries()) {
     const summary = sourceAssetSummary(source);
     if (!summary) {
       warnings.add(`${source.provider}/${source.config} has no asset_summary; asset allocation may be incomplete`);
@@ -311,47 +338,96 @@ function buildAssetSummary(
         warnings.add(`${source.provider}/${source.config} has unknown asset category: ${String(rawBucket.category)}`);
         continue;
       }
-      if (!includeAssetTotals && category === "cash") continue;
-      const value = num(rawBucket.market_value);
-      if (value === undefined) continue;
-      const convertedValue = roundMoney(value * rate);
-      const bucket = categoryBucket(category);
-      bucket.market_value_cny = roundMoney(bucket.market_value_cny + convertedValue);
-      bucket.positions_count += num(rawBucket.positions_count) ?? 0;
+      if (category === "cash") continue;
 
       const holdings = Array.isArray(rawBucket.holdings) ? rawBucket.holdings.filter(isRecord) : [];
+      if (!holdings.length) {
+        const value = num(rawBucket.market_value);
+        if (value === undefined) continue;
+        const convertedValue = roundMoney(value * rate);
+        const current = fallbackCategoryTotals.get(category) ?? { market_value_cny: 0, positions_count: 0 };
+        current.market_value_cny = roundMoney(current.market_value_cny + convertedValue);
+        current.positions_count += num(rawBucket.positions_count) ?? 0;
+        fallbackCategoryTotals.set(category, current);
+        continue;
+      }
+
       for (const rawHolding of holdings) {
         const holdingValue = num(rawHolding.market_value);
         if (holdingValue === undefined) continue;
         const holdingCategory = categoryValue(rawHolding.category) ?? category;
-        const holding: StockPortfolioAssetHolding = {
+        if (holdingCategory === "cash") continue;
+        const holdingCurrency = str(rawHolding.currency, currency).toUpperCase();
+        const holdingRate = fxRateFor(holdingCurrency, config, warnings);
+        if (holdingRate === undefined) continue;
+        const sourceLabel = sourceAssetLabel(source);
+        const code = str(rawHolding.code, "UNKNOWN");
+        const name = str(rawHolding.name, "UNKNOWN");
+        const holding: PendingAssetHolding = {
           provider: source.provider,
           config: source.config,
-          source_label: source.label,
-          code: str(rawHolding.code, "UNKNOWN"),
-          name: str(rawHolding.name, "UNKNOWN"),
-          source_currency: str(rawHolding.currency, currency).toUpperCase(),
+          source_label: sourceLabel,
+          code,
+          name,
+          source_currency: holdingCurrency,
           category: holdingCategory,
           label: str(rawHolding.label, assetCategoryLabel(holdingCategory)),
-          market_value_cny: roundMoney(holdingValue * rate),
-          fx_rate_to_cny: rate,
+          market_value_cny: roundMoney(holdingValue * holdingRate),
+          fx_rate_to_cny: holdingRate,
           instrument_type: str(rawHolding.instrument_type) || undefined,
+          dedupe_key: `${source.provider}|${sourceLabel.toUpperCase()}|${normalizeHoldingCode(code)}`,
+          dedupe_priority: (includeAssetTotals ? 1_000_000 : 0) + sourceIndex,
         };
-        bucket.holdings.push(holding);
-        if (holdingCategory !== "cash") {
-          holdingsForClassification.push({
-            provider: source.provider,
-            config: source.config,
-            source_label: source.label,
-            code: holding.code,
-            name: holding.name,
-            source_currency: holding.source_currency,
-            market_value_cny: holding.market_value_cny,
-            fx_rate_to_cny: holding.fx_rate_to_cny,
-            instrument_type: holding.instrument_type,
-          });
+        const existing = pendingHoldings.get(holding.dedupe_key);
+        if (!existing || shouldReplacePendingHolding(existing, holding)) {
+          pendingHoldings.set(holding.dedupe_key, holding);
         }
       }
+    }
+  }
+
+  for (const account of byAccount) {
+    if (account.cash_cny === undefined) continue;
+    const bucket = categoryBucket("cash");
+    bucket.market_value_cny = roundMoney(bucket.market_value_cny + account.cash_cny);
+    bucket.holdings.push({
+      provider: account.provider,
+      config: account.config,
+      source_label: account.label,
+      code: "CASH",
+      name: "Cash",
+      source_currency: account.source_currency,
+      category: "cash",
+      label: assetCategoryLabel("cash"),
+      market_value_cny: account.cash_cny,
+      fx_rate_to_cny: account.fx_rate_to_cny,
+    });
+  }
+
+  for (const [category, total] of fallbackCategoryTotals.entries()) {
+    const bucket = categoryBucket(category);
+    bucket.market_value_cny = roundMoney(bucket.market_value_cny + total.market_value_cny);
+    bucket.positions_count += total.positions_count;
+  }
+
+  for (const pendingHolding of pendingHoldings.values()) {
+    const holding = stripPendingHoldingMetadata(pendingHolding);
+    const bucket = categoryBucket(holding.category);
+    bucket.market_value_cny = roundMoney(bucket.market_value_cny + holding.market_value_cny);
+    bucket.positions_count += 1;
+    bucket.holdings.push(holding);
+    if (holding.category !== "cash") {
+      holdingsForClassification.push({
+        provider: holding.provider,
+        config: holding.config,
+        source_label: holding.source_label,
+        code: holding.code,
+        name: holding.name,
+        source_currency: holding.source_currency,
+        market_value_cny: holding.market_value_cny,
+        fx_rate_to_cny: holding.fx_rate_to_cny,
+        instrument_type: holding.instrument_type,
+      });
     }
   }
 
