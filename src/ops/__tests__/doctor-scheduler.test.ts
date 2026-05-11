@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Client } from "discord.js";
 import type { DoctorReport } from "../doctor.js";
 import type { DoctorRepairResult } from "../doctor-repair.js";
+import type { DoctorNotificationGroup } from "../doctor-scheduler.js";
 import type { IncidentRow } from "../../store/incidents.js";
 
 const ENV_KEYS = [
@@ -50,8 +51,8 @@ function reportWithFailedTask(): DoctorReport {
   };
 }
 
-function incidentRow(): IncidentRow {
-  return {
+function incidentRow(overrides: Partial<IncidentRow> = {}): IncidentRow {
+  const base: IncidentRow = {
     id: "incident-123456",
     dedupe_key: "task:task-123456:failed",
     type: "task_failed",
@@ -67,6 +68,77 @@ function incidentRow(): IncidentRow {
     created_at: "2026-05-10T04:00:00.000Z",
     updated_at: "2026-05-10T04:00:00.000Z",
     resolved_at: null,
+  };
+  return { ...base, ...overrides };
+}
+
+function reportWithRepeatedNetworkTasks(): DoctorReport {
+  const error = "Reconnecting... 1/5 (stream disconnected before completion: stream closed before response.completed)";
+  return {
+    evidence: {
+      generatedAt: "2026-05-10T04:00:00.000Z",
+      mode: "recent",
+      dbPath: "/tmp/miniclaw.db",
+      cronStatePath: "/tmp/cron-state.json",
+      connectivityStatePath: "/tmp/connectivity.json",
+      taskCandidates: [
+        {
+          id: "cdcbc955-ffe0-4d73-aca2-db67d72e57bc",
+          status: "failed",
+          prompt: "morning auto improve task 1",
+          result_summary: error,
+          source_route_type: "cron_task",
+        },
+        {
+          id: "a36bc841-087a-45f2-9d2f-6902a118f002",
+          status: "failed",
+          prompt: "morning auto improve task 2",
+          result_summary: error,
+          source_route_type: "cron_task",
+        },
+      ],
+      taskEvents: [
+        {
+          id: 1,
+          task_id: "cdcbc955-ffe0-4d73-aca2-db67d72e57bc",
+          event_type: "provider_error",
+          severity: "error",
+          message: error,
+          payload_json: null,
+          created_at: "2026-05-10T04:01:00.000Z",
+        },
+        {
+          id: 2,
+          task_id: "a36bc841-087a-45f2-9d2f-6902a118f002",
+          event_type: "provider_error",
+          severity: "error",
+          message: error,
+          payload_json: null,
+          created_at: "2026-05-10T04:02:00.000Z",
+        },
+      ],
+      cronErrors: [],
+      pm2: { app: "miniclaw", found: true, status: "online", restartCount: 66 },
+      git: { cwd: "/repo", branch: "main", sha: "abc1234", dirtyFiles: [] },
+      connectivity: { status: "discord_ok", consecutive_failures: 0 },
+      logs: [],
+    },
+    diagnosis: {
+      incidentType: "task_failed",
+      severity: "warning",
+      category: "network",
+      title: "Task failed: cdcbc955",
+      summary: "The strongest signal points to connectivity rather than a code repair.",
+      evidenceSummary: [
+        "task=cdcbc955 status=failed",
+        `task_result=${error}`,
+        "route=cron_task",
+        "connectivity=discord_ok failures=0",
+        "pm2=online restarts=66",
+      ],
+      repairAllowed: false,
+      recommendedAction: "Check VPN/proxy/network and Discord reachability before changing code.",
+    },
   };
 }
 
@@ -199,6 +271,109 @@ describe("doctor scheduler", () => {
     expect(notify).toHaveBeenCalledTimes(1);
     expect(result.created).toEqual([row]);
     expect(result.notified).toEqual([row]);
+  });
+
+  it("groups repeated task failure notifications by category, route, and error signature", async () => {
+    process.env.MINICLAW_DOCTOR_AUTO_DIAGNOSE_ENABLED = "true";
+    process.env.MINICLAW_DOCTOR_SUMMARY_CHANNEL_ID = "channel-1";
+    const { createDoctorScheduler, __testables } = await import("../doctor-scheduler.js");
+    const report = reportWithRepeatedNetworkTasks();
+    const rows = new Map<string, IncidentRow>([
+      [
+        "cdcbc955-ffe0-4d73-aca2-db67d72e57bc",
+        incidentRow({
+          id: "incident-cdcbc955",
+          dedupe_key: "task:cdcbc955-ffe0-4d73-aca2-db67d72e57bc:failed",
+          subject_id: "cdcbc955-ffe0-4d73-aca2-db67d72e57bc",
+          title: "Task failed: cdcbc955",
+          summary: "The strongest signal points to connectivity rather than a code repair.",
+          diagnosis_json: JSON.stringify({
+            category: "network",
+            repairAllowed: false,
+            recommendedAction: "Check VPN/proxy/network and Discord reachability before changing code.",
+          }),
+        }),
+      ],
+      [
+        "a36bc841-087a-45f2-9d2f-6902a118f002",
+        incidentRow({
+          id: "incident-a36bc841",
+          dedupe_key: "task:a36bc841-087a-45f2-9d2f-6902a118f002:failed",
+          subject_id: "a36bc841-087a-45f2-9d2f-6902a118f002",
+          title: "Task failed: a36bc841",
+          summary: "The strongest signal points to connectivity rather than a code repair.",
+          diagnosis_json: JSON.stringify({
+            category: "network",
+            repairAllowed: false,
+            recommendedAction: "Check VPN/proxy/network and Discord reachability before changing code.",
+          }),
+        }),
+      ],
+    ]);
+    const createOrUpdate = vi.fn((candidate) => ({
+      row: rows.get(candidate.subjectId ?? "")!,
+      created: true,
+      severityEscalated: false,
+    }));
+    const appendEvent = vi.fn(() => 1);
+    const notifiedGroups: DoctorNotificationGroup[] = [];
+    const notify = vi.fn(async (_client: Client, group: DoctorNotificationGroup) => {
+      notifiedGroups.push(group);
+    });
+    const scheduler = createDoctorScheduler({} as Client, {
+      runDoctorFn: vi.fn(async () => report),
+      createOrUpdateIncidentFn: createOrUpdate,
+      appendIncidentEventFn: appendEvent,
+      sendNotificationFn: notify,
+      drainingFn: () => false,
+    });
+
+    const result = await scheduler.runOnce("test");
+
+    expect(notify).toHaveBeenCalledTimes(1);
+    const group = notifiedGroups[0]!;
+    expect(group.items).toHaveLength(2);
+    const text = __testables.formatDoctorNotificationGroup(group, report);
+    expect(text).toContain("2 similar task failures");
+    expect(text).toContain("Tasks: `cdcbc955`, `a36bc841`");
+    expect(text).toContain("Repeated error:");
+    expect(text).toContain("stream disconnected");
+    expect(result.notified.map((row) => row.id)).toEqual(["incident-cdcbc955", "incident-a36bc841"]);
+    expect(appendEvent).toHaveBeenCalledWith("incident-cdcbc955", "doctor_notified", expect.objectContaining({
+      grouped: true,
+      group_size: 2,
+    }));
+    expect(appendEvent).toHaveBeenCalledWith("incident-a36bc841", "doctor_notified", expect.objectContaining({
+      grouped: true,
+      group_size: 2,
+    }));
+  });
+
+  it("keeps different task failure signatures in separate notifications", async () => {
+    process.env.MINICLAW_DOCTOR_AUTO_DIAGNOSE_ENABLED = "true";
+    const { createDoctorScheduler } = await import("../doctor-scheduler.js");
+    const report = reportWithRepeatedNetworkTasks();
+    report.evidence.taskCandidates[1]!.result_summary = "TypeError: Cannot read properties of undefined";
+    const rows = new Map<string, IncidentRow>([
+      ["cdcbc955-ffe0-4d73-aca2-db67d72e57bc", incidentRow({ id: "incident-cdcbc955", subject_id: "cdcbc955-ffe0-4d73-aca2-db67d72e57bc" })],
+      ["a36bc841-087a-45f2-9d2f-6902a118f002", incidentRow({ id: "incident-a36bc841", subject_id: "a36bc841-087a-45f2-9d2f-6902a118f002" })],
+    ]);
+    const notify = vi.fn(async () => undefined);
+    const scheduler = createDoctorScheduler({} as Client, {
+      runDoctorFn: vi.fn(async () => report),
+      createOrUpdateIncidentFn: vi.fn((candidate) => ({
+        row: rows.get(candidate.subjectId ?? "")!,
+        created: true,
+        severityEscalated: false,
+      })),
+      appendIncidentEventFn: vi.fn(() => 1),
+      sendNotificationFn: notify,
+      drainingFn: () => false,
+    });
+
+    await scheduler.runOnce("test");
+
+    expect(notify).toHaveBeenCalledTimes(2);
   });
 
   it("runs guarded auto repair and posts a repair summary when enabled", async () => {

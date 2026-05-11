@@ -198,6 +198,48 @@ describe("runDoctor", () => {
     expect(formatDoctorReport(report)).toContain("Task failed");
   });
 
+  it("diagnoses stream-disconnected provider failures as network issues", async () => {
+    const streamError = "Reconnecting... 1/5 (stream disconnected before completion: stream closed before response.completed)";
+    const dbPath = createTaskDb([{
+      id: "task-network-1",
+      status: "failed",
+      result_summary: streamError,
+      events: [{
+        event_type: "provider_error",
+        severity: "error",
+        message: streamError,
+      }],
+    }]);
+    const cronStatePath = writeJson(join(tmp, "cron-state.json"), { jobs: {} });
+    const connectivityStatePath = writeJson(join(tmp, "connectivity.json"), {
+      updated_at: "2026-05-10T03:11:00.000Z",
+      status: "discord_ok",
+      consecutive_failures: 0,
+      checks: {},
+    });
+
+    const report = await runDoctor(
+      {
+        mode: "task",
+        taskIdPrefix: "task-network",
+        json: false,
+        dbPath,
+        cronStatePath,
+        connectivityStatePath,
+        logDir: writeLogDir([]),
+        cwd: tmp,
+      },
+      { now: () => new Date("2026-05-10T03:20:00.000Z"), commandRunner: fakeRunner() }
+    );
+
+    expect(report.diagnosis).toMatchObject({
+      incidentType: "task_failed",
+      category: "network",
+      repairAllowed: false,
+    });
+    expect(report.diagnosis.recommendedAction).toContain("VPN/proxy/network");
+  });
+
   it("diagnoses cron auth failures as not auto-repairable", async () => {
     const dbPath = createTaskDb([]);
     const cronStatePath = writeJson(join(tmp, "cron-state.json"), {

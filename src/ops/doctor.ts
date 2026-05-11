@@ -464,6 +464,7 @@ function classifyCategory(text: string, connectivity: DoctorConnectivityState): 
     return "network";
   }
   if (/(discord_delivery_failed|discord|missing access|unknown message|cannot send messages|message send|message edit)/i.test(text)) return "discord";
+  if (/(reconnecting|stream disconnected|stream closed|connection reset|socket hang up|fetch failed|network error|network down|proxy error|vpn disconnected)/i.test(text)) return "network";
   if (/(cookie|auth|unauthori[sz]ed|forbidden|credential|session expired|login|登录|鉴权|认证)/i.test(text)) return "provider_auth";
   if (/(no new|not found|empty|没有|无新|0 条|0条|no data|data absence)/i.test(text)) return "provider_data";
   if (/(timeout|429|rate limit|econn|enotfound|http 5\d\d|upstream|third[- ]party)/i.test(text)) return "third_party";
