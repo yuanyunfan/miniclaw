@@ -14,7 +14,7 @@ export type CodexReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhig
 export type CodexWebSearchMode = "disabled" | "cached" | "live";
 export type ClaudeSettingSource = "user" | "project" | "local";
 export type SmartRouterDefaultMode = "suggest" | "confirm" | "auto";
-export type SmartRouterClassifierProvider = "auto" | "openai" | "openai_compatible" | "codex";
+export type SmartRouterClassifierProvider = "auto" | "raven" | "anthropic" | "openai" | "openai_compatible" | "codex";
 export type AudioTranscriptionProvider = "auto" | "openai" | "openai_compatible" | "local_faster_whisper";
 
 export interface SmtpEmailNotificationConfig {
@@ -563,12 +563,12 @@ export const config = {
         ["routing", "smart_router", "llm_classifier", "provider"],
         "MINICLAW_SMART_ROUTER_LLM_PROVIDER",
         "auto",
-        ["auto", "openai", "openai_compatible", "codex"]
+        ["auto", "raven", "anthropic", "openai", "openai_compatible", "codex"]
       ),
-      model: requiredString(
+      model: stringOrInherit(
         ["routing", "smart_router", "llm_classifier", "model"],
         "MINICLAW_SMART_ROUTER_LLM_MODEL",
-        "gpt-4o-mini"
+        "inherit"
       ),
       timeoutMs: positiveNumber(
         ["routing", "smart_router", "llm_classifier", "timeout_ms"],

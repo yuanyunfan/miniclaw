@@ -34,10 +34,12 @@ routing:
       # Legacy compatibility field. Current LLM-first router calls the classifier
       # for every non-empty chat-eligible message when enabled.
       only_when_ambiguous: true
-      # auto: use OpenAI/OpenAI-compatible chat completions when OPENAI_API_KEY
-      # or OPENAI_BASE_URL is configured; otherwise fall back to Codex.
-      provider: auto # auto | openai | openai_compatible | codex
-      model: gpt-4o-mini
+      # auto: use the same lightweight API boundary as chat:
+      # ANTHROPIC_BASE_URL + ANTHROPIC_API_KEY first for Raven/Anthropic-compatible
+      # Messages API, then OpenAI/OpenAI-compatible chat completions, otherwise Codex.
+      provider: auto # auto | raven | anthropic | openai | openai_compatible | codex
+      # inherit: raven/anthropic uses claude.model; openai/openai_compatible uses gpt-4o-mini.
+      model: inherit
       timeout_ms: 8000
       fallback_to_codex: true
     confirmation:

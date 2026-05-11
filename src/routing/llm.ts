@@ -5,10 +5,20 @@ import type { EstimatedEffort, LlmRouteClassifier, RouteCapabilityDecision, Rout
 
 const VALID_EFFORTS = new Set<EstimatedEffort>(["short", "medium", "long"]);
 const OPENAI_DEFAULT_BASE_URL = "https://api.openai.com/v1";
+const OPENAI_DEFAULT_MODEL = "gpt-4o-mini";
 
 let anthropicClient: Anthropic | null = null;
 
 type OpenAiClassifierProvider = "openai" | "openai_compatible";
+type ApiClassifierProvider = "anthropic" | OpenAiClassifierProvider;
+
+type AnthropicClassifierClient = Pick<Anthropic, "messages">;
+
+type AnthropicClassifierOptions = {
+  model: string;
+  timeoutMs: number;
+  client?: AnthropicClassifierClient;
+};
 
 type OpenAiChatClassifierOptions = {
   provider: OpenAiClassifierProvider;
@@ -147,14 +157,50 @@ function trimBaseUrl(url: string): string {
   return url.replace(/\/+$/, "");
 }
 
-function resolveOpenAiApiProvider(): OpenAiClassifierProvider | null {
+function resolveApiClassifierProvider(): ApiClassifierProvider | null {
   const provider = config.smartRouter.llmClassifier.provider;
   if (provider === "codex") return null;
+  if (provider === "raven" || provider === "anthropic") return "anthropic";
   if (provider === "openai") return "openai";
   if (provider === "openai_compatible") return "openai_compatible";
+  if (config.anthropicBaseUrl && config.anthropicApiKey) return "anthropic";
   if (config.openaiApiKey) return "openai";
   if (config.openaiBaseUrl) return "openai_compatible";
+  if (config.agentProvider === "claude" && config.anthropicApiKey) return "anthropic";
   return null;
+}
+
+function classifierModelFor(provider: ApiClassifierProvider): string {
+  const configured = config.smartRouter.llmClassifier.model;
+  if (configured) return configured;
+  return provider === "anthropic" ? config.claudeModel : OPENAI_DEFAULT_MODEL;
+}
+
+function classifierTimeoutController(timeoutMs: number): AbortController {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(new Error(`Smart router classifier timeout after ${timeoutMs}ms`)), timeoutMs);
+  timer.unref?.();
+  ctrl.signal.addEventListener("abort", () => clearTimeout(timer), { once: true });
+  return ctrl;
+}
+
+async function classifyRouteWithAnthropicMessages(
+  input: RouteClassifierInput,
+  options: AnthropicClassifierOptions,
+): Promise<RouteCapabilityDecision> {
+  const ctrl = classifierTimeoutController(options.timeoutMs);
+  try {
+    const client = options.client ?? getAnthropicClient();
+    const msg = await client.messages.create({
+      model: options.model,
+      max_tokens: 500,
+      temperature: 0,
+      messages: [{ role: "user", content: classifierPrompt(input) }],
+    }, { signal: ctrl.signal });
+    return parseCapabilityJson(textFromAnthropicContent(msg.content));
+  } finally {
+    if (!ctrl.signal.aborted) ctrl.abort();
+  }
 }
 
 async function classifyRouteWithOpenAiChat(
@@ -169,9 +215,7 @@ async function classifyRouteWithOpenAiChat(
   }
 
   const baseUrl = trimBaseUrl(options.baseUrl ?? OPENAI_DEFAULT_BASE_URL);
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(new Error(`Smart router classifier timeout after ${options.timeoutMs}ms`)), options.timeoutMs);
-  timer.unref?.();
+  const ctrl = classifierTimeoutController(options.timeoutMs);
 
   try {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -201,7 +245,7 @@ async function classifyRouteWithOpenAiChat(
     if (!text) throw new Error("OpenAI classifier response did not contain message content");
     return parseCapabilityJson(text);
   } finally {
-    clearTimeout(timer);
+    if (!ctrl.signal.aborted) ctrl.abort();
   }
 }
 
@@ -236,24 +280,19 @@ async function classifyRouteWithCodexThread(input: RouteClassifierInput): Promis
 }
 
 export const classifyRouteWithLlm: LlmRouteClassifier = async (input) => {
-  const prompt = classifierPrompt(input);
-
-  if (config.agentProvider === "claude") {
-    const msg = await getAnthropicClient().messages.create({
-      model: config.claudeModel,
-      max_tokens: 500,
-      temperature: 0,
-      messages: [{ role: "user", content: prompt }],
-    });
-    return parseCapabilityJson(textFromAnthropicContent(msg.content));
-  }
-
-  const apiProvider = resolveOpenAiApiProvider();
+  const apiProvider = resolveApiClassifierProvider();
   if (apiProvider) {
     try {
+      const model = classifierModelFor(apiProvider);
+      if (apiProvider === "anthropic") {
+        return await classifyRouteWithAnthropicMessages(input, {
+          model,
+          timeoutMs: config.smartRouter.llmClassifier.timeoutMs,
+        });
+      }
       return await classifyRouteWithOpenAiChat(input, {
         provider: apiProvider,
-        model: config.smartRouter.llmClassifier.model,
+        model,
         timeoutMs: config.smartRouter.llmClassifier.timeoutMs,
         apiKey: config.openaiApiKey,
         baseUrl: config.openaiBaseUrl,
@@ -268,4 +307,11 @@ export const classifyRouteWithLlm: LlmRouteClassifier = async (input) => {
   return classifyRouteWithCodexThread(input);
 };
 
-export const __testables = { parseCapabilityJson, classifierPrompt, classifyRouteWithOpenAiChat };
+export const __testables = {
+  parseCapabilityJson,
+  classifierPrompt,
+  classifyRouteWithAnthropicMessages,
+  classifyRouteWithOpenAiChat,
+  resolveApiClassifierProvider,
+  classifierModelFor,
+};

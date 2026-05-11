@@ -117,6 +117,53 @@ describe("capability LLM classifier helpers", () => {
     });
   });
 
+  it("classifies through the Raven/Anthropic-compatible messages API", async () => {
+    const createMock = vi.fn().mockResolvedValue({
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          needs_current_info: false,
+          needs_multi_step_research: true,
+          needs_file_write: true,
+          needs_shell: true,
+          creates_persistent_output: true,
+          estimated_effort: "medium",
+          confidence: 0.88,
+          reason: "needs local config update and trigger",
+          evidence: ["raven_classifier"],
+          risk_flags: ["writes_files"],
+        }),
+      }],
+    });
+
+    const parsed = await __testables.classifyRouteWithAnthropicMessages({
+      content: "这个定时任务补充上 MiniClaw 定时任务，按执行时间排序，最后触发一下",
+      channelId: "chat-1",
+      hasAttachments: false,
+    }, {
+      model: "claude-router",
+      timeoutMs: 8000,
+      client: { messages: { create: createMock } } as never,
+    });
+
+    expect(parsed.needsFileWrite).toBe(true);
+    expect(parsed.needsShell).toBe(true);
+    expect(parsed.createsPersistentOutput).toBe(true);
+    expect(parsed.confidence).toBe(0.88);
+    expect(createMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "claude-router",
+        max_tokens: 500,
+        temperature: 0,
+        messages: [{
+          role: "user",
+          content: expect.stringContaining("Classify the capabilities needed"),
+        }],
+      }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    );
+  });
+
   it("adds authorization when the lightweight classifier uses OpenAI API", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       choices: [{ message: { content: JSON.stringify({ confidence: 0.7 }) } }],

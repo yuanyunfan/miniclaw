@@ -586,6 +586,40 @@ storage:
     expect(config.smartRouter.llmClassifier.enabled).toBe(true);
   });
 
+  it("supports Raven classifier provider with inherited model", async () => {
+    const cfg = join(tmpDir, "config.yaml");
+    writeFileSync(cfg, `
+discord:
+  client_id: "client-yaml"
+  guild_id: "guild-yaml"
+  allowed_user_id: "user-yaml"
+routing:
+  smart_router:
+    llm_classifier:
+      provider: raven
+      model: inherit
+agent:
+  provider: codex
+  default_cwd: "${tmpDir}"
+anthropic:
+  base_url: "http://localhost:7024"
+claude:
+  model: claude-router
+storage:
+  db_path: "${join(tmpDir, "data.db")}"
+  memory_path: "${join(tmpDir, "MEMORY.md")}"
+`);
+    process.env.MINICLAW_CONFIG = cfg;
+    process.env.DISCORD_TOKEN = "token-env";
+    process.env.ANTHROPIC_API_KEY = "raven-key";
+
+    const { config } = await import("../config.js");
+
+    expect(config.smartRouter.llmClassifier.provider).toBe("raven");
+    expect(config.smartRouter.llmClassifier.model).toBeUndefined();
+    expect(config.anthropicBaseUrl).toBe("http://localhost:7024");
+  });
+
   it("preserves legacy blank budget and turn env values as unlimited", async () => {
     const cfg = join(tmpDir, "config.yaml");
     writeFileSync(cfg, `

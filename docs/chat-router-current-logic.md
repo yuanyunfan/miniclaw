@@ -197,16 +197,20 @@ classifier prompt 的边界：
   - `steipete的1099 次贡献...` 应输出 `needs_current_info=true`、`needs_multi_step_research=true`。
   - `stock-pulse中的当前持仓盘中快照 ... 加个 ... 排序` 应输出 `needs_file_write=true`。
 
-Codex provider 下的 classifier 默认优先使用轻量 OpenAI-compatible `chat/completions` API：
+Codex provider 下的 classifier 默认优先使用轻量 API，不再先创建 Codex thread：
 
-- `routing.smart_router.llm_classifier.provider: auto` 时，如果配置了 `OPENAI_API_KEY`，走 OpenAI 风格 API；如果只配置了 `OPENAI_BASE_URL`，走 OpenAI-compatible API；两者都没有时回退到 Codex thread。
+- `routing.smart_router.llm_classifier.provider: auto` 时，如果配置了 `ANTHROPIC_BASE_URL` + `ANTHROPIC_API_KEY`，优先走 Raven/Anthropic-compatible Messages API。这和当前 chat 路径使用本机 raven 反代的边界一致。
+- 如果没有 Raven/Anthropic-compatible 配置，`auto` 再检查 `OPENAI_API_KEY` / `OPENAI_BASE_URL`，走 OpenAI 或 OpenAI-compatible `chat/completions`。
+- 如果以上 API 配置都没有，最后才回退到 Codex thread。
+- `provider: raven` / `provider: anthropic` 强制使用 Anthropic Messages API；`ANTHROPIC_BASE_URL=http://localhost:7024` 时就是连接本机 raven。
 - `provider: openai` 强制要求 `OPENAI_API_KEY`。
 - `provider: openai_compatible` 强制要求 `OPENAI_BASE_URL`，如同时配置 `OPENAI_API_KEY` 会带上 Bearer Authorization。
 - `provider: codex` 强制使用原来的 read-only Codex thread。
-- `model` 默认 `gpt-4o-mini`，`timeout_ms` 默认 8000。
+- `model: inherit` 时，Raven/Anthropic-compatible 路径继承 `claude.model`，OpenAI/OpenAI-compatible 路径使用 `gpt-4o-mini`。
+- `timeout_ms` 默认 8000。
 - `fallback_to_codex: true` 时，轻量 API 调用失败会回退到 read-only Codex thread；设为 `false` 时直接把 classifier 失败暴露给 smart router fallback。
 
-Codex thread fallback 仍关闭 web search 和 network，最多 30 秒超时。Claude provider 下仍使用 Anthropic messages API，temperature 0。
+Codex thread fallback 仍关闭 web search 和 network，最多 30 秒超时。
 
 ### Classifier Failure Fallback
 
