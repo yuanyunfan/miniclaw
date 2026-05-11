@@ -1,0 +1,195 @@
+# Incident Center Operator View
+
+Status: draft
+Date: 2026-05-11
+
+## Background
+
+MiniClaw already has a meaningful Auto Doctor foundation:
+
+- `/doctor`
+- `/incidents`
+- `/incident view`
+- `/incident resolve`
+- `/incident ignore`
+- `/incident retry-repair`
+- `/incident ship-preview`
+- `/incident approve-ship`
+- guarded repair worker
+- guarded ship path
+- safe restart boundary
+
+The remaining gap is operator continuity. From one incident id, the user should be able to trace the original task/cron/log evidence, task trace, repair run, ship preview, restart decision, blockers, rollback command, and post-ship monitoring state.
+
+## Goals
+
+- Strengthen `/incident view` into a compact operator detail view.
+- Add incident search/filter by type, category, route, provider, repair status, and severity.
+- Add repair branch review report with diff summary, changed paths, verification commands, risks, and rollback command.
+- Link incidents to task trace, cron run detail, repair run detail, ship preview, and restart status.
+- Keep the main MiniClaw process read-only for diagnosis; repair writes stay in isolated worktrees.
+
+## Non-Goals
+
+- Do not create a web dashboard in this slice.
+- Do not auto-update `main` or restart production without explicit approval.
+- Do not expose raw evidence bundles, prompts, credentials, cookies, or account data in Discord.
+- Do not make the main bot process modify source files.
+- Do not replace `doctor:repair` or `doctor:ship`; improve their review surfaces.
+
+## Existing Architecture Evidence
+
+- `src/commands/register.ts`: incident slash commands are already registered.
+- `src/commands/handlers.ts`: handles `/incidents` and `/incident` subcommands.
+- `src/commands/incident-detail.ts`: formats incident detail text.
+- `src/store/incidents.ts`: incident, incident event, and repair run repositories.
+- `src/ops/doctor.ts`: evidence collection and diagnosis.
+- `src/ops/doctor-scheduler.ts`: scheduled diagnosis, notifications, repair attempts.
+- `src/ops/doctor-repair.ts`: isolated worktree repair flow and repair reports.
+- `src/ops/doctor-ship.ts`: guarded ship and optional safe restart.
+- `docs/zh/13-auto-doctor.zh.md`: current Auto Doctor user-facing docs.
+- `docs/plans/2026-05-10-miniclaw-auto-doctor-self-repair.md`: original self-repair loop plan.
+
+## Target User Experience
+
+### `/incidents`
+
+Support optional filters:
+
+- `status`
+- `type`
+- `severity`
+- `category`
+- `provider`
+- `route`
+- `repair_status`
+- `limit`
+
+Default remains open incidents only.
+
+Output should be grouped and compact:
+
+- headline count
+- top severity/type groups
+- incident rows with short id, severity/status, type, subject, updated age, repair state
+- command hints
+
+### `/incident view id:<prefix>`
+
+Add sections when data exists:
+
+- core incident facts
+- source subject
+- diagnosis summary
+- linked task trace command if subject is task
+- linked cron run command if subject is cron and cron run history exists
+- recent incident events
+- repair run summary
+- ship preview state
+- restart status
+- blockers
+- rollback command or revert instructions
+- next recommended operator action
+
+### Repair Review Report
+
+Add a reusable formatter for repair review:
+
+- incident id and title
+- repair branch and commit
+- base SHA
+- changed files
+- diff summary
+- verification commands and exit status
+- blocked paths result
+- risks and rollback command
+- ship/restart commands
+
+Expose via:
+
+- `pnpm run doctor:ship -- --incident <id>` dry-run output
+- `/incident ship-preview`
+- maybe `/incident repair-report id:<id>` if `/incident view` becomes too long
+
+## Data Model Additions
+
+Prefer using existing `repair_runs.report_json` and `verification_json` first.
+
+If missing fields are needed, add nullable fields later:
+
+- `repair_runs.diff_summary_json`
+- `repair_runs.changed_files_json`
+- `repair_runs.rollback_command`
+- `repair_runs.ship_blockers_json`
+- `repair_runs.post_ship_monitoring_json`
+
+Do not add schema fields until the formatter proves the current stored JSON cannot support it.
+
+## Implementation Plan
+
+1. Inventory current incident and repair JSON payloads.
+   - Use tests and local dry-run outputs; do not inspect private live data in docs.
+2. Add incident filter store helpers.
+   - Extend `listOpenIncidents` or add `listIncidents(filters)`.
+   - Keep id-prefix resolution unchanged.
+   - Add tests for filters and sorting.
+3. Extend `/incidents`.
+   - Add optional filter args in `src/commands/register.ts`.
+   - Implement filter parsing in `src/commands/handlers.ts`.
+   - Keep output under Discord limits.
+4. Improve `formatIncidentDetail`.
+   - Add linked command hints:
+     - `/task-log id:<task-prefix>` when available;
+     - future `/cron-run id:<run-id>` when cron history exists;
+     - `pnpm run doctor:ship -- --incident <id>` for local preview.
+   - Add repair state and blockers from latest repair run.
+5. Add repair review formatter.
+   - Candidate file: `src/commands/repair-review.ts` or `src/ops/doctor-repair-report.ts`.
+   - Use it from `doctor:ship` dry-run and Discord ship preview if possible.
+6. Add post-ship monitoring hints.
+   - After successful ship/restart, incident events should record main update and restart attempt.
+   - View should show those events and next check command, not auto-run monitoring unless already configured.
+7. Reuse task trace exporter once implemented.
+   - If trace exporter has not landed, add only command hints and keep this item in execution notes.
+8. Add tests.
+   - Incident filter tests.
+   - Incident detail formatting tests.
+   - Repair review formatter tests.
+
+## Verification Plan
+
+- Focused:
+  - `pnpm vitest run src/store/__tests__/incidents.test.ts`
+  - `pnpm vitest run src/commands/__tests__/incident-detail.test.ts`
+  - Add repair review tests if implemented.
+- Static:
+  - `pnpm run typecheck`
+  - `pnpm run lint`
+- Full:
+  - `pnpm test`
+- Optional local smoke:
+  - `pnpm run doctor -- --json`
+  - `pnpm run doctor:ship -- --incident <test-incident> --json` when a safe test incident exists.
+
+## Risks And Rollback
+
+- Risk: incident view exceeds Discord message limits.
+  - Mitigation: keep detail sections compact; use attached Markdown only if redaction and size handling are ready.
+- Risk: filters produce misleading empty output.
+  - Mitigation: include active filter summary and examples.
+- Risk: repair report leaks diff content from sensitive files.
+  - Mitigation: show changed paths and summary by default; avoid raw diff in Discord.
+- Risk: operator commands imply auto-approval.
+  - Mitigation: copy should state approval boundary; ship/restart commands remain explicit.
+
+## Documentation Sync
+
+- Update `docs/zh/13-auto-doctor.zh.md`.
+- Update `docs/architecture.md` if incident data model or command surface changes.
+- Update `docs/bot-routing.md` if slash command behavior changes materially.
+- Run `pnpm run quality:docs`.
+
+## Execution Notes
+
+Record new filters, formatter behavior, command output examples, and verification evidence here when implemented.
+
