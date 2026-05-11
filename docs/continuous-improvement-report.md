@@ -1,292 +1,295 @@
-# MiniClaw 深度解析与持续优化报告
+# MiniClaw 下一阶段持续优化报告
 
-日期：2026-05-10
+日期：2026-05-11
 
 ## TLDR
 
-MiniClaw 现在已经不是一个简单的 Discord bot，而是一个面向单用户的 personal AI operations hub。它的核心价值不在于替代 Claude Code、Codex、OpenClaw 或 Hermes，而在于把这些 runtime 变成可切换后端，并在本机掌握 Discord 入口、私有数据 provider、cron、task state、记忆、诊断、重启安全和质量门禁。
+本报告只保留下一阶段仍需提升的内容，不再展开历史 WIP 收敛、已有能力清单或正向评价段落。对齐当前代码后，最值得优先推进的是任务执行展示边界、trace 用户视图、Smart Router 评估闭环、provider framework、DB/config 治理、incident center 和 docs drift 防护。
 
-后续把 Claude Code / Codex / 第三方 Agent、普通 AI API、Discord / 其他 IM 抽象出来是合理的，而且应该做。但抽象边界要分成三层：`AgentRuntime`、`ModelClient`、`IMTransport`。不要把它们都塞进一个泛化的 `provider`，因为它们的权限、状态、成本、流式事件和故障模式完全不同。
+短期第一优先级是 `TaskViewEvent + Discord view reporter + trace export`。现在 `TaskReporter` 已经承担 SQLite 观测写入，但 SDK 事件归一化、Discord progress/final 渲染和用户可导出的完整 trace 还没有形成清晰边界，这会继续放大 `src/agent/task.ts` 的复杂度。
 
-未来最值得持续投入的是运行系统能力：provider framework、task event/reporting、incident center、Smart Router 评估闭环、Auto Doctor 的受控修复链路，以及围绕私有数据的 zero-touch 自动化。最不值得投入的是复刻通用 coding agent、把所有任务强行多 agent 化、或者让主进程自动修改并重启自己。
+第二优先级是把运行态数据变成可评估闭环：Smart Router 不能只记录 classifier 结果，还要能关联用户按钮选择、实际创建 task、最终 task outcome 和 route correction；Auto Doctor 不能只产生 incident，还要让 incident、trace、repair run、ship preview 和 restart decision 可以被连续追踪。
 
-当前仓库的基础很强：测试密度高，质量门禁完整，runtime 边界逐步清晰。但复杂度中心已经很明显，尤其是 `src/agent/task.ts`、`src/bot.ts`、`src/config.ts`、`src/store/db.ts` 和 `src/ops/*`。下一阶段应优先做边界拆分和运行态可观测性，而不是继续堆 feature。
+不建议把 MiniClaw 扩展成通用 Agent 平台，也不建议默认把所有任务多 agent 化。正确方向是围绕个人自动化、私有数据、Discord-native delivery 和可替换 runtime adapter 做运行系统治理。
 
-## 分析范围与当前基线
+## 本次对齐范围
 
-本报告基于当前工作区快照进行静态代码审计、文档审计和基础验证。当前分支为 `main`，remote 指向个人仓库 `git@github-personal:yuanyunfan/miniclaw.git`。
+本次只对齐当前代码实现，不修改业务代码；文档以代码证据作为风险判断依据。
 
-工作区在分析时已有未提交改动，主要集中在 Auto Doctor、Smart Router capability classifier、config、ops repair 相关文件。本报告没有修改这些代码改动，只新增本分析文档和 docs 索引。
+用于判断剩余改进项的代码证据：
 
-代码规模：
+- 本次复核发现并修正了 `docs/architecture.md` 的 DB schema version / Smart Router 字段 drift，并新增了 `quality:docs` 的第一层检查；剩余问题是 changed-path 到 docs path 的语义映射仍未脚本化。
+- `src/agent/task-reporter.ts` 和 `src/store/task-events.ts` 负责写入 `task_events`，但仓库里没有真正的 `TaskViewEvent` source file 或 Discord view reporter。
+- `src/agent/task.ts` 仍直接消费 Claude/Codex SDK 事件、格式化 tool progress、更新 Discord progress，并发送最终结果。
+- `src/bot.ts` 仍集中处理 Discord message、Smart Router、chat、task、button 和 slash command 事件。
+- `src/providers/types.ts` 的 provider contract 仍主要是 `PreProviderResult`：`text`、`attachments`、`skipTask`、`commit`。
+- `src/config.ts` 仍集中处理 YAML/env loading、validation、path resolution、agent provider、doctor、connectivity、routing 和 attachment 配置。
+- 最大复杂度热点仍集中在 `src/providers/market-intel/collectors/official.ts`、`src/agent/task.ts`、`src/ops/doctor-scheduler.ts`、`src/bot.ts`、`src/ops/doctor-repair.ts`、`src/store/db.ts`、`src/config.ts` 和 `src/ops/doctor.ts`。
 
-- production TypeScript 文件：143 个，约 22079 行。
-- test 文件：97 个，约 9813 行。
-- docs Markdown 文件：33 个。
-- 最大复杂度中心：`src/agent/task.ts` 859 行、`src/bot.ts` 780 行、`src/ops/doctor-repair.ts` 705 行、`src/config.ts` 689 行、`src/ops/doctor.ts` 647 行、`src/store/db.ts` 607 行。
+## P1: 任务展示边界仍未拆开
 
-验证基线：
+### 当前问题
 
-- `pnpm run typecheck`：通过。
-- `pnpm run lint`：通过。
-- `pnpm test`：通过，97 个 test files、485 个 tests passed。
+`src/agent/task.ts` 仍同时承担这些职责：
 
-## 当前系统画像
+- active task lifecycle、cancel、interrupt、drain。
+- Claude Agent SDK 和 Codex SDK 分支执行。
+- SDK 原始事件解析。
+- tool progress line 格式化。
+- Discord progress update。
+- final embed/raw result 发送。
+- DB task 状态更新。
+- `TaskReporter` 观测事件写入。
 
-### 1. 产品定位
+`TaskReporter` 现在是 observability reporter，不是 view reporter。它把事件写入 `task_events`，但不应该继续承载 Discord 展示职责。下一阶段需要明确区分：
 
-MiniClaw 的 README 对定位已经非常准确：
+- `TaskTraceReporter` 或保留现名 `TaskReporter`：只负责结构化观测写入。
+- `TaskViewEvent`：统一 Claude/Codex/fake runtime 的用户可见事件。
+- `DiscordTaskViewReporter`：只负责把 `TaskViewEvent` 渲染成 Discord status、progress、final output 和附件。
 
-- Discord 是入口和交付层。
-- Claude Code / Codex 是可切换执行引擎。
-- 用户配置、cron、provider state 和 secrets 放在 `~/.miniclaw/`。
-- 微信公众号、邮件、信用卡、股票账户等数据先由只读 provider 结构化采集，再交给 LLM 总结。
-- 敏感能力默认只读、脱敏、不写入 Git。
+### 建议改动
 
-这个定位是正确的。MiniClaw 不应该发展成“另一个 OpenClaw”或“另一个 Hermes”，而应该成为用户自己的 AI automation control plane。
+1. 新增 `src/agent/task-view-events.ts`，定义最小 `TaskViewEvent` union。
+2. 拆出 `src/agent/runners/claude-task-runner.ts` 和 `src/agent/runners/codex-task-runner.ts`，只负责 SDK -> `TaskViewEvent` + `TaskResult`。
+3. 新增 `src/discord/task-view-reporter.ts`，负责 Discord progress/final rendering。
+4. 保留 `src/agent/task-reporter.ts` 作为 SQLite trace writer，避免和 Discord reporter 混名。
+5. 让 `executeTask` 逐步退化成 orchestration shell，而不是继续承载 SDK 和 Discord 细节。
 
-### 2. 运行链路
+### 验收标准
 
-当前主要入口包括：
+- `src/agent/task.ts` 不再直接格式化大部分 tool progress line。
+- Claude/Codex SDK event schema 变化时，只影响对应 runner。
+- Discord 展示策略变化时，不需要改 Claude/Codex runner。
+- `TaskReporter` 和 Discord view reporter 的职责在文件名、类型和测试里都清楚。
 
-- Discord `MessageCreate`：thread continuation、task channel、auto-reply chat、Smart Router。
-- Discord `InteractionCreate`：cron retry button、Smart Router button、slash commands。
-- Slash commands：`/task`、`/status`、`/health`、`/doctor`、`/incidents`、`/agent-config`、`/cancel`、`/resume`、memory commands。
-- cron scheduler：从 `~/.miniclaw/cron/*.yaml` 加载 job，支持 `task`、`script`、`skill`、`message`。
-- Stage CLI：独立 Ink/TUI 多 agent 控制台。
+## P1: Trace 已有结构化事实源，但缺用户可读出口
 
-核心执行路径：
+### 当前问题
 
-- chat 路径：`src/bot.ts` -> `src/agent/chat.ts` -> Claude messages stream 或 Codex read-only thread。
-- task 路径：`src/commands/handlers.ts` / `src/discord/task-intake.ts` / `src/bot.ts` -> `src/agent/task.ts` -> Claude Agent SDK 或 Codex SDK。
-- cron task 路径：`src/cron/scheduler.ts` -> `src/cron/runner-task.ts` -> pre_script / pre_provider -> `executeTask(outputMode=raw)`。
-- runtime ops 路径：connectivity monitor、Auto Doctor、incident DB、safe restart、repair worker。
+`task_events` 已经能记录 task accepted、context captured、session/turn/tool/provider error、Discord delivery failure 和 final status。Auto Doctor 和 `/incident view` 也能读取部分 trace。
 
-### 3. 数据与状态
+剩余缺口是用户视图：
 
-MiniClaw 当前有三类状态：
+- 没有 `/task-log` 或 `/task trace`。
+- 没有 `task-<id>-trace.md` 导出。
+- 长任务完成后，Discord 里仍主要依赖 tail summary 和 final message。
+- trace retention、redaction、附件大小阈值还没有明确策略。
 
-- SQLite：tasks、chat_history、scenes、scene_messages、smart_router_decisions、incidents、incident_events、repair_runs。
-- Markdown memory：`~/.miniclaw/memories/MEMORY.md`。
-- JSON/YAML runtime state：`~/.miniclaw/cron/state.json`、provider state、config、connectivity state。
+### 建议改动
 
-这个结构符合 local-first。真正要加强的是 state lifecycle：保留多久、如何清理、如何导出诊断 bundle、如何避免敏感 prompt 和 provider 原始数据长期沉积。
+1. 新增 `src/store/task-trace-export.ts`，从 `task_events` 生成用户可读 Markdown。
+2. 新增 slash command：`/task-log id:<prefix>` 或 `/task trace id:<prefix>`。
+3. 长任务按阈值自动附加 trace 文件，例如事件数、耗时或错误 severity 达到阈值才上传。
+4. trace export 默认脱敏 provider payload，只保留 event type、severity、message、关键 ids、耗时和错误类型。
+5. Auto Doctor 的 incident detail 链接到同一 trace exporter，避免 incident view 和 task-log 各自实现一套格式。
 
-### 4. 抽象边界
+### 验收标准
 
-MiniClaw 确实应该减少对 Claude Code、Codex 和 Discord 的直接绑定。原因不是为了做成通用平台，而是为了避免未来每接一个 Agent 或 IM 都要改核心 task、cron、doctor、routing 和 store 逻辑。
+- 任意最近 task 都能从 Discord 查询到可读 trace。
+- provider/tool error 能在 trace 中定位到时间、provider、event type 和简短 message。
+- trace 文件不会暴露完整 prompt、cookie、token、邮箱正文或账户原始数据。
 
-建议把外部依赖拆成四类：
+## P1: Smart Router 需要评估闭环
 
-- `AgentRuntime`：Claude Code、Codex、Hermes Agent、OpenClaw 或未来其他可执行任务的 agent。它的特点是长任务、可写工作区、可 resume/cancel、有工具调用、有会话 id、有 token/cost/trace。
-- `ModelClient`：OpenAI API、Anthropic API、本地 LLM、router LLM 等普通 AI API。它的特点是轻量、短链路、适合分类/总结/诊断/格式化，不应该默认拥有工作区写权限。
-- `IMTransport`：Discord、Telegram、Slack、飞书、Teams、邮件 thread 等交互入口。它的特点是 message、thread、reply、edit、button、attachment、permission、rate limit 和 user identity。
-- `DataProvider`：WeChat、email、Futu、Eastmoney、stock portfolio 等私有或公开数据源。它不等于 AI provider，主要职责是采集、脱敏、结构化和 dedupe state。
+### 当前问题
 
-这四层不要混在一起。尤其是 `AgentRuntime` 和 `ModelClient` 必须分开：Codex/Claude Code 这种 coding agent 是“执行器”，OpenAI/Anthropic API 是“模型能力”。前者可以改文件、调用工具、跨轮恢复；后者更适合 Smart Router、Auto Doctor classifier、report summarizer 和 cheap fallback。
+`smart_router_decisions` 已经记录 prompt hash、preview、capability JSON、classifier timing/error、`action_result` 和 `created_task_id`。这足够做单次 route debugging，但还不足以回答长期质量问题：
 
-目标抽象可以是：
+- 用户点击了“转为 task / 继续 chat / 取消”之后，选择没有被建模成独立 feedback 字段。
+- router decision 和 created task 的 final status 没有形成固定 report。
+- 没有 route correction 机制，比如用户在 chat 中纠正“这个应该走 task”。
+- 没有 `/router-review` 或本地 report 来聚类 false positive / false negative / classifier failure。
 
-```ts
-interface AgentRuntime {
-  id: string;
-  capabilities: AgentRuntimeCapabilities;
-  runTask(request: AgentTaskRequest, sink: AgentEventSink): Promise<AgentTaskResult>;
-  continueTask?(request: AgentContinueRequest, sink: AgentEventSink): Promise<AgentTaskResult>;
-  cancel?(taskId: string): Promise<void>;
-  validateSession?(sessionId: string): boolean;
-}
+### 建议改动
 
-interface ModelClient {
-  id: string;
-  complete(request: ModelRequest): Promise<ModelResponse>;
-  stream?(request: ModelRequest): AsyncIterable<ModelEvent>;
-}
+1. 在 `smart_router_decisions` 或关联表中记录 `user_choice`、`final_route`、`task_final_status`、`correction_type`。
+2. 给 Smart Router button handler 补充 choice 更新，区分推荐、确认、用户选择和最终动作。
+3. 新增 `scripts/router-review.ts` 或 `/router-review`，按 channel、route、classifier error type、task outcome 聚合。
+4. 把高频真实 prompt 固化成 fixture，覆盖 current info、multi-step research、file/code change、runtime inspection 和普通解释。
+5. 本地 deterministic policy 继续作为最终权限边界；LLM classifier 只提供 capability hint。
 
-interface IMTransport {
-  id: string;
-  sendMessage(target: MessageTarget, message: OutboundMessage): Promise<MessageRef>;
-  editMessage(ref: MessageRef, message: OutboundMessage): Promise<void>;
-  createThread?(source: MessageRef, title: string): Promise<MessageTarget>;
-  sendFile?(target: MessageTarget, file: OutboundFile): Promise<MessageRef>;
-}
-```
+### 验收标准
 
-接口里应该表达 MiniClaw 真正需要的能力，而不是表达某个 SDK 的对象模型。比如 Discord 有 thread 和 button，但 Telegram/Slack 未必完全一致；所以核心层应该使用 `MessageTarget`、`MessageRef`、`ActionRef`、`AttachmentRef` 这类中性对象，再由 adapter 做降级或映射。
+- 能回答“某类 prompt 最近 7 天被误路由了多少次”。
+- 能看到 classifier failure 是否真的导致用户体验下降。
+- 能区分 classifier 判错、policy 拦截、用户选择变化和 task 执行失败。
 
-合理的目录方向：
+## P1: Docs drift 需要进入质量门禁
 
-- `src/runtime/agent-runtime.ts`：Agent runtime contract。
-- `src/runtime/model-client.ts`：普通 AI API contract。
-- `src/im/transport.ts`：IM transport contract。
-- `src/adapters/agent-codex/*`：Codex adapter。
-- `src/adapters/agent-claude/*`：Claude adapter。
-- `src/adapters/im-discord/*`：Discord adapter。
-- `src/adapters/model-openai/*`、`src/adapters/model-anthropic/*`：普通 model API adapter。
+### 当前问题
 
-短期不要一次性重写。更稳的迁移顺序是：先抽 `TaskViewEvent`，再让 Claude/Codex runner 产出统一事件，然后让 Discord reporter 消费这些事件。等 task event/reporting 稳定后，再把 Discord message/thread 操作下沉到 `IMTransport`。
+代码已经推进到 DB schema v8，本次复核也修正了 `docs/architecture.md` 的 schema version 和 Smart Router classifier 字段说明，并加入 `quality:docs` 第一层检查。剩余问题是 D1 仍只覆盖少数高价值 invariant，还没有根据 changed paths 判断哪些文档必须同步。
 
-## 已经做得好的地方
+当前 docs 数量继续增长，feature docs、plans、architecture 和 bot-routing 之间容易重复描述同一事实。一旦 schema、route behavior、quality gate 或 provider contract 改动，只靠人工记忆同步会持续失效。
 
-### Discord-native workflow 是真实优势
+### 建议改动
 
-MiniClaw 的 task thread、progress message、final Markdown 分片、cron 失败按钮、incident notification 都很贴合 Discord。这个方向比做一个新 Web dashboard 更符合当前使用场景。
+1. 扩展 `quality:docs`，增加 changed-path 到 docs path 的轻量映射。
+2. Smart Router action/result 字段变更时，要求同步 `docs/bot-routing.md` 或 feature doc。
+3. provider contract 变更时，要求同步 provider framework 文档。
+4. 对历史 plan 文档保持归档，不再让它们承担当前 source of truth。
 
-建议继续把 Discord 当成 primary UX。Web/dashboard 可以后置，优先保证 Discord 里的状态、回溯、retry、resume、诊断都好用。
+### 验收标准
 
-### chat 和 task 的权限边界清晰
+- 核心文档不会继续引用过期 schema version。
+- 新增/修改 route、DB schema、provider contract 时，有自动检查或固定 review checklist。
+- feature doc 中的 “待实现” 不再长期漂移成过期 backlog。
 
-当前设计坚持：
+## P1: 复杂度热点需要拆分
 
-- chat：轻量、只读、短链路。
-- task：可写、有状态、可 resume、可观测。
+### 当前问题
 
-Smart Router 的价值是降低用户选择成本，而不是抹掉边界。这个判断非常重要，应继续保持。
+当前文件规模显示复杂度中心已经明显：
 
-### provider-driven reports 是长期护城河
+- `src/providers/market-intel/collectors/official.ts`：1095 行。
+- `src/agent/task.ts`：955 行。
+- `src/ops/doctor-scheduler.ts`：848 行。
+- `src/bot.ts`：816 行。
+- `src/ops/doctor-repair.ts`：775 行。
+- `src/store/db.ts`：764 行。
+- `src/config.ts`：746 行。
+- `src/ops/doctor.ts`：734 行。
 
-`pre_provider` + `PreProviderResult` 的抽象已经抓住了 MiniClaw 的核心方向：先结构化采集，再让 LLM 做总结。当前已有 WeChat、email、CMB credit card、Futu、Eastmoney、stock portfolio、stock pulse 等 provider，这比单纯 chat bot 更有长期价值。
+这些不是单纯“行数太多”的问题，而是职责集中导致变更风险升高。AI agent 后续参与维护时，也更容易在错误层级修问题。
 
-下一阶段不应只增加更多 provider，而应提升 provider 框架本身。
+### 建议改动
 
-### 运行态安全意识已经成体系
+`src/bot.ts` 拆成：
 
-当前已经有：
+- `src/bot/message-thread-continuation.ts`
+- `src/bot/message-task-channel.ts`
+- `src/bot/message-chat.ts`
+- `src/bot/message-smart-router.ts`
+- `src/bot/button-dispatch.ts`
+- `src/bot/slash-dispatch.ts`
 
-- graceful shutdown drain。
-- `safe-restart` 拒绝有 running task 时重启。
-- interrupted task 持久化和 startup recovery。
-- connectivity monitor + Email fallback。
-- Auto Doctor read-only diagnosis。
-- repair worker 使用 isolated worktree。
+`src/agent/task.ts` 拆成：
 
-这说明 MiniClaw 正在从“能跑”走向“能长期值守”。这条线应继续加强。
+- task lifecycle registry。
+- Claude/Codex/fake runners。
+- `TaskViewEvent` normalization。
+- Discord view reporting。
+- DB persistence and recovery glue。
 
-### 质量门禁强于一般个人项目
+`src/ops/doctor-scheduler.ts` 拆成：
 
-已有质量基础包括：
+- scan loop。
+- candidate grouping。
+- notification formatting。
+- auto repair trigger policy。
+- scheduler state/update side effects。
 
-- `pnpm run typecheck`、`lint`、`test`、`build`。
-- G0 safety check。
-- secret scan。
-- dependency scan。
-- coverage ratchet。
-- cron E2E fixture。
-- Discord E2E workflow。
-- fake agent runtime。
+`src/providers/market-intel/collectors/official.ts` 拆成：
 
-这对 AI 参与维护的项目尤其重要。持续优化时不要绕过这些 gate。
+- calendar/news/events collectors。
+- quote/macro source adapters。
+- scoring input builder。
+- source-specific parsers and fixtures。
 
-## 主要问题与风险
+### 验收标准
 
-### P0: 当前 Smart Router/DB WIP 需要收敛成原子变更
+- 每个拆分后的文件都有单一职责和独立测试入口。
+- 新增一个 provider、route 或 repair policy 时，不需要同时改多个 god module。
+- 复杂路径的测试 fixture 可以直接定位到对应模块，而不是只能跑全量 task/bot tests。
 
-当前工作区仍有多处未提交改动，集中在 Smart Router capability classifier、router eval fixture/tests、DB schema、`bot.ts` 和对应文档。这些改动已经通过 `typecheck/lint/test`，但还没有形成清晰的提交边界。
+## P1: 外部依赖抽象仍偏品牌分支
 
-建议：
+### 当前问题
 
-1. 先确认 Smart Router capability classifier、router eval、DB schema 和 docs 是否属于同一个独立改动。
-2. 如果其中混有不相关行为，拆成多个原子 commit。
-3. 保留当前已通过的验证基线：`pnpm run typecheck`、`pnpm run lint`、`pnpm test`。
-4. 如果 schema 或 routing 行为继续变化，同步 `docs/bot-routing.md` 和 Smart Router feature 文档。
+当前配置和运行路径仍围绕 `AgentProvider = "claude" | "codex"` 展开。`src/agent/task.ts`、`src/agent/chat.ts`、`src/stage/*`、`src/routing/llm.ts` 等位置都直接依赖 `config.agentProvider`。
 
-### P1: 复杂度中心开始接近 god module
+这说明 MiniClaw 已经支持多个 agent 后端，但抽象仍是品牌切换，不是能力契约。后续如果接 Hermes Agent、OpenClaw、Telegram、Slack、Teams 或普通 AI API，继续扩大品牌分支会失控。
 
-`task.ts` 同时负责：
+### 建议改动
 
-- active task registry。
-- cancellation/interruption/drain。
-- Codex SDK event consumption。
-- Claude Agent SDK event consumption。
-- tool display formatting。
-- progress rendering。
-- DB update。
-- final result sending。
-- attachment cleanup。
+1. 把 `agentProvider` 逐步升级为 runtime 配置，例如 `runtime.default_agent`，值可以继续是 `claude` / `codex`。
+2. 定义 `AgentRuntime`：长任务、workspace 权限、session、resume/cancel、tool events、trace。
+3. 定义 `ModelClient`：短链路分类、总结、诊断和格式化，不拥有 workspace 写权限。
+4. 定义 `IMTransport`：send/edit/thread/button/file/rate limit/permission。
+5. 保持 `DataProvider` 独立，不把 WeChat、email、Futu、Eastmoney 这类数据采集误归到 AI provider。
 
-`bot.ts` 同时负责：
+### 验收标准
 
-- Discord client construction。
-- route resolution。
-- Smart Router confirmation UI。
-- task auto creation。
-- thread continuation。
-- attachment processing。
-- chat progress display。
-- button dispatch。
-- slash command switch。
+- 新增普通 LLM API 用于 router/doctor 时，不需要伪装成 coding agent runtime。
+- 新增一个 Agent runtime 时，不需要改 Discord rendering。
+- 新增一个 IM transport 时，不需要改 Claude/Codex runner。
 
-这些模块现在还能维护，但继续增长会产生两个问题：
+## P1: DB migration 和 state lifecycle 需要治理
 
-- 任何改动都容易误伤多个运行路径。
-- AI agent 后续改代码时容易在错误层级修问题。
+### 当前问题
 
-建议优先拆：
+`src/store/db.ts` 仍集中处理多张表创建、migration、schema version、task、chat history 和 Smart Router helper。随着 `task_events`、incidents、repair runs、market forecasts 继续增长，单文件 migration 会越来越难 review。
 
-- `src/agent/task-events.ts`：统一 `TaskViewEvent`。
-- `src/discord/task-reporter.ts`：Discord status/progress/final output。
-- `src/agent/provider-runner-codex.ts` 和 `src/agent/provider-runner-claude.ts`：只负责 SDK -> TaskViewEvent。
-- `src/bot/message-handlers/*`：thread continuation、task channel、chat path、smart router path 分文件。
+state lifecycle 也需要明确：
 
-### P1: 外部依赖抽象还停留在品牌分支
+- `chat_history` 保留多久。
+- `task_events` 保留多久。
+- `smart_router_decisions` 是否保留 prompt preview。
+- `incident_events`、`repair_runs` 和 market forecast evaluation 如何归档。
+- 导出诊断 bundle 时哪些字段必须脱敏。
 
-当前 `src/config.ts` 里的 `AgentProvider = "claude" | "codex"`、`src/agent/task.ts` 里的 Claude/Codex 分支、`src/bot.ts` 里的 Discord client wiring，说明系统已经支持多个后端，但抽象还偏“品牌切换”，不是“能力契约”。
+### 建议改动
 
-这个阶段还能接受，因为目前只有 Claude/Codex + Discord。但如果后续接入 Hermes Agent、OpenClaw、Telegram、Slack、Teams 或普通 AI API，继续用品牌分支会很快失控。
+1. 新增 `src/store/migrations/`，每个 schema version 一个 migration function。
+2. 增加 `schema_version_history` 或 `schema_audit`，记录迁移执行时间和版本。
+3. 把 `tasks`、`smart_router_decisions`、`incidents`、`task_events`、`market_forecasts` 拆成 repository module。
+4. 增加 state retention 配置和清理命令。
+5. 对 prompt preview、provider payload、email/account data 做明确 redaction policy。
 
-建议：
+### 验收标准
 
-1. 把 `agentProvider` 逐步升级为 `runtime.default_agent`，值可以仍然是 `claude` / `codex`，但核心代码依赖 `AgentRuntime` contract。
-2. 把 Smart Router、Auto Doctor diagnosis、report summarizer 使用的 LLM 抽成 `ModelClient`，不要复用 coding agent runtime。
-3. 把 Discord send/edit/thread/button/file 操作集中到 `DiscordTransport`，核心 task 只面对 `IMTransport`。
-4. adapter 要声明 capability，而不是让核心层猜。例如 `supportsResume`、`supportsFiles`、`supportsThreads`、`supportsButtons`、`supportsToolEvents`、`maxMessageLength`。
-5. 不要强求所有 transport 支持 Discord 的完整体验。核心层给出理想事件和动作，adapter 负责 best-effort degrade。
+- 新 schema 变更不再需要在一个大函数里插入多段 SQL。
+- migration 可以单测从旧版本升级。
+- 长期运行后 DB 不会无限积累敏感 trace 和 prompt preview。
 
-这类抽象的价值很高，但要跟着现有痛点推进。第一刀仍然应该落在 `TaskViewEvent + TaskReporter`，因为它天然就是 `AgentRuntime` 和 `IMTransport` 之间的边界。
+## P1: Config 需要 schema-first 拆分
 
-### P1: config 已经过于集中
+### 当前问题
 
-`src/config.ts` 现在承载 YAML loading、env parsing、validation、path resolution、E2E guard、doctor config、connectivity config、codex/claude config、smart router config。继续扩展会让新配置很难 review。
+`src/config.ts` 仍集中处理：
 
-建议拆成：
+- YAML/env loading。
+- type coercion。
+- validation。
+- path resolution。
+- E2E isolation guard。
+- agent runtime config。
+- doctor/connectivity config。
+- Smart Router config。
+- attachments/audio transcription config。
 
-- `src/config/load.ts`：YAML/env loading。
-- `src/config/schema.ts`：Zod 或 typed validators。
-- `src/config/resolve.ts`：home path、default、inherit resolution。
-- `src/config/runtime.ts`：最终 `config` 对象。
-- `src/config/e2e-guards.ts`：E2E path isolation。
+虽然项目已经依赖 `zod`，但主配置还没有形成 schema-first 分层。继续添加 provider、runtime、transport 和 doctor 配置会让 review 成本继续升高。
 
-Zod 已经是依赖，可以逐步用于新配置，不必一次性重写所有字段。
+### 建议改动
 
-### P1: DB schema 和 store API 需要进入 migration discipline
+1. 新增 `src/config/load.ts`：只负责 YAML/env/source loading。
+2. 新增 `src/config/schema.ts`：集中 Zod schema 或 typed validators。
+3. 新增 `src/config/resolve.ts`：统一 home path、default 和 inherit resolution。
+4. 新增 `src/config/runtime.ts`：输出最终 readonly config object。
+5. 新配置先进入 schema，再进入 runtime config，不再直接追加到单一 `config.ts`。
 
-`src/store/db.ts` 已经包含多张表和 4 个 schema version。继续增长后，把 migration 写在一个大函数里会变得难审。
+### 验收标准
 
-建议：
+- 新增配置字段时有 schema、默认值、env key 和测试。
+- E2E guard 能独立测试，不依赖全量 config import side effect。
+- provider/doctor/runtime 配置可以分文件 review。
 
-- 建立 `src/store/migrations/`。
-- 每个 version 一个 migration function。
-- 新增 `schema_audit` 或 `schema_version_history` 记录迁移执行时间。
-- 给 `tasks`、`incidents`、`repair_runs` 分离 repository module。
-- 为 state retention 增加清理策略：chat_history、smart_router_decisions、incident_events、old repair_runs。
+## P1: Provider Framework 还不是统一 SDK
 
-### P1: task trace 还没有成为一等公民
+### 当前问题
 
-当前 Discord progress 只保留 tail lines，DB 只保存 result summary。长任务完成后，用户能看到摘要，但无法完整复盘 agent 到底做了什么。
+`PreProviderResult` 能满足当前 cron/report 需求，但 provider framework 仍偏薄。现在各 provider 已经各自具备 config、collector、format、redaction、health-like 能力的一部分，但没有统一 manifest、health check、dry-run、structured output 和 replay fixture 协议。
 
-建议：
+继续按单个 provider 增量扩展会带来这些问题：
 
-- 引入 normalized task trace。
-- 写入 SQLite 或 `~/.miniclaw/tasks/<task-id>/trace.jsonl`。
-- Discord 主消息继续只展示 tail summary。
-- 长任务完成后按阈值上传 `task-<id>-trace.md` 或提供 `/task-log <id>`。
-- Auto Doctor 应优先读取 normalized trace，而不是只 tail pm2 log。
+- cron 失败很难稳定区分 auth、data absence、network、format drift 和 provider bug。
+- Auto Doctor 难以判断 provider failure 是否可修。
+- 新 provider 接入缺少固定测试模板。
+- zero-touch 报告失败后，用户看到的诊断不够可执行。
 
-### P1: provider contract 还太薄
+### 建议改动
 
-当前 `PreProviderResult` 只有 `text`、`skipTask`、`commit`。这已经能工作，但随着 provider 变多，会缺少统一治理能力。
-
-建议把 provider 升级为 manifest-driven：
+定义 provider manifest：
 
 ```ts
 interface ProviderManifest {
@@ -300,286 +303,167 @@ interface ProviderManifest {
 }
 ```
 
-每个 provider 应有固定能力：
+每个 provider 应提供：
 
-- `healthCheck()`：检查配置、secret、登录态、网络，不执行下游 task。
-- `dryRun()`：采样输出，默认脱敏。
+- `healthCheck()`：只检查配置、secret、登录态、网络，不触发下游 LLM task。
+- `dryRun()`：采样结构化输出，默认脱敏。
 - `run()`：生成结构化结果。
-- `format()`：从结构化结果到 prompt block。
-- `commit()`：仅在下游 LLM task 成功后更新 dedupe state。
+- `format()`：从结构化结果生成 prompt block。
+- `commit()`：只在下游 LLM task 成功后更新 dedupe state。
+- `fixtures/`：覆盖 replay、format drift 和 redaction。
 
-这样 cron/report pipeline 会更可诊断，也更适合 Auto Doctor 判断 provider auth、provider data、network、third_party。
+### 验收标准
 
-### P2: Smart Router 需要评估闭环，而不只是 classifier
+- provider failure 可以稳定归类为 auth、network、data absence、format drift、provider bug。
+- 新 provider 接入有固定目录和测试模板。
+- cron/report pipeline 能在不跑 LLM 的情况下做 provider health preflight。
 
-当前 Smart Router 正在从 intent classifier 转向 capability classifier，这是对的。更长期的问题不是 classifier prompt 怎么写，而是如何知道它是否判对。
+## P2: Auto Doctor 和 Incident Center 需要从告警走向运维入口
 
-建议：
+### 当前问题
 
-- 扩展 `smart_router_decisions`：记录 final action、user button choice、task success/fail、route correction。
-- 增加 `/router-review` 或本地 report：按 false positive / false negative 聚类。
-- 对固定高频 prompt 建 snapshot fixtures。
-- 对 channel policy 做显式配置：哪些频道允许 auto task，哪些只允许 confirm，哪些永远 chat。
-- LLM classifier 只能做 capability hint，最终权限决策必须由本地 deterministic policy 做。
+`/incident view`、repair run、ship preview、approve ship 和 safe restart 相关路径已经存在，但仍缺一个更完整的 incident center 体验：
 
-### P2: Auto Doctor 要保持“修复分支优先”，不要太快进 main
+- incident search/filter 还不够强。
+- incident 和 task/cron/trace/log/repair run 的链接还不够连续。
+- repair branch review report 还不够像一个可审查变更包。
+- promotion blockers、rollback command、post-ship monitoring 还没有形成统一视图。
 
-Auto Doctor 已经进入 repair branch commit 阶段，这是很有价值的方向，但它也是风险最高的方向。
+### 建议改动
 
-建议保持以下硬边界：
+1. 强化 `/incident view`：展示 task trace link、cron run、repair run、ship preview、restart status。
+2. 增加 incident search/filter：按 type、category、route、provider、repair status、severity 聚合。
+3. 增加 repair branch review report：diff 摘要、changed paths、验证命令、测试输出、风险和回滚命令。
+4. 保持主进程 read-only diagnosis；repair worker 只在 isolated worktree 写代码。
+5. main merge、live restart、credential refresh 继续需要显式审批或强约束。
 
-- 主进程只做 diagnosis，不直接改 live main worktree。
-- repair worker 只在 isolated worktree 修改。
-- auto commit 只提交 repair branch。
-- auto push 初期只 push repair branch。
-- main merge、live restart、credential refresh 永远需要显式操作或强约束。
-- provider auth、network、Discord outage、third-party failure 不进入 auto repair。
+### 验收标准
 
-最终目标不是“MiniClaw 自己随便修自己”，而是“MiniClaw 自动准备一个可 review、可验证、可 revert 的 repair proposal”。
+- 用户能从一个 incident id 追到原始 task、trace、repair run、验证结果和 ship decision。
+- 可修复 bug 能生成可 review、可验证、可 revert 的 repair proposal。
+- Auto Doctor 不会自动修改 live main worktree 或未经确认重启生产进程。
 
-### P2: Stage 子系统需要明确是核心还是实验场
+## P2: Cron 运行历史和 per-job 控制需要增强
 
-Stage 是有价值的，但它和 Discord bot 的主路线不同。当前它共享 DB、config、chat-tools，也有独立 persona/orchestrator/TUI。长期需要明确：
+### 当前问题
 
-- 如果 Stage 是实验场：不要让它牵动主 runtime 架构。
-- 如果 Stage 是核心能力：要纳入 docs index、quality gates、runtime health、usage accounting。
+cron 当前支持 task/script/skill/message、pre_script、pre_provider、retry button 和 skipTask。下一步问题不再是能不能跑，而是长期运行时能不能诊断和治理：
 
-当前建议把 Stage 定为 experimental playground，主要用于 persona/multi-agent workflow 研究，不要让它成为 MiniClaw 必须维护的第二产品面。
+- cron run history 仍主要依赖 state/log/task，而不是一张可查询的 run table。
+- job-level timeout 只覆盖 pre_script 等局部，不是完整 task run SLA。
+- job-level max concurrency、backoff、cooldown 和 circuit breaker 还不够系统化。
+- provider health preflight 还没有成为统一入口。
+
+### 建议改动
+
+1. 新增 `cron_runs` 表或等价 repository，记录每次 job run 的 status、duration、attempt、task_id、incident_id、provider summary。
+2. 增加 job-level timeout 和 max concurrency。
+3. 增加 retry/backoff/cooldown 配置。
+4. pre_provider 先走 provider health/dry-run，再决定是否触发 LLM task。
+5. cron failure 通知链接到 run detail、task trace 和 incident detail。
+
+### 验收标准
+
+- 任意 cron job 能回答最近 N 次运行成功率、失败分类和平均耗时。
+- provider auth/session 问题不会反复触发无意义 LLM task。
+- cron failure 能自动给出下一步诊断入口，而不是只给一条错误文本。
+
+## P3: Stage 子系统保持实验边界
+
+### 当前问题
+
+Stage CLI 有独立 persona、orchestrator、TUI 和 smoke/e2e，但它和 Discord bot 主路线不是同一个产品面。若继续和主 runtime 深度耦合，会让 MiniClaw 同时维护两个入口和两套 UX。
+
+### 建议改动
+
+1. 明确 Stage 是 experimental playground，主要服务 persona/multi-agent workflow 研究。
+2. Stage 可复用 AgentRuntime 和 ModelClient，但不要反向牵动 Discord task runtime。
+3. 如果 Stage 要成为核心能力，再补 docs index、quality gates、runtime health 和 usage accounting。
+
+### 验收标准
+
+- Stage 改动不会阻塞 Discord bot 的核心运行质量。
+- 多 agent 只在复杂 research/design/review/coding 场景启用，不成为默认路径。
 
 ## 推荐路线图
 
-### 近期：稳定当前主干
+### 近期
 
-目标：恢复可提交、可部署的稳定基线。
-
-建议任务：
-
-1. 明确当前 Smart Router/DB/docs WIP 是一个还是多个原子改动。
-2. 若继续修改 router schema 或 decision log，补齐 migration 和 docs drift。
-3. 保持 `pnpm run typecheck && pnpm run lint && pnpm test` 全绿。
-4. 必要时跑 `pnpm run build` 和 `pnpm run e2e:cron`。
-5. 更新对应 docs：Smart Router、bot routing、quality gates。
-
-完成标准：
-
-- 本地 G1/L1 全绿。
-- 当前 WIP 不再混杂多个独立主题。
-- `docs/README.md` 能找到最新设计文档。
-
-### 30 天：Task Reporter 和 Trace 一等化
-
-目标：降低 `task.ts` 复杂度，并让长任务可审计；同时建立 `AgentRuntime` 和 `IMTransport` 之间的第一条稳定边界。
-
-建议任务：
+目标：降低 `task.ts` / `bot.ts` 的运行风险，并把 D1 docs drift 从少数 invariant 扩展到 changed-path 语义检查。
 
 1. 定义 `TaskViewEvent`。
-2. 拆出 `TaskReporter`。
-3. Codex/Claude runner 只产出 normalized events，不直接关心 Discord 输出。
-4. Discord reporter 只消费 `TaskViewEvent`，不直接关心 Claude/Codex SDK event。
-5. 完整 trace 写入 JSONL。
-6. Discord 完成消息可附 trace/result 文件。
-7. Auto Doctor 读取 task trace 做诊断。
+2. 新增 Discord view reporter。
+3. 保留 SQLite `TaskReporter` 作为 observability reporter。
+4. 新增 trace export 的最小 CLI 或 slash command。
+5. 扩展 `quality:docs` 的 changed-path 映射。
 
-完成标准：
+### 30 天
 
-- `src/agent/task.ts` 明显变薄。
-- provider SDK event schema 改动时，只影响 runner adapter。
-- 任何 task 都能定位到完整 trace。
-- 新 Agent runtime 接入时，不需要改 Discord reporter。
+目标：让 task 和 router 都能被复盘。
 
-### 60 天：Provider Framework 2.0
+1. `/task-log` 或 `/task trace` 可用。
+2. 长任务按阈值自动附 trace/result 文件。
+3. Smart Router 记录 user choice、final route、task outcome。
+4. 新增 router review report。
+5. incident detail 复用同一 trace exporter。
 
-目标：把 provider 从“能用的脚本集合”提升为可靠数据层。
+### 60 天
 
-建议任务：
+目标：把 provider 和 state 治理从约定变成框架。
 
-1. 增加 provider manifest。
-2. 增加 provider health check。
-3. 增加 provider dry-run CLI。
-4. 标准化 provider structured output。
-5. 标准化 redaction 和 privacy level。
-6. 增加 provider replay fixture。
+1. 写 `docs/features/15-provider-framework.md`。
+2. 改造 1 个 provider 作为 manifest + health + dry-run + replay fixture 样板。
+3. 建立 `src/store/migrations/`。
+4. 拆分 `src/config.ts` 的 load/schema/resolve/runtime。
+5. 增加 state retention 和 redaction policy。
 
-完成标准：
+### 90 天
 
-- cron 失败能区分 auth、data absence、network、format drift。
-- 新 provider 接入需要遵循统一接口和测试模板。
-- zero-touch 报告任务失败后可以自动给出可执行诊断。
+目标：把 Auto Doctor 变成可审查的运行态控制面。
 
-### 90 天：Incident Center 和受控自修复
-
-目标：让 MiniClaw 成为自己的值守系统，但不越过安全边界。
-
-建议任务：
-
-1. 增加 `/incident <id>` 详情。
-2. 增加 incident -> task/cron/log/trace 的链接。
-3. 增加 repair branch review report。
-4. repair worker 自动生成 patch + verification report。
-5. auto push 只推 repair branch。
-6. main merge 和 live restart 保持人工确认。
-
-完成标准：
-
-- 失败出现后，用户不需要手动问“为什么失败”，MiniClaw 主动给 diagnosis。
-- 可修复 bug 自动形成 repair proposal。
-- 修复链路有 diff、测试、commit SHA、风险和回滚信息。
-
-## 按模块的具体优化建议
-
-### `src/runtime/*` 和 `src/adapters/*`
-
-建议新增 runtime / adapter 分层，但采用渐进迁移：
-
-- 先定义 `AgentRuntime`、`ModelClient`、`IMTransport` 的最小接口。
-- 先把 Claude/Codex task runner 包成 `AgentRuntime` adapter。
-- 再把 Discord progress/final/thread 操作包成 `DiscordTransport`。
-- 最后再把 Smart Router / Auto Doctor 的 LLM 调用迁到 `ModelClient`。
-
-不要一开始就做插件系统、marketplace、动态加载、复杂 adapter registry。MiniClaw 当前需要的是可替换边界，不是生态平台。
-
-### `src/bot.ts`
-
-建议拆分：
-
-- `message-thread-continuation.ts`
-- `message-task-channel.ts`
-- `message-chat.ts`
-- `smart-router-buttons.ts`
-- `slash-dispatch.ts`
-
-目标是让 `bot.ts` 只负责 Discord client wiring 和事件分发，不再承载业务逻辑。
-
-### `src/agent/task.ts`
-
-建议拆分：
-
-- task lifecycle：active/cancel/interrupted/drain。
-- provider runners：Claude / Codex。
-- task event normalization。
-- Discord reporting。
-- final DB persistence。
-
-这会显著降低未来支持 Hermes/OpenClaw/acpx adapter 的成本。
-
-### `src/config.ts`
-
-建议逐步引入 schema-first 配置。不要一次性重写，但新配置尤其是 `doctor`、`providers`、`routing` 应先有 schema，再进入 `config`。
-
-### `src/store/db.ts`
-
-建议迁移到 versioned migrations。`tasks`、`incidents`、`smart_router_decisions` 应各自有 repository module，避免一个 store 文件无限增长。
-
-### `src/cron/*`
-
-建议增强：
-
-- job-level timeout。
-- job-level max concurrency。
-- last successful output pointer。
-- retry policy 可配置。
-- provider health preflight。
-- cron run history 表，替代或补充 JSON state。
-
-### `src/providers/*`
-
-建议建立 provider SDK template：
-
-- `config.ts`
-- `types.ts`
-- `collector.ts`
-- `format.ts`
-- `redaction.ts`
-- `health.ts`
-- `__tests__/fixtures`
-
-每个 provider 都应能回答三个问题：配置是否健康、今天有没有新数据、输出是否已经脱敏。
-
-### `src/ops/*`
-
-建议把 Auto Doctor 拆成四层：
-
-- evidence collectors。
-- diagnosis classifier。
-- incident persistence。
-- repair worker。
-
-现在这些边界已经开始出现，但还可以进一步减少耦合。尤其是 repair worker 的 policy、workspace、agent、verification、commit 应继续拆分，便于审计。
-
-### `docs/*`
-
-docs 已经很多，下一步重点不是继续增加散文档，而是保持索引、状态和代码一致：
-
-- 每个顶层系统只保留一个 source of truth。
-- 已完成 plan 要清楚标注 status。
-- feature 文档里的 “待实现” 要定期复核，避免变成过期 backlog。
-- D1 docs drift check 应从文档规则进入实际 gate。
+1. 强化 `/incident view` 和 incident search/filter。
+2. repair branch review report 标准化。
+3. promotion blockers、rollback command、post-ship monitoring 进入同一视图。
+4. 继续保持 main merge 和 live restart 的显式审批边界。
 
 ## 不建议投入的方向
 
-### 不要做通用 Agent 平台
+### 不做通用 Agent 平台
 
-OpenClaw、Hermes、Claude Code、Codex 会持续快速演进。MiniClaw 不应该在通用 multi-agent runtime 上和它们竞争。
+MiniClaw 应围绕个人自动化、私有数据入口、Discord-native delivery、runtime switching 和运行态治理。支持多个 Agent runtime 和多个 IM transport 是为了降低耦合，不是为了和 OpenClaw、Hermes、Claude Code、Codex 做通用平台竞争。
 
-MiniClaw 应该做的是：
+### 不默认多 agent 化
 
-- 私有数据入口。
-- 本地自动化。
-- Discord-native delivery。
-- runtime switching。
-- 个人 workflow state。
+多 agent 的价值在复杂任务协议、handoff artifacts 和质量门禁，不在 agent 数量。默认路径应保持单 agent，只有复杂 design、review、long research 和 coding task 再引入角色化分工。
 
-这不等于不要抽象。正确方向是“可替换 adapter”，不是“通用 agent 平台”。MiniClaw 可以支持多个 Agent runtime 和多个 IM transport，但核心仍然围绕个人自动化、私有数据和运行态治理，而不是面向第三方开发者提供一套完整平台。
+### 不急着上 Web dashboard
 
-### 不要把所有任务都多 agent 化
+当前最重要的 UX 仍在 Discord。只有 incident board、provider health board、跨任务搜索和长期指标需要更强可视化时，Web dashboard 才值得投入。
 
-多 agent 的价值在协议、handoff artifacts 和质量门禁，不在 agent 数量。对 MiniClaw 来说，默认单 agent + 必要时 delegated subtask 更稳。只有设计、评审、长期 research、复杂 coding 才值得启用多角色。
+### 不自动修改 live main worktree
 
-### 不要急着上 Web dashboard
+Self-repair 应保持 branch proposal 模式。自动改 main、自动 push main、自动重启 live runtime 都应长期保持高门槛。
 
-当前最重要的 UX 在 Discord。Web dashboard 只有在需要跨任务搜索、incident board、provider health board 时才值得做。否则会分散维护精力。
+## 验收门禁
 
-### 不要自动修改 live main worktree
+核心命令：
 
-Self-repair 可以做，但必须是 branch proposal。自动改 main、自动重启 live runtime、自动 push main 都应该长期保持高门槛。
+- `pnpm run typecheck`
+- `pnpm run lint`
+- `pnpm test`
+- 涉及 runtime 输出或 build artifact 时加跑 `pnpm run build`
+- 涉及 cron 时加跑 `pnpm run e2e:cron`
+- 涉及质量门禁时加跑 `pnpm run quality:commit` 或对应 scoped gate
 
-## 成功指标
+文档验收：
 
-运行可靠性：
+- 改动后的 report 只列剩余提升项，不再维护正向评价清单。
+- 新增或修改 feature/source-of-truth 文档时同步 `docs/README.md`。
+- schema、route、provider contract、quality gate 变更必须有对应 docs drift 检查或明确 review checklist。
 
-- Discord silent failure 次数下降。
-- interrupted task 数量下降。
-- cron failure 自动诊断覆盖率上升。
-- safe restart 被使用，而不是手动 PM2 restart。
+运行态验收：
 
-自动化价值：
-
-- 每日/每周报告 zero-touch 成功率。
-- provider `skipTask` 和 failure 的分类准确率。
-- 私有数据任务中人工导出需求为 0。
-
-工程质量：
-
-- `typecheck/lint/test/build` 长期保持绿。
-- coverage ratchet 按模块稳步提高。
-- L3 Discord fake E2E 定期运行。
-- docs drift 被 gate 或 review 明确捕获。
-
-AI self-improvement：
-
-- incident -> repair proposal 的平均耗时。
-- repair proposal verification 通过率。
-- 被拒绝的 auto repair 原因可审计。
-- 无未经确认的 main push / live restart。
-
-## 建议的下一步
-
-最务实的下一步不是继续加新 provider，而是先稳定当前主干：
-
-1. 把当前 Smart Router/DB/docs WIP 收敛成可验证的原子 commit。
-2. 如果 Auto Doctor/repair branch 继续推进，保持它和 routing 变更分离。
-3. 设计并实现 `TaskViewEvent` + `TaskReporter`，开始降低 `task.ts` 复杂度。
-4. 为 provider framework 写一份 `docs/features/14-provider-framework.md`，再按这个协议改造 1 个 provider 作为样板。
-5. 增加 `/incident <id>` 详情视图，让 Auto Doctor 的数据真正变成运维入口。
-
-如果只能选一个方向，我建议优先做 `TaskReporter + trace`。它会直接改善 task 可观测性、Auto Doctor 诊断质量、Discord UX、provider failure analysis，也能降低最核心模块的维护风险。
+- 新 task 可在 Discord 中看到清晰状态。
+- 出错 task 可通过 trace 定位 provider/tool/Discord delivery failure。
+- Smart Router 可通过 report 解释 route decision 和后续 outcome。
+- Auto Doctor incident 可追到 task、trace、repair run 和 ship/restart decision。

@@ -19,17 +19,17 @@ MiniClaw 不是普通 TypeScript library。它同时包含：
 
 当前已经具备的基础：
 
-- `package.json` 已有 `build`、`lint`、`typecheck`、`test`、`test:cov`、`quality:commit`、`quality:push`、`quality:g0`、`quality:secrets`、`quality:deps`、`quality:coverage`、`e2e:cron` 和 `e2e:discord`。
-- `scripts/git-hooks/pre-commit` 调用 `pnpm run quality:commit`；实际顺序是 staged G0、staged secret scan、lint、typecheck、Vitest。
-- `scripts/git-hooks/pre-push` 调用 `pnpm run quality:push`；实际顺序是 build、coverage、coverage ratchet、lint、cron E2E、full-tree G0、full-tree secret scan、dependency scan，并可用 `MINICLAW_RUN_DISCORD_E2E=1` 显式开启真实 Discord E2E。
-- `.github/workflows/quality.yml` 在 push / pull request 上运行 Node 22、frozen install、G0、gitleaks、typecheck、lint、coverage、coverage ratchet、cron E2E、dependency scan 和 build。
+- `package.json` 已有 `build`、`lint`、`typecheck`、`test`、`test:cov`、`quality:commit`、`quality:push`、`quality:g0`、`quality:docs`、`quality:secrets`、`quality:deps`、`quality:coverage`、`e2e:cron` 和 `e2e:discord`。
+- `scripts/git-hooks/pre-commit` 调用 `pnpm run quality:commit`；实际顺序是 staged G0、staged secret scan、D1 docs drift、lint、typecheck、Vitest。
+- `scripts/git-hooks/pre-push` 调用 `pnpm run quality:push`；实际顺序是 build、coverage、coverage ratchet、D1 docs drift、lint、cron E2E、full-tree G0、full-tree secret scan、dependency scan，并可用 `MINICLAW_RUN_DISCORD_E2E=1` 显式开启真实 Discord E2E。
+- `.github/workflows/quality.yml` 在 push / pull request 上运行 Node 22、frozen install、G0、gitleaks、typecheck、lint、coverage、coverage ratchet、D1 docs drift、cron E2E、dependency scan 和 build。
 - `.github/workflows/discord-e2e.yml` 是独立 manual/nightly workflow；默认 fake agent，可通过 input/nightly 配置扩展 cases 或跑真实 agent。
 - `eslint.config.js` 对 `src/**/*.ts` 强制 `no-console` 和 `@typescript-eslint/no-floating-promises`，CLI/stdio 入口按例外处理。
 - `scripts/quality-coverage-ratchet.ts` 已设置分模块 coverage ratchet，不设置全局 80%。
 
 当前仍需注意：
 
-- D1 文档漂移目前是人工/process gate；`package.json` 和 GitHub Actions 还没有独立的 `quality:docs` 或 changed-path docs drift 脚本。
+- D1 文档漂移已有第一层脚本化检查；changed-path 到 docs path 的语义映射仍需要人工 review。
 - 真实 Discord E2E 依赖 test Discord secrets 和网络稳定性，不进入普通 pre-commit / pre-push / CI 默认路径。
 - coverage ratchet 只覆盖第一批纯逻辑/formatter/provider 模块；I/O-heavy 入口仍以 targeted tests + E2E fixture 保护。
 
@@ -245,9 +245,9 @@ MiniClaw 是 docs-first 项目，长期维护依赖 `docs/architecture.md`、`do
 
 当前执行方式：
 
-- 目前还没有脚本化 changed-path docs drift check；执行者需要在改动完成前按下面映射人工核对。
+- `pnpm run quality:docs` 运行 `scripts/quality-docs.ts`，检查 DB schema version、Smart Router ER 字段和 `docs/features/*.md` 索引。
+- 执行者仍需要在改动完成前按下面映射人工核对 changed-path docs drift。
 - 对紧急修复可以允许暂不改文档，但必须在 commit body、PR 或后续 plan 中写明原因和补文档路径。
-- 后续如果新增 `quality:docs`，应先实现 changed paths 到 docs paths 的轻量映射，再接入 pre-push/CI。
 
 ## 推荐执行矩阵
 
@@ -255,6 +255,7 @@ pre-commit：
 
 - G0 staged safety check
 - G2 staged secret scan
+- D1 docs drift first slice
 - G1 `lint + typecheck`
 - L1 `pnpm test`
 
@@ -263,6 +264,7 @@ pre-push：
 - G1 `build + lint`
 - `test:cov`
 - coverage ratchet
+- D1 docs drift first slice
 - cron E2E fixture
 - G0 full-tree safety check
 - G2 full-tree secret scan / dependency scan
@@ -273,9 +275,10 @@ CI：
 - G0 install / lockfile / environment
 - G1 typecheck / lint / build
 - coverage run + coverage ratchet
+- D1 docs drift first slice
 - cron E2E fixture
 - G2 full secret scan / dependency scan
-- D1 docs drift 仍为人工/process gate，尚未脚本化
+- changed-path docs drift 仍为人工/process gate
 
 manual/nightly：
 
@@ -490,6 +493,7 @@ manual/nightly：
 - secret scan：本地 `scripts/quality-secrets.ts` 优先用 gitleaks，未安装时 fallback 到 G0；CI 使用 `gitleaks/gitleaks-action@v2`。
 - dependency scan：`scripts/quality-deps.ts` 使用 `pnpm audit --prod --audit-level high`。
 - coverage ratchet：`scripts/quality-coverage-ratchet.ts` 对纯逻辑和高覆盖 provider 模块设置分模块阈值，不设置全局 80%。
+- docs drift：`scripts/quality-docs.ts` 检查 DB schema version、Smart Router ER 字段和 feature docs 索引。
 
 ## 后续维护 loop
 

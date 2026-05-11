@@ -53,6 +53,9 @@ jobs:
       - name: Coverage ratchet
         run: pnpm run quality:coverage
 
+      - name: Docs drift
+        run: pnpm run quality:docs
+
       - name: Cron E2E fixture
         run: pnpm run e2e:cron
 
