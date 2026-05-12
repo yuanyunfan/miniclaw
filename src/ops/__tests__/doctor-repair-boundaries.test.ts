@@ -1,9 +1,22 @@
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { IncidentRow } from "../../store/incidents.js";
 import { evaluateRepairPolicy } from "../doctor-repair/policy.js";
 import { parseChangedFiles, validateChangedPaths } from "../doctor-repair/path-policy.js";
 import { buildRepairPrompt } from "../doctor-repair/prompt.js";
+import { formatDoctorRepairResult } from "../doctor-repair/report.js";
 import { repairVerificationCommands, runVerification } from "../doctor-repair/verification.js";
+import {
+  buildRepairCommitMessage,
+  commitVerifiedRepair,
+  prepareRepairWorktree,
+  pushRepairBranch,
+  repairBranch,
+  repairWorkspacePath,
+  sanitizeRepairId,
+} from "../doctor-repair/worktree.js";
 
 function incident(overrides: Partial<IncidentRow> = {}): IncidentRow {
   return {
@@ -183,5 +196,82 @@ describe("doctor repair verification boundary", () => {
     ]);
     expect(results.at(-1)?.output).toHaveLength(4000);
     expect(run).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("doctor repair worktree boundary", () => {
+  it("derives stable sanitized worktree paths and branch names", () => {
+    expect(sanitizeRepairId("incident:abc/def")).toBe("incident-abc-def");
+    expect(repairWorkspacePath("/tmp/repairs", "incident:abc/def")).toBe(join("/tmp/repairs", "incident-abc-def"));
+    expect(repairBranch("incident:abc/def")).toBe("doctor-repair/incident-abc-def");
+  });
+
+  it("creates missing worktrees and validates existing ones before reuse", () => {
+    const root = mkdtempSync(join(tmpdir(), "miniclaw-repair-boundary-"));
+    const workspace = join(root, "incident-1");
+    const run = vi.fn(() => "");
+
+    try {
+      prepareRepairWorktree(workspace, "doctor-repair/incident-1", root, run, "/source");
+      expect(run).toHaveBeenCalledWith(
+        "git",
+        ["worktree", "add", "-B", "doctor-repair/incident-1", workspace, "HEAD"],
+        "/source",
+      );
+
+      run.mockClear();
+      mkdirSync(workspace);
+      prepareRepairWorktree(workspace, "doctor-repair/incident-1", root, run, "/source");
+      expect(run).toHaveBeenCalledWith("git", ["status", "--short"], workspace);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("builds repair commit metadata and pushes only the isolated branch ref", () => {
+    const row = incident();
+    const run = vi.fn((cmd: string, args: string[]) => {
+      if (cmd === "git" && args.join(" ") === "diff --cached --name-only") return "src/fix.ts\n";
+      if (cmd === "git" && args.join(" ") === "rev-parse HEAD") return "commit-sha\n";
+      return "";
+    });
+
+    expect(buildRepairCommitMessage(row)).toMatchObject({
+      title: "fix: repair MiniClaw incident incident",
+      body: expect.stringContaining("Co-authored-by: Codex <codex@openai.com>"),
+    });
+    expect(commitVerifiedRepair(row, ["src/fix.ts"], "/repo", { authorName: "yuanyunfan", authorEmail: "me@example.test" }, run)).toBe("commit-sha");
+    expect(pushRepairBranch("doctor-repair/incident-123456", "/repo", run)).toBe("origin/doctor-repair/incident-123456");
+    expect(run).toHaveBeenCalledWith("git", ["config", "user.name", "yuanyunfan"], "/repo");
+    expect(run).toHaveBeenCalledWith("git", ["add", "--", "src/fix.ts"], "/repo");
+    expect(run).toHaveBeenCalledWith("git", ["push", "origin", "HEAD:refs/heads/doctor-repair/incident-123456"], "/repo");
+  });
+});
+
+describe("doctor repair report boundary", () => {
+  it("formats dry-run, policy, changed-file, and verification sections", () => {
+    const text = formatDoctorRepairResult({
+      ok: false,
+      dryRun: false,
+      incident: { id: "incident-123456", title: "Task failed: task-1" },
+      policy: { blockers: ["blocked"], warnings: ["review manually"] },
+      workspacePath: "/repo/repairs/incident-123456",
+      branch: "doctor-repair/incident-123456",
+      baseSha: "base-sha",
+      pushError: "permission denied",
+      changedFiles: ["src/fix.ts"],
+      verification: [
+        { ok: true, command: "pnpm run typecheck" },
+        { ok: false, command: "pnpm run lint" },
+      ],
+      message: "repair branch push failed: permission denied",
+    });
+
+    expect(text).toContain("MiniClaw Doctor Repair: blocked");
+    expect(text).toContain("Incident: incident Task failed: task-1");
+    expect(text).toContain("- blocker: blocked");
+    expect(text).toContain("- warning: review manually");
+    expect(text).toContain("- src/fix.ts");
+    expect(text).toContain("- failed: pnpm run lint");
   });
 });

@@ -153,7 +153,7 @@ Auto Doctor reads these events for selected or recent task candidates. Classific
 
 `doctor:repair` loads one persisted incident and evaluates the repair policy before doing any work. The default mode is dry-run, which prints the target isolated worktree, repair branch, policy result, and generated repair prompt without creating a worktree or running Codex.
 
-The repair implementation keeps `ops/doctor-repair.ts` as the CLI/scheduler facade and orchestration shell. Pure policy and text boundaries live under `ops/doctor-repair/`: `policy.ts` evaluates incident eligibility, `path-policy.ts` parses changed files and validates allowed/blocked paths, `prompt.ts` builds the worker prompt, and `verification.ts` selects/runs the guarded verification commands. New repair rules should land in those modules with focused tests before touching the worktree/commit flow.
+The repair implementation keeps `ops/doctor-repair.ts` as the CLI/scheduler facade and incident state orchestration shell. Guarded boundaries live under `ops/doctor-repair/`: `policy.ts` evaluates incident eligibility, `path-policy.ts` parses changed files and validates allowed/blocked paths, `prompt.ts` builds the worker prompt, `verification.ts` selects/runs guarded verification commands, `agent.ts` owns Codex repair agent streaming, `worktree.ts` owns worktree/branch/dependency/commit/push Git operations, and `report.ts` formats CLI/report output. New repair rules should land in those modules with focused tests before touching the state orchestration flow.
 
 Execute mode is intentionally gated:
 

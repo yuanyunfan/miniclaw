@@ -1,6 +1,3 @@
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
 import { config } from "../config.js";
 import {
   appendIncidentEvent,
@@ -11,13 +8,7 @@ import {
   type IncidentRow,
   type RepairRunRow,
 } from "../store/incidents.js";
-import {
-  codexInput,
-  codexThreadOptions,
-  formatCodexItemLine,
-  getCodexClient,
-  withCodexTimeout,
-} from "../agent/codex.js";
+import { runCodexRepairAgent, type RepairAgentResult } from "./doctor-repair/agent.js";
 import {
   evaluateRepairPolicy as evaluateRepairPolicyWithOptions,
   type RepairPolicyResult,
@@ -32,9 +23,21 @@ import {
   type CommandRunner,
   type VerificationResult,
 } from "./doctor-repair/verification.js";
+import {
+  commitVerifiedRepair,
+  currentGitSha,
+  defaultCommandRunner,
+  ensureRepairDependencies,
+  prepareRepairWorktree,
+  pushRepairBranch,
+  repairBranch,
+  repairWorkspacePath,
+} from "./doctor-repair/worktree.js";
 
+export type { RepairAgentResult } from "./doctor-repair/agent.js";
 export type { RepairPolicyResult } from "./doctor-repair/policy.js";
 export { parseChangedFiles } from "./doctor-repair/path-policy.js";
+export { formatDoctorRepairResult } from "./doctor-repair/report.js";
 export {
   repairVerificationCommands,
   selectTargetedTestCommands,
@@ -47,14 +50,6 @@ export interface DoctorRepairArgs {
   execute: boolean;
   force: boolean;
   json: boolean;
-}
-
-export interface RepairAgentResult {
-  success: boolean;
-  threadId?: string;
-  response: string;
-  toolLog: string[];
-  error?: string;
 }
 
 export interface DoctorRepairResult {
@@ -85,28 +80,6 @@ interface DoctorRepairDeps {
   appendIncidentEventFn?: typeof appendIncidentEvent;
   markIncidentStatusFn?: typeof markIncidentStatus;
   runAgentFn?: (prompt: string, cwd: string) => Promise<RepairAgentResult>;
-}
-
-function defaultCommandRunner(cmd: string, args: string[], cwd: string): string {
-  try {
-    return execFileSync(cmd, args, {
-      cwd,
-      encoding: "utf8",
-      timeout: 10 * 60 * 1000,
-      stdio: ["ignore", "pipe", "pipe"],
-      maxBuffer: 20 * 1024 * 1024,
-    });
-  } catch (err) {
-    const error = err as Error & { stdout?: Buffer | string; stderr?: Buffer | string };
-    const stdout = error.stdout ? String(error.stdout).trim() : "";
-    const stderr = error.stderr ? String(error.stderr).trim() : "";
-    const detail = [stdout, stderr].filter(Boolean).join("\n");
-    throw new Error(detail || error.message);
-  }
-}
-
-function sanitizeId(id: string): string {
-  return id.replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 64);
 }
 
 export function parseDoctorRepairArgs(argv: string[]): DoctorRepairArgs {
@@ -152,14 +125,6 @@ export function evaluateRepairPolicy(incident: IncidentRow, execute: boolean, fo
   });
 }
 
-function repairWorkspacePath(incidentId: string): string {
-  return join(config.doctor.repairWorktreeRoot, sanitizeId(incidentId));
-}
-
-function repairBranch(incidentId: string): string {
-  return `doctor-repair/${sanitizeId(incidentId).slice(0, 24)}`;
-}
-
 export function buildRepairPrompt(incident: IncidentRow): string {
   return buildRepairPromptWithPolicy(incident, {
     allowedPaths: config.doctor.allowedPaths,
@@ -167,103 +132,11 @@ export function buildRepairPrompt(incident: IncidentRow): string {
   });
 }
 
-function prepareWorktree(path: string, branch: string, run: CommandRunner): void {
-  mkdirSync(config.doctor.repairWorktreeRoot, { recursive: true });
-  if (existsSync(path)) {
-    run("git", ["status", "--short"], path);
-    return;
-  }
-  run("git", ["worktree", "add", "-B", branch, path, "HEAD"], process.cwd());
-}
-
 export function validateChangedPaths(paths: string[]): string[] {
   return validateChangedPathsWithPolicy(paths, {
     allowedPaths: config.doctor.allowedPaths,
     blockedPaths: config.doctor.blockedPaths,
   });
-}
-
-function ensureRepairDependencies(path: string, run: CommandRunner): void {
-  if (existsSync(join(path, "node_modules", ".bin", "tsx"))) return;
-  run("pnpm", ["install", "--frozen-lockfile"], path);
-}
-
-function currentGitSha(path: string, run: CommandRunner): string {
-  return run("git", ["rev-parse", "HEAD"], path).trim();
-}
-
-function commitMessage(incident: IncidentRow): { title: string; body: string } {
-  const shortId = sanitizeId(incident.id).slice(0, 8);
-  return {
-    title: `fix: repair MiniClaw incident ${shortId}`,
-    body: [
-      `Incident: ${incident.id}`,
-      `Title: ${incident.title}`,
-      "",
-      "Co-authored-by: Codex <codex@openai.com>",
-    ].join("\n"),
-  };
-}
-
-function commitVerifiedRepair(incident: IncidentRow, changedFiles: string[], path: string, run: CommandRunner): string {
-  run("git", ["config", "user.name", config.doctor.repairCommitAuthorName], path);
-  run("git", ["config", "user.email", config.doctor.repairCommitAuthorEmail], path);
-  run("git", ["add", "--", ...changedFiles], path);
-  const staged = run("git", ["diff", "--cached", "--name-only"], path).trim();
-  if (!staged) throw new Error("no staged repair changes after git add");
-  const message = commitMessage(incident);
-  run("git", ["commit", "-m", message.title, "-m", message.body], path);
-  return currentGitSha(path, run);
-}
-
-function pushRepairBranch(branch: string, path: string, run: CommandRunner): string {
-  const ref = `refs/heads/${branch}`;
-  run("git", ["push", "origin", `HEAD:${ref}`], path);
-  return `origin/${branch}`;
-}
-
-async function runCodexRepairAgent(prompt: string, cwd: string): Promise<RepairAgentResult> {
-  const ctrl = new AbortController();
-  const timeoutCtrl = withCodexTimeout(ctrl.signal, config.codex.timeoutMs);
-  const codex = getCodexClient();
-  const thread = codex.startThread(codexThreadOptions("task", cwd));
-  const toolLog: string[] = [];
-  let response = "";
-  let error: string | undefined;
-  const { events } = await thread.runStreamed(codexInput(prompt), { signal: timeoutCtrl.signal });
-
-  for await (const event of events) {
-    if (timeoutCtrl.signal.aborted) {
-      error = `Codex timeout after ${config.codex.timeoutMs}ms`;
-      break;
-    }
-    switch (event.type) {
-      case "turn.failed":
-        error = event.error.message;
-        break;
-      case "error":
-        error = event.message;
-        break;
-      case "item.started":
-      case "item.updated":
-      case "item.completed":
-        if (event.item.type === "agent_message") response = event.item.text;
-        else {
-          const line = formatCodexItemLine(event.item);
-          if (line) toolLog.push(line);
-        }
-        break;
-    }
-  }
-
-  if (!timeoutCtrl.signal.aborted) timeoutCtrl.abort();
-  return {
-    success: !error,
-    response: response.trim(),
-    toolLog,
-    ...(thread.id ? { threadId: thread.id } : {}),
-    ...(error ? { error } : {}),
-  };
 }
 
 export async function runDoctorRepair(args: DoctorRepairArgs, deps: DoctorRepairDeps = {}): Promise<DoctorRepairResult> {
@@ -278,7 +151,7 @@ export async function runDoctorRepair(args: DoctorRepairArgs, deps: DoctorRepair
   if (!incident) throw new Error(`incident not found: ${args.incidentId}`);
 
   const policy = evaluateRepairPolicy(incident, args.execute, args.force);
-  const workspacePath = repairWorkspacePath(incident.id);
+  const workspacePath = repairWorkspacePath(config.doctor.repairWorktreeRoot, incident.id);
   const branch = repairBranch(incident.id);
   const prompt = buildRepairPrompt(incident);
   let repairRun: RepairRunRow | undefined;
@@ -336,7 +209,7 @@ export async function runDoctorRepair(args: DoctorRepairArgs, deps: DoctorRepair
   }
 
   appendIncidentEventFn(incident.id, "repair_started", { repair_run_id: repairRun.id, execute: args.execute });
-  prepareWorktree(workspacePath, branch, commandRunner);
+  prepareRepairWorktree(workspacePath, branch, config.doctor.repairWorktreeRoot, commandRunner);
   ensureRepairDependencies(workspacePath, commandRunner);
   const dirtyBefore = parseChangedFiles(commandRunner("git", ["status", "--porcelain"], workspacePath));
   if (dirtyBefore.length) {
@@ -443,7 +316,16 @@ export async function runDoctorRepair(args: DoctorRepairArgs, deps: DoctorRepair
 
   if (config.doctor.autoCommitEnabled) {
     try {
-      commitSha = commitVerifiedRepair(incident, changedFiles, workspacePath, commandRunner);
+      commitSha = commitVerifiedRepair(
+        incident,
+        changedFiles,
+        workspacePath,
+        {
+          authorName: config.doctor.repairCommitAuthorName,
+          authorEmail: config.doctor.repairCommitAuthorEmail,
+        },
+        commandRunner,
+      );
       appendIncidentEventFn(incident.id, "repair_committed", {
         repair_run_id: repairRun.id,
         commit_sha: commitSha,
@@ -567,32 +449,4 @@ export async function runDoctorRepair(args: DoctorRepairArgs, deps: DoctorRepair
         ? "repair committed on isolated repair branch and is ready for review"
         : "repair is ready for review in isolated worktree",
   };
-}
-
-export function formatDoctorRepairResult(result: DoctorRepairResult): string {
-  return [
-    `MiniClaw Doctor Repair: ${result.ok ? "ok" : "blocked"}`,
-    "",
-    `Incident: ${result.incident.id.slice(0, 8)} ${result.incident.title}`,
-    `Mode: ${result.dryRun ? "dry-run" : "execute"}`,
-    `Workspace: ${result.workspacePath}`,
-    `Branch: ${result.branch}`,
-    ...(result.baseSha ? [`Base SHA: ${result.baseSha}`] : []),
-    ...(result.commitSha ? [`Commit SHA: ${result.commitSha}`] : []),
-    ...(result.pushed ? [`Pushed: ${result.pushTarget ?? "yes"}`] : []),
-    ...(result.pushError ? [`Push error: ${result.pushError}`] : []),
-    `Message: ${result.message}`,
-    "",
-    "Policy:",
-    result.policy.blockers.length ? result.policy.blockers.map((item) => `- blocker: ${item}`).join("\n") : "- allowed",
-    ...result.policy.warnings.map((item) => `- warning: ${item}`),
-    "",
-    "Changed files:",
-    ...(result.changedFiles.length ? result.changedFiles.map((file) => `- ${file}`) : ["- (none)"]),
-    "",
-    "Verification:",
-    ...(result.verification.length
-      ? result.verification.map((item) => `- ${item.ok ? "ok" : "failed"}: ${item.command}`)
-      : ["- (not run)"]),
-  ].join("\n");
 }

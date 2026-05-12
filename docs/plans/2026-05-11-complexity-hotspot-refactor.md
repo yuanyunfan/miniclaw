@@ -360,3 +360,23 @@ For each completed slice, record:
   - `pnpm ralph:verify -- --task complexity-hotspot-refactor --profile standard` passed: `pnpm run typecheck`, `pnpm run lint`, `pnpm run quality:docs`.
 - Public API changes: none for existing consumers. Existing imports from `src/ops/doctor-repair.ts` for policy, path validation, targeted test selection, repair execution, and formatting remain valid.
 - Follow-up cleanup: Continue Slice E by extracting worktree/branch operations, Codex repair agent execution, commit/push helpers, and report formatting from the orchestration shell.
+
+### 2026-05-12 - Slice E Doctor Repair Execution Boundary Extraction
+
+- Slice name: Slice E completion, repair worktree/agent/report boundary.
+- Changed files:
+  - `src/ops/doctor-repair.ts`: kept `runDoctorRepair()`, CLI args, compatibility exports, incident status transitions, repair_run updates, and high-level repair orchestration as the public facade.
+  - `src/ops/doctor-repair/worktree.ts`: extracted default command runner, repair id sanitization, worktree path/branch derivation, worktree preparation, dependency install guard, current SHA lookup, repair commit message, verified commit, and isolated branch push helpers.
+  - `src/ops/doctor-repair/agent.ts`: extracted Codex repair agent streaming, timeout handling, agent response capture, tool log capture, and agent failure mapping.
+  - `src/ops/doctor-repair/report.ts`: extracted CLI/report formatting for dry-run, policy, changed files, verification, commit, and push status output.
+  - `src/ops/__tests__/doctor-repair-boundaries.test.ts`: added focused tests for sanitized worktree targets, worktree creation/reuse command routing, commit/push command routing, and report formatting.
+  - `docs/architecture.md`, `docs/features/13-auto-doctor.md`, `docs/continuous-improvement-report.md`: documented the completed guarded repair module boundary and updated hotspot status.
+- Behavior parity tests:
+  - `pnpm vitest run src/ops/__tests__/doctor-repair.test.ts src/ops/__tests__/doctor-repair-boundaries.test.ts` passed, 21 tests.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm run build` passed.
+  - `pnpm run quality:docs` passed.
+  - `pnpm ralph:verify -- --task complexity-hotspot-refactor --profile standard` passed: `pnpm run typecheck`, `pnpm run lint`, `pnpm run quality:docs`.
+- Public API changes: none for existing consumers. `runDoctorRepair()`, `parseDoctorRepairArgs()`, `evaluateRepairPolicy()`, `validateChangedPaths()`, `selectTargetedTestCommands()`, `formatDoctorRepairResult()`, and related facade type exports remain available from `src/ops/doctor-repair.ts`.
+- Follow-up cleanup: Slice E is now complete enough that new repair policy, Git/worktree behavior, agent streaming behavior, verification rules, and report text should land in the extracted modules with focused tests. Remaining complexity-hotspot work should move to Slice F/G or the next explicitly selected hotspot rather than broadening `src/ops/doctor-repair.ts`.
