@@ -168,6 +168,13 @@ describe("schema migrations", () => {
     expect(__testables.columnExists("market_forecast_items", "source")).toBe(true);
     expect(__testables.columnExists("market_forecast_evaluations", "score_json")).toBe(true);
   });
+
+  it("ensures cron run history table exists", () => {
+    expect(__testables.columnExists("cron_runs", "job_name")).toBe(true);
+    expect(__testables.columnExists("cron_runs", "status")).toBe(true);
+    expect(__testables.columnExists("cron_runs", "task_id")).toBe(true);
+    expect(__testables.columnExists("cron_runs", "metadata_json")).toBe(true);
+  });
 });
 
 describe("updateTask", () => {

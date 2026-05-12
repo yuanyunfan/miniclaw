@@ -5,7 +5,7 @@ import { join } from "node:path";
 import "../proxy.js";
 import type { Client, SendableChannels } from "discord.js";
 import { AttachmentBuilder } from "discord.js";
-import type { CronJobScript } from "./types.js";
+import type { CronJobRunOutcome, CronJobScript } from "./types.js";
 import { createLogger } from "../lib/log.js";
 
 const log = createLogger("cron");
@@ -139,7 +139,7 @@ function trimDiscordContent(text: string): string {
   return text.slice(0, 1900).trimEnd() + "\n\n... (truncated)";
 }
 
-export async function runScript(job: CronJobScript, client: Client): Promise<void> {
+export async function runScript(job: CronJobScript, client: Client): Promise<CronJobRunOutcome> {
   const scriptsDir = getScriptsDir();
   const scriptPath = join(scriptsDir, job.script);
   if (!existsSync(scriptPath)) {
@@ -214,7 +214,11 @@ export async function runScript(job: CronJobScript, client: Client): Promise<voi
 
   if (success && !stderr.trim() && isSkippedScriptOutput(stdout)) {
     log.info(`${job.name} skipped by script output`);
-    return;
+    return {
+      status: "skipped",
+      errorCategory: "script_skipped",
+      errorMessage: "script output requested skip",
+    };
   }
 
   // 解析附件（PNG / image / media）
@@ -223,12 +227,12 @@ export async function runScript(job: CronJobScript, client: Client): Promise<voi
     : { paths: [], remaining: stdout, messages: [] };
 
   if (success && job.silent_success && attachmentPaths.length === 0 && messages.length === 0 && !remaining && !stderr) {
-    return;
+    return { status: "success" };
   }
 
   if (!job.capture_output && success && attachmentPaths.length === 0) {
     await postToChannel(client, job.channel, `cron \`${job.name}\` ${status} (${durationS}s)`);
-    return;
+    return { status: "success" };
   }
 
   const ch = await fetchChannel(client, job.channel);
@@ -244,13 +248,13 @@ export async function runScript(job: CronJobScript, client: Client): Promise<voi
         ? { content: trimDiscordContent(messages[i]), files }
         : { content: trimDiscordContent(messages[i]) });
     }
-    return;
+    return { status: "success" };
   }
 
   // 仅附件（无文字残余）→ 单独发附件，不带啰嗦的状态行
   if (success && files.length > 0 && !remaining && !stderr) {
     await ch.send({ files });
-    return;
+    return { status: "success" };
   }
 
   // 有文字 / 失败 → 拼 status + body + 附件
@@ -272,6 +276,7 @@ export async function runScript(job: CronJobScript, client: Client): Promise<voi
   }
 
   if (failureReason) throw new CronScriptRunError(failureReason);
+  return { status: "success" };
 }
 
 async function fetchChannel(client: Client, channelId: string): Promise<SendableChannels | null> {

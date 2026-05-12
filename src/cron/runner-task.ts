@@ -8,7 +8,7 @@ import { recordMarketForecastFromPayload, stripMarketForecastJsonForDisplay, upd
 import { executeTask, getActiveTaskCount, type TaskResult } from "../agent/task.js";
 import { TaskReporter } from "../agent/task-reporter.js";
 import { loadPrompt } from "../agent/prompts.js";
-import type { CronJobTask, CronJobSkill } from "./types.js";
+import type { CronJobRunOutcome, CronJobTask, CronJobSkill } from "./types.js";
 import { renderTemplate } from "./template.js";
 import { resolve, join } from "node:path";
 import { createLogger } from "../lib/log.js";
@@ -21,17 +21,48 @@ import { DRAINING_MESSAGE, isDraining } from "../runtime/shutdown.js";
 const log = createLogger("cron");
 import { homedir } from "node:os";
 
+interface CronTaskRunErrorMetadata {
+  taskId?: string;
+  providerName?: string;
+  providerStatus?: string;
+  providerCategory?: string;
+}
+
 class CronTaskRunError extends Error {
-  constructor(message: string) {
+  taskId?: string;
+  providerName?: string;
+  providerStatus?: string;
+  providerCategory?: string;
+
+  constructor(message: string, metadata: CronTaskRunErrorMetadata = {}) {
     super(message);
     this.name = "CronTaskRunError";
+    this.taskId = metadata.taskId;
+    this.providerName = metadata.providerName;
+    this.providerStatus = metadata.providerStatus;
+    this.providerCategory = metadata.providerCategory;
   }
 }
 
-function assertTaskResultOk(jobName: string, result: TaskResult): void {
+function attachCronTaskRunMetadata(err: unknown, metadata: CronTaskRunErrorMetadata): Error {
+  if (err instanceof CronTaskRunError) {
+    err.taskId = err.taskId ?? metadata.taskId;
+    err.providerName = err.providerName ?? metadata.providerName;
+    err.providerStatus = err.providerStatus ?? metadata.providerStatus;
+    err.providerCategory = err.providerCategory ?? metadata.providerCategory;
+    return err;
+  }
+  if (err instanceof Error) {
+    Object.assign(err, metadata);
+    return err;
+  }
+  return new CronTaskRunError(String(err), metadata);
+}
+
+function assertTaskResultOk(jobName: string, result: TaskResult, metadata: CronTaskRunErrorMetadata = {}): void {
   if (result.success) return;
   const summary = result.result.trim() || "task returned failure without details";
-  throw new CronTaskRunError(`${jobName} task failed: ${summary.slice(0, 1500)}`);
+  throw new CronTaskRunError(`${jobName} task failed: ${summary.slice(0, 1500)}`, metadata);
 }
 
 function resolveHome(p: string): string {
@@ -227,7 +258,7 @@ async function runPreProviderPreflight(job: CronJobTask, runAt: Date): Promise<v
   log.info(`${job.name} pre_provider ${job.pre_provider} dry-run preflight ok`);
 }
 
-export async function runTask(job: CronJobTask, client: Client): Promise<void> {
+export async function runTask(job: CronJobTask, client: Client): Promise<CronJobRunOutcome> {
   assertNotDraining(job.name);
   const runAt = cronRunAt();
   if (getActiveTaskCount() >= config.maxConcurrentTasks) {
@@ -295,7 +326,14 @@ export async function runTask(job: CronJobTask, client: Client): Promise<void> {
         if (result.skipTask.notifyMessage) {
           await channel.send(result.skipTask.notifyMessage.slice(0, 1900));
         }
-        return;
+        return {
+          status: "skipped",
+          providerName: job.pre_provider,
+          providerStatus: "skipped",
+          providerCategory: result.skipTask.reason,
+          errorCategory: result.skipTask.reason,
+          errorMessage: result.skipTask.message,
+        };
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -335,14 +373,22 @@ export async function runTask(job: CronJobTask, client: Client): Promise<void> {
     source_channel_id: job.channel,
     prepended_context_chars: prependedContext.length,
   });
-  const result = await executeTask({
-    taskId,
-    prompt,
-    cwd,
-    channel,
-    outputMode: "raw",
-    ...(marketForecastId ? { rawOutputTextTransform: stripMarketForecastJsonForDisplay } : {}),
-  });
+  let result: TaskResult;
+  try {
+    result = await executeTask({
+      taskId,
+      prompt,
+      cwd,
+      channel,
+      outputMode: "raw",
+      ...(marketForecastId ? { rawOutputTextTransform: stripMarketForecastJsonForDisplay } : {}),
+    });
+  } catch (err) {
+    throw attachCronTaskRunMetadata(err, {
+      taskId,
+      ...(job.pre_provider ? { providerName: job.pre_provider, providerStatus: "failed" } : {}),
+    });
+  }
   if (marketForecastId) {
     const extraction = updateMarketForecastReport(marketForecastId, result.result);
     reporter.contextCaptured({
@@ -352,14 +398,22 @@ export async function runTask(job: CronJobTask, client: Client): Promise<void> {
       llm_forecast_items: extraction.insertedItemCount,
     });
   }
-  assertTaskResultOk(job.name, result);
+  assertTaskResultOk(job.name, result, {
+    taskId,
+    ...(job.pre_provider ? { providerName: job.pre_provider, providerStatus: "failed" } : {}),
+  });
   await sendPreProviderAttachments(channel, job.name, preProviderAttachments);
   if (preProviderCommit) {
     await preProviderCommit();
   }
+  return {
+    status: "success",
+    taskId,
+    ...(job.pre_provider ? { providerName: job.pre_provider, providerStatus: "ok" } : {}),
+  };
 }
 
-export async function runSkill(job: CronJobSkill, client: Client): Promise<void> {
+export async function runSkill(job: CronJobSkill, client: Client): Promise<CronJobRunOutcome> {
   assertNotDraining(job.name);
   if (getActiveTaskCount() >= config.maxConcurrentTasks) {
     const msg = `${job.name} skipped: hit MINICLAW_MAX_CONCURRENT_TASKS=${config.maxConcurrentTasks}`;
@@ -396,6 +450,12 @@ export async function runSkill(job: CronJobSkill, client: Client): Promise<void>
     source_channel_id: job.channel,
     skill: job.skill,
   });
-  const result = await executeTask({ taskId, prompt, cwd, channel, outputMode: "raw" });
-  assertTaskResultOk(job.name, result);
+  let result: TaskResult;
+  try {
+    result = await executeTask({ taskId, prompt, cwd, channel, outputMode: "raw" });
+  } catch (err) {
+    throw attachCronTaskRunMetadata(err, { taskId });
+  }
+  assertTaskResultOk(job.name, result, { taskId });
+  return { status: "success", taskId };
 }

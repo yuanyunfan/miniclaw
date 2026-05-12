@@ -190,3 +190,17 @@ Keep defaults compatible with current behavior.
 
 Record schema version, config defaults, query commands, and verification output here when implemented.
 
+### 2026-05-12 Ralph iteration: durable run history foundation
+
+- Implemented schema v11 with `cron_runs` plus `idx_cron_runs_job_started` and `idx_cron_runs_status_started`.
+- Added `src/store/cron-runs.ts` helpers: `createCronRun`, `markCronRunCompleted`, `markCronRunFailed`, `getCronRun`, `listCronRuns`, and `summarizeCronRuns`.
+- Instrumented scheduler dispatch to create one `cron_runs` row per attempt, including skipped dispatches during drain/concurrency, `retry_scheduled` rows before retry backoff, final `failed` rows, and successful/skipped outcomes.
+- Runner outcomes now carry task/provider metadata so task and skill cron runs can link `task_id`, and pre-provider `skipTask` outcomes are stored as `skipped`.
+- Kept JSON `state.json` writes as the compatibility source for current `cron:list` and retry button behavior.
+- Updated `docs/architecture.md` SQLite schema notes and ER diagram to schema v11 / `cron_runs`.
+- Verification:
+  - `pnpm exec vitest run src/store/__tests__/cron-runs.test.ts src/store/__tests__/migrations.test.ts src/store/__tests__/db.test.ts src/cron/__tests__/scheduler.test.ts src/cron/__tests__/runner-task.test.ts src/cron/__tests__/runner-script.test.ts src/cron/__tests__/runner-message.test.ts` passed: 7 files, 60 tests.
+  - `pnpm run typecheck` passed.
+  - `pnpm run e2e:cron` passed: `Cron E2E fixture passed: cron-e2e-1778599767213`.
+  - `pnpm run quality:docs` passed with schema v11.
+  - `pnpm run lint` passed.

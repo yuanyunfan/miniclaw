@@ -58,6 +58,17 @@ export interface CronJobSkill extends CronJobBase {
 
 export type CronJob = CronJobTask | CronJobScript | CronJobMessage | CronJobSkill;
 
+export interface CronJobRunOutcome {
+  status: "success" | "skipped";
+  taskId?: string;
+  providerName?: string;
+  providerStatus?: string;
+  providerCategory?: string;
+  errorCategory?: string;
+  errorMessage?: string;
+  metadata?: Record<string, unknown>;
+}
+
 export interface CronJobLoadResult {
   jobs: CronJob[];
   errors: Array<{ file: string; error: string }>;

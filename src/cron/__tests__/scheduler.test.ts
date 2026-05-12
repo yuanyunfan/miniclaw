@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import Database from "better-sqlite3";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -6,6 +7,9 @@ import type { Client } from "discord.js";
 import { __testables, requestCronRetryNow } from "../scheduler.js";
 import { getJobState, resetStateCache } from "../state.js";
 import type { CronJobMessage } from "../types.js";
+import { setDb } from "../../store/connection.js";
+import { listCronRuns } from "../../store/cron-runs.js";
+import { ensureBaseSchema, runMigrations } from "../../store/schema.js";
 
 function messageJob(): CronJobMessage {
   return {
@@ -49,10 +53,20 @@ function clientWithFailingSends(failuresBeforeSuccess: number): { client: Client
   return { client, sendCount: () => sends };
 }
 
+let db: Database.Database;
+
 beforeEach(() => {
+  db = new Database(":memory:");
+  setDb(db);
+  ensureBaseSchema(db);
+  runMigrations(db);
   const dir = mkdtempSync(join(tmpdir(), "miniclaw-scheduler-state-"));
   process.env.MINICLAW_CRON_STATE = join(dir, "state.json");
   resetStateCache();
+});
+
+afterEach(() => {
+  db.close();
 });
 
 describe("cron scheduler dispatch", () => {
@@ -113,6 +127,48 @@ describe("cron scheduler dispatch", () => {
     const state = getJobState("slow-message");
     expect(state?.last_status).toBe("ok");
     expect(state?.completed).toBe(5);
+  });
+
+  it("records durable cron_runs rows for successful dispatches", async () => {
+    const job = { ...messageJob(), name: "history-success" };
+    const { client } = clientWithFailingSends(0);
+
+    await __testables.dispatch(job, client);
+
+    const rows = listCronRuns({ jobName: job.name, limit: 5 });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      job_name: "history-success",
+      job_type: "message",
+      status: "success",
+      attempt: 1,
+    });
+    expect(rows[0]?.started_at).toBeTruthy();
+    expect(rows[0]?.completed_at).toBeTruthy();
+    expect(rows[0]?.duration_ms).toBeGreaterThanOrEqual(0);
+  });
+
+  it("records retry_scheduled and final success attempts in cron_runs", async () => {
+    const job = { ...messageJob(), name: "history-retry" };
+    const { client } = clientWithFailingSends(1);
+    const policy = {
+      ...__testables.DEFAULT_RETRY_POLICY,
+      maxAttempts: 2,
+      sleep: async () => {},
+    };
+
+    await __testables.dispatch(job, client, policy);
+
+    const rows = listCronRuns({ jobName: job.name, limit: 5 }).sort((a, b) => a.attempt - b.attempt);
+    expect(rows.map((row) => [row.attempt, row.status])).toEqual([
+      [1, "retry_scheduled"],
+      [2, "success"],
+    ]);
+    expect(rows[0]?.error_message).toContain("boom-1");
+    expect(JSON.parse(rows[0]?.metadata_json ?? "{}")).toMatchObject({
+      failure_run_id: expect.any(String),
+      retry_delay_ms: 10 * 60 * 1000,
+    });
   });
 
   it("第 5 次仍失败时停止重试并记录 retries exhausted", async () => {

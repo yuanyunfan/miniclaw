@@ -8,6 +8,7 @@ import { migration007MarketForecasts } from "./007-market-forecasts.js";
 import { migration008RouterClassifierFields } from "./008-router-classifier-fields.js";
 import { migration009RouterEvaluationFields } from "./009-router-evaluation-fields.js";
 import { migration010SchemaVersionHistory } from "./010-schema-version-history.js";
+import { migration011CronRuns } from "./011-cron-runs.js";
 import type { SchemaMigration } from "./types.js";
 
 export const migrations: SchemaMigration[] = [
@@ -21,4 +22,5 @@ export const migrations: SchemaMigration[] = [
   migration008RouterClassifierFields,
   migration009RouterEvaluationFields,
   migration010SchemaVersionHistory,
+  migration011CronRuns,
 ];

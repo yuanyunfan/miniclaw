@@ -8,7 +8,7 @@ import type { SchemaMigration } from "./migrations/types.js";
 
 export { columnExists } from "./migrations/helpers.js";
 
-export const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 11;
 
 export interface SchemaVersionHistoryRow {
   id: number;
@@ -191,6 +191,31 @@ export function ensureBaseSchema(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_market_forecasts_task ON market_forecasts(task_id);
     CREATE INDEX IF NOT EXISTS idx_market_forecasts_scope_date ON market_forecasts(market_scope, trade_date, session);
+    CREATE TABLE IF NOT EXISTS cron_runs (
+      id TEXT PRIMARY KEY,
+      job_name TEXT NOT NULL,
+      job_type TEXT NOT NULL,
+      status TEXT NOT NULL,
+      attempt INTEGER NOT NULL,
+      scheduled_at TEXT,
+      started_at TEXT NOT NULL,
+      completed_at TEXT,
+      duration_ms INTEGER,
+      task_id TEXT,
+      incident_id TEXT,
+      provider_name TEXT,
+      provider_status TEXT,
+      provider_category TEXT,
+      error_category TEXT,
+      error_message TEXT,
+      alert_message_id TEXT,
+      alert_channel_id TEXT,
+      metadata_json TEXT,
+      FOREIGN KEY (task_id) REFERENCES tasks(id),
+      FOREIGN KEY (incident_id) REFERENCES incidents(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_cron_runs_job_started ON cron_runs(job_name, started_at);
+    CREATE INDEX IF NOT EXISTS idx_cron_runs_status_started ON cron_runs(status, started_at);
     CREATE TABLE IF NOT EXISTS market_forecast_items (
       id TEXT PRIMARY KEY,
       forecast_id TEXT NOT NULL,

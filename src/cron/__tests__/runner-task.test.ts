@@ -93,13 +93,20 @@ describe("cron task runner", () => {
       result: "The operation was aborted",
     });
 
-    await expect(runTask(taskJob(), client())).rejects.toThrow(
-      "daily-ai-news task failed: The operation was aborted",
-    );
+    let error: unknown;
+    try {
+      await runTask(taskJob(), client());
+    } catch (err) {
+      error = err;
+    }
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain("daily-ai-news task failed: The operation was aborted");
     expect(mocks.createTask).toHaveBeenCalledWith(expect.objectContaining({
       source_route_type: "cron_task",
       source_channel_id: "1000000000000000000",
     }));
+    const createdTask = mocks.createTask.mock.calls[0]?.[0] as { id?: string } | undefined;
+    expect((error as { taskId?: string }).taskId).toBe(createdTask?.id);
   });
 
   it("resolves when the underlying task succeeds", async () => {
@@ -113,7 +120,10 @@ describe("cron task runner", () => {
       result: "ok",
     });
 
-    await expect(runTask(taskJob(), client())).resolves.toBeUndefined();
+    await expect(runTask(taskJob(), client())).resolves.toMatchObject({
+      status: "success",
+      taskId: expect.any(String),
+    });
   });
 
   it("skips the downstream task when a pre_provider returns skipTask", async () => {
@@ -130,7 +140,12 @@ describe("cron task runner", () => {
       ...taskJob(),
       pre_provider: "cmb-credit-card-email",
       pre_provider_config: "default",
-    }, client())).resolves.toBeUndefined();
+    }, client())).resolves.toMatchObject({
+      status: "skipped",
+      providerName: "cmb-credit-card-email",
+      errorCategory: "no_matching_cmb_credit_card_email",
+      errorMessage: "transactions=0",
+    });
 
     expect(mocks.runPreProvider).toHaveBeenCalledWith("cmb-credit-card-email", expect.objectContaining({
       configName: "default",
@@ -157,7 +172,11 @@ describe("cron task runner", () => {
       ...taskJob(),
       pre_provider: "wechat-mp",
       pre_provider_config: "daily-ai-wechat",
-    }, client(send))).resolves.toBeUndefined();
+    }, client(send))).resolves.toMatchObject({
+      status: "skipped",
+      providerName: "wechat-mp",
+      errorCategory: "wechat_mp_session_invalid",
+    });
 
     expect(send).toHaveBeenCalledWith("需要重新登录微信公众号后台 session");
     expect(mocks.createTask).not.toHaveBeenCalled();
@@ -219,7 +238,11 @@ describe("cron task runner", () => {
       name: "us-stock-pre-market",
       pre_provider: "market-intel",
       pre_provider_config: "us-pre-market",
-    }, client())).resolves.toBeUndefined();
+    }, client())).resolves.toMatchObject({
+      status: "success",
+      taskId: expect.any(String),
+      providerName: "market-intel",
+    });
 
     const createdTask = mocks.createTask.mock.calls[0]?.[0] as { id?: string } | undefined;
     expect(createdTask?.id).toBeDefined();
@@ -249,7 +272,10 @@ describe("cron task runner", () => {
       ...taskJob(),
       pre_provider: "stock-portfolio",
       pre_provider_config: "us-stock",
-    }, client())).resolves.toBeUndefined();
+    }, client())).resolves.toMatchObject({
+      status: "skipped",
+      errorCategory: "controlled_test_stop",
+    });
 
     expect(mocks.runPreProvider).toHaveBeenCalledWith("stock-portfolio", expect.objectContaining({
       runAt: new Date("2026-05-08T12:45:00.000Z"),
@@ -279,7 +305,10 @@ describe("cron task runner", () => {
       pre_provider: "stock-pulse",
       pre_provider_config: "us-hourly",
       pre_provider_preflight: "health",
-    }, client())).resolves.toBeUndefined();
+    }, client())).resolves.toMatchObject({
+      status: "success",
+      providerName: "stock-pulse",
+    });
 
     expect(mocks.runProviderHealthCheck).toHaveBeenCalledWith("stock-pulse", expect.objectContaining({
       configName: "us-hourly",
@@ -339,7 +368,10 @@ describe("cron task runner", () => {
       pre_provider: "stock-pulse",
       pre_provider_config: "us-hourly",
       pre_provider_preflight: "dry_run",
-    }, client())).resolves.toBeUndefined();
+    }, client())).resolves.toMatchObject({
+      status: "success",
+      providerName: "stock-pulse",
+    });
 
     expect(mocks.runProviderDryRun).toHaveBeenCalledWith("stock-pulse", expect.objectContaining({
       configName: "us-hourly",
@@ -378,7 +410,10 @@ describe("cron task runner", () => {
         ...taskJob(),
         pre_provider: "stock-portfolio",
         pre_provider_config: "daily-stock-summary",
-      }, client(send))).resolves.toBeUndefined();
+      }, client(send))).resolves.toMatchObject({
+        status: "success",
+        providerName: "stock-portfolio",
+      });
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }

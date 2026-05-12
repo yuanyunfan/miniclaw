@@ -6,14 +6,21 @@ import { runTask, runSkill } from "./runner-task.js";
 import { runMessage } from "./runner-message.js";
 import { runScript } from "./runner-script.js";
 import { recordRun, getAllJobStates, updateJobState, type JobState } from "./state.js";
-import type { CronJob } from "./types.js";
+import type { CronJob, CronJobRunOutcome } from "./types.js";
 import {
+  sanitizeCronError,
   sendOrUpdateCronFailureAlert,
   updateCronRecoveredAlert,
   type CronFailureAlertRef,
 } from "./failure-notifier.js";
 import { createLogger } from "../lib/log.js";
 import { DRAINING_MESSAGE, isDraining } from "../runtime/shutdown.js";
+import {
+  createCronRun,
+  markCronRunCompleted,
+  markCronRunFailed,
+  type CronRunRow,
+} from "../store/cron-runs.js";
 
 const log = createLogger("cron");
 
@@ -35,6 +42,7 @@ type RetryPolicy = {
 type DispatchOptions = {
   notifyFailures?: boolean;
   failureAlert?: CronFailureAlertRef;
+  scheduledAt?: Date;
 };
 
 type CronRetryBeforeRun = (pending: { status: "woke" | "started"; jobName: string }) => Promise<void>;
@@ -115,11 +123,55 @@ async function waitForRetryDelay(
   }
 }
 
-async function runJob(job: CronJob, client: Client): Promise<void> {
-  if (job.type === "task")    await runTask(job, client);
-  else if (job.type === "script") await runScript(job, client);
-  else if (job.type === "skill")  await runSkill(job, client);
-  else if (job.type === "message") await runMessage(job, client);
+function errorCategory(err: unknown): string {
+  if (err instanceof Error && err.name) return err.name;
+  return "unknown_error";
+}
+
+function errorMessage(err: unknown): string {
+  return sanitizeCronError(err instanceof Error ? err.message : String(err), 1500);
+}
+
+function errorMetadata(err: unknown): Partial<Pick<CronJobRunOutcome, "taskId" | "providerName" | "providerStatus" | "providerCategory">> {
+  if (!err || typeof err !== "object") return {};
+  const record = err as Record<string, unknown>;
+  return {
+    ...(typeof record.taskId === "string" ? { taskId: record.taskId } : {}),
+    ...(typeof record.providerName === "string" ? { providerName: record.providerName } : {}),
+    ...(typeof record.providerStatus === "string" ? { providerStatus: record.providerStatus } : {}),
+    ...(typeof record.providerCategory === "string" ? { providerCategory: record.providerCategory } : {}),
+  };
+}
+
+function markRunSkipped(
+  job: CronJob,
+  scheduledAt: Date,
+  startedAt: Date,
+  msg: string,
+  category: string,
+): CronRunRow {
+  const run = createCronRun({
+    jobName: job.name,
+    jobType: job.type,
+    attempt: 1,
+    scheduledAt,
+    startedAt,
+  });
+  return markCronRunCompleted(run.id, {
+    status: "skipped",
+    completedAt: new Date(),
+    durationMs: Date.now() - startedAt.getTime(),
+    errorCategory: category,
+    errorMessage: sanitizeCronError(msg, 1500),
+  });
+}
+
+async function runJob(job: CronJob, client: Client): Promise<CronJobRunOutcome> {
+  if (job.type === "task") return await runTask(job, client);
+  if (job.type === "script") return await runScript(job, client);
+  if (job.type === "skill") return await runSkill(job, client);
+  if (job.type === "message") return await runMessage(job, client);
+  return { status: "success" };
 }
 
 function getCronSchedules(job: CronJob): string[] {
@@ -132,16 +184,21 @@ async function dispatch(
   retryPolicy: RetryPolicy = DEFAULT_RETRY_POLICY,
   options: DispatchOptions = {}
 ): Promise<void> {
+  const scheduledAt = options.scheduledAt ?? new Date();
   if (isDraining()) {
+    const startedAt = new Date();
     const msg = `${job.name} skipped: ${DRAINING_MESSAGE}`;
     log.warn(msg);
+    markRunSkipped(job, scheduledAt, startedAt, msg, "draining");
     recordRun(job.name, false, 0, msg);
     return;
   }
 
   if (runningJobs.has(job.name)) {
+    const startedAt = new Date();
     const msg = `${job.name} skipped: previous run still active`;
     log.warn(msg);
+    markRunSkipped(job, scheduledAt, startedAt, msg, "already_running");
     recordRun(job.name, false, 0, msg);
     return;
   }
@@ -154,12 +211,31 @@ async function dispatch(
   try {
     for (let attempt = 1; attempt <= policy.maxAttempts; attempt++) {
       const startedAt = Date.now();
+      const cronRun = createCronRun({
+        jobName: job.name,
+        jobType: job.type,
+        attempt,
+        scheduledAt,
+        startedAt: new Date(startedAt),
+        metadata: { failure_run_id: failureRunId },
+      });
       try {
         if (attempt > 1) {
           log.info(`${job.name} retry attempt ${attempt}/${policy.maxAttempts}`);
         }
-        await runJob(job, client);
+        const outcome = await runJob(job, client);
         const durationMs = Date.now() - startedAt;
+        markCronRunCompleted(cronRun.id, {
+          status: outcome.status,
+          durationMs,
+          taskId: outcome.taskId,
+          providerName: outcome.providerName,
+          providerStatus: outcome.providerStatus,
+          providerCategory: outcome.providerCategory,
+          errorCategory: outcome.errorCategory,
+          errorMessage: outcome.errorMessage,
+          metadata: outcome.metadata ?? { failure_run_id: failureRunId },
+        });
         recordRun(job.name, true, durationMs, undefined, {
           last_attempt: attempt,
           max_attempts: policy.maxAttempts,
@@ -176,7 +252,8 @@ async function dispatch(
         return;
       } catch (err) {
         const durationMs = Date.now() - startedAt;
-        const errorMsg = err instanceof Error ? err.message : String(err);
+        const errorMsg = errorMessage(err);
+        const metadata = errorMetadata(err);
         const willRetry = attempt < policy.maxAttempts;
         const retryDelayMs = willRetry ? getRetryDelayMs(policy, attempt) : 0;
         const nextRetryAt = willRetry ? new Date(Date.now() + retryDelayMs) : undefined;
@@ -211,6 +288,24 @@ async function dispatch(
             log.error(`${job.name} failed to send cron failure alert:`, notifyErr);
           }
         }
+
+        markCronRunFailed(cronRun.id, {
+          status: willRetry ? "retry_scheduled" : "failed",
+          durationMs,
+          taskId: metadata.taskId,
+          providerName: metadata.providerName,
+          providerStatus: metadata.providerStatus,
+          providerCategory: metadata.providerCategory,
+          errorCategory: errorCategory(err),
+          errorMessage: recordedError,
+          alertMessageId: failureAlert?.messageId,
+          alertChannelId: failureAlert?.channelId,
+          metadata: {
+            failure_run_id: failureRunId,
+            ...(nextRetryAt ? { next_retry_at: nextRetryAt.toISOString() } : {}),
+            ...(willRetry ? { retry_delay_ms: retryDelayMs } : {}),
+          },
+        });
 
         if (!willRetry) return;
         log.warn(`${job.name} retrying in ${formatDuration(retryDelayMs)} (next attempt ${attempt + 1}/${policy.maxAttempts})`);
