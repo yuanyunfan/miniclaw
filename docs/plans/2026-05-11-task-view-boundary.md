@@ -219,3 +219,14 @@ Record the final module boundary, changed files, and verification commands here 
   - `pnpm run typecheck` passed.
   - `pnpm run lint` passed.
   - `pnpm ralph:verify -- --task task-view-boundary` passed with profile `task-runtime`, including `pnpm run quality:docs`.
+
+### 2026-05-12 Slice 3: Runner Contract Types
+
+- Scope: first remaining independently shippable boundary slice after Slice 2. Added runner contract types only; no provider execution, Discord reporter, DB lifecycle, or `executeTask` wiring changed.
+- `src/agent/runners/types.ts`: added `TaskRunnerProvider`, `TaskRunnerInput`, and `TaskRunner` so future Claude/Codex/fake runners can emit redacted `TaskViewEvent` values and separate trace facts while returning the existing `TaskResult`.
+- `src/agent/__tests__/task-runner-types.test.ts`: added a focused contract test for a fake runner that exercises `onViewEvent`, `onTraceEvent`, the provider union, and the `TaskResult` return shape.
+- Verification:
+  - `pnpm vitest run src/agent/__tests__/task-runner-types.test.ts src/agent/__tests__/task-view-events.test.ts` passed: 2 files, 6 tests.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm ralph:verify -- --task task-view-boundary` passed with profile `task-runtime`, including fake runtime, trace reporter, task event store, typecheck, lint, and `pnpm run quality:docs`.
