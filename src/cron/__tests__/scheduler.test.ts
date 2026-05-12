@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import type { Client } from "discord.js";
 import { __testables, requestCronRetryNow } from "../scheduler.js";
 import { getJobState, resetStateCache } from "../state.js";
-import type { CronJobMessage } from "../types.js";
+import type { CronJobMessage, CronJobTask } from "../types.js";
 import { setDb } from "../../store/connection.js";
 import { listCronRuns } from "../../store/cron-runs.js";
 import { ensureBaseSchema, runMigrations } from "../../store/schema.js";
@@ -146,6 +146,50 @@ describe("cron scheduler dispatch", () => {
     expect(rows[0]?.started_at).toBeTruthy();
     expect(rows[0]?.completed_at).toBeTruthy();
     expect(rows[0]?.duration_ms).toBeGreaterThanOrEqual(0);
+  });
+
+  it("records provider preflight failure metadata in cron_runs", async () => {
+    const sent: unknown[] = [];
+    const client = {
+      channels: {
+        fetch: async () => ({
+          isSendable: () => true,
+          send: async (payload: unknown) => {
+            sent.push(payload);
+            return {};
+          },
+        }),
+      },
+    } as unknown as Client;
+    const job: CronJobTask = {
+      name: "history-provider-preflight",
+      schedule: "* * * * *",
+      enabled: true,
+      type: "task",
+      channel: "1000000000000000000",
+      pre_provider: "wechat-mp",
+      pre_provider_preflight: "health",
+      prompt: "summarize updates",
+    };
+    const policy = {
+      ...__testables.DEFAULT_RETRY_POLICY,
+      maxAttempts: 1,
+    };
+
+    await __testables.dispatch(job, client, policy);
+
+    const rows = listCronRuns({ jobName: job.name, limit: 5 });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      job_name: "history-provider-preflight",
+      job_type: "task",
+      status: "failed",
+      provider_name: "wechat-mp",
+      provider_status: "health_failed",
+      error_category: "provider_preflight_failed",
+    });
+    expect(rows[0]?.error_message).toContain("does not support health checks");
+    expect(sent.some((payload) => String(payload).includes("pre_provider health preflight 失败"))).toBe(true);
   });
 
   it("records retry_scheduled and final success attempts in cron_runs", async () => {

@@ -14,7 +14,7 @@ import { resolve, join } from "node:path";
 import { createLogger } from "../lib/log.js";
 import { runPreProvider, runProviderDryRun, runProviderHealthCheck } from "../providers/index.js";
 import type { PreProviderAttachment } from "../providers/types.js";
-import type { ProviderDryRunResult, ProviderHealthResult } from "../providers/framework.js";
+import { categorizeProviderError, type ProviderDryRunResult, type ProviderHealthResult } from "../providers/framework.js";
 import type { MarketIntelPayload } from "../providers/market-intel/types.js";
 import { DRAINING_MESSAGE, isDraining } from "../runtime/shutdown.js";
 
@@ -26,6 +26,7 @@ interface CronTaskRunErrorMetadata {
   providerName?: string;
   providerStatus?: string;
   providerCategory?: string;
+  errorCategory?: string;
 }
 
 class CronTaskRunError extends Error {
@@ -33,6 +34,7 @@ class CronTaskRunError extends Error {
   providerName?: string;
   providerStatus?: string;
   providerCategory?: string;
+  errorCategory?: string;
 
   constructor(message: string, metadata: CronTaskRunErrorMetadata = {}) {
     super(message);
@@ -41,6 +43,7 @@ class CronTaskRunError extends Error {
     this.providerName = metadata.providerName;
     this.providerStatus = metadata.providerStatus;
     this.providerCategory = metadata.providerCategory;
+    this.errorCategory = metadata.errorCategory;
   }
 }
 
@@ -50,6 +53,7 @@ function attachCronTaskRunMetadata(err: unknown, metadata: CronTaskRunErrorMetad
     err.providerName = err.providerName ?? metadata.providerName;
     err.providerStatus = err.providerStatus ?? metadata.providerStatus;
     err.providerCategory = err.providerCategory ?? metadata.providerCategory;
+    err.errorCategory = err.errorCategory ?? metadata.errorCategory;
     return err;
   }
   if (err instanceof Error) {
@@ -105,6 +109,29 @@ function buildCronTaskPrompt(jobName: string, prependedContext: string, rendered
 
 function preflightModeLabel(mode: NonNullable<CronJobTask["pre_provider_preflight"]>): string {
   return mode === "dry_run" ? "dry-run" : mode;
+}
+
+function preflightProviderStatus(mode: NonNullable<CronJobTask["pre_provider_preflight"]>): string {
+  return `${mode}_failed`;
+}
+
+function stringField(value: unknown, key: string): string | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const raw = (value as Record<string, unknown>)[key];
+  return typeof raw === "string" && raw ? raw : undefined;
+}
+
+function preflightFailureMetadata(
+  job: CronJobTask,
+  mode: NonNullable<CronJobTask["pre_provider_preflight"]>,
+  category?: string,
+): CronTaskRunErrorMetadata {
+  return {
+    providerName: job.pre_provider,
+    providerStatus: preflightProviderStatus(mode),
+    providerCategory: category,
+    errorCategory: category ?? "provider_preflight_failed",
+  };
 }
 
 function healthFailureMessage(result: ProviderHealthResult): string {
@@ -236,16 +263,17 @@ async function sendPreProviderAttachments(
 
 async function runPreProviderPreflight(job: CronJobTask, runAt: Date): Promise<void> {
   if (!job.pre_provider || !job.pre_provider_preflight || job.pre_provider_preflight === "off") return;
+  const mode = job.pre_provider_preflight;
   const args = {
     configName: job.pre_provider_config,
     jobName: job.name,
     channelId: job.channel,
     runAt,
   };
-  if (job.pre_provider_preflight === "health") {
+  if (mode === "health") {
     const result = await runProviderHealthCheck(job.pre_provider, args);
     if (!result.ok) {
-      throw new CronTaskRunError(healthFailureMessage(result));
+      throw new CronTaskRunError(healthFailureMessage(result), preflightFailureMetadata(job, mode, result.category));
     }
     log.info(`${job.name} pre_provider ${job.pre_provider} health preflight ok`);
     return;
@@ -253,7 +281,7 @@ async function runPreProviderPreflight(job: CronJobTask, runAt: Date): Promise<v
 
   const result = await runProviderDryRun(job.pre_provider, args);
   if (!result.ok) {
-    throw new CronTaskRunError(dryRunFailureMessage(result));
+    throw new CronTaskRunError(dryRunFailureMessage(result), preflightFailureMetadata(job, mode, result.category));
   }
   log.info(`${job.name} pre_provider ${job.pre_provider} dry-run preflight ok`);
 }
@@ -300,7 +328,13 @@ export async function runTask(job: CronJobTask, client: Client): Promise<CronJob
         const msg = err instanceof Error ? err.message : String(err);
         const mode = preflightModeLabel(job.pre_provider_preflight);
         await channel.send(`⏰ cron \`${job.name}\` ❌ pre_provider ${mode} preflight 失败: ${msg.slice(0, 1500)}`);
-        throw new CronTaskRunError(`pre_provider ${mode} preflight failed: ${msg}`);
+        const providerCategory = stringField(err, "providerCategory");
+        throw new CronTaskRunError(`pre_provider ${mode} preflight failed: ${msg}`, {
+          providerName: job.pre_provider,
+          providerStatus: preflightProviderStatus(job.pre_provider_preflight),
+          providerCategory,
+          errorCategory: stringField(err, "errorCategory") ?? providerCategory ?? "provider_preflight_failed",
+        });
       }
     }
     try {
@@ -338,7 +372,13 @@ export async function runTask(job: CronJobTask, client: Client): Promise<CronJob
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       await channel.send(`⏰ cron \`${job.name}\` ❌ pre_provider 失败: ${msg.slice(0, 1500)}`);
-      throw new CronTaskRunError(`pre_provider failed: ${msg}`);
+      const providerCategory = categorizeProviderError(err);
+      throw new CronTaskRunError(`pre_provider failed: ${msg}`, {
+        providerName: job.pre_provider,
+        providerStatus: "failed",
+        providerCategory,
+        errorCategory: providerCategory,
+      });
     }
   }
 

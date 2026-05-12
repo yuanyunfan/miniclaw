@@ -331,13 +331,24 @@ describe("cron task runner", () => {
       checkedAt: "2026-05-08T12:45:00.000Z",
     });
 
-    await expect(runTask({
+    let error: unknown;
+    await runTask({
       ...taskJob(),
       pre_provider: "stock-pulse",
       pre_provider_config: "missing",
       pre_provider_preflight: "health",
-    }, client(send))).rejects.toThrow("pre_provider health preflight failed: config: stock-pulse provider config missing");
+    }, client(send)).catch((err: unknown) => {
+      error = err;
+    });
 
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain("pre_provider health preflight failed: config: stock-pulse provider config missing");
+    expect(error).toMatchObject({
+      providerName: "stock-pulse",
+      providerStatus: "health_failed",
+      providerCategory: "config",
+      errorCategory: "config",
+    });
     expect(send).toHaveBeenCalledWith(expect.stringContaining("pre_provider health preflight 失败"));
     expect(mocks.runPreProvider).not.toHaveBeenCalled();
     expect(mocks.createTask).not.toHaveBeenCalled();
@@ -380,6 +391,41 @@ describe("cron task runner", () => {
     const taskInput = mocks.executeTask.mock.calls[0]?.[0] as { prompt?: string } | undefined;
     expect(taskInput?.prompt).toContain("\"real_provider_payload\":true");
     expect(taskInput?.prompt).not.toContain("\"position_count\":2");
+  });
+
+  it("stops before provider collection and annotates dry-run preflight failures", async () => {
+    const { runTask } = await import("../runner-task.js");
+    const send = vi.fn(async () => ({ id: "message-1" }));
+    mocks.runProviderDryRun.mockResolvedValue({
+      ok: false,
+      category: "auth",
+      previewText: "session expired",
+      redacted: true,
+      warnings: [],
+    });
+
+    let error: unknown;
+    await runTask({
+      ...taskJob(),
+      pre_provider: "stock-pulse",
+      pre_provider_config: "us-hourly",
+      pre_provider_preflight: "dry_run",
+    }, client(send)).catch((err: unknown) => {
+      error = err;
+    });
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain("pre_provider dry-run preflight failed: auth: session expired");
+    expect(error).toMatchObject({
+      providerName: "stock-pulse",
+      providerStatus: "dry_run_failed",
+      providerCategory: "auth",
+      errorCategory: "auth",
+    });
+    expect(send).toHaveBeenCalledWith(expect.stringContaining("pre_provider dry-run preflight 失败"));
+    expect(mocks.runPreProvider).not.toHaveBeenCalled();
+    expect(mocks.createTask).not.toHaveBeenCalled();
+    expect(mocks.executeTask).not.toHaveBeenCalled();
   });
 
   it("uploads pre_provider attachments after a successful raw cron task", async () => {

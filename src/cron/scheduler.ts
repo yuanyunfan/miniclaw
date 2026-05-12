@@ -132,7 +132,7 @@ function errorMessage(err: unknown): string {
   return sanitizeCronError(err instanceof Error ? err.message : String(err), 1500);
 }
 
-function errorMetadata(err: unknown): Partial<Pick<CronJobRunOutcome, "taskId" | "providerName" | "providerStatus" | "providerCategory">> {
+function errorMetadata(err: unknown): Partial<Pick<CronJobRunOutcome, "taskId" | "providerName" | "providerStatus" | "providerCategory" | "errorCategory">> {
   if (!err || typeof err !== "object") return {};
   const record = err as Record<string, unknown>;
   return {
@@ -140,6 +140,7 @@ function errorMetadata(err: unknown): Partial<Pick<CronJobRunOutcome, "taskId" |
     ...(typeof record.providerName === "string" ? { providerName: record.providerName } : {}),
     ...(typeof record.providerStatus === "string" ? { providerStatus: record.providerStatus } : {}),
     ...(typeof record.providerCategory === "string" ? { providerCategory: record.providerCategory } : {}),
+    ...(typeof record.errorCategory === "string" ? { errorCategory: record.errorCategory } : {}),
   };
 }
 
@@ -296,7 +297,7 @@ async function dispatch(
           providerName: metadata.providerName,
           providerStatus: metadata.providerStatus,
           providerCategory: metadata.providerCategory,
-          errorCategory: errorCategory(err),
+          errorCategory: metadata.errorCategory ?? errorCategory(err),
           errorMessage: recordedError,
           alertMessageId: failureAlert?.messageId,
           alertChannelId: failureAlert?.channelId,

@@ -59,6 +59,7 @@ pre_provider_preflight: health   # off | health | dry_run
 - `dry_run`：先执行 `runProviderDryRun()`。dry-run 输出只作为 redacted gate，不会拼进 prompt；通过后仍会执行真实 `runPreProvider()` 生成 prompt context。
 - 不允许在没有 `pre_provider` 的 job 上配置 `pre_provider_preflight`。
 - preflight 不改变 commit 语义：provider state/session commit 仍只在 downstream task 成功后执行。
+- preflight 失败会携带 provider metadata 写入 `cron_runs`：`provider_name` 是配置的 `pre_provider`，`provider_status` 为 `health_failed` 或 `dry_run_failed`，`provider_category` / `error_category` 优先使用 framework failure taxonomy；provider 不支持对应 gate 时落为 `provider_preflight_failed`。真实 `runPreProvider()` 采集失败也会通过同一 taxonomy 写入 `provider_*` 字段，避免只留下 generic task-run error。
 
 ## Stock Pulse Pilot
 
