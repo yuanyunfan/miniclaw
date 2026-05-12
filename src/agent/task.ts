@@ -8,84 +8,23 @@ import { ProgressReporter } from "../discord/progress.js";
 import { taskCompleteEmbed, taskErrorEmbed, taskStartEmbed } from "../discord/formatter.js";
 import { chunkMessage } from "../discord/chunks.js";
 import { sendChunkedTextWithDeferredLinkPreviews } from "../discord/text.js";
-import { buildMemoryPrompt } from "../memory/inject.js";
-import { loadSubagents, listSubagentNames } from "./subagents.js";
-import { loadMcpServers } from "./mcp.js";
-import { EASTMONEY_JYWG_TOOL_NAMES } from "../mcp/eastmoney-jywg/safety.js";
-import { FUTU_STOCK_TOOL_NAMES } from "../mcp/futu-stock/safety.js";
 import { IDENTITY_LINE_TASK } from "./identity.js";
-import { loadPrompt } from "./prompts.js";
 import { createLogger } from "../lib/log.js";
 import type { CodexInputEntry } from "./codex.js";
-import {
-  codexInput,
-  codexThreadOptions,
-  formatCodexItemLine,
-  getCodexClient,
-  withCodexTimeout,
-} from "./codex.js";
-import { assertProviderSession, formatSessionId } from "./session.js";
-import { fmtTokens, formatAnthropicUsage, formatCodexUsage } from "./usage.js";
-import { buildFakeTaskResult } from "../e2e/fake-agent.js";
-import { formatTaskPromptForSystem } from "../routing/task-context.js";
+import { fmtTokens, formatAnthropicUsage } from "./usage.js";
 import { appendTaskEvent, type TaskEventSeverity } from "../store/task-events.js";
 import { TaskReporter } from "./task-reporter.js";
-import type { TaskRunnerProvider } from "./runners/types.js";
+import { buildSupervisorBlock } from "./supervisor.js";
+import { claudeTaskRunner } from "./runners/claude-task-runner.js";
+import { codexTaskRunner } from "./runners/codex-task-runner.js";
+import { createFakeTaskRunner } from "./runners/fake-task-runner.js";
+import { pushCompactedLine } from "./runners/progress-lines.js";
+import type { TaskRunner, TaskRunnerResult, TaskRunnerTraceOptions } from "./runners/types.js";
+import type { TaskViewEvent } from "./task-view-events.js";
 
 const log = createLogger("task");
 
 const PROGRESS_TAIL_LINES = 25;
-
-function toolIcon(name: string): string {
-  if (name === "Skill") return "📚";
-  if (name === "Bash") return "💻";
-  if (name === "Read") return "📖";
-  if (name === "Write" || name === "Edit") return "📝";
-  if (name === "Glob" || name === "Grep") return "🔎";
-  if (name === "WebFetch") return "🌐";
-  if (name === "WebSearch") return "🔍";
-  if (name === "Agent" || name === "Task") return "🤖";
-  if (name.startsWith("mcp__")) return "🔌";
-  return "🔧";
-}
-
-function toolShortName(name: string): string {
-  if (name === "Bash") return "terminal";
-  if (name === "Skill") return "skill_view";
-  if (name === "Agent" || name === "Task") return "agent";
-  if (name.startsWith("mcp__")) return name.slice(5).replace(/__/g, ":");
-  return name.toLowerCase();
-}
-
-function allowedFutuStockMcpTools(mcpServers: Record<string, unknown>): string[] {
-  return mcpServers["futu-stock"]
-    ? FUTU_STOCK_TOOL_NAMES.map((name) => `mcp__futu-stock__${name}`)
-    : [];
-}
-
-function allowedEastmoneyJywgMcpTools(mcpServers: Record<string, unknown>): string[] {
-  return mcpServers["eastmoney-jywg"]
-    ? EASTMONEY_JYWG_TOOL_NAMES.map((name) => `mcp__eastmoney-jywg__${name}`)
-    : [];
-}
-
-function formatToolDetail(name: string, input: Record<string, unknown>): string {
-  let raw = "";
-  if (name === "Bash") raw = String(input.command ?? "");
-  else if (name === "Read" || name === "Edit" || name === "Write") raw = String(input.file_path ?? "");
-  else if (name === "Glob" || name === "Grep") raw = String(input.pattern ?? "");
-  else if (name === "Skill") raw = String(input.skill ?? "");
-  else if (name === "WebFetch") raw = String(input.url ?? "");
-  else if (name === "WebSearch") raw = String(input.query ?? "");
-  else if (name === "Agent" || name === "Task") {
-    const role = (input.subagent_type as string) ?? "general-purpose";
-    const promptStr = String(input.prompt ?? "").slice(0, 60);
-    raw = `[${role}] ${promptStr}`;
-  } else if (name.startsWith("mcp__")) {
-    raw = JSON.stringify(input).slice(0, 80);
-  }
-  return raw.replace(/\s+/g, " ").trim();
-}
 
 export interface TaskResult {
   success: boolean;
@@ -113,11 +52,6 @@ export const __testables = {
   deleteActiveTaskForTest,
   resetTaskRuntimeForTest,
 };
-
-export function buildSupervisorBlock(subagentNames: string[]): string {
-  if (!subagentNames.length) return "";
-  return loadPrompt("supervisor", { subagent_names: subagentNames.join(" / ") });
-}
 
 const activeTasks = new Map<string, AbortController>();
 const cancelledTasks = new Set<string>();
@@ -237,8 +171,9 @@ function recordTaskEvent(taskId: string, eventType: string, severity: TaskEventS
   }
 }
 
-function selectTaskRunner(agentProvider: AgentProvider, fakeAgent: boolean): TaskRunnerProvider {
-  return fakeAgent ? "fake" : agentProvider;
+function selectTaskRunner(agentProvider: AgentProvider, fakeAgent: boolean): TaskRunner {
+  if (fakeAgent) return createFakeTaskRunner(agentProvider);
+  return agentProvider === "codex" ? codexTaskRunner : claudeTaskRunner;
 }
 
 function rawTaskMessages(taskId: string, result: TaskResult): string[] {
@@ -367,53 +302,6 @@ async function sendEmbedTaskResult(
   }
 }
 
-async function executeFakeTask(
-  params: ExecuteTaskParams,
-  progress: ProgressReporter,
-  abortController: AbortController,
-  startedAt: number,
-  shortId: string,
-  reporter: TaskReporter,
-): Promise<TaskResult> {
-  const fake = buildFakeTaskResult(params.prompt, config.agentProvider);
-  const result: TaskResult = {
-    success: true,
-    sessionId: fake.sessionId,
-    costUsd: 0,
-    durationMs: Date.now() - startedAt + fake.durationMs,
-    turns: 1,
-    result: fake.reply,
-    tokensSummary: fake.tokensSummary,
-  };
-  const status = finalTaskStatus(params.taskId, abortController, result.success);
-  updateTask(params.taskId, {
-    session_id: result.sessionId,
-    status,
-    result_summary: result.result,
-    cost_usd: result.costUsd,
-    duration_ms: result.durationMs,
-    completed_at: new Date().toISOString(),
-  });
-  reporter.sessionStarted(result.sessionId, config.agentProvider);
-  reporter.finished(status, {
-    provider: config.agentProvider,
-    duration_ms: result.durationMs,
-    turns: result.turns,
-    cost_usd: result.costUsd,
-    session_id: result.sessionId,
-  });
-  log.info(`✓ ${shortId} e2e-fake done turns=1 wall=${result.durationMs}ms ${result.tokensSummary}`);
-
-  if ((params.outputMode ?? "embed") === "raw") {
-    await progress.complete(params.channel);
-    await sendRawTaskResult(params.channel, params.taskId, rawDisplayTaskResult(params, result));
-    return result;
-  }
-
-  await sendEmbedTaskResult(params, progress, abortController, result, ["🧪 e2e fake agent"], 0, params.statusMessage, reporter);
-  return result;
-}
-
 interface ExecuteTaskParams {
   taskId: string;
   prompt: string;
@@ -431,20 +319,10 @@ interface ExecuteTaskParams {
   statusMessage?: Message;
 }
 
-function pushCompactedLine(lines: string[], line: string): boolean {
-  const lastIdx = lines.length - 1;
-  if (lastIdx >= 0) {
-    const last = lines[lastIdx];
-    const baseLast = last.replace(/\s+\(×\d+\)$/, "");
-    if (baseLast === line) {
-      const m = last.match(/\(×(\d+)\)$/);
-      const next = m ? parseInt(m[1], 10) + 1 : 2;
-      lines[lastIdx] = `${line} (×${next})`;
-      return false;
-    }
-  }
-  lines.push(line);
-  return true;
+interface ViewProgressState {
+  lines: string[];
+  turns: number;
+  toolCount: number;
 }
 
 async function updateProgressTail(
@@ -457,156 +335,110 @@ async function updateProgressTail(
   await progress.update(buildRealtimeProgress(lines, turns, toolCount), channel);
 }
 
-async function executeCodexTask(
+function taskViewProgressLine(event: Extract<TaskViewEvent, { type: "tool_progress" | "assistant_progress" }>): string {
+  if (event.type === "assistant_progress") return event.text;
+  return event.detail ? `${event.title}: "${event.detail}"` : event.title;
+}
+
+async function handleTaskViewEvent(
+  event: TaskViewEvent,
   params: ExecuteTaskParams,
   progress: ProgressReporter,
-  abortController: AbortController,
-  startedAt: number,
-  shortId: string,
-  reporter: TaskReporter,
-): Promise<TaskResult> {
-  const memoryBlock = buildMemoryPrompt();
-  const identityLine = IDENTITY_LINE_TASK;
-  const subagentNames = listSubagentNames();
-  const supervisorBlock = buildSupervisorBlock(subagentNames);
-  const resumeRawId = params.resumeSessionId ? assertProviderSession(params.resumeSessionId, "codex") : undefined;
-
-  const prompt = [
-    identityLine,
-    supervisorBlock,
-    memoryBlock,
-    "你正在通过 Codex SDK 执行 MiniClaw 的 coding-agent 任务。请直接完成用户请求；需要修改文件时使用工作区内的工具，最后用中文给出结果和验证证据。",
-    formatTaskPromptForSystem(params.prompt),
-  ].filter(Boolean).join("\n\n");
-
-  const codex = getCodexClient();
-  const threadOptions = codexThreadOptions("task", params.cwd);
-  const thread = resumeRawId
-    ? codex.resumeThread(resumeRawId, threadOptions)
-    : codex.startThread(threadOptions);
-
-  let sessionId = resumeRawId ? formatSessionId("codex", resumeRawId) : "";
-  let finalResponse = "";
-  let failedMessage = "";
-  let tokensSummary: string | undefined;
-  const toolCallLog: string[] = [];
-  let toolStep = 0;
-  let turns = 0;
-
-  const timeoutCtrl = withCodexTimeout(abortController.signal, config.codex.timeoutMs);
-  const { events } = await thread.runStreamed(
-    codexInput(prompt, params.attachmentCodexInputs),
-    { signal: timeoutCtrl.signal },
-  );
-
-  for await (const event of events) {
-    if (abortController.signal.aborted || timeoutCtrl.signal.aborted) {
-      failedMessage = wasInterrupted(params.taskId)
-        ? interruptedReason(params.taskId)
-        : abortController.signal.aborted ? "任务已被用户取消" : "Codex 执行超时";
+  state: ViewProgressState,
+  renderProgress: boolean,
+): Promise<void> {
+  switch (event.type) {
+    case "session_started": {
+      updateTask(params.taskId, { session_id: event.sessionId });
       break;
     }
-
-    switch (event.type) {
-      case "thread.started": {
-        sessionId = formatSessionId("codex", event.thread_id);
-        updateTask(params.taskId, { session_id: sessionId });
-        reporter.sessionStarted(sessionId, "codex");
-        break;
+    case "turn_started": {
+      state.turns = event.turn;
+      break;
+    }
+    case "tool_progress":
+    case "assistant_progress": {
+      const line = taskViewProgressLine(event);
+      const added = pushCompactedLine(state.lines, line);
+      if (event.type === "tool_progress" && event.countAsTool !== false) state.toolCount++;
+      const countedToolEvent = event.type === "tool_progress" && event.countAsTool !== false;
+      if (renderProgress && (added || countedToolEvent)) {
+        await updateProgressTail(progress, params.channel, state.lines, state.turns, state.toolCount);
       }
-      case "turn.started": {
-        turns++;
-        reporter.turnStarted(turns, "codex");
-        break;
-      }
-      case "turn.completed": {
-        tokensSummary = formatCodexUsage(event.usage);
-        reporter.turnCompleted(turns, "codex", event.usage);
-        break;
-      }
-      case "turn.failed": {
-        failedMessage = event.error.message;
-        reporter.providerError("codex", failedMessage, { event_type: event.type });
-        break;
-      }
-      case "error": {
-        failedMessage = event.message;
-        reporter.providerError("codex", failedMessage, { event_type: event.type });
-        break;
-      }
-      case "item.started":
-      case "item.updated":
-      case "item.completed": {
-        if (event.item.type === "agent_message") {
-          finalResponse = event.item.text;
-          break;
-        }
-        const line = formatCodexItemLine(event.item);
-        if (line && pushCompactedLine(toolCallLog, line)) {
-          toolStep++;
-          reporter.toolEvent("codex", line, { item_type: event.item.type, stream_event: event.type });
-          await updateProgressTail(progress, params.channel, toolCallLog, turns, toolStep);
-        }
-        break;
-      }
+      break;
     }
   }
+}
 
-  if (!timeoutCtrl.signal.aborted) timeoutCtrl.abort();
+function recordRunnerTrace(reporter: TaskReporter, eventType: string, options: TaskRunnerTraceOptions = {}): void {
+  reporter.event(eventType, {
+    severity: options.severity,
+    message: options.message,
+    payload: options.payload,
+  });
+}
 
-  if (!sessionId && thread.id) {
-    sessionId = formatSessionId("codex", thread.id);
-    updateTask(params.taskId, { session_id: sessionId });
+function normalizeRunnerResult(
+  taskId: string,
+  abortController: AbortController,
+  result: TaskRunnerResult,
+): TaskRunnerResult {
+  if (wasInterrupted(taskId)) {
+    return { ...result, success: false, result: interruptedReason(taskId) };
   }
+  if (wasCancelled(taskId, abortController)) {
+    return { ...result, success: false, result: "任务已被用户取消" };
+  }
+  return result;
+}
 
-  const lastResult: TaskResult = {
-    success: !failedMessage && !wasCancelled(params.taskId, abortController) && !wasInterrupted(params.taskId),
-    sessionId,
-    costUsd: 0,
-    durationMs: Date.now() - startedAt,
-    turns: turns || 1,
-    result: wasInterrupted(params.taskId)
-      ? interruptedReason(params.taskId)
-      : wasCancelled(params.taskId, abortController)
-      ? "任务已被用户取消"
-      : failedMessage || finalResponse.trim() || "[无文字回复]",
-    ...(tokensSummary ? { tokensSummary } : {}),
-  };
-
-  const status = finalTaskStatus(params.taskId, abortController, lastResult.success);
+function completeTaskRow(
+  params: ExecuteTaskParams,
+  abortController: AbortController,
+  result: TaskRunnerResult,
+  runner: TaskRunner,
+  reporter: TaskReporter,
+  toolCount: number,
+): ReturnType<typeof finalTaskStatus> {
+  const status = finalTaskStatus(params.taskId, abortController, result.success);
   updateTask(params.taskId, {
-    session_id: lastResult.sessionId,
+    session_id: result.sessionId,
     status,
-    result_summary: lastResult.result.slice(0, 10000),
-    cost_usd: lastResult.costUsd,
-    duration_ms: lastResult.durationMs,
+    result_summary: result.result.slice(0, 10000),
+    cost_usd: result.costUsd,
+    duration_ms: result.durationMs,
     completed_at: new Date().toISOString(),
   });
+  const provider = runner.provider === "fake" ? config.agentProvider : runner.provider;
+  const payload: Record<string, unknown> = {
+    provider,
+    duration_ms: result.durationMs,
+    turns: result.turns,
+    cost_usd: result.costUsd,
+    session_id: result.sessionId,
+  };
+  if (runner.provider !== "fake") payload.tool_count = toolCount;
   reporter.finished(status, {
-    provider: "codex",
-    duration_ms: lastResult.durationMs,
-    turns: lastResult.turns,
-    cost_usd: lastResult.costUsd,
-    session_id: lastResult.sessionId,
-    tool_count: toolStep,
+    ...payload,
   });
+  return status;
+}
 
+function logTaskCompletion(
+  shortId: string,
+  runner: TaskRunner,
+  result: TaskRunnerResult,
+  toolCount: number,
+  startedAt: number,
+): void {
+  const provider = runner.provider === "fake" ? "e2e-fake" : runner.provider;
+  const wallMs = Date.now() - startedAt;
   log.info(
-    `${lastResult.success ? "✓" : "✗"} ${shortId} codex ${lastResult.success ? "done" : "failed"} ` +
-    `turns=${lastResult.turns} wall=${lastResult.durationMs}ms tools=${toolStep}` +
-    (lastResult.tokensSummary ? ` ${lastResult.tokensSummary}` : "")
+    `${result.success ? "✓" : "✗"} ${shortId} ${provider} ${result.success ? "done" : "failed"} ` +
+    `turns=${result.turns} cost=$${result.costUsd.toFixed(4)} ` +
+    `sdk=${result.durationMs}ms wall=${wallMs}ms tools=${toolCount}` +
+    (result.tokensSummary ? ` ${result.tokensSummary}` : "")
   );
-
-  const outputMode = params.outputMode ?? "embed";
-  if (outputMode === "raw") {
-    await progress.complete(params.channel, lastResult.success ? undefined : { keepAsError: true });
-    await sendRawTaskResult(params.channel, params.taskId, rawDisplayTaskResult(params, lastResult));
-    return lastResult;
-  }
-
-  await sendEmbedTaskResult(params, progress, abortController, lastResult, toolCallLog, toolStep, params.statusMessage, reporter);
-
-  return lastResult;
 }
 
 export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult> {
@@ -620,7 +452,7 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
   });
   const startedAt = Date.now();
   const shortId = params.taskId.slice(0, 8);
-  const runnerProvider = selectTaskRunner(config.agentProvider, config.e2e.fakeAgent);
+  const runner = selectTaskRunner(config.agentProvider, config.e2e.fakeAgent);
   reporter.started({
     provider: config.agentProvider,
     model: config.model,
@@ -653,249 +485,24 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
       await progress.update(buildRealtimeProgress([], 0, 0), params.channel);
     }
 
-    if (runnerProvider === "fake") {
-      return await executeFakeTask(params, progress, abortController, startedAt, shortId, reporter);
-    }
-
-    if (runnerProvider === "codex") {
-      return await executeCodexTask(params, progress, abortController, startedAt, shortId, reporter);
-    }
-
-    const { query } = await import("@anthropic-ai/claude-agent-sdk");
-    const resumeRawId = resumeId ? assertProviderSession(resumeId, "claude") : undefined;
-    const memoryBlock = buildMemoryPrompt();
-    const identityLine = IDENTITY_LINE_TASK;
-
-    const subagentCalls: string[] = [];
-    const SUBAGENT_PER_ROLE_CAP = parseInt(process.env.MINICLAW_SUBAGENT_ROLE_CAP ?? "4", 10);
-
-    const subagents = loadSubagents();
-    const subagentNames = listSubagentNames();
-    const mcpServers = loadMcpServers();
-    const supervisorBlock = buildSupervisorBlock(subagentNames);
-    const claudeFlagSettings = config.claude.disableHooks
-      ? { disableAllHooks: true as const }
-      : undefined;
-
-    const appendParts = [identityLine, supervisorBlock, memoryBlock].filter(Boolean);
-
-    const hasAttachments = !!(params.attachmentBlocks && params.attachmentBlocks.length);
-    const promptParam = hasAttachments
-      ? (async function* () {
-          yield {
-            type: "user" as const,
-            parent_tool_use_id: null,
-            message: {
-              role: "user" as const,
-              content: [
-                ...params.attachmentBlocks!,
-                { type: "text" as const, text: params.prompt },
-              ],
-            },
-          };
-        })()
-      : params.prompt;
-
-    const q = query({
-      prompt: promptParam,
-      options: {
-        model: config.claudeModel,
-        cwd: params.cwd,
-        permissionMode: "acceptEdits",
-        settingSources: config.claude.settingSources,
-        ...(claudeFlagSettings ? { settings: claudeFlagSettings } : {}),
-        systemPrompt: {
-          type: "preset",
-          preset: "claude_code",
-          append: appendParts.join("\n\n"),
-        },
-        allowedTools: [
-          "Read", "Write", "Edit", "Bash", "Glob",
-          "WebSearch", "WebFetch", "Agent",
-          "mcp__exa__web_search_exa",
-          "mcp__exa__get_code_context_exa",
-          "mcp__context7__resolve-library-id",
-          "mcp__context7__query-docs",
-          ...allowedEastmoneyJywgMcpTools(mcpServers),
-          ...allowedFutuStockMcpTools(mcpServers),
-        ],
-        agents: subagents,
-        ...(Object.keys(mcpServers).length ? { mcpServers } : {}),
-        canUseTool: async (toolName, input) => {
-          const skillName = (input as { skill?: string }).skill;
-          const BLOCKED_SKILLS = new Set(["triad", "triad-resume"]);
-          if (toolName === "Skill" && skillName && BLOCKED_SKILLS.has(skillName)) {
-            return {
-              behavior: "deny" as const,
-              message: `${skillName} 在 miniclaw 中被禁用（它是面向 CLI 交互的 slash command，与 SDK Discord bot 流程不匹配）。请改用项目角色化 subagent 完成多阶段任务。`,
-            };
-          }
-          if (toolName === "Agent" || toolName === "Task") {
-            const role = String((input as { subagent_type?: string }).subagent_type ?? "general");
-            const used = subagentCalls.filter((r) => r === role).length;
-            if (used >= SUBAGENT_PER_ROLE_CAP) {
-              return {
-                behavior: "deny" as const,
-                message: `subagent ${role} 已被调用 ${used} 次（cap=${SUBAGENT_PER_ROLE_CAP}）。继续重复调用很可能是失控循环——请整合现有输出回复用户，或换不同角色，必要时升级用户。`,
-              };
-            }
-            subagentCalls.push(role);
-          }
-          if (toolName === "Bash") {
-            const cmd = String((input as { command?: string }).command ?? "");
-            const DESTRUCTIVE = /\b(rm\s+-rf?\s+\/(?!tmp\/|var\/folders\/)|sudo\b|npm\s+publish|pnpm\s+publish|git\s+push\s+--force(?!-with-lease))\b/;
-            if (DESTRUCTIVE.test(cmd)) {
-              return {
-                behavior: "deny" as const,
-                message: `Bash 命令被拒绝：检测到高风险破坏性操作 (${cmd.slice(0, 80)})。如确需执行，请由用户手动操作。`,
-              };
-            }
-          }
-          return { behavior: "allow" as const, updatedInput: input };
-        },
-        ...(config.defaultMaxTurns !== undefined ? { maxTurns: config.defaultMaxTurns } : {}),
-        ...(config.defaultBudgetUsd !== undefined ? { maxBudgetUsd: config.defaultBudgetUsd } : {}),
-        abortController,
-        ...(resumeRawId ? { resume: resumeRawId } : {}),
-      },
+    const progressState: ViewProgressState = { lines: [], turns: 0, toolCount: 0 };
+    const runnerResult = await runner.run({
+      taskId: params.taskId,
+      prompt: params.prompt,
+      cwd: params.cwd,
+      ...(params.resumeSessionId ? { resumeSessionId: params.resumeSessionId } : {}),
+      ...(params.attachmentBlocks ? { attachmentBlocks: params.attachmentBlocks } : {}),
+      ...(params.attachmentCodexInputs ? { attachmentCodexInputs: params.attachmentCodexInputs } : {}),
+      signal: abortController.signal,
+      onViewEvent: (event) => handleTaskViewEvent(event, params, progress, progressState, outputMode === "embed"),
+      onTraceEvent: (eventType, options) => recordRunnerTrace(reporter, eventType, options),
     });
+    const lastResult = normalizeRunnerResult(params.taskId, abortController, runnerResult);
+    const toolCallLog = lastResult.progressLines ?? progressState.lines;
+    const toolStep = lastResult.toolCount ?? progressState.toolCount;
 
-    let sessionId = "";
-    let lastResult: TaskResult | null = null;
-    const toolCallLog: string[] = [];
-    let toolStep = 0;
-
-    for await (const msg of q) {
-      if (abortController.signal.aborted) {
-        lastResult = {
-          success: false,
-          sessionId,
-          costUsd: 0,
-          durationMs: 0,
-          turns: 0,
-          result: wasInterrupted(params.taskId) ? interruptedReason(params.taskId) : "任务已被用户取消",
-        };
-        break;
-      }
-
-      switch (msg.type) {
-        case "system": {
-          if ("session_id" in msg && msg.session_id) {
-            sessionId = formatSessionId("claude", msg.session_id);
-            updateTask(params.taskId, { session_id: sessionId });
-            reporter.sessionStarted(sessionId, "claude");
-          }
-          break;
-        }
-
-        case "assistant": {
-          const blocks = msg.message.content;
-          const parentId = (msg as { parent_tool_use_id?: string }).parent_tool_use_id;
-          const indent = parentId ? "  ↳ " : "";
-
-          for (const block of blocks) {
-            if (block.type !== "tool_use") continue;
-            toolStep++;
-            const input = (block.input ?? {}) as Record<string, unknown>;
-            const icon = toolIcon(block.name);
-            const short = toolShortName(block.name);
-            const detail = formatToolDetail(block.name, input);
-            const display = detail.length > 60 ? detail.slice(0, 60) + "..." : detail;
-            const line = `${indent}${icon} ${short}${display ? `: "${display}"` : ""}`;
-
-            const lastIdx = toolCallLog.length - 1;
-            if (lastIdx >= 0) {
-              const last = toolCallLog[lastIdx];
-              const baseLast = last.replace(/\s+\(×\d+\)$/, "");
-              if (baseLast === line) {
-                const m = last.match(/\(×(\d+)\)$/);
-                const next = m ? parseInt(m[1], 10) + 1 : 2;
-                toolCallLog[lastIdx] = `${line} (×${next})`;
-                continue;
-              }
-            }
-            toolCallLog.push(line);
-            reporter.toolEvent("claude", line, {
-              tool_name: block.name,
-              parent_tool_use_id: parentId,
-            });
-          }
-
-          if (toolCallLog.length) {
-            await progress.update(buildRealtimeProgress(toolCallLog, lastResult?.turns ?? 0, toolStep), params.channel);
-          }
-          break;
-        }
-
-        case "result": {
-          const costUsd = msg.subtype === "success" ? msg.total_cost_usd : 0;
-          const durationMs = msg.duration_ms;
-          const turns = msg.num_turns;
-          const result = msg.subtype === "success"
-            ? msg.result
-            : ("errors" in msg ? msg.errors.join("\n") : "Unknown error");
-          sessionId = msg.session_id ? formatSessionId("claude", msg.session_id) : sessionId;
-          const tokensSummary = formatUsage((msg as { usage?: unknown }).usage);
-
-          lastResult = {
-            success: msg.subtype === "success",
-            sessionId,
-            costUsd,
-            durationMs,
-            turns,
-            result,
-            ...(tokensSummary ? { tokensSummary } : {}),
-          };
-          if (!lastResult.success) {
-            reporter.providerError("claude", result, { subtype: msg.subtype });
-          }
-          break;
-        }
-      }
-    }
-
-    if (!lastResult) {
-      lastResult = {
-        success: false,
-        sessionId,
-        costUsd: 0,
-        durationMs: 0,
-        turns: 0,
-        result: wasInterrupted(params.taskId)
-          ? interruptedReason(params.taskId)
-          : wasCancelled(params.taskId, abortController) ? "任务已被用户取消" : "任务被中断或无结果",
-      };
-    }
-
-    const status = finalTaskStatus(params.taskId, abortController, lastResult.success);
-    updateTask(params.taskId, {
-      session_id: lastResult.sessionId,
-      status,
-      result_summary: lastResult.result.slice(0, 10000),
-      cost_usd: lastResult.costUsd,
-      duration_ms: lastResult.durationMs,
-      completed_at: new Date().toISOString(),
-    });
-    reporter.finished(status, {
-      provider: "claude",
-      duration_ms: lastResult.durationMs,
-      turns: lastResult.turns,
-      cost_usd: lastResult.costUsd,
-      session_id: lastResult.sessionId,
-      tool_count: toolStep,
-    });
-
-    const wallMs = Date.now() - startedAt;
-    const subagentTrace = subagentCalls.length
-      ? ` subagents=[${subagentCalls.join("→")}]`
-      : "";
-    log.info(
-      `${lastResult.success ? "✓" : "✗"} ${shortId} ${lastResult.success ? "done" : "failed"} ` +
-      `turns=${lastResult.turns} cost=$${lastResult.costUsd.toFixed(4)} ` +
-      `sdk=${lastResult.durationMs}ms wall=${wallMs}ms tools=${toolStep}` +
-      subagentTrace +
-      (lastResult.tokensSummary ? ` ${lastResult.tokensSummary}` : "")
-    );
+    completeTaskRow(params, abortController, lastResult, runner, reporter, toolStep);
+    logTaskCompletion(shortId, runner, lastResult, toolStep, startedAt);
 
     if (outputMode === "raw") {
       // 程序化触发（cron 等）：直接发结果文本，不带任何元数据装饰

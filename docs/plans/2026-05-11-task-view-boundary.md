@@ -275,3 +275,23 @@ Record the final module boundary, changed files, and verification commands here 
   - `pnpm run typecheck` passed.
   - `pnpm run lint` passed.
   - `pnpm ralph:verify -- --task task-view-boundary` passed with profile `task-runtime`, including fake runtime, trace reporter, task event store, typecheck, lint, and `pnpm run quality:docs`.
+
+### 2026-05-12 Slice 5: Runner Extraction
+
+- Scope: completed Target 2. Extracted fake, Codex, and Claude runtime execution behind `TaskRunner` modules while keeping `executeTask(params)` as the public orchestration shell. Discord rendering remains in `src/agent/task.ts` for the next target.
+- `src/agent/runners/fake-task-runner.ts`: wraps deterministic E2E fake task execution behind `TaskRunner`, emits provider-neutral view events, emits trace facts, and returns final progress metadata used by the existing Discord renderer.
+- `src/agent/runners/codex-task-runner.ts`: moved Codex SDK thread setup, timeout handling, stream event parsing, Codex session id formatting, token summary extraction, and Codex tool progress conversion out of `task.ts`.
+- `src/agent/runners/claude-task-runner.ts`: moved Claude SDK query setup, MCP/subagent/tool permission wiring, stream event parsing, Claude session id formatting, usage formatting, and Claude tool progress conversion out of `task.ts`.
+- `src/agent/task.ts`: now selects a `TaskRunner`, passes abort `signal`, attachments, view callbacks, and trace callbacks into the runner, updates `session_id` from `session_started` view events, performs final DB lifecycle writes after runner completion, and keeps existing raw/embed Discord output behavior.
+- `src/agent/runners/types.ts` and `src/agent/task-view-events.ts`: extended the runner contract with attachment inputs, trace event options, `TaskRunnerResult` progress metadata, and `countAsTool` for progress rendering compatibility.
+- `src/agent/supervisor.ts` and `src/agent/runners/progress-lines.ts`: extracted shared prompt and progress-line helpers needed by runners without importing `task.ts`.
+- Tests:
+  - `src/agent/__tests__/task-runners.test.ts`: added runner-focused coverage for exported Claude/Codex runners and fake runner view/trace/result behavior.
+  - `src/agent/__tests__/task-helpers.test.ts`: updated runner selection expectations to assert actual runner providers.
+  - `src/agent/__tests__/task-runner-types.test.ts`: updated trace callback coverage for the richer trace options contract.
+- Verification:
+  - `pnpm vitest run src/agent/__tests__/task-runners.test.ts src/agent/__tests__/task-runner-types.test.ts src/agent/__tests__/task-helpers.test.ts src/agent/__tests__/e2e-fake-runtime.test.ts` passed: 4 files, 29 tests.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm ralph:verify -- --task task-view-boundary` passed with profile `task-runtime`, including fake runtime, trace reporter, task event store, typecheck, lint, and `pnpm run quality:docs`.
+  - `pnpm run build` passed; generated ignored `dist/` artifacts were removed after verification.

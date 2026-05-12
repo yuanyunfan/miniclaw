@@ -28,6 +28,7 @@ export interface ToolProgressViewEvent {
   title: string;
   detail?: string;
   severity?: TaskViewEventSeverity;
+  countAsTool?: boolean;
 }
 
 export interface AssistantProgressViewEvent {
@@ -132,6 +133,7 @@ export const taskViewEvents = {
     title: string;
     detail?: string;
     severity?: TaskViewEventSeverity;
+    countAsTool?: boolean;
   }): ToolProgressViewEvent {
     const detail = optionalText(params.detail);
     return {
@@ -140,6 +142,7 @@ export const taskViewEvents = {
       title: requiredText(params.title, "tool activity"),
       ...(detail ? { detail } : {}),
       ...(params.severity ? { severity: params.severity } : {}),
+      ...(params.countAsTool !== undefined ? { countAsTool: params.countAsTool } : {}),
     };
   },
 

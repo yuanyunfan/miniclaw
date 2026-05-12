@@ -16,7 +16,7 @@ describe("TaskRunner boundary types", () => {
           provider,
           cwd: input.cwd,
         });
-        input.onTraceEvent("runner_started", { provider });
+        input.onTraceEvent("runner_started", { payload: { provider } });
 
         return {
           success: true,
