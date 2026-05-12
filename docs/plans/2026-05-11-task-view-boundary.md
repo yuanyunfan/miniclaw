@@ -205,3 +205,17 @@ Record the final module boundary, changed files, and verification commands here 
   - `pnpm run typecheck` passed.
   - `pnpm run lint` passed.
   - `pnpm run quality:docs` passed.
+
+### 2026-05-12 Slice 2: TaskViewEvent Boundary Types
+
+- Scope: first remaining independently shippable boundary slice after Slice 1 tests. Added the provider-neutral `TaskViewEvent` contract and helper builders only; no runner, Discord reporter, DB lifecycle, or `executeTask` wiring changed.
+- `src/agent/task-view-events.ts`: added the minimal view-event union for task/session/turn/progress/error/completion/failure events, a bounded text redaction helper for user-visible event text, and builder helpers that redact progress/error/result text without importing Discord or SQLite types.
+- `src/agent/__tests__/task-view-events.test.ts`: covered lifecycle event shape, secret redaction for progress/error/final result text, bounded progress text, and non-mutating task completion result cloning.
+- Verification:
+  - `pnpm vitest run src/agent/__tests__/task-view-events.test.ts` passed: 1 file, 5 tests.
+  - `pnpm vitest run src/agent/__tests__/e2e-fake-runtime.test.ts` passed: 1 file, 4 tests.
+  - `pnpm vitest run src/agent/__tests__/task-reporter.test.ts` passed: 1 file, 1 test.
+  - `pnpm vitest run src/store/__tests__/task-events.test.ts` passed: 1 file, 1 test.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm ralph:verify -- --task task-view-boundary` passed with profile `task-runtime`, including `pnpm run quality:docs`.
