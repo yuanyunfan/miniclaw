@@ -79,11 +79,11 @@ pnpm ralph:task -- --task task-view-boundary --execute --merge-main --push-main
 2. It checks that the controller checkout is clean.
 3. It creates an isolated Git worktree under `../miniclaw-ralph/<task-id>` by default.
 4. It starts Codex with `codex exec --ephemeral --sandbox workspace-write`.
-5. Codex receives a strict prompt: implement the largest coherent reviewable phase from the plan, prefer behavior wiring plus focused tests, do not commit, do not push, update the plan notes, and mark the plan `Status:` as `done` only when the full plan is genuinely complete and verified.
+5. Codex receives a strict prompt: implement the largest coherent reviewable phase from the plan, prefer behavior wiring plus focused tests, do not commit, do not push, update the plan notes, include a specific commit title/description block in the final response, and mark the plan `Status:` as `done` only when the full plan is genuinely complete and verified.
 6. If the plan `Status:` is closed, the controller syncs the matching queue entry in `docs/ralph/queue.json` before verification and commit.
 7. The controller checks for a non-empty diff.
 8. The controller runs `pnpm ralph:verify`.
-9. If verification passes, the controller commits the worktree branch.
+9. If verification passes, the controller commits the worktree branch with the parsed per-run commit subject/body, falling back to the queue title only when Codex omitted the metadata block.
 10. If `--push` is set, the controller pushes the task branch to `origin`.
 
 `ralph:loop` wraps this single-task execution:
@@ -101,7 +101,7 @@ pnpm ralph:task -- --task task-view-boundary --execute --merge-main --push-main
 - `ralph:run` defaults to dry-run.
 - Codex is instructed not to commit or push.
 - Codex is instructed to avoid micro-slices; a Ralph iteration should normally complete a plan phase rather than only one helper, type, or test.
-- Raw Codex JSONL/stdout/stderr logs are written under ignored `.ralph/`.
+- Raw Codex JSONL/stdout/stderr logs are written under ignored `.ralph/`; the terminal only shows summarized redacted progress events.
 - The controller refuses to run from a dirty checkout unless `--force` is used.
 - `--push` is explicit; local branch commit is the default execute behavior.
 - `--push-main` is separate from `--push`: it publishes the integrated base branch, not the task branch.
@@ -118,3 +118,4 @@ pnpm ralph:task -- --task task-view-boundary --execute --merge-main --push-main
 - Raw run logs are local-only under `.ralph/`.
 - Automatic retry is not implemented.
 - Parallel execution is possible by choosing different tasks, but `ralph:loop --merge-main` is intentionally serial.
+- Commit titles are per-run when Codex provides the required final metadata block; the queue `commit_title` remains only a fallback.

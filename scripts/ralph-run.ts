@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
-import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 interface RalphQueue {
@@ -59,6 +59,12 @@ interface RunPlan {
   verifyProfile: string;
   commitTitle: string;
   prompt: string;
+}
+
+interface CommitMetadata {
+  title: string;
+  description: string[];
+  source: "codex-final" | "fallback";
 }
 
 function parseArgs(argv: string[]): Args {
@@ -152,6 +158,10 @@ function printHelp(): void {
     "  --sandbox <mode>          Default: workspace-write",
     "",
   ].join("\n"));
+}
+
+function logRalph(message: string): void {
+  process.stdout.write(`[ralph] ${message}\n`);
 }
 
 function gitText(args: string[], cwd?: string): string {
@@ -301,6 +311,12 @@ function buildPrompt(task: RalphTask, verifyProfile: string): string {
     "8. If the full plan is genuinely complete and verified, update the plan `Status:` to `done`; Ralph will sync the queue status from that closed plan status.",
     "9. Preserve user work and do not revert unrelated changes.",
     "10. Leave the final diff in the worktree; Ralph will verify and commit it.",
+    "11. End your final response with this exact commit metadata block, and put nothing after it:",
+    "    Ralph commit title: <type: short specific English title for this phase, max 72 chars>",
+    "    Ralph commit description:",
+    "    - <what changed in this phase>",
+    "    - <why this phase is reviewable on its own>",
+    "    - <verification evidence you ran>",
     "",
     "Start now.",
     "",
@@ -369,6 +385,7 @@ function createOrReuseWorktree(plan: RunPlan, args: Args): void {
 }
 
 function runCommand(command: string, commandArgs: string[], cwd: string): void {
+  logRalph(`run: ${command} ${commandArgs.join(" ")}`);
   const result = spawnSync(command, commandArgs, {
     cwd,
     stdio: "inherit",
@@ -380,7 +397,120 @@ function runCommand(command: string, commandArgs: string[], cwd: string): void {
   }
 }
 
-function runCodex(plan: RunPlan, args: Args): void {
+function redactForConsole(value: string): string {
+  return value
+    .replace(/(Authorization:\s*Bearer\s+)[^\s"']+/gi, "$1***")
+    .replace(/(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, "$1***")
+    .replace(/([?&](?:api_?key|token|access_token|refresh_token|exaApiKey)=)[^&\s"']+/gi, "$1***")
+    .replace(/((?:api_?key|token|access_token|refresh_token|exaApiKey)\s*[:=]\s*)[^\s"']+/gi, "$1***");
+}
+
+function truncateForConsole(value: string, max = 180): string {
+  const singleLine = value.replace(/\s+/g, " ").trim();
+  if (singleLine.length <= max) return singleLine;
+  return `${singleLine.slice(0, max - 1)}…`;
+}
+
+function relativeToWorktree(plan: RunPlan, path: string): string {
+  const rel = relative(plan.worktreePath, path);
+  return rel.startsWith("..") || isAbsolute(rel) ? basename(path) : rel;
+}
+
+function describeFileChanges(plan: RunPlan, changes: unknown): string {
+  if (!Array.isArray(changes)) return "file changes";
+  const paths = changes
+    .map((change) => {
+      if (!change || typeof change !== "object") return undefined;
+      const path = "path" in change && typeof change.path === "string" ? change.path : undefined;
+      const kind = "kind" in change && typeof change.kind === "string" ? change.kind : undefined;
+      if (!path) return undefined;
+      return `${kind ?? "change"} ${relativeToWorktree(plan, path)}`;
+    })
+    .filter((value): value is string => Boolean(value));
+  if (paths.length === 0) return "file changes";
+  const preview = paths.slice(0, 4).join(", ");
+  const suffix = paths.length > 4 ? `, +${paths.length - 4} more` : "";
+  return `${preview}${suffix}`;
+}
+
+function handleCodexJsonLine(plan: RunPlan, line: string): void {
+  const trimmed = line.trim();
+  if (!trimmed) return;
+
+  let event: unknown;
+  try {
+    event = JSON.parse(trimmed);
+  } catch {
+    logRalph(`codex output: ${truncateForConsole(redactForConsole(trimmed))}`);
+    return;
+  }
+
+  if (!event || typeof event !== "object") return;
+  const eventType = "type" in event && typeof event.type === "string" ? event.type : "event";
+  const item = "item" in event && event.item && typeof event.item === "object" ? event.item : undefined;
+  const itemType = item && "type" in item && typeof item.type === "string" ? item.type : undefined;
+
+  if (eventType === "thread.started") {
+    logRalph("codex thread started");
+    return;
+  }
+  if (eventType === "turn.started") {
+    logRalph("codex turn started");
+    return;
+  }
+  if (eventType === "turn.completed") {
+    logRalph("codex turn completed");
+    return;
+  }
+
+  if (itemType === "command_execution") {
+    const command = item && "command" in item && typeof item.command === "string" ? item.command : "(command)";
+    const commandText = truncateForConsole(redactForConsole(command), 220);
+    if (eventType === "item.started") {
+      logRalph(`codex command started: ${commandText}`);
+      return;
+    }
+    if (eventType === "item.completed") {
+      const exitCode = item && "exit_code" in item ? item.exit_code : undefined;
+      const failed = typeof exitCode === "number" && exitCode !== 0;
+      logRalph(`codex command ${failed ? "failed" : "completed"}: exit=${exitCode ?? "unknown"} ${commandText}`);
+      return;
+    }
+  }
+
+  if (itemType === "file_change") {
+    if (eventType === "item.started") {
+      const changes = item && "changes" in item ? item.changes : undefined;
+      logRalph(`codex file change started: ${describeFileChanges(plan, changes)}`);
+      return;
+    }
+    if (eventType === "item.completed") {
+      logRalph("codex file change completed");
+      return;
+    }
+  }
+
+  if (itemType === "agent_message" && eventType === "item.completed") {
+    const text = item && "text" in item && typeof item.text === "string" ? item.text : "";
+    const firstLine = text.split(/\r?\n/).find((line) => line.trim());
+    if (firstLine) logRalph(`codex message: ${truncateForConsole(redactForConsole(firstLine), 220)}`);
+    return;
+  }
+
+  if (itemType === "error" && eventType === "item.completed") {
+    const message = item && "message" in item && typeof item.message === "string" ? item.message : "error";
+    logRalph(`codex error event: ${truncateForConsole(redactForConsole(message), 220)}`);
+  }
+}
+
+async function endStream(stream: ReturnType<typeof createWriteStream>): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    stream.on("error", reject);
+    stream.end(resolve);
+  });
+}
+
+async function runCodex(plan: RunPlan, args: Args): Promise<void> {
   const codexArgs = [
     "exec",
     "--ephemeral",
@@ -395,21 +525,66 @@ function runCodex(plan: RunPlan, args: Args): void {
   if (args.model) codexArgs.push("--model", args.model);
   codexArgs.push("-");
 
-  const result = spawnSync(args.codexBin, codexArgs, {
+  const stdoutPath = join(plan.rawRunDir, "codex.jsonl");
+  const stderrPath = join(plan.rawRunDir, "codex.stderr.log");
+  const stdoutFile = createWriteStream(stdoutPath);
+  const stderrFile = createWriteStream(stderrPath);
+  const startedAt = Date.now();
+  let stdoutBuffer = "";
+  let stderrBytes = 0;
+  let lastStderrNoticeAt = 0;
+
+  logRalph(`codex start: ${args.codexBin} ${codexArgs.slice(0, -1).join(" ")} -`);
+  logRalph(`codex logs: ${plan.rawRunDir}`);
+
+  const child = spawn(args.codexBin, codexArgs, {
     cwd: plan.worktreePath,
-    input: plan.prompt,
-    encoding: "utf8",
-    maxBuffer: 200 * 1024 * 1024,
+    stdio: ["pipe", "pipe", "pipe"],
     env: process.env,
   });
 
-  writeFileSync(join(plan.rawRunDir, "codex.jsonl"), result.stdout ?? "");
-  writeFileSync(join(plan.rawRunDir, "codex.stderr.log"), result.stderr ?? "");
+  const heartbeat = setInterval(() => {
+    const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
+    logRalph(`codex still running: ${elapsedSeconds}s elapsed`);
+  }, 30_000);
+
+  child.stdout.setEncoding("utf8");
+  child.stdout.on("data", (chunk: string) => {
+    stdoutFile.write(chunk);
+    stdoutBuffer += chunk;
+    const lines = stdoutBuffer.split(/\r?\n/);
+    stdoutBuffer = lines.pop() ?? "";
+    for (const line of lines) handleCodexJsonLine(plan, line);
+  });
+
+  child.stderr.on("data", (chunk: Buffer) => {
+    stderrFile.write(chunk);
+    stderrBytes += chunk.length;
+    const now = Date.now();
+    if (now - lastStderrNoticeAt > 15_000) {
+      lastStderrNoticeAt = now;
+      logRalph(`codex stderr activity: ${stderrBytes} bytes captured in ${stderrPath}`);
+    }
+  });
+
+  child.stdin.end(plan.prompt);
+
+  const result = await new Promise<{ status: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
+    child.on("error", reject);
+    child.on("close", (status, signal) => resolve({ status, signal }));
+  });
+
+  clearInterval(heartbeat);
+  if (stdoutBuffer.trim()) handleCodexJsonLine(plan, stdoutBuffer);
+  await Promise.all([endStream(stdoutFile), endStream(stderrFile)]);
 
   if (result.status !== 0) {
     const suffix = result.signal ? ` signal=${result.signal}` : "";
     throw new Error(`codex exec failed (${result.status ?? "unknown"}${suffix}); logs: ${plan.rawRunDir}`);
   }
+
+  const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
+  logRalph(`codex completed: ${elapsedSeconds}s elapsed`);
 }
 
 function changedFiles(cwd: string): string[] {
@@ -438,22 +613,96 @@ function runVerify(plan: RunPlan): void {
   ], plan.worktreePath);
 }
 
-function commitWorktree(plan: RunPlan): string {
+function readCodexFinal(plan: RunPlan): string | undefined {
+  const path = join(plan.rawRunDir, "codex-final.md");
+  if (!existsSync(path)) return undefined;
+  return readFileSync(path, "utf8");
+}
+
+function normalizeCommitTitle(value: string | undefined): string | undefined {
+  const title = value?.replace(/^[-*]\s*/, "").replace(/^`|`$/g, "").trim();
+  if (!title) return undefined;
+  return truncateForConsole(title.replace(/\s+/g, " "), 72);
+}
+
+function parseCommitDescription(text: string, startIndex: number, firstLine: string): string[] {
+  const afterMarker = text.slice(startIndex);
+  const lines = [firstLine, ...afterMarker.split(/\r?\n/)]
+    .map((line) => line.trimEnd())
+    .filter((line) => !/^Ralph commit title:/i.test(line))
+    .filter((line) => !/^Ralph commit description:/i.test(line));
+  const useful: string[] = [];
+  for (const line of lines) {
+    if (useful.length >= 8) break;
+    if (!line.trim() && useful.length === 0) continue;
+    if (/^<oai-mem-citation>/i.test(line)) break;
+    useful.push(truncateForConsole(line, 140));
+  }
+  while (useful.length > 0 && !useful[useful.length - 1]?.trim()) useful.pop();
+  return useful;
+}
+
+function commitMetadataFromCodexFinal(plan: RunPlan): CommitMetadata | undefined {
+  const text = readCodexFinal(plan);
+  if (!text) return undefined;
+
+  const titleMatch = /^Ralph commit title:\s*(.+)$/im.exec(text);
+  const descriptionMatch = /^Ralph commit description:\s*(.*)$/im.exec(text);
+  const title = normalizeCommitTitle(titleMatch?.[1]);
+  if (!title) return undefined;
+
+  const description = descriptionMatch
+    ? parseCommitDescription(text, (descriptionMatch.index ?? 0) + descriptionMatch[0].length, descriptionMatch[1] ?? "")
+    : [];
+
+  return {
+    title,
+    description: description.length > 0 ? description : [`Ralph completed a verified phase for ${plan.task.title ?? plan.task.id}.`],
+    source: "codex-final",
+  };
+}
+
+function fallbackCommitMetadata(plan: RunPlan, diff: string[]): CommitMetadata {
+  const changed = diff.slice(0, 10).map((file) => `- ${file}`);
+  return {
+    title: plan.commitTitle,
+    description: [
+      `Ralph completed a verified phase for ${plan.task.title ?? plan.task.id}.`,
+      "",
+      "Changed files:",
+      ...changed,
+    ],
+    source: "fallback",
+  };
+}
+
+function commitMetadata(plan: RunPlan, diff: string[]): CommitMetadata {
+  return commitMetadataFromCodexFinal(plan) ?? fallbackCommitMetadata(plan, diff);
+}
+
+function commitWorktree(plan: RunPlan, diff: string[]): { sha: string; metadata: CommitMetadata } {
+  const metadata = commitMetadata(plan, diff);
   git(["add", "-A"], plan.worktreePath);
   git([
     "commit",
     "-m",
-    plan.commitTitle,
+    metadata.title,
     "-m",
     [
+      ...metadata.description,
+      "",
       `Ralph task: ${plan.task.id}`,
       `Plan: ${plan.task.plan}`,
       `Run: ${plan.runId}`,
+      `Commit metadata source: ${metadata.source}`,
       "",
       "Co-authored-by: Codex <codex@openai.com>",
     ].join("\n"),
   ], plan.worktreePath);
-  return gitText(["rev-parse", "--short", "HEAD"], plan.worktreePath);
+  return {
+    sha: gitText(["rev-parse", "--short", "HEAD"], plan.worktreePath),
+    metadata,
+  };
 }
 
 function writeRunMetadata(plan: RunPlan, args: Args, status: string, extra: Record<string, unknown> = {}): void {
@@ -495,7 +744,7 @@ function printDryRun(plan: RunPlan, args: Args): void {
   ].join("\n"));
 }
 
-try {
+async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const repoRoot = gitText(["rev-parse", "--show-toplevel"]);
   process.chdir(repoRoot);
@@ -509,8 +758,13 @@ try {
 
   if (!args.execute) {
     printDryRun(plan, args);
-    process.exit(0);
+    return;
   }
+
+  logRalph(`task start: ${plan.task.id} (${plan.task.title ?? plan.task.plan})`);
+  logRalph(`branch: ${plan.branch}`);
+  logRalph(`worktree: ${plan.worktreePath}`);
+  logRalph(`run: ${plan.runId}`);
 
   ensureClean(repoRoot, args.force);
   mkdirSync(dirname(plan.rawRunDir), { recursive: true });
@@ -523,7 +777,7 @@ try {
     runCommand("pnpm", ["install", "--frozen-lockfile", "--offline"], plan.worktreePath);
   }
 
-  runCodex(plan, args);
+  await runCodex(plan, args);
 
   const queueSync = syncQueueStatusFromPlan(plan);
   if (queueSync?.queue_status_synced) {
@@ -539,8 +793,11 @@ try {
   if (!args.skipVerify) runVerify(plan);
 
   let commitSha: string | undefined;
+  let commitMessage: CommitMetadata | undefined;
   if (!args.skipCommit) {
-    commitSha = commitWorktree(plan);
+    const commit = commitWorktree(plan, diff);
+    commitSha = commit.sha;
+    commitMessage = commit.metadata;
   }
 
   if (args.push) {
@@ -550,6 +807,9 @@ try {
   writeRunMetadata(plan, args, "completed", {
     changed_files: diff,
     commit_sha: commitSha,
+    commit_title: commitMessage?.title,
+    commit_description: commitMessage?.description,
+    commit_metadata_source: commitMessage?.source,
     ...(queueSync ?? {}),
   });
 
@@ -558,11 +818,14 @@ try {
     `- task: ${plan.task.id}`,
     `- branch: ${plan.branch}`,
     `- commit: ${commitSha ?? "(not committed)"}`,
+    `- commit title: ${commitMessage?.title ?? "(not committed)"}`,
     `- logs: ${plan.rawRunDir}`,
     "",
   ].join("\n"));
-} catch (err) {
+}
+
+main().catch((err: unknown) => {
   const message = err instanceof Error ? err.message : String(err);
   process.stderr.write(`ralph-run error: ${message}\n`);
   process.exit(1);
-}
+});
