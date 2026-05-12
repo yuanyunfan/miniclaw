@@ -61,7 +61,7 @@ export const DOCS_DRIFT_REQUIREMENTS: DocsDriftRequirement[] = [
   },
   {
     id: "config",
-    sourcePatterns: ["src/config.ts", "config.example.yaml"],
+    sourcePatterns: ["src/config.ts", "src/config/**", "config.example.yaml"],
     requiredAnyOf: ["docs/architecture.md", "docs/features/*.md"],
     reason: "Configuration schema, default, or example changed",
   },

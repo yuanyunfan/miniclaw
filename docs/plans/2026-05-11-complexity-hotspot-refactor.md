@@ -468,3 +468,27 @@ For each completed slice, record:
   - `pnpm ralph:verify -- --task complexity-hotspot-refactor --profile standard` passed: `pnpm run typecheck`, `pnpm run lint`, `pnpm run quality:docs`.
 - Public API changes: no function signature changes. Task trace exported models/Markdown now redact raw session ids as hashed identifiers.
 - Follow-up cleanup: Slice F is now complete. Remaining complexity-hotspot work should move to Slice G config schema-first refactor or another explicitly selected hotspot; future provider dry-run/diagnostic bundles should reuse `src/privacy/diagnostic-redaction.ts`.
+
+### 2026-05-12 - Slice G Config Load/Env/Resolve/E2E Boundary Extraction
+
+- Slice name: Slice G partial, config facade and pure boundary extraction.
+- Changed files:
+  - `src/config.ts`: reduced to compatibility facade re-exporting `src/config/index.ts`.
+  - `src/config/index.ts`: kept runtime config assembly, `config`, `assertE2eSafeRuntimePath()`, public type re-exports, process env base URL side effects, and current YAML/env/default behavior.
+  - `src/config/load.ts`: extracted YAML file loading, default config path behavior, explicit missing config errors, and raw object schema validation handoff.
+  - `src/config/env.ts`: extracted env precedence, raw config path reads, scalar/boolean/number/list parsing, enum/inherit parsing, and unlimited budget/turn parsing.
+  - `src/config/schema.ts`: added Zod-backed raw object schema plus shared enum value constants.
+  - `src/config/resolve.ts`: extracted `~` path resolution and `routing.channel_defaults.*.cwd` resolution.
+  - `src/config/e2e-guard.ts`: extracted pure E2E temp-dir isolation checks.
+  - `src/config/types.ts`: moved public config type aliases and `SmtpEmailNotificationConfig`.
+  - `src/config/__tests__/config-boundaries.test.ts`: added focused tests for load/env/resolve/schema/E2E guard boundaries.
+  - `src/quality/docs-drift.ts`, `src/quality/__tests__/docs-drift.test.ts`, `docs/quality-gates.md`: extended docs drift mapping to cover future `src/config/**` changes.
+  - `docs/architecture.md`, `docs/continuous-improvement-report.md`, `docs/plans/2026-05-11-config-schema-first.md`: documented the new boundary and remaining runtime assembly work.
+- Behavior parity tests:
+  - `pnpm vitest run src/quality/__tests__/docs-drift.test.ts src/config/__tests__/config-boundaries.test.ts src/__tests__/config.test.ts src/e2e/__tests__/safety.test.ts` passed, 36 tests.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm run quality:docs` passed.
+  - `pnpm run build` passed; generated ignored `dist/` artifacts were removed after verification.
+- Public API changes: none. Existing `import { config } from "../config.js"` call sites remain valid, and no user-facing config fields/env keys changed.
+- Follow-up cleanup: continue Slice G by splitting `src/config/index.ts` into domain runtime builders, adding deeper domain schemas, and freezing the final runtime config object after mutation-prone tests are migrated.

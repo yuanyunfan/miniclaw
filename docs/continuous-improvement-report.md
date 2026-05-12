@@ -23,9 +23,9 @@
 - `src/agent/task.ts` 已保留 task lifecycle orchestration，Claude/Codex/fake runner parsing、progress line formatting 和 Discord view reporting 已经拆出。
 - `src/bot.ts` 已保留 Discord event registration、draining guard 和外层 route shell；MessageCreate、button、slash 和 Smart Router 路径已经拆到 `src/bot/*`。
 - `src/providers/types.ts` 的 provider contract 仍主要是 `PreProviderResult`：`text`、`attachments`、`skipTask`、`commit`。
-- `src/config.ts` 仍集中处理 YAML/env loading、validation、path resolution、agent provider、doctor、connectivity、routing 和 attachment 配置。
+- `src/config.ts` 已降为兼容 facade；YAML loading、env/type coercion reader、raw schema/enums、path resolution 和 E2E isolation guard 已拆到 `src/config/*`，剩余复杂度集中在 `src/config/index.ts` 的 runtime config assembly。
 - `src/providers/market-intel/collectors/official.ts` 已从集中 collector 降为 public facade；官方证据采集现在由 source-family collectors、scoring-input assembly、HTTP/shared helpers 和 parser fixtures 分层承载。
-- 最大复杂度热点仍集中在 `src/store/db.ts`、`src/config.ts` 和 `src/ops/doctor.ts`；`src/ops/doctor-repair.ts` 已从 repair god module 降为 facade + incident state orchestration，后续重点是防止 policy/path/prompt/verification/worktree/agent/report 边界回流。
+- 最大复杂度热点仍集中在 `src/config/index.ts` 和 `src/ops/doctor.ts`；`src/store/db.ts`、`src/config.ts` 和 `src/ops/doctor-repair.ts` 已降为 facade，后续重点是防止 repository/config helper/repair helper 边界回流。
 
 ## P1: 任务展示边界仍未拆开
 
@@ -142,7 +142,7 @@
 当前文件规模显示复杂度中心仍然集中，但 bot/task/doctor scheduler 和 DB migration 已完成第一轮边界拆分，剩余热点应继续按职责推进：
 
 - `src/store/db.ts`：137 行，已保留 DB init/schema facade、compatibility re-export 和 Stage scene helpers；live connection 已拆到 `src/store/connection.ts`，`tasks`、`chat_history`、`smart_router_decisions` helper 已拆到 `src/store/repositories/*`。
-- `src/config.ts`：811 行。
+- `src/config.ts`：1 行兼容 facade；`src/config/index.ts`：559 行，仍承担最终 runtime config assembly。
 - `src/ops/doctor-repair.ts`：452 行，已保留 repair facade + incident/repair_run 状态编排；repair policy、path allowlist、prompt build、verification gate、worktree/branch/dependency/commit/push Git 操作、Codex repair agent streaming、CLI/report formatting 已拆到 `src/ops/doctor-repair/*`。
 - `src/providers/market-intel/collectors/official.ts`：35 行 public facade；source-family collector orchestration 已拆到 `collectors/macro.ts`、`news.ts`、`events.ts`，evidence section assembly / derived risk 已拆到 `collectors/scoring-input.ts`，HTTP client 与 source status/warning helpers 已拆到 `collectors/official-http.ts`、`official-shared.ts`。
 - `src/ops/doctor.ts`：734 行。
@@ -258,32 +258,27 @@ state lifecycle 也需要明确：
 
 ### 当前问题
 
-`src/config.ts` 仍集中处理：
+`src/config.ts` 已经变成兼容 facade，但 `src/config/index.ts` 仍集中组装最终 runtime config：
 
-- YAML/env loading。
-- type coercion。
-- validation。
-- path resolution。
-- E2E isolation guard。
 - agent runtime config。
 - doctor/connectivity config。
 - Smart Router config。
 - attachments/audio transcription config。
 
-虽然项目已经依赖 `zod`，但主配置还没有形成 schema-first 分层。继续添加 provider、runtime、transport 和 doctor 配置会让 review 成本继续升高。
+YAML loading、env/type coercion reader、raw object/enums、path resolution 和 E2E isolation guard 已经拆到 `src/config/*` 并可独立测试；剩余问题是各 domain 还没有 schema-first runtime builder，最终 config object 也还没有冻结。
 
 ### 建议改动
 
-1. 新增 `src/config/load.ts`：只负责 YAML/env/source loading。
-2. 新增 `src/config/schema.ts`：集中 Zod schema 或 typed validators。
-3. 新增 `src/config/resolve.ts`：统一 home path、default 和 inherit resolution。
-4. 新增 `src/config/runtime.ts`：输出最终 readonly config object。
-5. 新配置先进入 schema，再进入 runtime config，不再直接追加到单一 `config.ts`。
+1. 按 domain 继续拆 `src/config/index.ts`：agent/Codex/Claude、routing/Smart Router、storage/state、doctor/connectivity、attachments/audio、notifications。
+2. 为每个 domain 增加 Zod schema 或 typed validators，并把 allowed enum/default/env key mapping 放在同一 review surface。
+3. 新增 `src/config/runtime.ts` 或 domain runtime builders，输出最终 readonly config object。
+4. 冻结最终 runtime config，避免测试或运行时意外 mutation。
+5. 新配置先进入 schema，再进入 runtime config，不再直接追加到 `src/config/index.ts` 的大对象。
 
 ### 验收标准
 
 - 新增配置字段时有 schema、默认值、env key 和测试。
-- E2E guard 能独立测试，不依赖全量 config import side effect。
+- E2E guard 已能独立测试，不依赖全量 config import side effect；后续保持这一边界。
 - provider/doctor/runtime 配置可以分文件 review。
 
 ## P1: Provider Framework 还不是统一 SDK

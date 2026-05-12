@@ -167,3 +167,26 @@ Only remove the facade after imports are migrated and tested.
 
 Record moved modules, compatibility behavior, env precedence, and verification commands here when implemented.
 
+### 2026-05-12 - Config Load/Env/Resolve/E2E Boundary Extraction
+
+- Scope: first schema-first refactor phase. Split pure config loading, env/type coercion, path resolution, raw schema/enums, E2E guard, and public config types out of the all-in-one runtime module while preserving the existing `src/config.ts` import facade and user-facing config shape.
+- Changed files:
+  - `src/config.ts`: reduced to compatibility facade re-exporting `src/config/index.ts`.
+  - `src/config/index.ts`: kept runtime config assembly, `config`, `assertE2eSafeRuntimePath()`, public type re-exports, process env base URL side effects, and existing default/env precedence behavior.
+  - `src/config/load.ts`: extracted `MINICLAW_CONFIG` path resolution, YAML loading, missing explicit config handling, and raw object schema handoff.
+  - `src/config/env.ts`: extracted raw config reader, env precedence, scalar coercion, enum/inherit parsing, boolean/number/list parsing, and unlimited budget/turn semantics.
+  - `src/config/schema.ts`: added Zod-backed raw object validation plus shared enum value constants.
+  - `src/config/resolve.ts`: extracted home path and channel default cwd resolution.
+  - `src/config/e2e-guard.ts`: extracted pure E2E temp-dir isolation checks so guard behavior can be tested without importing the runtime singleton.
+  - `src/config/types.ts`: moved public config type aliases and notification config interface.
+  - `src/config/__tests__/config-boundaries.test.ts`: added boundary tests for YAML loading, explicit missing config behavior, raw schema rejection, env precedence, blank-env unlimited semantics, path resolution, and E2E guard behavior.
+  - `src/quality/docs-drift.ts`, `src/quality/__tests__/docs-drift.test.ts`, `docs/quality-gates.md`: updated docs drift mapping so future `src/config/**` changes require config docs sync.
+  - `docs/architecture.md`, `docs/continuous-improvement-report.md`: documented the new config facade/module boundary and remaining runtime assembly hotspot.
+- Behavior parity tests:
+  - `pnpm vitest run src/quality/__tests__/docs-drift.test.ts src/config/__tests__/config-boundaries.test.ts src/__tests__/config.test.ts src/e2e/__tests__/safety.test.ts` passed, 36 tests.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm run quality:docs` passed.
+  - `pnpm run build` passed; generated ignored `dist/` artifacts were removed after verification.
+- Public API changes: none. Existing imports from `src/config.ts` / `../config.js` remain valid, and no user-facing YAML/env key shape changed.
+- Follow-up cleanup: split `src/config/index.ts` by domain runtime builders, add deeper domain Zod schemas/default/env mapping tests, and freeze the final runtime config object when test mutation patterns have been removed.

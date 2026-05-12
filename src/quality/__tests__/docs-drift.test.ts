@@ -68,6 +68,15 @@ describe("docs drift requirement matching", () => {
     expect(hasRequiredDocChange(findings[0].requirement, ["scripts/quality-docs.ts", "docs/quality-gates.md"])).toBe(true);
   });
 
+  it("maps split config modules to config docs requirements", () => {
+    const findings = findDocsDriftFindings(["src/config/env.ts"]);
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0].requirement.id).toBe("config");
+    expect(findings[0].sourcePaths).toEqual(["src/config/env.ts"]);
+    expect(hasRequiredDocChange(findings[0].requirement, ["src/config/env.ts", "docs/architecture.md"])).toBe(true);
+  });
+
   it("requires prompt docs and prompt snapshot tests for prompt asset changes", () => {
     const missingSnapshot = findDocsDriftFindings(["prompts/supervisor.md", "docs/prompts.md"]);
 

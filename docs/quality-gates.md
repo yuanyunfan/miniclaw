@@ -241,7 +241,7 @@ MiniClaw 是 docs-first 项目，长期维护依赖 `docs/architecture.md`、`do
 - 改 `src/cron/**` 或 `scripts/cron-*`：必须同步 `docs/architecture.md` 或一个 `docs/features/*.md`。
 - 改 `src/store/db.ts`、`src/store/schema.ts` 或 `src/store/**`：必须同步 `docs/architecture.md`。
 - 改 `src/providers/**`：必须同步 `docs/architecture.md` 或一个 `docs/features/*.md`。
-- 改 `src/config.ts` 或 `config.example.yaml`：必须同步 `docs/architecture.md` 或一个 `docs/features/*.md`。
+- 改 `src/config.ts`、`src/config/**` 或 `config.example.yaml`：必须同步 `docs/architecture.md` 或一个 `docs/features/*.md`。
 - 改 `prompts/**` 或 `src/agent/prompts.ts`：必须同步 `docs/prompts.md`，并同步 `src/__tests__/prompt-snapshot.test.ts`。
 - 改 `scripts/quality-*`、`src/quality/**`、`.github/workflows/**` 或 `scripts/git-hooks/**`：必须同步 `docs/quality-gates.md`。
 - 改 `src/ops/doctor*` 或 `scripts/doctor*`：必须同步 `docs/features/13-auto-doctor.md`。
