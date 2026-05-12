@@ -51,6 +51,13 @@ export interface CronRunSummaryRow {
   last_status: CronRunStatus;
 }
 
+export interface CronRunFailureWindow {
+  job_name: string;
+  failure_count: number;
+  latest_failure_at: string | null;
+  latest_success_at: string | null;
+}
+
 export interface CreateCronRunInput {
   id?: string;
   jobName: string;
@@ -306,4 +313,37 @@ export function summarizeCronRuns(options: SummarizeCronRunsOptions = {}): CronR
      ORDER BY datetime(last_started_at) DESC, job_name ASC
      LIMIT @limit`
   ).all({ ...where.params, limit }).map((row) => row as CronRunSummaryRow);
+}
+
+export function getCronRunFailureWindow(jobName: string, since: Date | string): CronRunFailureWindow {
+  const sinceIso = toIso(since);
+  const latestSuccess = getDb().prepare(
+    `SELECT COALESCE(completed_at, started_at) AS at
+     FROM cron_runs
+     WHERE job_name = @job_name
+       AND status = 'success'
+     ORDER BY COALESCE(completed_at, started_at) DESC, id DESC
+     LIMIT 1`
+  ).get({ job_name: jobName }) as { at: string } | undefined;
+  const latestSuccessAt = latestSuccess?.at ?? null;
+  const row = getDb().prepare(
+    `SELECT
+       COUNT(*) AS failure_count,
+       MAX(COALESCE(completed_at, started_at)) AS latest_failure_at
+     FROM cron_runs
+     WHERE job_name = @job_name
+       AND status IN ('failed', 'retry_scheduled')
+       AND COALESCE(completed_at, started_at) >= @since
+       AND (@latest_success_at IS NULL OR COALESCE(completed_at, started_at) > @latest_success_at)`
+  ).get({
+    job_name: jobName,
+    since: sinceIso,
+    latest_success_at: latestSuccessAt,
+  }) as { failure_count: number; latest_failure_at: string | null };
+  return {
+    job_name: jobName,
+    failure_count: row.failure_count,
+    latest_failure_at: row.latest_failure_at,
+    latest_success_at: latestSuccessAt,
+  };
 }

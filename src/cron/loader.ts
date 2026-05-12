@@ -3,7 +3,14 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { load as yamlLoad } from "js-yaml";
 import cron from "node-cron";
-import type { CronJob, CronJobLoadResult, CronJobType, PreProviderPreflightMode } from "./types.js";
+import type {
+  CronJob,
+  CronJobCircuitBreakerConfig,
+  CronJobCooldownConfig,
+  CronJobLoadResult,
+  CronJobType,
+  PreProviderPreflightMode,
+} from "./types.js";
 import { isPreProviderName } from "../providers/index.js";
 
 const CRON_DIR_DEFAULT = join(homedir(), ".miniclaw/cron");
@@ -11,6 +18,13 @@ const VALID_TYPES: CronJobType[] = ["task", "script", "skill", "message"];
 const VALID_PRE_PROVIDER_PREFLIGHT_MODES: PreProviderPreflightMode[] = ["off", "health", "dry_run"];
 const MAX_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 const MAX_CONCURRENCY = 50;
+const MAX_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
+const MAX_CIRCUIT_FAILURE_THRESHOLD = 100;
+const MAX_CIRCUIT_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const MAX_CIRCUIT_OPEN_MS = 7 * 24 * 60 * 60 * 1000;
+const DEFAULT_CIRCUIT_FAILURE_THRESHOLD = 3;
+const DEFAULT_CIRCUIT_WINDOW_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_CIRCUIT_OPEN_MS = 60 * 60 * 1000;
 
 const EXAMPLE_YAML = `# 示例 cron job —— 默认 disabled，照抄改 name + enabled: true 即可
 # 文档: https://github.com/yuanyunfan/miniclaw#cron
@@ -30,6 +44,13 @@ type: message
 channel: "REPLACE_WITH_DISCORD_CHANNEL_ID"
 # timeout_ms: 1800000       # 可选：完整 job wall-clock 超时（毫秒）
 # max_concurrency: 1        # 可选：同名 job 并发上限，默认 1
+# cooldown:
+#   after_failure_ms: 1800000
+# circuit_breaker:
+#   enabled: true
+#   failure_threshold: 3
+#   window_ms: 86400000
+#   open_ms: 3600000
 content: "早安！今天 {{date}} ({{weekday}})。"
 `;
 
@@ -83,6 +104,50 @@ function parseOptionalPositiveInteger(
   return value;
 }
 
+function parseCooldownConfig(value: unknown, file: string): CronJobCooldownConfig | undefined {
+  if (value === undefined) return undefined;
+  if (!isPlainObject(value)) throw new Error(`${file}: 'cooldown' 必须是对象`);
+  const afterFailureMs = parseOptionalPositiveInteger(
+    value.after_failure_ms,
+    file,
+    "cooldown.after_failure_ms",
+    MAX_COOLDOWN_MS
+  );
+  if (afterFailureMs === undefined) {
+    throw new Error(`${file}: 'cooldown.after_failure_ms' 是必填正整数`);
+  }
+  return { after_failure_ms: afterFailureMs };
+}
+
+function parseCircuitBreakerConfig(value: unknown, file: string): CronJobCircuitBreakerConfig | undefined {
+  if (value === undefined) return undefined;
+  if (!isPlainObject(value)) throw new Error(`${file}: 'circuit_breaker' 必须是对象`);
+  if (value.enabled !== undefined && typeof value.enabled !== "boolean") {
+    throw new Error(`${file}: 'circuit_breaker.enabled' 必须是 boolean`);
+  }
+  return {
+    enabled: value.enabled !== false,
+    failure_threshold: parseOptionalPositiveInteger(
+      value.failure_threshold,
+      file,
+      "circuit_breaker.failure_threshold",
+      MAX_CIRCUIT_FAILURE_THRESHOLD
+    ) ?? DEFAULT_CIRCUIT_FAILURE_THRESHOLD,
+    window_ms: parseOptionalPositiveInteger(
+      value.window_ms,
+      file,
+      "circuit_breaker.window_ms",
+      MAX_CIRCUIT_WINDOW_MS
+    ) ?? DEFAULT_CIRCUIT_WINDOW_MS,
+    open_ms: parseOptionalPositiveInteger(
+      value.open_ms,
+      file,
+      "circuit_breaker.open_ms",
+      MAX_CIRCUIT_OPEN_MS
+    ) ?? DEFAULT_CIRCUIT_OPEN_MS,
+  };
+}
+
 function validateJob(raw: unknown, file: string): CronJob {
   if (!isPlainObject(raw)) throw new Error(`${file}: top-level must be a YAML object`);
   const r = raw as Record<string, unknown>;
@@ -102,6 +167,8 @@ function validateJob(raw: unknown, file: string): CronJob {
   const timezone = typeof r.timezone === "string" ? r.timezone : undefined;
   const timeoutMs = parseOptionalPositiveInteger(r.timeout_ms, file, "timeout_ms", MAX_TIMEOUT_MS);
   const maxConcurrency = parseOptionalPositiveInteger(r.max_concurrency, file, "max_concurrency", MAX_CONCURRENCY) ?? 1;
+  const cooldown = parseCooldownConfig(r.cooldown, file);
+  const circuitBreaker = parseCircuitBreakerConfig(r.circuit_breaker, file);
   const baseCommon = {
     name: r.name.trim(),
     schedule,
@@ -110,6 +177,8 @@ function validateJob(raw: unknown, file: string): CronJob {
     channel: r.channel,
     max_concurrency: maxConcurrency,
     ...(timeoutMs !== undefined ? { timeout_ms: timeoutMs } : {}),
+    ...(cooldown ? { cooldown } : {}),
+    ...(circuitBreaker ? { circuit_breaker: circuitBreaker } : {}),
   };
 
   if (type === "task") {

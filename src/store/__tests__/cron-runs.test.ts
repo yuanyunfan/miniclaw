@@ -4,6 +4,7 @@ import { setDb } from "../connection.js";
 import { ensureBaseSchema, runMigrations } from "../schema.js";
 import {
   createCronRun,
+  getCronRunFailureWindow,
   getCronRun,
   listCronRuns,
   markCronRunCompleted,
@@ -175,5 +176,51 @@ describe("cron run persistence", () => {
       last_status: "failed",
     });
     expect(getCronRun("daily-success")?.status).toBe("success");
+  });
+
+  it("computes failure windows from cron_runs and resets after a later success", () => {
+    createCronRun({
+      id: "window-failed-1",
+      jobName: "window-job",
+      jobType: "message",
+      startedAt: "2026-05-12T01:00:00.000Z",
+    });
+    markCronRunFailed("window-failed-1", {
+      completedAt: "2026-05-12T01:00:01.000Z",
+      errorMessage: "boom-1",
+    });
+    createCronRun({
+      id: "window-retry-1",
+      jobName: "window-job",
+      jobType: "message",
+      startedAt: "2026-05-12T01:10:00.000Z",
+    });
+    markCronRunFailed("window-retry-1", {
+      status: "retry_scheduled",
+      completedAt: "2026-05-12T01:10:01.000Z",
+      errorMessage: "boom-2",
+    });
+
+    expect(getCronRunFailureWindow("window-job", "2026-05-12T00:00:00.000Z")).toMatchObject({
+      failure_count: 2,
+      latest_failure_at: "2026-05-12T01:10:01.000Z",
+      latest_success_at: null,
+    });
+
+    createCronRun({
+      id: "window-success",
+      jobName: "window-job",
+      jobType: "message",
+      startedAt: "2026-05-12T01:20:00.000Z",
+    });
+    markCronRunCompleted("window-success", {
+      completedAt: "2026-05-12T01:20:01.000Z",
+    });
+
+    expect(getCronRunFailureWindow("window-job", "2026-05-12T00:00:00.000Z")).toMatchObject({
+      failure_count: 0,
+      latest_failure_at: null,
+      latest_success_at: "2026-05-12T01:20:01.000Z",
+    });
   });
 });

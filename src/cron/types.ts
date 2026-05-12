@@ -1,6 +1,17 @@
 export type CronJobType = "task" | "script" | "skill" | "message";
 export type PreProviderPreflightMode = "off" | "health" | "dry_run";
 
+export interface CronJobCooldownConfig {
+  after_failure_ms: number;
+}
+
+export interface CronJobCircuitBreakerConfig {
+  enabled: boolean;
+  failure_threshold: number;
+  window_ms: number;
+  open_ms: number;
+}
+
 export interface CronJobBase {
   name: string;
   schedule: string | string[];
@@ -18,6 +29,15 @@ export interface CronJobBase {
    * historical "skip if previous run is still active" behavior.
    */
   max_concurrency?: number;
+  /**
+   * Optional post-failure cooldown. New dispatches during the cooldown window
+   * are recorded as skipped rows in cron_runs instead of silently ignored.
+   */
+  cooldown?: CronJobCooldownConfig;
+  /**
+   * Optional rolling-window circuit breaker backed by durable cron_runs history.
+   */
+  circuit_breaker?: CronJobCircuitBreakerConfig;
 }
 
 export interface CronJobTask extends CronJobBase {

@@ -233,3 +233,17 @@ Record schema version, config defaults, query commands, and verification output 
   - `pnpm run lint` passed.
   - `pnpm run e2e:cron` passed: `Cron E2E fixture passed: cron-e2e-1778601087271`.
   - `pnpm run quality:docs` passed with schema v11.
+
+### 2026-05-12 Ralph iteration: cooldown and circuit breaker gates
+
+- Added cron YAML support for `cooldown.after_failure_ms` and `circuit_breaker` with bounded defaults for threshold/window/open duration.
+- Added `getCronRunFailureWindow()` so cooldown and circuit breaker decisions are computed from durable `cron_runs`, ignoring circuit-open/skipped rows and resetting after a later successful run.
+- Scheduler dispatch now applies cooldown/circuit gates after the same-job concurrency slot is acquired and before retry attempts begin; cooldown writes `cron_runs.status=skipped` / `error_category=cooldown`, while circuit breaker writes `cron_runs.status=circuit_open` / `error_category=circuit_open` plus open-until metadata.
+- JSON `state.json` compatibility remains intact: blocked dispatches still call `recordRun()` and expose `next_retry_at` for local status surfaces.
+- Updated `docs/architecture.md` cron section to document the new history-backed gates.
+- Verification:
+  - `pnpm exec vitest run src/cron/__tests__/loader.test.ts src/cron/__tests__/scheduler.test.ts src/store/__tests__/cron-runs.test.ts` passed: 3 files, 44 tests.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm run e2e:cron` passed: `Cron E2E fixture passed: cron-e2e-1778601660368`.
+  - `pnpm run quality:docs` passed with schema v11.

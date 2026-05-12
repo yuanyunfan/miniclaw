@@ -17,8 +17,10 @@ import { createLogger } from "../lib/log.js";
 import { DRAINING_MESSAGE, isDraining } from "../runtime/shutdown.js";
 import {
   createCronRun,
+  getCronRunFailureWindow,
   markCronRunCompleted,
   markCronRunFailed,
+  type CronRunStatus,
   type CronRunRow,
 } from "../store/cron-runs.js";
 import { appendIncidentEvent, createOrUpdateIncident } from "../store/incidents.js";
@@ -51,6 +53,14 @@ type CronRetryBeforeRun = (pending: { status: "woke" | "started"; jobName: strin
 type CronRetryRequestOptions = {
   beforeRun?: CronRetryBeforeRun;
   failureAlert?: CronFailureAlertRef;
+};
+
+type CronControlBlock = {
+  status: Extract<CronRunStatus, "skipped" | "circuit_open">;
+  category: "cooldown" | "circuit_open";
+  message: string;
+  nextAllowedAt: Date;
+  metadata: Record<string, unknown>;
 };
 
 export type CronRetryRequestResult =
@@ -122,6 +132,72 @@ function getJobMaxConcurrency(job: CronJob): number {
   const raw = job.max_concurrency ?? 1;
   if (!Number.isFinite(raw)) return 1;
   return Math.max(1, Math.floor(raw));
+}
+
+function subtractMs(date: Date, ms: number): Date {
+  return new Date(date.getTime() - ms);
+}
+
+function addMs(value: string, ms: number): Date | undefined {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return undefined;
+  return new Date(timestamp + ms);
+}
+
+function getCronControlBlock(job: CronJob, now = new Date()): CronControlBlock | undefined {
+  const circuit = job.circuit_breaker;
+  if (circuit?.enabled) {
+    const failureWindow = getCronRunFailureWindow(job.name, subtractMs(now, circuit.window_ms));
+    const openUntil = failureWindow.latest_failure_at
+      ? addMs(failureWindow.latest_failure_at, circuit.open_ms)
+      : undefined;
+    if (
+      openUntil
+      && openUntil.getTime() > now.getTime()
+      && failureWindow.failure_count >= circuit.failure_threshold
+    ) {
+      return {
+        status: "circuit_open",
+        category: "circuit_open",
+        message: `${job.name} skipped: circuit breaker open until ${openUntil.toISOString()}`,
+        nextAllowedAt: openUntil,
+        metadata: {
+          open_until: openUntil.toISOString(),
+          failure_count: failureWindow.failure_count,
+          failure_threshold: circuit.failure_threshold,
+          window_ms: circuit.window_ms,
+          open_ms: circuit.open_ms,
+          latest_failure_at: failureWindow.latest_failure_at,
+          latest_success_at: failureWindow.latest_success_at,
+        },
+      };
+    }
+  }
+
+  const cooldown = job.cooldown;
+  if (cooldown) {
+    const failureWindow = getCronRunFailureWindow(job.name, subtractMs(now, cooldown.after_failure_ms));
+    const cooldownUntil = failureWindow.latest_failure_at
+      ? addMs(failureWindow.latest_failure_at, cooldown.after_failure_ms)
+      : undefined;
+    if (cooldownUntil && cooldownUntil.getTime() > now.getTime()) {
+      return {
+        status: "skipped",
+        category: "cooldown",
+        message: `${job.name} skipped: cooldown active until ${cooldownUntil.toISOString()}`,
+        nextAllowedAt: cooldownUntil,
+        metadata: {
+          cooldown_until: cooldownUntil.toISOString(),
+          after_failure_ms: cooldown.after_failure_ms,
+          failure_count: failureWindow.failure_count,
+          latest_failure_at: failureWindow.latest_failure_at,
+          latest_success_at: failureWindow.latest_success_at,
+        },
+      };
+    }
+  }
+
+  return undefined;
 }
 
 function getRunningJobCount(jobName: string): number {
@@ -204,6 +280,10 @@ function markRunSkipped(
   startedAt: Date,
   msg: string,
   category: string,
+  options: {
+    status?: Extract<CronRunStatus, "skipped" | "circuit_open">;
+    metadata?: Record<string, unknown>;
+  } = {},
 ): CronRunRow {
   const run = createCronRun({
     jobName: job.name,
@@ -213,11 +293,12 @@ function markRunSkipped(
     startedAt,
   });
   return markCronRunCompleted(run.id, {
-    status: "skipped",
+    status: options.status ?? "skipped",
     completedAt: new Date(),
     durationMs: Date.now() - startedAt.getTime(),
     errorCategory: category,
     errorMessage: sanitizeCronError(msg, 1500),
+    metadata: options.metadata,
   });
 }
 
@@ -380,6 +461,20 @@ async function dispatch(
   const failureRunId = randomUUID();
   let failureAlert: CronFailureAlertRef | undefined = options.failureAlert;
   try {
+    const controlBlock = getCronControlBlock(job);
+    if (controlBlock) {
+      const startedAt = new Date();
+      log.warn(controlBlock.message);
+      markRunSkipped(job, scheduledAt, startedAt, controlBlock.message, controlBlock.category, {
+        status: controlBlock.status,
+        metadata: controlBlock.metadata,
+      });
+      recordRun(job.name, false, 0, controlBlock.message, {
+        next_retry_at: controlBlock.nextAllowedAt.toISOString(),
+      });
+      return;
+    }
+
     for (let attempt = 1; attempt <= policy.maxAttempts; attempt++) {
       const startedAt = Date.now();
       const cronRun = createCronRun({

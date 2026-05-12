@@ -8,7 +8,7 @@ import { __testables, requestCronRetryNow } from "../scheduler.js";
 import { getJobState, resetStateCache } from "../state.js";
 import type { CronJobMessage, CronJobTask } from "../types.js";
 import { setDb } from "../../store/connection.js";
-import { listCronRuns } from "../../store/cron-runs.js";
+import { createCronRun, listCronRuns, markCronRunFailed } from "../../store/cron-runs.js";
 import { getIncident } from "../../store/incidents.js";
 import { ensureBaseSchema, runMigrations } from "../../store/schema.js";
 
@@ -182,6 +182,122 @@ describe("cron scheduler dispatch", () => {
       attempt: 1,
       max_attempts: 1,
     });
+  });
+
+  it("cooldown active after a recent failure skips dispatch and records visible history", async () => {
+    let sends = 0;
+    const client = {
+      channels: {
+        fetch: async () => ({
+          isSendable: () => true,
+          send: async () => {
+            sends++;
+            return {};
+          },
+        }),
+      },
+    } as unknown as Client;
+    const failureCompletedAt = new Date(Date.now() - 100).toISOString();
+    const job = {
+      ...messageJob(),
+      name: "cooldown-history",
+      cooldown: { after_failure_ms: 60_000 },
+    };
+    createCronRun({
+      id: "cooldown-failed",
+      jobName: job.name,
+      jobType: job.type,
+      startedAt: new Date(Date.now() - 200).toISOString(),
+    });
+    markCronRunFailed("cooldown-failed", {
+      completedAt: failureCompletedAt,
+      errorMessage: "recent boom",
+    });
+
+    await __testables.dispatch(job, client);
+
+    expect(sends).toBe(0);
+    const rows = listCronRuns({ jobName: job.name, limit: 5 });
+    const cooldownRow = rows.find((row) => row.error_category === "cooldown");
+    expect(cooldownRow).toMatchObject({
+      status: "skipped",
+      error_category: "cooldown",
+    });
+    expect(cooldownRow?.error_message).toContain("cooldown active");
+    expect(JSON.parse(cooldownRow?.metadata_json ?? "{}")).toMatchObject({
+      after_failure_ms: 60_000,
+      latest_failure_at: failureCompletedAt,
+    });
+    expect(getJobState(job.name)?.last_error).toContain("cooldown active");
+    expect(getJobState(job.name)?.next_retry_at).toBeTruthy();
+  });
+
+  it("circuit breaker opens from recent cron_runs failures and records circuit_open rows", async () => {
+    let sends = 0;
+    const client = {
+      channels: {
+        fetch: async () => ({
+          isSendable: () => true,
+          send: async () => {
+            sends++;
+            return {};
+          },
+        }),
+      },
+    } as unknown as Client;
+    const job = {
+      ...messageJob(),
+      name: "circuit-history",
+      circuit_breaker: {
+        enabled: true,
+        failure_threshold: 2,
+        window_ms: 60_000,
+        open_ms: 60_000,
+      },
+    };
+    const firstFailureAt = new Date(Date.now() - 500).toISOString();
+    const secondFailureAt = new Date(Date.now() - 100).toISOString();
+    createCronRun({
+      id: "circuit-failed-1",
+      jobName: job.name,
+      jobType: job.type,
+      startedAt: firstFailureAt,
+    });
+    markCronRunFailed("circuit-failed-1", {
+      completedAt: firstFailureAt,
+      errorMessage: "boom-1",
+    });
+    createCronRun({
+      id: "circuit-failed-2",
+      jobName: job.name,
+      jobType: job.type,
+      startedAt: secondFailureAt,
+    });
+    markCronRunFailed("circuit-failed-2", {
+      status: "retry_scheduled",
+      completedAt: secondFailureAt,
+      errorMessage: "boom-2",
+    });
+
+    await __testables.dispatch(job, client);
+
+    expect(sends).toBe(0);
+    const rows = listCronRuns({ jobName: job.name, limit: 5 });
+    const circuitRow = rows.find((row) => row.status === "circuit_open");
+    expect(circuitRow).toMatchObject({
+      status: "circuit_open",
+      error_category: "circuit_open",
+    });
+    const metadata = JSON.parse(circuitRow?.metadata_json ?? "{}");
+    expect(metadata).toMatchObject({
+      failure_count: 2,
+      failure_threshold: 2,
+      latest_failure_at: secondFailureAt,
+      window_ms: 60_000,
+      open_ms: 60_000,
+    });
+    expect(metadata.open_until).toBeTruthy();
+    expect(getJobState(job.name)?.last_error).toContain("circuit breaker open");
   });
 
   it("失败后按 10m 起步指数退避重试，最多总尝试 5 次", async () => {

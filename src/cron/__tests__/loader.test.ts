@@ -168,6 +168,13 @@ type: message
 channel: "${VALID_CHANNEL}"
 timeout_ms: 1800000
 max_concurrency: 2
+cooldown:
+  after_failure_ms: 600000
+circuit_breaker:
+  enabled: true
+  failure_threshold: 4
+  window_ms: 86400000
+  open_ms: 3600000
 content: "早安 {{date}}"
 `);
     const r = loadCronJobs();
@@ -175,6 +182,13 @@ content: "早安 {{date}}"
     expect(r.jobs[0].enabled).toBe(true);
     expect(r.jobs[0].timeout_ms).toBe(1800000);
     expect(r.jobs[0].max_concurrency).toBe(2);
+    expect(r.jobs[0].cooldown).toEqual({ after_failure_ms: 600000 });
+    expect(r.jobs[0].circuit_breaker).toEqual({
+      enabled: true,
+      failure_threshold: 4,
+      window_ms: 86400000,
+      open_ms: 3600000,
+    });
     if (r.jobs[0].type === "message") {
       expect(r.jobs[0].content).toBe("早安 {{date}}");
     }
@@ -359,6 +373,33 @@ content: hi
 `);
     const r = loadCronJobs();
     expect(r.errors[0].error).toMatch(/max_concurrency.*正整数/);
+  });
+
+  it("cooldown.after_failure_ms 缺失或非法 → 拒绝", () => {
+    write("bad-cooldown.yaml", `
+name: x
+schedule: "0 9 * * *"
+type: message
+channel: "${VALID_CHANNEL}"
+cooldown: {}
+content: hi
+`);
+    const r = loadCronJobs();
+    expect(r.errors[0].error).toMatch(/cooldown\.after_failure_ms/);
+  });
+
+  it("circuit_breaker 字段非法 → 拒绝", () => {
+    write("bad-circuit.yaml", `
+name: x
+schedule: "0 9 * * *"
+type: message
+channel: "${VALID_CHANNEL}"
+circuit_breaker:
+  enabled: yes
+content: hi
+`);
+    const r = loadCronJobs();
+    expect(r.errors[0].error).toMatch(/circuit_breaker\.enabled/);
   });
 
   it("重名 job 第二个进 errors", () => {
