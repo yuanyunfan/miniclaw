@@ -180,7 +180,7 @@ flowchart TD
 
 ### LLM Capability Classifier
 
-LLM classifier 在 `src/routing/llm.ts`，只输出 capability JSON，不回答用户问题，也不直接决定最终 route。
+LLM classifier 在 `src/routing/llm.ts`，只输出 capability JSON，不回答用户问题，也不直接决定最终 route。底层 Anthropic-compatible、OpenAI-compatible 和 read-only Codex thread 调用都先包装成 `ModelClient`，因此 classifier 不拥有 `AgentRuntime` 的 workspace 写权限或 task 执行能力。
 
 调用条件：
 

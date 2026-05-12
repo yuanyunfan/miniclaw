@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { ModelClassificationInput, ModelClient } from "../../runtime/model-client.js";
 import { __testables } from "../llm.js";
 
 describe("capability LLM classifier helpers", () => {
@@ -52,6 +53,55 @@ describe("capability LLM classifier helpers", () => {
     expect(prompt).toContain("needs_current_info");
     expect(prompt).not.toContain("Heuristic capability hints");
     expect(prompt).not.toContain('"intent"');
+  });
+
+  it("routes capability classification through the ModelClient contract", async () => {
+    const complete = vi.fn();
+    let classifyCalls = 0;
+    let classifyInput: ModelClassificationInput<unknown> | undefined;
+    const classify = async <T>(input: ModelClassificationInput<T>): Promise<T> => {
+      classifyCalls++;
+      classifyInput = input as unknown as ModelClassificationInput<unknown>;
+      return input.parse(JSON.stringify({
+        needs_current_info: false,
+        needs_multi_step_research: false,
+        needs_file_write: false,
+        needs_shell: false,
+        estimated_effort: "short",
+        confidence: 0.77,
+        reason: "short conceptual answer",
+        evidence: ["model_client"],
+      }));
+    };
+    const client: ModelClient = {
+      id: "router-test-client",
+      kind: "model_client",
+      complete,
+      classify,
+    };
+
+    const parsed = await __testables.classifyRouteWithModelClient({
+      content: "解释一下 RSS 是什么",
+      channelId: "chat-1",
+      hasAttachments: false,
+    }, client);
+
+    expect(parsed.confidence).toBe(0.77);
+    expect(parsed.matchedSignals).toContain("llm_classifier");
+    expect(classifyCalls).toBe(1);
+    expect(classifyInput).toEqual(expect.objectContaining({
+      prompt: expect.stringContaining("Classify the capabilities needed"),
+      responseFormat: "json",
+      temperature: 0,
+      maxTokens: 500,
+      metadata: expect.objectContaining({
+        purpose: "smart_router_classifier",
+        channelId: "chat-1",
+      }),
+    }));
+    expect(complete).not.toHaveBeenCalled();
+    expect("capabilities" in client).toBe(false);
+    expect("startTask" in client).toBe(false);
   });
 
   it("classifies through a lightweight OpenAI-compatible chat completion API", async () => {
@@ -115,6 +165,14 @@ describe("capability LLM classifier helpers", () => {
       max_tokens: 500,
       response_format: { type: "json_object" },
     });
+    expect(body.messages[0]).toEqual({
+      role: "system",
+      content: "You classify MiniClaw smart-router capabilities. Return JSON only.",
+    });
+    expect(body.messages[1]).toEqual(expect.objectContaining({
+      role: "user",
+      content: expect.stringContaining("Classify the capabilities needed"),
+    }));
   });
 
   it("classifies through the Raven/Anthropic-compatible messages API", async () => {
