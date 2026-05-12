@@ -1,0 +1,80 @@
+{
+  "runAt": "2026-05-10T14:30:00.000Z",
+  "config": {
+    "market_scope": "us",
+    "portfolio_provider_config": "us-stock",
+    "active_window": {
+      "timezone": "Asia/Shanghai",
+      "start": "09:30",
+      "end": "01:00"
+    },
+    "markets": {
+      "us": {
+        "timezone": "America/New_York",
+        "sessions": [
+          {
+            "start": "09:30",
+            "end": "16:00"
+          }
+        ],
+        "holidays": []
+      }
+    },
+    "universe": {
+      "enabled": true,
+      "include_portfolio": true,
+      "include_watchlist": true,
+      "include_sources": false,
+      "max_symbols": 10,
+      "symbols": [
+        {
+          "symbol": "MSFT",
+          "name": "Microsoft",
+          "market": "us",
+          "source": "watchlist"
+        }
+      ],
+      "sources": []
+    },
+    "quote": {
+      "provider": "yahoo",
+      "interval": "5m",
+      "range": "60d",
+      "include_prepost": false,
+      "timeout_ms": 1000,
+      "concurrency": 2
+    },
+    "thresholds": {
+      "stock": {
+        "hour_abs_pct": 2,
+        "day_abs_pct": 4,
+        "bar_abs_pct": 0.6,
+        "bar_sigma_multiplier": 2,
+        "abnormal_bar_count": 3,
+        "same_direction_bars": 10,
+        "z_score": 2,
+        "urgent_z_score": 3
+      },
+      "etf": {
+        "hour_abs_pct": 1,
+        "day_abs_pct": 2,
+        "bar_abs_pct": 0.35,
+        "bar_sigma_multiplier": 2,
+        "abnormal_bar_count": 3,
+        "same_direction_bars": 10,
+        "z_score": 2,
+        "urgent_z_score": 3
+      },
+      "leveraged_etf": {
+        "hour_abs_pct": 2,
+        "day_abs_pct": 4,
+        "bar_abs_pct": 0.8,
+        "bar_sigma_multiplier": 2,
+        "abnormal_bar_count": 3,
+        "same_direction_bars": 10,
+        "z_score": 2.5,
+        "urgent_z_score": 3.5
+      }
+    }
+  }
+}

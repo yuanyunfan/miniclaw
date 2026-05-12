@@ -1,0 +1,178 @@
+{
+  "runAt": "2026-05-08T14:30:00.000Z",
+  "config": {
+    "market_scope": "us",
+    "portfolio_provider_config": "us-stock",
+    "active_window": {
+      "timezone": "Asia/Shanghai",
+      "start": "09:30",
+      "end": "01:00"
+    },
+    "markets": {
+      "us": {
+        "timezone": "America/New_York",
+        "sessions": [
+          {
+            "start": "09:30",
+            "end": "16:00"
+          }
+        ],
+        "holidays": []
+      }
+    },
+    "universe": {
+      "enabled": true,
+      "include_portfolio": true,
+      "include_watchlist": true,
+      "include_sources": true,
+      "max_symbols": 10,
+      "symbols": [
+        {
+          "symbol": "MSFT",
+          "name": "Microsoft",
+          "market": "us",
+          "source": "watchlist"
+        }
+      ],
+      "sources": [
+        {
+          "type": "yahoo_screener",
+          "name": "fixture-gainers",
+          "market": "us",
+          "enabled": true,
+          "limit": 5,
+          "scr_id": "day_gainers"
+        }
+      ]
+    },
+    "quote": {
+      "provider": "yahoo",
+      "interval": "5m",
+      "range": "60d",
+      "include_prepost": false,
+      "timeout_ms": 1000,
+      "concurrency": 2
+    },
+    "thresholds": {
+      "stock": {
+        "hour_abs_pct": 2,
+        "day_abs_pct": 4,
+        "bar_abs_pct": 0.6,
+        "bar_sigma_multiplier": 2,
+        "abnormal_bar_count": 3,
+        "same_direction_bars": 10,
+        "z_score": 2,
+        "urgent_z_score": 3
+      },
+      "etf": {
+        "hour_abs_pct": 1,
+        "day_abs_pct": 2,
+        "bar_abs_pct": 0.35,
+        "bar_sigma_multiplier": 2,
+        "abnormal_bar_count": 3,
+        "same_direction_bars": 10,
+        "z_score": 2,
+        "urgent_z_score": 3
+      },
+      "leveraged_etf": {
+        "hour_abs_pct": 2,
+        "day_abs_pct": 4,
+        "bar_abs_pct": 0.8,
+        "bar_sigma_multiplier": 2,
+        "abnormal_bar_count": 3,
+        "same_direction_bars": 10,
+        "z_score": 2.5,
+        "urgent_z_score": 3.5
+      }
+    }
+  },
+  "portfolioPayload": {
+    "cny_summary": {
+      "fx_rates": {
+        "USD": 7.1
+      }
+    },
+    "sources": [
+      {
+        "status": "ok",
+        "provider": "futu-stock",
+        "label": "Fixture US",
+        "payload": {
+          "positions_summary": {
+            "top_positions": [
+              {
+                "code": "AAPL",
+                "name": "Apple",
+                "currency": "USD",
+                "instrument_type": "stock",
+                "daily_pnl": 10,
+                "pnl_value": 50,
+                "pnl_ratio": 1.25
+              }
+            ],
+            "top_gainers": [],
+            "top_losers": []
+          }
+        }
+      }
+    ]
+  },
+  "universeSymbols": [
+    {
+      "symbol": "NVDA",
+      "name": "Nvidia",
+      "market": "us",
+      "source": "universe:fixture-gainers"
+    }
+  ],
+  "quotes": {
+    "AAPL": {
+      "symbol": "AAPL",
+      "provider_symbol": "AAPL",
+      "market": "us",
+      "currency": "USD",
+      "previous_close": 100,
+      "bars": [
+        { "timestamp": "2026-05-08T13:30:00.000Z", "close": 100 },
+        { "timestamp": "2026-05-08T13:35:00.000Z", "close": 100.05 },
+        { "timestamp": "2026-05-08T13:40:00.000Z", "close": 100.1 },
+        { "timestamp": "2026-05-08T13:45:00.000Z", "close": 101.1 },
+        { "timestamp": "2026-05-08T13:50:00.000Z", "close": 102.11 },
+        { "timestamp": "2026-05-08T13:55:00.000Z", "close": 103.13 },
+        { "timestamp": "2026-05-08T14:00:00.000Z", "close": 104.16 },
+        { "timestamp": "2026-05-08T14:05:00.000Z", "close": 105.2 },
+        { "timestamp": "2026-05-08T14:10:00.000Z", "close": 106.25 },
+        { "timestamp": "2026-05-08T14:15:00.000Z", "close": 107.31 },
+        { "timestamp": "2026-05-08T14:20:00.000Z", "close": 108.38 },
+        { "timestamp": "2026-05-08T14:25:00.000Z", "close": 109.46 },
+        { "timestamp": "2026-05-08T14:30:00.000Z", "close": 110.55 },
+        { "timestamp": "2026-05-08T14:35:00.000Z", "close": 111.66 },
+        { "timestamp": "2026-05-08T14:40:00.000Z", "close": 112.78 }
+      ]
+    },
+    "MSFT": {
+      "symbol": "MSFT",
+      "provider_symbol": "MSFT",
+      "market": "us",
+      "currency": "USD",
+      "previous_close": 200,
+      "bars": [
+        { "timestamp": "2026-05-08T13:30:00.000Z", "close": 200 },
+        { "timestamp": "2026-05-08T13:35:00.000Z", "close": 200 },
+        { "timestamp": "2026-05-08T13:40:00.000Z", "close": 200 },
+        { "timestamp": "2026-05-08T13:45:00.000Z", "close": 200 },
+        { "timestamp": "2026-05-08T13:50:00.000Z", "close": 200 },
+        { "timestamp": "2026-05-08T13:55:00.000Z", "close": 200 },
+        { "timestamp": "2026-05-08T14:00:00.000Z", "close": 200 },
+        { "timestamp": "2026-05-08T14:05:00.000Z", "close": 200 },
+        { "timestamp": "2026-05-08T14:10:00.000Z", "close": 200 },
+        { "timestamp": "2026-05-08T14:15:00.000Z", "close": 200 },
+        { "timestamp": "2026-05-08T14:20:00.000Z", "close": 200 },
+        { "timestamp": "2026-05-08T14:25:00.000Z", "close": 200 },
+        { "timestamp": "2026-05-08T14:30:00.000Z", "close": 200 },
+        { "timestamp": "2026-05-08T14:35:00.000Z", "close": 200 },
+        { "timestamp": "2026-05-08T14:40:00.000Z", "close": 200 }
+      ]
+    }
+  }
+}

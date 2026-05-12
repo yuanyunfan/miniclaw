@@ -1,6 +1,6 @@
 # Provider Framework SDK
 
-Status: in_progress
+Status: done
 Date: 2026-05-11
 
 ## Background
@@ -264,3 +264,26 @@ Record pilot provider, manifest fields, CLI commands, cron integration state, an
   - `pnpm run lint` passed.
   - `pnpm run quality:docs` passed: D1 docs drift check passed with 16 feature docs and schema v10.
   - `pnpm run ralph:verify -- --task provider-framework-sdk --profile provider` passed: provider tests 44 files, 129 tests; typecheck, lint, and `quality:docs` passed.
+
+2026-05-12 Ralph iteration 4:
+
+- Completed the replay fixture phase for the two migrated framework providers.
+- Added `stock-pulse` fixtures:
+  - `src/providers/stock-pulse/fixtures/us-hourly-replay.json` covers market-open replay across portfolio/watchlist/universe inputs, quote failure redaction, dry-run summary redaction, and delayed nested provider `commit()`.
+  - `src/providers/stock-pulse/fixtures/closed-market.json` covers no-data gating when the configured market is closed; portfolio and quote clients are not queried.
+- Added `eastmoney-jywg-readonly` fixtures:
+  - `src/providers/eastmoney-jywg-readonly/fixtures/replay-summary.json` covers sensitive account replay, health safe details, redacted dry-run, formatted prompt redaction, and delayed session persistence.
+  - `src/providers/eastmoney-jywg-readonly/fixtures/no-data.json` covers no asset/position data as a redacted warning state instead of a crash.
+  - `src/providers/eastmoney-jywg-readonly/fixtures/format-drift-error.json` covers `format_drift` failure categorization and token-like value redaction.
+- Added fixture tests:
+  - `src/providers/stock-pulse/__tests__/fixtures.test.ts`
+  - `src/providers/eastmoney-jywg-readonly/__tests__/fixtures.test.ts`
+- Documentation sync: updated `docs/features/16-provider-framework.md` with fixture locations/coverage and updated `docs/quality-gates.md` so migrated framework providers require replay/no-data/format-drift fixture coverage.
+- Full plan state: implementation plan items 1-9 are complete; stock-pulse remains the low-risk pilot, eastmoney-jywg-readonly covers sensitive provider behavior, cron preflight is opt-in, and replay fixtures now cover the remaining fixture/redaction goal. Status moved to `done` after Ralph provider verification passed.
+- Verification:
+  - `pnpm vitest run src/providers/stock-pulse/__tests__/fixtures.test.ts src/providers/eastmoney-jywg-readonly/__tests__/fixtures.test.ts` passed: 2 files, 5 tests.
+  - `pnpm vitest run src/providers` passed: 46 files, 134 tests.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm run quality:docs` passed: D1 docs drift check passed with 16 feature docs and schema v10.
+  - `pnpm run ralph:verify -- --task provider-framework-sdk --profile provider` passed: provider tests 46 files, 134 tests; typecheck, lint, and `quality:docs` passed.

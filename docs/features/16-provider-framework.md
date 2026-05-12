@@ -12,6 +12,7 @@
 - `src/providers/index.ts`: legacy pre-provider registry、framework manifest registry、health/dry-run runner。
 - `src/providers/stock-pulse/index.ts`: `stock-pulse` pilot provider module。
 - `src/providers/eastmoney-jywg-readonly/index.ts`: sensitive broker provider module，覆盖 session health、redacted dry-run 和 delayed session persistence。
+- `src/providers/stock-pulse/fixtures/*.json` / `src/providers/eastmoney-jywg-readonly/fixtures/*.json`: framework provider replay、no-data、format-drift fixture。
 - `scripts/provider-health.ts`: provider health CLI。
 - `scripts/provider-dry-run.ts`: provider dry-run CLI，默认只输出 redacted preview。
 - `src/cron/loader.ts` / `src/cron/runner-task.ts`: opt-in cron preflight 配置解析和执行 gate。
@@ -89,6 +90,21 @@ Health check 会加载 provider profile 和本地 session，并调用只读 `cli
 
 Dry-run 会执行一次只读 broker snapshot 采集和 formatter 前 structured payload 构建，但 preview 只输出 redacted summary：是否包含 report/snapshot/positions/asset summary、position/top-position/warning count 和 market session。即使 broker 返回 updated session，dry-run 也不会保存 session；只有兼容 adapter 返回的 `commit()` 在 downstream task 成功后才保存 updated session。
 
+## Replay Fixtures
+
+当前 fixture 覆盖已迁移的两个 framework provider：
+
+- `src/providers/stock-pulse/fixtures/us-hourly-replay.json`: market-open replay，覆盖 portfolio/watchlist/universe scan、quote failure redaction、dry-run summary redaction 和 nested provider delayed commit。
+- `src/providers/stock-pulse/fixtures/closed-market.json`: no-data gate，覆盖 market closed 时不查询 portfolio 或 quote source。
+- `src/providers/eastmoney-jywg-readonly/fixtures/replay-summary.json`: sensitive broker replay，覆盖 health safe details、redacted dry-run、formatted prompt redaction 和 session delayed commit。
+- `src/providers/eastmoney-jywg-readonly/fixtures/no-data.json`: no-position/no-asset warning state，覆盖 provider 不崩溃且只输出 redacted warning summary。
+- `src/providers/eastmoney-jywg-readonly/fixtures/format-drift-error.json`: format drift failure taxonomy，覆盖 `format_drift` 分类和 token-like value redaction。
+
+对应 tests：
+
+- `src/providers/stock-pulse/__tests__/fixtures.test.ts`
+- `src/providers/eastmoney-jywg-readonly/__tests__/fixtures.test.ts`
+
 ## CLI
 
 ```bash
@@ -124,7 +140,7 @@ pnpm provider:dry-run -- --provider stock-pulse --config us-hourly --json
 - dry-run 行为、redaction 规则和预览字段。
 - structured output schema/version。
 - formatter 输出 shape。
-- replay fixture 或 focused provider tests。
+- replay fixture 和 focused provider tests，至少覆盖 replay、redaction、no-data；对第三方页面/API provider 还要覆盖 format drift 分类。
 - `commit()` 的副作用和触发时机。
 - failure category 映射。
 
@@ -133,6 +149,7 @@ pnpm provider:dry-run -- --provider stock-pulse --config us-hourly --json
 本阶段的 focused 验证：
 
 ```bash
+pnpm vitest run src/providers/stock-pulse/__tests__/fixtures.test.ts src/providers/eastmoney-jywg-readonly/__tests__/fixtures.test.ts
 pnpm vitest run src/cron/__tests__/loader.test.ts src/cron/__tests__/runner-task.test.ts
 pnpm vitest run src/providers
 pnpm vitest run src/providers/eastmoney-jywg-readonly/__tests__/framework.test.ts
