@@ -60,6 +60,15 @@ Scheduler module boundary:
 - `src/ops/doctor-scheduler/notifications.ts` owns Discord summary and repair notification text plus channel delivery.
 - `src/ops/doctor-scheduler/repair-policy.ts` owns repair eligibility and rate-limit skip decisions.
 
+Read-only diagnosis module boundary:
+
+- `src/ops/doctor.ts` is the compatibility facade for `runDoctor()`, `parseDoctorArgs()`, `formatDoctorReport()`, `redactSensitive()`, and public doctor types.
+- `src/ops/doctor/args.ts` owns CLI flag parsing and `~` path resolution.
+- `src/ops/doctor/evidence.ts` owns local read-only evidence collection from SQLite, cron/connectivity state, PM2, Git, and logs.
+- `src/ops/doctor/diagnosis.ts` owns incident type, severity, category, repair eligibility, evidence summary, and next-action classification.
+- `src/ops/doctor/report.ts` owns CLI text report formatting.
+- `src/ops/doctor/redaction.ts` owns doctor-local redaction and value normalization helpers used before evidence reaches diagnosis/reporting.
+
 ## Evidence Sources
 
 - SQLite task DB: recent failed, interrupted, and long-running running tasks.

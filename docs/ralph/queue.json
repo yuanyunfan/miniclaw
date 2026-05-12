@@ -52,7 +52,7 @@
       "id": "complexity-hotspot-refactor",
       "title": "Complexity Hotspot Refactor Plan",
       "priority": "P1",
-      "status": "pending",
+      "status": "done",
       "plan": "docs/plans/2026-05-11-complexity-hotspot-refactor.md",
       "branch": "ralph/complexity-hotspot-refactor",
       "verify_profile": "standard",

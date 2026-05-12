@@ -4,9 +4,9 @@
 
 ## TLDR
 
-本报告只保留下一阶段仍需提升的内容，不再展开历史 WIP 收敛、已有能力清单或正向评价段落。对齐当前代码后，最值得优先推进的是任务执行展示边界、trace 用户视图、Smart Router 评估闭环、provider framework、DB/config 治理、incident center 和 docs drift 防护。
+本报告只保留下一阶段仍需提升的内容，不再展开历史 WIP 收敛、已有能力清单或正向评价段落。对齐当前代码后，最值得优先推进的是 trace/provider diagnostic bundle、Smart Router 评估闭环、provider framework、incident center 和 docs drift 防护。
 
-短期第一优先级是 `TaskViewEvent + Discord view reporter + trace export`。现在 `TaskReporter` 已经承担 SQLite 观测写入，但 SDK 事件归一化、Discord progress/final 渲染和用户可导出的完整 trace 还没有形成清晰边界，这会继续放大 `src/agent/task.ts` 的复杂度。
+`TaskViewEvent + runner + Discord view reporter + trace export` 的第一轮边界已经落地。短期第一优先级应转向 provider dry-run / diagnostic bundle 的一致治理，避免新的诊断入口绕开现有 redaction、trace 和 docs drift 规则。
 
 第二优先级是把运行态数据变成可评估闭环：Smart Router 不能只记录 classifier 结果，还要能关联用户按钮选择、实际创建 task、最终 task outcome 和 route correction；Auto Doctor 不能只产生 incident，还要让 incident、trace、repair run、ship preview 和 restart decision 可以被连续追踪。
 
@@ -14,7 +14,7 @@
 
 ## 本次对齐范围
 
-本次只对齐当前代码实现，不修改业务代码；文档以代码证据作为风险判断依据。
+本报告对齐当前代码实现；文档以代码证据作为风险判断依据。
 
 用于判断剩余改进项的代码证据：
 
@@ -25,36 +25,26 @@
 - `src/providers/types.ts` 的 provider contract 仍主要是 `PreProviderResult`：`text`、`attachments`、`skipTask`、`commit`。
 - `src/config.ts` 已降为兼容 facade；`src/config/index.ts` 只保留 public exports/proxy side effect；runtime config assembly 和 runtime freeze 已拆到 `src/config/runtime.ts`，agent/routing/storage/tasks/doctor/attachments/provider/MCP 等 domain defaults/env key mapping 已拆到 `src/config/domains/*`。
 - `src/providers/market-intel/collectors/official.ts` 已从集中 collector 降为 public facade；官方证据采集现在由 source-family collectors、scoring-input assembly、HTTP/shared helpers 和 parser fixtures 分层承载。
-- 最大复杂度热点现在集中在 `src/ops/doctor.ts`；`src/store/db.ts`、`src/config.ts`、`src/config/index.ts`、`src/config/runtime.ts` 和 `src/ops/doctor-repair.ts` 已降为 facade/orchestration shell，后续重点是防止 repository/config helper/repair helper 边界回流。
+- 复杂度热点第一轮拆分已覆盖 bot、task runtime、doctor scheduler、doctor repair、DB/config、market-intel official collector 和 read-only doctor diagnosis；后续重点是防止 repository/config/helper/diagnosis/report 边界回流。
 
-## P1: 任务展示边界仍未拆开
+## P1: 任务展示边界已拆开，后续防止职责回流
 
 ### 当前问题
 
-`src/agent/task.ts` 仍同时承担这些职责：
+`src/agent/task.ts` 已经退化为 task lifecycle orchestration shell，不再直接承载 Claude/Codex SDK event parsing、progress line formatting 或 Discord final rendering。当前剩余问题不是继续拆 `task.ts`，而是防止后续改动把职责写回错误层级：
 
-- active task lifecycle、cancel、interrupt、drain。
-- Claude Agent SDK 和 Codex SDK 分支执行。
-- SDK 原始事件解析。
-- tool progress line 格式化。
-- Discord progress update。
-- final embed/raw result 发送。
-- DB task 状态更新。
-- `TaskReporter` 观测事件写入。
-
-`TaskReporter` 现在是 observability reporter，不是 view reporter。它把事件写入 `task_events`，但不应该继续承载 Discord 展示职责。下一阶段需要明确区分：
-
-- `TaskTraceReporter` 或保留现名 `TaskReporter`：只负责结构化观测写入。
-- `TaskViewEvent`：统一 Claude/Codex/fake runtime 的用户可见事件。
-- `DiscordTaskViewReporter`：只负责把 `TaskViewEvent` 渲染成 Discord status、progress、final output 和附件。
+- provider SDK schema 变化应只改 `src/agent/runners/*`。
+- Discord 展示策略变化应只改 `src/discord/task-view-reporter.ts`。
+- SQLite trace 持久化应继续留在 `src/agent/task-reporter.ts` 和 `src/store/task-events.ts`。
+- 新 provider 或 fake runtime 不应直接 import Discord 类型。
 
 ### 建议改动
 
-1. 新增 `src/agent/task-view-events.ts`，定义最小 `TaskViewEvent` union。
-2. 拆出 `src/agent/runners/claude-task-runner.ts` 和 `src/agent/runners/codex-task-runner.ts`，只负责 SDK -> `TaskViewEvent` + `TaskResult`。
-3. 新增 `src/discord/task-view-reporter.ts`，负责 Discord progress/final rendering。
-4. 保留 `src/agent/task-reporter.ts` 作为 SQLite trace writer，避免和 Discord reporter 混名。
-5. 让 `executeTask` 逐步退化成 orchestration shell，而不是继续承载 SDK 和 Discord 细节。
+1. 已完成：`src/agent/task-view-events.ts` 定义 provider-neutral user-visible event contract。
+2. 已完成：`src/agent/runners/claude-task-runner.ts`、`codex-task-runner.ts`、`fake-task-runner.ts` 承接 SDK/fake runtime parsing。
+3. 已完成：`src/discord/task-view-reporter.ts` 承接 Discord progress/final rendering。
+4. 已完成：`src/agent/task-reporter.ts` 保持 SQLite trace writer 职责。
+5. 后续：新增 provider/runtime 时先补 runner-focused tests，不要扩大 `src/agent/task.ts`。
 
 ### 验收标准
 
@@ -139,13 +129,13 @@
 
 ### 当前问题
 
-当前文件规模显示复杂度中心仍然集中，但 bot/task/doctor scheduler 和 DB migration 已完成第一轮边界拆分，剩余热点应继续按职责推进：
+当前文件规模显示主要热点已经完成第一轮边界拆分，后续重点是防止职责重新集中：
 
 - `src/store/db.ts`：137 行，已保留 DB init/schema facade、compatibility re-export 和 Stage scene helpers；live connection 已拆到 `src/store/connection.ts`，`tasks`、`chat_history`、`smart_router_decisions` helper 已拆到 `src/store/repositories/*`。
 - `src/config.ts`：1 行兼容 facade；`src/config/index.ts`：23 行 public exports/proxy side effect；`src/config/runtime.ts`：99 行 runtime composition + E2E validation + freeze；domain builders 已拆到 `src/config/domains/*`。
 - `src/ops/doctor-repair.ts`：452 行，已保留 repair facade + incident/repair_run 状态编排；repair policy、path allowlist、prompt build、verification gate、worktree/branch/dependency/commit/push Git 操作、Codex repair agent streaming、CLI/report formatting 已拆到 `src/ops/doctor-repair/*`。
 - `src/providers/market-intel/collectors/official.ts`：35 行 public facade；source-family collector orchestration 已拆到 `collectors/macro.ts`、`news.ts`、`events.ts`，evidence section assembly / derived risk 已拆到 `collectors/scoring-input.ts`，HTTP client 与 source status/warning helpers 已拆到 `collectors/official-http.ts`、`official-shared.ts`。
-- `src/ops/doctor.ts`：734 行。
+- `src/ops/doctor.ts`：32 行 read-only doctor facade；CLI args、evidence collection、diagnosis、report formatting、redaction 和 public types 已拆到 `src/ops/doctor/*`。
 - `src/agent/task.ts`：367 行，已保留 task lifecycle orchestration，provider runners 和 Discord view reporter 已外置。
 - `src/ops/doctor-scheduler.ts`：310 行，已保留 scan orchestration，grouping/notification/repair-policy/state 已外置。
 - `src/bot.ts`：116 行，已保留 Discord event registration 和 route shell，message/interaction path 已外置。

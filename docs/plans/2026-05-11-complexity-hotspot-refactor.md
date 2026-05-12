@@ -1,6 +1,6 @@
 # Complexity Hotspot Refactor Plan
 
-Status: draft
+Status: done
 Date: 2026-05-11
 
 ## Background
@@ -511,3 +511,27 @@ For each completed slice, record:
   - `pnpm ralph:verify -- --task complexity-hotspot-refactor --profile standard` passed: `pnpm run typecheck`, `pnpm run lint`, `pnpm run quality:docs`.
 - Public API changes: none. Existing imports from `src/config.ts` / `../config.js` remain valid; no user-facing YAML/env key shape changed. Runtime config is frozen at runtime while preserving the prior public TypeScript shape for compatibility.
 - Follow-up cleanup: Slice G is complete. Remaining complexity-hotspot work should move to `src/ops/doctor.ts` or a separate explicit hotspot plan rather than adding config assembly back to `src/config/index.ts`.
+
+### 2026-05-12 - Final Hotspot Auto Doctor Diagnosis Boundary
+
+- Slice name: final complexity hotspot, read-only doctor diagnosis/evidence/report boundary. This closes the remaining `src/ops/doctor.ts` hotspot from the original background list; Slice B task runtime was completed in `docs/plans/2026-05-11-task-view-boundary.md`.
+- Changed files:
+  - `src/ops/doctor.ts`: reduced to the public facade for `runDoctor()`, `parseDoctorArgs()`, `formatDoctorReport()`, `redactSensitive()`, and doctor type exports.
+  - `src/ops/doctor/types.ts`: moved public doctor mode, evidence, diagnosis, report, args, command runner, and run options types.
+  - `src/ops/doctor/args.ts`: extracted CLI flag parsing and `~` path resolution.
+  - `src/ops/doctor/evidence.ts`: extracted read-only SQLite task/task_events, cron state, connectivity state, PM2, Git, and log evidence collection.
+  - `src/ops/doctor/diagnosis.ts`: extracted incident type, severity, category, repair eligibility, evidence summary, and next-action classification.
+  - `src/ops/doctor/report.ts`: extracted CLI text report formatting.
+  - `src/ops/doctor/redaction.ts`: extracted doctor-local redaction and value normalization helpers.
+  - `src/ops/__tests__/doctor-boundaries.test.ts`: added direct tests for diagnosis, report formatting, and doctor redaction boundaries.
+  - `docs/architecture.md`, `docs/features/13-auto-doctor.md`, `docs/continuous-improvement-report.md`: documented the final read-only doctor module boundary and updated remaining hotspot status.
+- Behavior parity tests:
+  - `pnpm vitest run src/ops/__tests__/doctor.test.ts src/ops/__tests__/doctor-boundaries.test.ts` passed, 10 tests.
+  - `pnpm vitest run src/ops/__tests__/doctor.test.ts src/ops/__tests__/doctor-boundaries.test.ts src/ops/__tests__/doctor-incidents.test.ts src/ops/__tests__/doctor-scheduler.test.ts src/ops/__tests__/doctor-scheduler-boundaries.test.ts src/ops/__tests__/doctor-repair.test.ts src/ops/__tests__/doctor-repair-boundaries.test.ts src/ops/__tests__/doctor-ship.test.ts src/ops/__tests__/doctor-metrics.test.ts` passed, 9 files / 53 tests.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm run quality:docs` passed with schema v10.
+  - `pnpm run build` passed; generated ignored `dist/` artifacts were removed after verification.
+  - `pnpm ralph:verify -- --task complexity-hotspot-refactor --profile standard` passed: `pnpm run typecheck`, `pnpm run lint`, `pnpm run quality:docs`.
+- Public API changes: none. Existing imports from `src/ops/doctor.ts` / `../ops/doctor.js` remain valid.
+- Follow-up cleanup: Complexity hotspot plan is complete. Future Auto Doctor diagnosis changes should land in `src/ops/doctor/evidence.ts`, `diagnosis.ts`, or `report.ts` with focused tests rather than broadening the facade.
