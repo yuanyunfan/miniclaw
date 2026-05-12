@@ -48,6 +48,8 @@ flowchart TD
     SW --> T["/task → handleTask"]
     SW --> S["/status → handleStatus"]
     SW --> TL["/task-log → handleTaskLog"]
+    SW --> CRS["/cron-runs → handleCronRuns"]
+    SW --> CRD["/cron-run → handleCronRun"]
     SW --> H["/health → handleHealth"]
     SW --> DR["/doctor → handleDoctor"]
     SW --> INCS["/incidents → handleIncidents"]
@@ -67,7 +69,7 @@ flowchart TD
     classDef route fill:#e6f7ff,stroke:#1890ff
     classDef drop fill:#fff1f0,stroke:#cf1322,color:#a8071a
     class F1,F2,F3,F4,P1,TCH,R0,R1,IS,SW filter
-    class CHAT,RES,TASKMSG,MEM,GREET,SMART,BTN,AUTOTASK,CRT,BACT,T,S,TL,H,DR,INCS,INC,AC,C,RS,RM,FG,MM,RECOV,IDX route
+    class CHAT,RES,TASKMSG,MEM,GREET,SMART,BTN,AUTOTASK,CRT,BACT,T,S,TL,CRS,CRD,H,DR,INCS,INC,AC,C,RS,RM,FG,MM,RECOV,IDX route
     class X1,X2,X3,X4,X5 drop
 ```
 
@@ -230,11 +232,13 @@ chunkMessage 切 2000 字  ← Discord 单消息上限
 
 按钮仍然先处理 cron retry，再处理 smart router 确认。其他按钮或菜单仍忽略。
 
-13 个 top-level slash command 由 `slash-dispatch.ts` **直接转发到 `commands/handlers.ts`** 的对应 handler，dispatch 层不做业务逻辑：
+15 个 top-level slash command 由 `slash-dispatch.ts` **直接转发到 `commands/handlers.ts`** 的对应 handler，dispatch 层不做业务逻辑：
 
 - `/task`
 - `/status`
 - `/task-log`
+- `/cron-runs`
+- `/cron-run`
 - `/health`
 - `/doctor`
 - `/incidents`
@@ -285,7 +289,7 @@ SIGINT / SIGTERM 由 `src/index.ts` 的 graceful shutdown 处理：先停止 mon
 - `miniclaw:cron:retry:<runId>`：cron 失败通知的立即重试按钮，由 `handleCronRetryButton()` 处理；这里的 `runId` 是 retry chain 的 `failure_run_id`，不是 durable `cron_runs.id`。
 - `miniclaw:smart:*`：smart router 的 task/chat/cancel 确认按钮，由 `handleSmartRouterButton()` 处理。
 
-`button-dispatch.ts` 保持 cron retry 按钮先于 smart router 按钮处理，避免误落到普通 slash command 分支。它只接受 `config.allowedUserId` 操作；custom id 里只放随机 `failure_run_id`，不会放 cron name、prompt、provider 配置、script args 或任何账号数据。真正执行时由 `requestCronRetryNow()` 在本机读取 `~/.miniclaw/cron/*.yaml`，如果失败 run 仍在 backoff，就唤醒当前 retry sleep；如果已经不在运行，则启动一次单独的立即重试。失败通知正文会单独显示 durable `cron_runs.id`，并给出 `pnpm run cron:runs -- --id <prefix>`、`/task-log id:<task-prefix>`、`/incident view id:<incident-prefix>` 等排查入口。
+`button-dispatch.ts` 保持 cron retry 按钮先于 smart router 按钮处理，避免误落到普通 slash command 分支。它只接受 `config.allowedUserId` 操作；custom id 里只放随机 `failure_run_id`，不会放 cron name、prompt、provider 配置、script args 或任何账号数据。真正执行时由 `requestCronRetryNow()` 在本机读取 `~/.miniclaw/cron/*.yaml`，如果失败 run 仍在 backoff，就唤醒当前 retry sleep；如果已经不在运行，则启动一次单独的立即重试。失败通知正文会单独显示 durable `cron_runs.id`，并给出 `pnpm run cron:runs -- --id <prefix>`、`/cron-run id:<run-prefix>`、`/task-log id:<task-prefix>`、`/incident view id:<incident-prefix>` 等排查入口。Discord 侧 `/cron-runs job:<optional> limit:<n>` 只读展示最近 durable run，`/cron-run id:<run-prefix>` 用完整 id 或唯一前缀展示单条 run 详情；两者都复用本地 `cron_runs` 表，不读取 cron YAML 或启动 job。
 
 ---
 
@@ -326,7 +330,7 @@ SIGINT / SIGTERM 由 `src/index.ts` 的 graceful shutdown 处理：先停止 mon
 - `src/agent/chat.ts` — chat 主流程的 LLM 调用细节
 - `src/agent/task.ts` — `/task` Supervisor 模式细节
 - `src/cron/scheduler.ts` — cron 调度引擎
-- `src/commands/handlers.ts` — 13 个 top-level slash command 的实现
+- `src/commands/handlers.ts` — 15 个 top-level slash command 的实现
 - `src/bot/message-thread-continuation.ts` — task thread 续话、session provider guard、resume task 创建
 - `src/bot/message-task-channel.ts` — dedicated task channel 的普通消息 intake
 - `src/bot/message-chat.ts` — chat route 内的记忆指令、smart router、附件处理和 chat 回复

@@ -38,6 +38,7 @@ import {
 } from "../store/incidents.js";
 import { formatIncidentDetail, formatIncidentResolution } from "./incident-detail.js";
 import { buildTaskLogReply, formatTaskTraceError } from "./task-log.js";
+import { buildCronRunDetailReply, buildCronRunsReply } from "./cron-runs.js";
 import { buildTaskTraceModel, resolveTaskForTrace } from "../store/task-trace-export.js";
 
 const log = createLogger("handlers");
@@ -144,6 +145,33 @@ export async function handleTaskLog(interaction: ChatInputCommandInteraction): P
   }
 
   await interaction.editReply(buildTaskLogReply(model.value));
+}
+
+export async function handleCronRuns(interaction: ChatInputCommandInteraction): Promise<void> {
+  if (!isAllowed(interaction.user.id)) {
+    await interaction.reply({ content: "⛔ 无权限", ephemeral: true });
+    return;
+  }
+
+  await interaction.reply({
+    content: buildCronRunsReply({
+      jobName: interaction.options.getString("job"),
+      limit: interaction.options.getInteger("limit"),
+    }),
+    ephemeral: true,
+  });
+}
+
+export async function handleCronRun(interaction: ChatInputCommandInteraction): Promise<void> {
+  if (!isAllowed(interaction.user.id)) {
+    await interaction.reply({ content: "⛔ 无权限", ephemeral: true });
+    return;
+  }
+
+  await interaction.reply({
+    content: buildCronRunDetailReply(interaction.options.getString("id", true)),
+    ephemeral: true,
+  });
 }
 
 export async function handleHealth(interaction: ChatInputCommandInteraction): Promise<void> {

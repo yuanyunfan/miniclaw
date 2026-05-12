@@ -1,6 +1,6 @@
 # Cron Run History And Per-Job Control
 
-Status: draft
+Status: done
 Date: 2026-05-11
 
 ## Background
@@ -263,3 +263,19 @@ Record schema version, config defaults, query commands, and verification output 
   - `pnpm run e2e:cron` passed: `Cron E2E fixture passed: cron-e2e-1778602168982`.
   - `pnpm run cron:runs -- --help` passed without requiring `DISCORD_TOKEN`.
   - `MINICLAW_DB_PATH=/private/tmp/miniclaw-cron-runs-smoke.db pnpm run cron:runs -- --limit 1` passed and printed an empty run list from a temporary database; the temporary SQLite files were cleaned up afterward.
+
+### 2026-05-13 Ralph iteration: Discord cron run query commands
+
+- Added Discord slash commands `/cron-runs job:<optional> limit:<n>` and `/cron-run id:<run-prefix>`.
+- Added `src/commands/cron-runs.ts` so Discord query output reuses the durable `cron_runs` formatter and id-prefix resolver already used by the local `cron:runs` CLI.
+- Wired the new commands through `commands/register.ts`, `commands/handlers.ts`, and `bot/slash-dispatch.ts`; both commands are allowed-user gated, ephemeral, and read-only.
+- Updated `docs/architecture.md` and `docs/bot-routing.md` to document the Discord run history query surface and the distinction from retry-chain button ids.
+- This completes the remaining Discord query surface from the implementation plan, so the plan status is now `done`.
+- Verification:
+  - `pnpm vitest run src/commands/__tests__/cron-runs.test.ts src/bot/__tests__/slash-dispatch.test.ts src/store/__tests__/cron-runs.test.ts` passed: 3 files, 15 tests.
+  - `pnpm vitest run src/cron/__tests__/scheduler.test.ts src/cron/__tests__/failure-notifier.test.ts src/cron/__tests__/state.test.ts` passed: 3 files, 28 tests.
+  - `pnpm run e2e:cron` passed: `Cron E2E fixture passed: cron-e2e-1778602591151`.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm run quality:docs` passed with schema v11.
+  - `pnpm ralph:verify -- --task cron-run-history-control --profile cron` passed, including cron tests, E2E fixture `cron-e2e-1778602706778`, typecheck, lint, and docs drift check.

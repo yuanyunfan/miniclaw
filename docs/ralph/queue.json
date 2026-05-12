@@ -112,7 +112,7 @@
       "id": "cron-run-history-control",
       "title": "Cron Run History And Per-Job Control",
       "priority": "P2",
-      "status": "pending",
+      "status": "done",
       "plan": "docs/plans/2026-05-11-cron-run-history-control.md",
       "branch": "ralph/cron-run-history-control",
       "verify_profile": "cron",

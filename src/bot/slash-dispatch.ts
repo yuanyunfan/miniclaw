@@ -2,6 +2,8 @@ import type { ChatInputCommandInteraction } from "discord.js";
 import {
   handleAgentConfig,
   handleCancel,
+  handleCronRun,
+  handleCronRuns,
   handleDoctor,
   handleForget,
   handleHealth,
@@ -30,6 +32,8 @@ const defaultSlashCommandDispatchDependencies: SlashCommandDispatchDependencies 
     "task": handleTask,
     "status": handleStatus,
     "task-log": handleTaskLog,
+    "cron-runs": handleCronRuns,
+    "cron-run": handleCronRun,
     "health": handleHealth,
     "doctor": handleDoctor,
     "incidents": handleIncidents,

@@ -37,6 +37,28 @@ const commands = [
     ),
 
   new SlashCommandBuilder()
+    .setName("cron-runs")
+    .setDescription("查看最近 cron run 历史")
+    .addStringOption((opt) =>
+      opt.setName("job").setDescription("cron job 名称（可选）").setRequired(false)
+    )
+    .addIntegerOption((opt) =>
+      opt
+        .setName("limit")
+        .setDescription("最多显示多少条（默认 10，最多 25）")
+        .setRequired(false)
+        .setMinValue(1)
+        .setMaxValue(25)
+    ),
+
+  new SlashCommandBuilder()
+    .setName("cron-run")
+    .setDescription("查看单个 cron run 详情")
+    .addStringOption((opt) =>
+      opt.setName("id").setDescription("cron run ID 或唯一前缀").setRequired(true)
+    ),
+
+  new SlashCommandBuilder()
     .setName("health")
     .setDescription("查看 MiniClaw 运行健康状态"),
 
