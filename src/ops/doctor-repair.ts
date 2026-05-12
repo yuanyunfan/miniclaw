@@ -18,6 +18,28 @@ import {
   getCodexClient,
   withCodexTimeout,
 } from "../agent/codex.js";
+import {
+  evaluateRepairPolicy as evaluateRepairPolicyWithOptions,
+  type RepairPolicyResult,
+} from "./doctor-repair/policy.js";
+import {
+  parseChangedFiles,
+  validateChangedPaths as validateChangedPathsWithPolicy,
+} from "./doctor-repair/path-policy.js";
+import { buildRepairPrompt as buildRepairPromptWithPolicy } from "./doctor-repair/prompt.js";
+import {
+  runVerification,
+  type CommandRunner,
+  type VerificationResult,
+} from "./doctor-repair/verification.js";
+
+export type { RepairPolicyResult } from "./doctor-repair/policy.js";
+export { parseChangedFiles } from "./doctor-repair/path-policy.js";
+export {
+  repairVerificationCommands,
+  selectTargetedTestCommands,
+} from "./doctor-repair/verification.js";
+export type { CommandRunner, VerificationResult } from "./doctor-repair/verification.js";
 
 export interface DoctorRepairArgs {
   incidentId: string;
@@ -27,25 +49,12 @@ export interface DoctorRepairArgs {
   json: boolean;
 }
 
-export interface RepairPolicyResult {
-  allowed: boolean;
-  blockers: string[];
-  warnings: string[];
-}
-
 export interface RepairAgentResult {
   success: boolean;
   threadId?: string;
   response: string;
   toolLog: string[];
   error?: string;
-}
-
-export interface VerificationResult {
-  command: string;
-  ok: boolean;
-  output: string;
-  durationMs?: number;
 }
 
 export interface DoctorRepairResult {
@@ -67,8 +76,6 @@ export interface DoctorRepairResult {
   verification: VerificationResult[];
   message: string;
 }
-
-export type CommandRunner = (cmd: string, args: string[], cwd: string) => string;
 
 interface DoctorRepairDeps {
   commandRunner?: CommandRunner;
@@ -100,25 +107,6 @@ function defaultCommandRunner(cmd: string, args: string[], cwd: string): string 
 
 function sanitizeId(id: string): string {
   return id.replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 64);
-}
-
-function parseJsonObject(value: string | null): Record<string, unknown> {
-  if (!value) return {};
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
-  } catch {
-    return {};
-  }
-}
-
-function stringField(obj: Record<string, unknown>, key: string): string | undefined {
-  const value = obj[key];
-  return typeof value === "string" && value.trim() ? value : undefined;
-}
-
-function booleanField(obj: Record<string, unknown>, key: string): boolean | undefined {
-  return typeof obj[key] === "boolean" ? obj[key] : undefined;
 }
 
 export function parseDoctorRepairArgs(argv: string[]): DoctorRepairArgs {
@@ -157,26 +145,11 @@ export function parseDoctorRepairArgs(argv: string[]): DoctorRepairArgs {
 }
 
 export function evaluateRepairPolicy(incident: IncidentRow, execute: boolean, force: boolean): RepairPolicyResult {
-  const diagnosis = parseJsonObject(incident.diagnosis_json);
-  const category = stringField(diagnosis, "category");
-  const repairAllowed = booleanField(diagnosis, "repairAllowed") === true;
-  const blockers: string[] = [];
-  const warnings: string[] = [];
-
-  if (["resolved", "ignored"].includes(incident.status)) blockers.push(`incident status is ${incident.status}`);
-  if (!repairAllowed && !force) blockers.push("diagnosis does not allow repair");
-  if (["provider_auth", "provider_data", "network", "discord", "third_party"].includes(category ?? "")) {
-    blockers.push(`category ${category} is not auto-repairable`);
-  }
-  if (!["task_failed", "cron_failed", "chat_error"].includes(incident.type) && !force) {
-    blockers.push(`incident type ${incident.type} is not repairable by policy`);
-  }
-  if (execute && !config.doctor.autoRepairEnabled && !force) {
-    blockers.push("doctor.auto_repair_enabled is false");
-  }
-  if (force) warnings.push("--force bypasses repairAllowed/type/config gates but not path verification");
-
-  return { allowed: blockers.length === 0, blockers, warnings };
+  return evaluateRepairPolicyWithOptions(incident, {
+    execute,
+    force,
+    autoRepairEnabled: config.doctor.autoRepairEnabled,
+  });
 }
 
 function repairWorkspacePath(incidentId: string): string {
@@ -188,39 +161,10 @@ function repairBranch(incidentId: string): string {
 }
 
 export function buildRepairPrompt(incident: IncidentRow): string {
-  return [
-    "You are MiniClaw Self-Repair Worker.",
-    "",
-    "Goal: produce the smallest safe code fix for the incident below in this isolated worktree.",
-    "",
-    "Rules:",
-    "- Do not edit secrets, credentials, cookies, sessions, runtime DBs, logs, or user config.",
-    "- Keep changes within the configured allowed paths.",
-    "- Add or update focused tests when the bug is testable.",
-    "- Run targeted verification and report exact commands.",
-    "- Do not restart MiniClaw, push to main, force-push, or modify the original worktree.",
-    "",
-    "Incident:",
-    JSON.stringify({
-      id: incident.id,
-      type: incident.type,
-      severity: incident.severity,
-      status: incident.status,
-      title: incident.title,
-      summary: incident.summary,
-      subject_id: incident.subject_id,
-      subject_type: incident.subject_type,
-      source: parseJsonObject(incident.source_json),
-      evidence: parseJsonObject(incident.evidence_json),
-      diagnosis: parseJsonObject(incident.diagnosis_json),
-    }, null, 2),
-    "",
-    "Allowed paths:",
-    ...config.doctor.allowedPaths.map((path) => `- ${path}`),
-    "",
-    "Blocked paths:",
-    ...config.doctor.blockedPaths.map((path) => `- ${path}`),
-  ].join("\n");
+  return buildRepairPromptWithPolicy(incident, {
+    allowedPaths: config.doctor.allowedPaths,
+    blockedPaths: config.doctor.blockedPaths,
+  });
 }
 
 function prepareWorktree(path: string, branch: string, run: CommandRunner): void {
@@ -232,132 +176,11 @@ function prepareWorktree(path: string, branch: string, run: CommandRunner): void
   run("git", ["worktree", "add", "-B", branch, path, "HEAD"], process.cwd());
 }
 
-function parseChangedFiles(status: string): string[] {
-  return status
-    .split(/\r?\n/)
-    .map((line) => line.trimEnd())
-    .filter(Boolean)
-    .map((line) => {
-      const raw = line.slice(3).trim();
-      return raw.includes(" -> ") ? raw.split(" -> ").pop()!.trim() : raw;
-    });
-}
-
-function normalizeGlobPath(value: string): string {
-  return value.replace(/^~\//, "").replace(/^\.\//, "");
-}
-
-function escapeRegexChar(char: string): string {
-  return /[\\^$+?.()|[\]{}]/.test(char) ? `\\${char}` : char;
-}
-
-function globToRegExp(pattern: string): RegExp {
-  const normalized = normalizeGlobPath(pattern);
-  let out = "^";
-  for (let i = 0; i < normalized.length; i++) {
-    const char = normalized[i];
-    const next = normalized[i + 1];
-    const afterNext = normalized[i + 2];
-
-    if (char === "*" && next === "*" && afterNext === "/") {
-      out += "(?:.*/)?";
-      i += 2;
-    } else if (char === "*" && next === "*") {
-      out += ".*";
-      i += 1;
-    } else if (char === "*") {
-      out += "[^/]*";
-    } else if (char === "?") {
-      out += "[^/]";
-    } else {
-      out += escapeRegexChar(char);
-    }
-  }
-  out += "$";
-  return new RegExp(out);
-}
-
-function matchesPattern(pattern: string, path: string): boolean {
-  return globToRegExp(pattern).test(normalizeGlobPath(path));
-}
-
 export function validateChangedPaths(paths: string[]): string[] {
-  const violations: string[] = [];
-  for (const path of paths) {
-    if (config.doctor.blockedPaths.some((pattern) => matchesPattern(pattern, path))) {
-      violations.push(`${path}: blocked path`);
-      continue;
-    }
-    if (!config.doctor.allowedPaths.some((pattern) => matchesPattern(pattern, path))) {
-      violations.push(`${path}: not in allowed_paths`);
-    }
-  }
-  return violations;
-}
-
-type VerificationCommand = [cmd: string, args: string[]];
-
-function normalizeRepoPath(path: string): string {
-  return path.replaceAll("\\", "/").replace(/^\.\//, "");
-}
-
-function hasTestSuffix(path: string): boolean {
-  return /(?:^|\/)__tests__\/.*\.(?:test|spec)\.ts$/.test(path) || /\.(?:test|spec)\.ts$/.test(path);
-}
-
-export function selectTargetedTestCommands(paths: string[]): VerificationCommand[] {
-  const normalizedPaths = paths.map(normalizeRepoPath);
-  const directTestFiles = normalizedPaths.filter(hasTestSuffix).sort();
-  if (directTestFiles.length) {
-    return [["pnpm", ["exec", "vitest", "run", ...directTestFiles]]];
-  }
-
-  const targets = new Set<string>();
-  for (const path of normalizedPaths) {
-    if (path.startsWith("src/routing/")) targets.add("src/routing/__tests__");
-    else if (path.startsWith("src/discord/")) targets.add("src/discord/__tests__");
-    else if (path.startsWith("src/cron/")) targets.add("src/cron/__tests__");
-    else if (path.startsWith("src/ops/")) targets.add("src/ops/__tests__");
-    else if (path.startsWith("src/store/")) targets.add("src/store/__tests__");
-    else if (path.startsWith("src/agent/")) targets.add("src/agent/__tests__");
-    else {
-      const provider = path.match(/^src\/providers\/([^/]+)\//)?.[1];
-      const mcp = path.match(/^src\/mcp\/([^/]+)\//)?.[1];
-      if (provider) targets.add(`src/providers/${provider}/__tests__`);
-      if (mcp) targets.add(`src/mcp/${mcp}/__tests__`);
-    }
-  }
-
-  return targets.size ? [["pnpm", ["exec", "vitest", "run", ...[...targets].sort()]]] : [];
-}
-
-function repairVerificationCommands(changedFiles: string[]): VerificationCommand[] {
-  return [
-    ["pnpm", ["run", "quality:g0"]],
-    ["pnpm", ["run", "quality:secrets"]],
-    ...selectTargetedTestCommands(changedFiles),
-    ["pnpm", ["run", "typecheck"]],
-    ["pnpm", ["run", "lint"]],
-    ["pnpm", ["test"]],
-    ["pnpm", ["run", "build"]],
-  ];
-}
-
-function runVerification(path: string, changedFiles: string[], run: CommandRunner): VerificationResult[] {
-  const results: VerificationResult[] = [];
-  for (const [cmd, args] of repairVerificationCommands(changedFiles)) {
-    const label = [cmd, ...args].join(" ");
-    const startedAt = Date.now();
-    try {
-      const output = run(cmd, args, path);
-      results.push({ command: label, ok: true, output: output.slice(-4000), durationMs: Date.now() - startedAt });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      results.push({ command: label, ok: false, output: message.slice(-4000), durationMs: Date.now() - startedAt });
-      break;
-    }
-  }
-  return results;
+  return validateChangedPathsWithPolicy(paths, {
+    allowedPaths: config.doctor.allowedPaths,
+    blockedPaths: config.doctor.blockedPaths,
+  });
 }
 
 function ensureRepairDependencies(path: string, run: CommandRunner): void {

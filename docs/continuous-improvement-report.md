@@ -25,7 +25,7 @@
 - `src/providers/types.ts` 的 provider contract 仍主要是 `PreProviderResult`：`text`、`attachments`、`skipTask`、`commit`。
 - `src/config.ts` 仍集中处理 YAML/env loading、validation、path resolution、agent provider、doctor、connectivity、routing 和 attachment 配置。
 - `src/providers/market-intel/collectors/official.ts` 已从集中 collector 降为 public facade；官方证据采集现在由 source-family collectors、scoring-input assembly、HTTP/shared helpers 和 parser fixtures 分层承载。
-- 最大复杂度热点仍集中在 `src/ops/doctor-repair.ts`、`src/store/db.ts`、`src/config.ts` 和 `src/ops/doctor.ts`；已拆出的 bot/task/doctor-scheduler/official evidence 边界需要继续防止职责回流。
+- 最大复杂度热点仍集中在 `src/store/db.ts`、`src/config.ts`、`src/ops/doctor-repair.ts` 和 `src/ops/doctor.ts`；已拆出的 bot/task/doctor-scheduler/official evidence/doctor-repair policy 边界需要继续防止职责回流。
 
 ## P1: 任务展示边界仍未拆开
 
@@ -144,7 +144,7 @@
 
 - `src/store/db.ts`：930 行。
 - `src/config.ts`：811 行。
-- `src/ops/doctor-repair.ts`：775 行。
+- `src/ops/doctor-repair.ts`：598 行，已保留 repair facade + worktree/agent/commit/push orchestration；repair policy、path allowlist、prompt build、verification gate 已拆到 `src/ops/doctor-repair/*`。
 - `src/providers/market-intel/collectors/official.ts`：35 行 public facade；source-family collector orchestration 已拆到 `collectors/macro.ts`、`news.ts`、`events.ts`，evidence section assembly / derived risk 已拆到 `collectors/scoring-input.ts`，HTTP client 与 source status/warning helpers 已拆到 `collectors/official-http.ts`、`official-shared.ts`。
 - `src/ops/doctor.ts`：734 行。
 - `src/agent/task.ts`：367 行，已保留 task lifecycle orchestration，provider runners 和 Discord view reporter 已外置。
@@ -186,6 +186,14 @@
 - 已完成：macro/news/events collector orchestration 按 source family 拆分，public facade 只保留 market-scope fan-out。
 - 已完成：scoring-input assembly / derived risk 与 HTTP/shared source result helpers 外置。
 - 后续：format drift、staleness、redaction 继续在 parser fixture 层先复现，再改 network-facing collector。
+
+`src/ops/doctor-repair.ts` 拆成：
+
+- 已完成：repair eligibility policy（`ops/doctor-repair/policy.ts`）。
+- 已完成：changed-file parsing and allowed/blocked path policy（`ops/doctor-repair/path-policy.ts`）。
+- 已完成：worker prompt rendering（`ops/doctor-repair/prompt.ts`）。
+- 已完成：verification command selection and execution wrapper（`ops/doctor-repair/verification.ts`）。
+- 后续：worktree/branch operations、Codex repair agent execution、commit/push/report formatting 继续从 orchestration shell 中拆出。
 
 ### 验收标准
 
