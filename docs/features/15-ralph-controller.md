@@ -80,10 +80,11 @@ pnpm ralph:task -- --task task-view-boundary --execute --merge-main --push-main
 3. It creates an isolated Git worktree under `../miniclaw-ralph/<task-id>` by default.
 4. It starts Codex with `codex exec --ephemeral --sandbox workspace-write`.
 5. Codex receives a strict prompt: implement the largest coherent reviewable phase from the plan, prefer behavior wiring plus focused tests, do not commit, do not push, update the plan notes, and mark the plan `Status:` as `done` only when the full plan is genuinely complete and verified.
-6. The controller checks for a non-empty diff.
-7. The controller runs `pnpm ralph:verify`.
-8. If verification passes, the controller commits the worktree branch.
-9. If `--push` is set, the controller pushes the task branch to `origin`.
+6. If the plan `Status:` is closed, the controller syncs the matching queue entry in `docs/ralph/queue.json` before verification and commit.
+7. The controller checks for a non-empty diff.
+8. The controller runs `pnpm ralph:verify`.
+9. If verification passes, the controller commits the worktree branch.
+10. If `--push` is set, the controller pushes the task branch to `origin`.
 
 `ralph:loop` wraps this single-task execution:
 
@@ -113,7 +114,7 @@ pnpm ralph:task -- --task task-view-boundary --execute --merge-main --push-main
 
 ## Current Limits
 
-- Queue status is not auto-mutated. A plan can remain `pending` across several phase iterations until the plan or queue entry is explicitly closed.
+- Queue status is auto-synced only when the plan reaches a closed `Status:`. Ralph does not maintain transient queue states such as `running`.
 - Raw run logs are local-only under `.ralph/`.
 - Automatic retry is not implemented.
 - Parallel execution is possible by choosing different tasks, but `ralph:loop --merge-main` is intentionally serial.

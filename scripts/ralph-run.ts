@@ -166,6 +166,56 @@ function readQueue(path: string): RalphQueue {
   return JSON.parse(readFileSync(path, "utf8")) as RalphQueue;
 }
 
+function repoRelativePath(repoRoot: string, path: string): string | undefined {
+  const absolute = resolveMaybeRelative(repoRoot, path);
+  const rel = relative(repoRoot, absolute);
+  return rel.startsWith("..") || isAbsolute(rel) ? undefined : rel;
+}
+
+function worktreeFilePath(plan: RunPlan, path: string): string | undefined {
+  const rel = repoRelativePath(plan.repoRoot, path);
+  return rel ? join(plan.worktreePath, rel) : undefined;
+}
+
+function planStatus(plan: RunPlan): string | undefined {
+  const path = worktreeFilePath(plan, plan.task.plan);
+  if (!path || !existsSync(path)) return undefined;
+  const match = readFileSync(path, "utf8").match(/^Status:\s*(.+)$/m);
+  return match?.[1]?.trim().toLowerCase();
+}
+
+function queueStatusForPlanStatus(status: string | undefined): string | undefined {
+  if (status === "blocked") return "blocked";
+  if (status === "skipped" || status === "superseded") return "skipped";
+  if (status === "closed" || status === "done" || status === "shipped") return "done";
+  return undefined;
+}
+
+function syncQueueStatusFromPlan(plan: RunPlan): Record<string, unknown> | undefined {
+  const nextStatus = queueStatusForPlanStatus(planStatus(plan));
+  if (!nextStatus) return undefined;
+
+  const queuePath = worktreeFilePath(plan, plan.queuePath);
+  if (!queuePath || !existsSync(queuePath)) return undefined;
+
+  const queue = readQueue(queuePath);
+  const task = queue.tasks.find((item) => item.id === plan.task.id);
+  if (!task) return undefined;
+
+  const previousStatus = task.status ?? "pending";
+  if (previousStatus === nextStatus) {
+    return { queue_status: nextStatus, queue_status_synced: false };
+  }
+
+  task.status = nextStatus;
+  writeFileSync(queuePath, `${JSON.stringify(queue, null, 2)}\n`);
+  return {
+    queue_status: nextStatus,
+    queue_status_previous: previousStatus,
+    queue_status_synced: true,
+  };
+}
+
 function sanitizeId(value: string): string {
   return value
     .toLowerCase()
@@ -248,7 +298,7 @@ function buildPrompt(task: RalphTask, verifyProfile: string): string {
     "5. Do not perform unrelated refactors.",
     "6. Do not commit, push, create branches, or modify the controller queue status.",
     "7. Update the plan's Execution Notes with actual changes and verification evidence.",
-    "8. If the full plan is genuinely complete and verified, update the plan `Status:` to `done`; otherwise leave it open.",
+    "8. If the full plan is genuinely complete and verified, update the plan `Status:` to `done`; Ralph will sync the queue status from that closed plan status.",
     "9. Preserve user work and do not revert unrelated changes.",
     "10. Leave the final diff in the worktree; Ralph will verify and commit it.",
     "",
@@ -475,6 +525,11 @@ try {
 
   runCodex(plan, args);
 
+  const queueSync = syncQueueStatusFromPlan(plan);
+  if (queueSync?.queue_status_synced) {
+    process.stdout.write(`Ralph queue status synced: ${plan.task.id} ${queueSync.queue_status_previous} -> ${queueSync.queue_status}\n`);
+  }
+
   const diff = changedFiles(plan.worktreePath);
   if (diff.length === 0) {
     writeRunMetadata(plan, args, "failed", { reason: "codex produced no worktree diff" });
@@ -495,6 +550,7 @@ try {
   writeRunMetadata(plan, args, "completed", {
     changed_files: diff,
     commit_sha: commitSha,
+    ...(queueSync ?? {}),
   });
 
   process.stdout.write([

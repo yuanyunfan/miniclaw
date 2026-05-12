@@ -29,7 +29,11 @@ Queue `status` values control the next/loop cursor:
 
 `ralph:next`, `ralph:loop`, and `ralph:task` select tasks whose queue status is `pending` and whose plan `Status:` is not closed. Closed plan statuses are `blocked`, `closed`, `done`, `shipped`, `skipped`, and `superseded`.
 
-A plan can stay `pending` across multiple Ralph iterations. This is intentional: each Codex run is instructed to land the next coherent reviewable phase, not the smallest possible micro-slice. Codex may mark the plan `Status:` as `done` only when the full plan is genuinely complete and verified; the controller queue status is still a manual cursor.
+A queue entry can stay `pending` across multiple Ralph iterations. This is intentional: each Codex run is instructed to land the next coherent reviewable phase, not the smallest possible micro-slice. Codex may mark the plan `Status:` as `done` only when the full plan is genuinely complete and verified. When `ralph:run` sees a closed plan status in the task worktree, it syncs the matching queue entry before verification and commit:
+
+- plan `done`, `closed`, or `shipped` -> queue `done`
+- plan `blocked` -> queue `blocked`
+- plan `skipped` or `superseded` -> queue `skipped`
 
 ## Dry Run
 
@@ -51,8 +55,9 @@ Execution mode:
 2. creates `../miniclaw-ralph/<task-id>`;
 3. installs dependencies in the worktree unless `--skip-install` is used;
 4. runs `codex exec --ephemeral`;
-5. runs `pnpm ralph:verify`;
-6. commits the worktree branch when verification passes.
+5. syncs the task queue status when the plan `Status:` is closed;
+6. runs `pnpm ralph:verify`;
+7. commits the worktree branch when verification passes.
 
 Add `--push` to push the branch to `origin`.
 

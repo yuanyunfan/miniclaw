@@ -12,7 +12,7 @@
       "id": "task-view-boundary",
       "title": "Task View Boundary And Runner Refactor",
       "priority": "P1",
-      "status": "pending",
+      "status": "done",
       "plan": "docs/plans/2026-05-11-task-view-boundary.md",
       "branch": "ralph/task-view-boundary",
       "verify_profile": "task-runtime",
