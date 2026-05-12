@@ -316,3 +316,26 @@ For each completed slice, record:
   - `pnpm ralph:verify -- --task complexity-hotspot-refactor --profile standard` passed: `pnpm run typecheck`, `pnpm run lint`, `pnpm run quality:docs`.
 - Public API changes: none. `MarketIntelOfficialHttpClient`, `buildEmptyMarketIntelEvidenceCollection()`, and `collectMarketIntelOfficialEvidence()` remain exported from `src/providers/market-intel/collectors/official.ts`.
 - Follow-up cleanup: Continue Slice D by splitting `official.ts` orchestration by source family, then move remaining Slice E/F/G hotspots through their dedicated plans.
+
+### 2026-05-12 - Slice D Official Source-Family Orchestration Extraction
+
+- Slice name: Slice D completion, official source-family collector boundary.
+- Changed files:
+  - `src/providers/market-intel/collectors/official.ts`: reduced to the public facade for `collectMarketIntelOfficialEvidence()`, `MarketIntelOfficialHttpClient`, and `buildEmptyMarketIntelEvidenceCollection()`, with market-scope fan-out only.
+  - `src/providers/market-intel/collectors/macro.ts`: extracted Treasury/BLS/PBOC/NBS endpoint orchestration and macro source status/warning behavior.
+  - `src/providers/market-intel/collectors/news.ts`: extracted Federal Reserve RSS endpoint orchestration.
+  - `src/providers/market-intel/collectors/events.ts`: extracted SEC EDGAR plus SSE/SZSE/HKEX announcement endpoint orchestration.
+  - `src/providers/market-intel/collectors/scoring-input.ts`: extracted evidence section assembly, dedupe, earnings/filings split, derived risk evidence, and empty collection construction.
+  - `src/providers/market-intel/collectors/official-http.ts`, `src/providers/market-intel/collectors/official-shared.ts`: extracted fetch-backed HTTP client, shared source/result helpers, failure redaction, and section helpers.
+  - `src/providers/market-intel/__tests__/official-collectors.test.ts`: added direct characterization coverage for independently callable macro/news/events source-family collectors.
+  - `docs/architecture.md`, `docs/features/14-market-intel-provider.md`, `docs/continuous-improvement-report.md`: documented the new official evidence facade/source-family/scoring-input boundary and updated current hotspot status.
+- Behavior parity tests:
+  - `pnpm vitest run src/providers/market-intel/__tests__/official-collectors.test.ts src/providers/market-intel/__tests__/official-parsers.test.ts` passed, 8 tests.
+  - `pnpm vitest run src/providers/market-intel` passed, 28 tests.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm run quality:docs` passed.
+  - `pnpm run build` passed.
+  - `pnpm ralph:verify -- --task complexity-hotspot-refactor --profile standard` passed: `pnpm run typecheck`, `pnpm run lint`, `pnpm run quality:docs`.
+- Public API changes: none. Existing imports from `src/providers/market-intel/collectors/official.ts` remain valid.
+- Follow-up cleanup: Slice D is now complete enough that new official market-intel sources should land in source-family collector modules plus parser fixtures, not in the facade. Remaining complexity-hotspot work should move to Slice E/F/G.

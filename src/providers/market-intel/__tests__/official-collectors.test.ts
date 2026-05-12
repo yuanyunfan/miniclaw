@@ -3,6 +3,9 @@ import {
   collectMarketIntelOfficialEvidence,
   type MarketIntelOfficialHttpClient,
 } from "../collectors/official.js";
+import { collectOfficialEventEvidence } from "../collectors/events.js";
+import { collectOfficialMacroEvidence } from "../collectors/macro.js";
+import { collectOfficialNewsEvidence } from "../collectors/news.js";
 import type { MarketIntelProviderConfig } from "../types.js";
 
 function usConfig(overrides: Partial<MarketIntelProviderConfig> = {}): MarketIntelProviderConfig {
@@ -187,6 +190,78 @@ describe("collectMarketIntelOfficialEvidence", () => {
       expect.objectContaining({ id: "news.federal_reserve", status: "ok" }),
       expect.objectContaining({ id: "filing.sec", status: "ok" }),
     ]));
+  });
+
+  it("keeps US official source-family collectors independently callable and ordered", async () => {
+    const http: MarketIntelOfficialHttpClient = {
+      async getText(url) {
+        if (url.includes("home.treasury.gov")) {
+          return `<?xml version="1.0"?><feed>
+            <entry><content><m:properties>
+              <d:NEW_DATE>2026-05-07T00:00:00</d:NEW_DATE>
+              <d:BC_2YEAR>3.87</d:BC_2YEAR>
+              <d:BC_10YEAR>4.28</d:BC_10YEAR>
+              <d:BC_30YEAR>4.92</d:BC_30YEAR>
+            </m:properties></content></entry>
+          </feed>`;
+        }
+        if (url.includes("federalreserve.gov")) {
+          return `<?xml version="1.0"?><rss><channel>
+            <item>
+              <title><![CDATA[Federal Reserve issues FOMC statement]]></title>
+              <link><![CDATA[https://www.federalreserve.gov/newsevents/pressreleases/monetary20260429a.htm]]></link>
+              <pubDate><![CDATA[Wed, 29 Apr 2026 18:00:00 GMT]]></pubDate>
+            </item>
+          </channel></rss>`;
+        }
+        throw new Error(`unexpected getText ${url}`);
+      },
+      async getJson(url) {
+        if (url.includes("company_tickers_exchange")) {
+          return { fields: ["cik", "name", "ticker", "exchange"], data: [[320193, "Apple Inc.", "AAPL", "Nasdaq"]] };
+        }
+        if (url.includes("CIK0000320193")) {
+          return {
+            filings: {
+              recent: {
+                form: ["8-K"],
+                filingDate: ["2026-05-07"],
+                accessionNumber: ["0000320193-26-000013"],
+                primaryDocument: ["aapl-20260507.htm"],
+              },
+            },
+          };
+        }
+        throw new Error(`unexpected getJson ${url}`);
+      },
+      async postJson() {
+        return {
+          status: "REQUEST_SUCCEEDED",
+          Results: {
+            series: [
+              { seriesID: "CUUR0000SA0", data: [{ year: "2026", periodName: "March", value: "330.213" }] },
+            ],
+          },
+        };
+      },
+    };
+    const params = { args: runArgs(), config: usConfig(), http };
+
+    const [macroResults, newsResults, eventResults] = await Promise.all([
+      collectOfficialMacroEvidence(params),
+      collectOfficialNewsEvidence(params),
+      collectOfficialEventEvidence(params),
+    ]);
+
+    expect(macroResults.map((item) => item.source.id)).toEqual(["macro.treasury", "macro.bls"]);
+    expect(newsResults.map((item) => item.source.id)).toEqual(["news.federal_reserve"]);
+    expect(eventResults.map((item) => item.source.id)).toEqual(["filing.sec"]);
+    expect(macroResults.flatMap((item) => item.items).map((item) => item.id)).toEqual(expect.arrayContaining([
+      "macro.treasury.yield_curve.1",
+      "macro.bls.1",
+    ]));
+    expect(newsResults[0]?.items[0]?.id).toBe("news.federal_reserve.1");
+    expect(eventResults[0]?.items[0]?.id).toBe("filing.sec.aapl.1");
   });
 
   it("collects CN official macro pages and SSE announcements", async () => {

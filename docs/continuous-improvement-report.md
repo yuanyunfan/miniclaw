@@ -19,12 +19,13 @@
 用于判断剩余改进项的代码证据：
 
 - 本次复核发现并修正了 `docs/architecture.md` 的 DB schema version / Smart Router 字段 drift，并新增了 `quality:docs` 的第一层检查；剩余问题是 changed-path 到 docs path 的语义映射仍未脚本化。
-- `src/agent/task-reporter.ts` 和 `src/store/task-events.ts` 负责写入 `task_events`，但仓库里没有真正的 `TaskViewEvent` source file 或 Discord view reporter。
-- `src/agent/task.ts` 仍直接消费 Claude/Codex SDK 事件、格式化 tool progress、更新 Discord progress，并发送最终结果。
-- `src/bot.ts` 仍集中处理 Discord message、Smart Router、chat、task、button 和 slash command 事件。
+- `src/agent/task-reporter.ts` 和 `src/store/task-events.ts` 负责写入 `task_events`；`TaskViewEvent`、provider runners 和 Discord view reporter 已经外置，后续重点是防止 trace writer 与 view reporter 再次混用。
+- `src/agent/task.ts` 已保留 task lifecycle orchestration，Claude/Codex/fake runner parsing、progress line formatting 和 Discord view reporting 已经拆出。
+- `src/bot.ts` 已保留 Discord event registration、draining guard 和外层 route shell；MessageCreate、button、slash 和 Smart Router 路径已经拆到 `src/bot/*`。
 - `src/providers/types.ts` 的 provider contract 仍主要是 `PreProviderResult`：`text`、`attachments`、`skipTask`、`commit`。
 - `src/config.ts` 仍集中处理 YAML/env loading、validation、path resolution、agent provider、doctor、connectivity、routing 和 attachment 配置。
-- 最大复杂度热点仍集中在 `src/providers/market-intel/collectors/official.ts`、`src/agent/task.ts`、`src/ops/doctor-scheduler.ts`、`src/bot.ts`、`src/ops/doctor-repair.ts`、`src/store/db.ts`、`src/config.ts` 和 `src/ops/doctor.ts`。
+- `src/providers/market-intel/collectors/official.ts` 已从集中 collector 降为 public facade；官方证据采集现在由 source-family collectors、scoring-input assembly、HTTP/shared helpers 和 parser fixtures 分层承载。
+- 最大复杂度热点仍集中在 `src/ops/doctor-repair.ts`、`src/store/db.ts`、`src/config.ts` 和 `src/ops/doctor.ts`；已拆出的 bot/task/doctor-scheduler/official evidence 边界需要继续防止职责回流。
 
 ## P1: 任务展示边界仍未拆开
 
@@ -144,7 +145,7 @@
 - `src/store/db.ts`：930 行。
 - `src/config.ts`：811 行。
 - `src/ops/doctor-repair.ts`：775 行。
-- `src/providers/market-intel/collectors/official.ts`：739 行，已把 source-specific parsing 拆到 `collectors/parsers/*`，collector orchestration 仍集中。
+- `src/providers/market-intel/collectors/official.ts`：35 行 public facade；source-family collector orchestration 已拆到 `collectors/macro.ts`、`news.ts`、`events.ts`，evidence section assembly / derived risk 已拆到 `collectors/scoring-input.ts`，HTTP client 与 source status/warning helpers 已拆到 `collectors/official-http.ts`、`official-shared.ts`。
 - `src/ops/doctor.ts`：734 行。
 - `src/agent/task.ts`：367 行，已保留 task lifecycle orchestration，provider runners 和 Discord view reporter 已外置。
 - `src/ops/doctor-scheduler.ts`：310 行，已保留 scan orchestration，grouping/notification/repair-policy/state 已外置。
@@ -182,7 +183,8 @@
 `src/providers/market-intel/collectors/official.ts` 拆成：
 
 - 已完成：source-specific parsers and fixtures（`collectors/parsers/shared.ts`、`macro.ts`、`filings.ts`、`risk.ts`）。
-- 后续：macro/news/filings/risk collector orchestration 继续按 source family 拆分。
+- 已完成：macro/news/events collector orchestration 按 source family 拆分，public facade 只保留 market-scope fan-out。
+- 已完成：scoring-input assembly / derived risk 与 HTTP/shared source result helpers 外置。
 - 后续：format drift、staleness、redaction 继续在 parser fixture 层先复现，再改 network-facing collector。
 
 ### 验收标准
