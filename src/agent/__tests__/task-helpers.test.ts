@@ -12,7 +12,7 @@ const {
   fmtTokens,
   formatUsage,
   finalTaskStatus,
-  selectTaskRunner,
+  selectTaskRuntime,
   addActiveTaskForTest,
   deleteActiveTaskForTest,
   resetTaskRuntimeForTest,
@@ -104,15 +104,50 @@ describe("finalTaskStatus", () => {
   });
 });
 
-describe("selectTaskRunner", () => {
-  it("uses configured providers when fake runtime is disabled", () => {
-    expect(selectTaskRunner("claude", false).provider).toBe("claude");
-    expect(selectTaskRunner("codex", false).provider).toBe("codex");
+describe("selectTaskRuntime", () => {
+  it("uses the configured registry runtime when fake runtime is disabled", () => {
+    expect(selectTaskRuntime({ agentProvider: "claude", e2e: { fakeAgent: false } }).runtime.id).toBe("claude");
+    expect(selectTaskRuntime({ agentProvider: "codex", e2e: { fakeAgent: false } }).runtime.id).toBe("codex");
   });
 
-  it("routes both configured providers through the fake runner in e2e fake mode", () => {
-    expect(selectTaskRunner("claude", true).provider).toBe("fake");
-    expect(selectTaskRunner("codex", true).provider).toBe("fake");
+  it("allows the future default runtime shape to override the compatibility alias", () => {
+    expect(selectTaskRuntime({
+      agentProvider: "claude",
+      runtime: { default_agent: "codex" },
+      e2e: { fakeAgent: false },
+    }).runtime.id).toBe("codex");
+  });
+
+  it("wraps the selected runtime with the fake task runner in e2e fake mode", async () => {
+    const selected = selectTaskRuntime({ agentProvider: "codex", e2e: { fakeAgent: true } });
+    const viewEvents: string[] = [];
+    const traceEvents: string[] = [];
+
+    const result = await selected.runtime.startTask({
+      taskId: "task-fake-runtime",
+      prompt: "e2e task helper-runtime",
+      cwd: "/tmp/work",
+      signal: new AbortController().signal,
+      onViewEvent: (event) => {
+        viewEvents.push(event.type);
+      },
+      onTraceEvent: (eventType) => {
+        traceEvents.push(eventType);
+      },
+    });
+
+    expect(selected).toMatchObject({
+      provider: "codex",
+      logProvider: "e2e-fake",
+      includeToolCount: false,
+    });
+    expect(result).toMatchObject({
+      success: true,
+      sessionId: "codex:e2e-helper-runtime",
+      result: "E2E_TASK_OK helper-runtime",
+    });
+    expect(viewEvents).toEqual(["session_started", "task_completed"]);
+    expect(traceEvents).toEqual(["session_started"]);
   });
 });
 

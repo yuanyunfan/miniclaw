@@ -13,6 +13,7 @@
 - progress 更新节流为约 2s，降低 Discord edit rate limit 风险。
 - `tasks.progress_message_id` 已持久化，用于进程重启后把悬挂任务标记为 interrupted。
 - Claude / Codex / fake runtime 已抽到 `src/agent/runners/*-task-runner.ts`，由 runner 把 SDK 原始事件转换为 provider-neutral `TaskViewEvent`。
+- `executeTask` 已通过 `src/agent/runtimes/registry.ts` 解析默认 `AgentRuntime` 并调用 `runtime.startTask`；legacy `agent.provider` 仍是当前默认 runtime alias，E2E fake task runner 也包装在同一 runtime contract 后面。
 - `src/discord/task-view-reporter.ts` 已负责 status embed、progress message、Execution Summary、最终 Markdown/raw output 和 Discord delivery failure callback。
 - `src/agent/task-reporter.ts` 已作为观测边界落地，把 task lifecycle、provider/tool event、Discord delivery failure 等规范化写入 SQLite `task_events`。
 - `src/store/task-trace-export.ts`、`/task-log`、`pnpm run task:trace` 和 `tasks.trace_auto_attach` 已生成安全 Markdown trace；脱敏由 `src/privacy/diagnostic-redaction.ts` 统一处理。
@@ -27,7 +28,7 @@
 当前 `/task` 的执行链路是：
 
 - `/task` handler 创建 Discord thread，并发送 `taskStartEmbed`。
-- `executeTask` 根据配置选择 `TaskRunner`，并保留 active task、abort、DB lifecycle 和 trace reporter 编排。
+- `executeTask` 根据配置经 runtime registry 选择 `AgentRuntime`，并保留 active task、abort、DB lifecycle 和 trace reporter 编排。
 - Claude / Codex / fake runner 负责 provider-specific SDK setup 和 stream event parsing，并输出 redacted `TaskViewEvent`。
 - `DiscordTaskViewReporter` 消费 `TaskViewEvent`，通过 `ProgressReporter` 持续 edit 一条普通 progress message。
 - 任务完成后，`DiscordTaskViewReporter` edit 状态 embed，保留 progress summary，并用普通 Markdown 消息发送最终结果。
@@ -35,7 +36,9 @@
 关键代码：
 
 - `src/commands/handlers.ts`: `/task` 入口、创建 thread、发送开始 embed。
-- `src/agent/task.ts`: orchestration shell，负责 runner selection、abort、DB lifecycle、trace reporter 和 Discord view reporter wiring。
+- `src/agent/task.ts`: orchestration shell，负责 runtime registry selection、abort、DB lifecycle、trace reporter 和 Discord view reporter wiring。
+- `src/agent/runtimes/registry.ts`: 默认 coding-agent runtime registry，当前把 legacy `agent.provider` 映射到 Claude / Codex `AgentRuntime`。
+- `src/agent/runtimes/task-runner-runtime.ts`: 把现有 `TaskRunner` 适配成 `AgentRuntime.startTask`。
 - `src/agent/runners/claude-task-runner.ts`: Claude Agent SDK setup、tool permission/MCP/subagent wiring、stream parsing 和 `TaskViewEvent` emission。
 - `src/agent/runners/codex-task-runner.ts`: Codex SDK thread setup、timeout/session/usage handling、stream parsing 和 `TaskViewEvent` emission。
 - `src/agent/runners/fake-task-runner.ts`: deterministic fake runtime runner，用于 E2E/runtime regression。
@@ -288,14 +291,16 @@ Codex / Claude 适配层负责把 SDK 原始事件转换为 `TaskViewEvent`。Di
 当前职责：
 
 - `TaskRunner` 执行 Claude / Codex / fake runtime，输出 redacted `TaskViewEvent`，并通过 `onTraceEvent` 上报结构化 trace facts。
+- `AgentRuntime` registry 是 `executeTask` 的选择边界；当前 runtime shim 仍复用已有 `TaskRunner`，所以 Discord 输出和 runner event contract 不变。
 - `DiscordTaskViewReporter` 创建 / 更新状态 embed、progress message、Execution Summary、最终 Markdown/raw result，并把 delivery failure 交给注入的 callback。
 - `TaskReporter` 只写 SQLite `task_events`。
-- `executeTask` 只负责 active task registry、abort ownership、runner selection、DB task row lifecycle、trace reporter 创建和 view reporter wiring。
+- `executeTask` 只负责 active task registry、abort ownership、runtime selection、DB task row lifecycle、trace reporter 创建和 view reporter wiring。
 
 验证：
 
 - `src/agent/__tests__/task-reporter.test.ts` 覆盖事件写入。
 - `src/agent/__tests__/task-runners.test.ts` 覆盖 runner contract exports 和 fake runner view/trace behavior。
+- `src/agent/__tests__/task-runtime-registry.test.ts` 覆盖 `executeTask` 经 `AgentRuntime.startTask` 执行任务和附件映射。
 - `src/discord/__tests__/task-view-reporter.test.ts` 覆盖 progress/final formatting 和 `DiscordTaskViewReporter` render flow。
 - `src/store/__tests__/task-events.test.ts` 覆盖 task event store。
 - `src/ops/__tests__/doctor.test.ts` / `doctor-incidents.test.ts` 覆盖 Auto Doctor 读取 trace。

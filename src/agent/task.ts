@@ -2,7 +2,7 @@ import type { Message, SendableChannels } from "discord.js";
 import type { ContentBlockParam } from "@anthropic-ai/sdk/resources/messages.js";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
-import { config, type AgentProvider } from "../config.js";
+import { config } from "../config.js";
 import { updateTask } from "../store/db.js";
 import { DiscordTaskViewReporter } from "../discord/task-view-reporter.js";
 import { IDENTITY_LINE_TASK } from "./identity.js";
@@ -12,10 +12,10 @@ import { fmtTokens, formatAnthropicUsage } from "./usage.js";
 import { appendTaskEvent, type TaskEventSeverity } from "../store/task-events.js";
 import { TaskReporter } from "./task-reporter.js";
 import { buildSupervisorBlock } from "./supervisor.js";
-import { claudeTaskRunner } from "./runners/claude-task-runner.js";
-import { codexTaskRunner } from "./runners/codex-task-runner.js";
 import { createFakeTaskRunner } from "./runners/fake-task-runner.js";
-import type { TaskRunner, TaskRunnerResult, TaskRunnerTraceOptions } from "./runners/types.js";
+import type { AgentRuntime, AgentRuntimeTraceOptions, AgentTaskResult } from "../runtime/agent-runtime.js";
+import { createTaskRunnerRuntime } from "./runtimes/task-runner-runtime.js";
+import { getDefaultAgentRuntime, isAgentRuntimeId, type DefaultAgentRuntimeConfig } from "./runtimes/registry.js";
 import type { TaskViewEvent } from "./task-view-events.js";
 
 const log = createLogger("task");
@@ -38,7 +38,7 @@ export const __testables = {
   buildSupervisorBlock,
   IDENTITY_LINE_TASK,
   finalTaskStatus,
-  selectTaskRunner,
+  selectTaskRuntime,
   addActiveTaskForTest,
   deleteActiveTaskForTest,
   resetTaskRuntimeForTest,
@@ -162,9 +162,38 @@ function recordTaskEvent(taskId: string, eventType: string, severity: TaskEventS
   }
 }
 
-function selectTaskRunner(agentProvider: AgentProvider, fakeAgent: boolean): TaskRunner {
-  if (fakeAgent) return createFakeTaskRunner(agentProvider);
-  return agentProvider === "codex" ? codexTaskRunner : claudeTaskRunner;
+interface TaskRuntimeConfig extends DefaultAgentRuntimeConfig {
+  e2e: {
+    fakeAgent: boolean;
+  };
+}
+
+interface SelectedTaskRuntime {
+  runtime: AgentRuntime;
+  provider: string;
+  logProvider: string;
+  includeToolCount: boolean;
+}
+
+function selectTaskRuntime(runtimeConfig: TaskRuntimeConfig): SelectedTaskRuntime {
+  const runtime = getDefaultAgentRuntime(runtimeConfig);
+  if (!runtimeConfig.e2e.fakeAgent) {
+    return { runtime, provider: runtime.id, logProvider: runtime.id, includeToolCount: true };
+  }
+
+  if (!isAgentRuntimeId(runtime.id)) {
+    throw new Error(`Cannot create fake task runtime for unknown default runtime: ${runtime.id}`);
+  }
+
+  return {
+    runtime: createTaskRunnerRuntime({
+      id: runtime.id,
+      runner: createFakeTaskRunner(runtime.id),
+    }),
+    provider: runtime.id,
+    logProvider: "e2e-fake",
+    includeToolCount: false,
+  };
 }
 
 interface ExecuteTaskParams {
@@ -184,7 +213,7 @@ interface ExecuteTaskParams {
   statusMessage?: Message;
 }
 
-function recordRunnerTrace(reporter: TaskReporter, eventType: string, options: TaskRunnerTraceOptions = {}): void {
+function recordRuntimeTrace(reporter: TaskReporter, eventType: string, options: AgentRuntimeTraceOptions = {}): void {
   reporter.event(eventType, {
     severity: options.severity,
     message: options.message,
@@ -192,11 +221,11 @@ function recordRunnerTrace(reporter: TaskReporter, eventType: string, options: T
   });
 }
 
-function normalizeRunnerResult(
+function normalizeRuntimeResult(
   taskId: string,
   abortController: AbortController,
-  result: TaskRunnerResult,
-): TaskRunnerResult {
+  result: AgentTaskResult,
+): AgentTaskResult {
   if (wasInterrupted(taskId)) {
     return { ...result, success: false, result: interruptedReason(taskId) };
   }
@@ -209,10 +238,11 @@ function normalizeRunnerResult(
 function completeTaskRow(
   params: ExecuteTaskParams,
   abortController: AbortController,
-  result: TaskRunnerResult,
-  runner: TaskRunner,
+  result: AgentTaskResult,
+  provider: string,
   reporter: TaskReporter,
   toolCount: number,
+  includeToolCount: boolean,
 ): ReturnType<typeof finalTaskStatus> {
   const status = finalTaskStatus(params.taskId, abortController, result.success);
   updateTask(params.taskId, {
@@ -223,7 +253,6 @@ function completeTaskRow(
     duration_ms: result.durationMs,
     completed_at: new Date().toISOString(),
   });
-  const provider = runner.provider === "fake" ? config.agentProvider : runner.provider;
   const payload: Record<string, unknown> = {
     provider,
     duration_ms: result.durationMs,
@@ -231,7 +260,7 @@ function completeTaskRow(
     cost_usd: result.costUsd,
     session_id: result.sessionId,
   };
-  if (runner.provider !== "fake") payload.tool_count = toolCount;
+  if (includeToolCount) payload.tool_count = toolCount;
   reporter.finished(status, {
     ...payload,
   });
@@ -240,12 +269,11 @@ function completeTaskRow(
 
 function logTaskCompletion(
   shortId: string,
-  runner: TaskRunner,
-  result: TaskRunnerResult,
+  provider: string,
+  result: AgentTaskResult,
   toolCount: number,
   startedAt: number,
 ): void {
-  const provider = runner.provider === "fake" ? "e2e-fake" : runner.provider;
   const wallMs = Date.now() - startedAt;
   log.info(
     `${result.success ? "✓" : "✗"} ${shortId} ${provider} ${result.success ? "done" : "failed"} ` +
@@ -260,12 +288,13 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
   activeTasks.set(params.taskId, abortController);
   const outputMode = params.outputMode ?? "embed";
   const reporter = new TaskReporter(params.taskId);
+  const selectedRuntime = selectTaskRuntime(config);
   const viewReporter = new DiscordTaskViewReporter({
     taskId: params.taskId,
     prompt: params.prompt,
     cwd: params.cwd,
     channel: params.channel,
-    provider: config.agentProvider,
+    provider: selectedRuntime.provider,
     model: config.model,
     outputMode,
     traceAutoAttach: config.tasks.traceAutoAttach,
@@ -275,9 +304,8 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
   });
   const startedAt = Date.now();
   const shortId = params.taskId.slice(0, 8);
-  const runner = selectTaskRunner(config.agentProvider, config.e2e.fakeAgent);
   reporter.started({
-    provider: config.agentProvider,
+    provider: selectedRuntime.provider,
     model: config.model,
     cwd: params.cwd,
     output_mode: outputMode,
@@ -293,27 +321,41 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
   try {
     await viewReporter.start();
 
-    const runnerResult = await runner.run({
+    const runtimeResult = await selectedRuntime.runtime.startTask({
       taskId: params.taskId,
       prompt: params.prompt,
       cwd: params.cwd,
       ...(params.resumeSessionId ? { resumeSessionId: params.resumeSessionId } : {}),
-      ...(params.attachmentBlocks ? { attachmentBlocks: params.attachmentBlocks } : {}),
-      ...(params.attachmentCodexInputs ? { attachmentCodexInputs: params.attachmentCodexInputs } : {}),
+      ...((params.attachmentBlocks || params.attachmentCodexInputs)
+        ? {
+            attachments: {
+              ...(params.attachmentBlocks ? { contentBlocks: params.attachmentBlocks } : {}),
+              ...(params.attachmentCodexInputs ? { inputEntries: params.attachmentCodexInputs } : {}),
+            },
+          }
+        : {}),
       signal: abortController.signal,
       onViewEvent: async (event: TaskViewEvent) => {
         if (event.type === "session_started") updateTask(params.taskId, { session_id: event.sessionId });
         await viewReporter.handle(event);
       },
-      onTraceEvent: (eventType, options) => recordRunnerTrace(reporter, eventType, options),
+      onTraceEvent: (eventType, options) => recordRuntimeTrace(reporter, eventType, options),
     });
-    const lastResult = normalizeRunnerResult(params.taskId, abortController, runnerResult);
+    const lastResult = normalizeRuntimeResult(params.taskId, abortController, runtimeResult);
     const progressSnapshot = viewReporter.snapshot();
     const toolCallLog = lastResult.progressLines ?? progressSnapshot.lines;
     const toolStep = lastResult.toolCount ?? progressSnapshot.toolCount;
 
-    const status = completeTaskRow(params, abortController, lastResult, runner, reporter, toolStep);
-    logTaskCompletion(shortId, runner, lastResult, toolStep, startedAt);
+    const status = completeTaskRow(
+      params,
+      abortController,
+      lastResult,
+      selectedRuntime.provider,
+      reporter,
+      toolStep,
+      selectedRuntime.includeToolCount,
+    );
+    logTaskCompletion(shortId, selectedRuntime.logProvider, lastResult, toolStep, startedAt);
 
     await viewReporter.finish(lastResult, status, { lines: toolCallLog, toolCount: toolStep });
 
@@ -326,7 +368,7 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
       ? "任务已被用户取消"
       : err instanceof Error ? err.message : String(err);
     log.error(`✗ ${shortId} threw after ${durationMs}ms: ${errMsg}`);
-    reporter.providerError(config.agentProvider, errMsg, { duration_ms: durationMs });
+    reporter.providerError(selectedRuntime.provider, errMsg, { duration_ms: durationMs });
 
     const status = finalTaskStatus(params.taskId, abortController, false);
     updateTask(params.taskId, {
@@ -336,7 +378,7 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
       completed_at: new Date().toISOString(),
     });
     reporter.finished(status, {
-      provider: config.agentProvider,
+      provider: selectedRuntime.provider,
       duration_ms: durationMs,
       turns: 0,
       cost_usd: 0,
