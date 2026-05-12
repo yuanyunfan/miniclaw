@@ -21,6 +21,7 @@
     "ralph:run": "tsx scripts/ralph-run.ts",
     "ralph:next": "tsx scripts/ralph-loop.ts --limit 1",
     "ralph:loop": "tsx scripts/ralph-loop.ts",
+    "ralph:task": "tsx scripts/ralph-loop.ts --until-task-done",
     "ralph:verify": "tsx scripts/ralph-verify.ts",
     "register": "tsx src/commands/register.ts",
     "test": "vitest run",

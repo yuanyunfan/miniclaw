@@ -9,6 +9,7 @@ It is intentionally external to the bot runtime. The Discord bot does not call t
 - One plan task per Codex run.
 - One fresh `codex exec --ephemeral` context per task attempt.
 - One isolated Git worktree/branch per task.
+- One coherent reviewable phase per task attempt by default; avoid committing micro-slices that only add a single helper, type, or test unless the plan explicitly defines that as the phase.
 - The controller verifies, commits, and optionally pushes.
 - `ralph:next` and `ralph:loop` keep `main` as the serial integration line when `--merge-main` is used.
 - Raw run logs are local and ignored under `.ralph/`.
@@ -26,9 +27,9 @@ Queue `status` values control the next/loop cursor:
 - `done`
 - `skipped`
 
-`ralph:next` and `ralph:loop` select the first task whose queue status is `pending` and whose plan `Status:` is not closed. Closed plan statuses are `blocked`, `closed`, `done`, `shipped`, `skipped`, and `superseded`.
+`ralph:next`, `ralph:loop`, and `ralph:task` select tasks whose queue status is `pending` and whose plan `Status:` is not closed. Closed plan statuses are `blocked`, `closed`, `done`, `shipped`, `skipped`, and `superseded`.
 
-A plan can stay `pending` across multiple Ralph iterations. This is intentional: each Codex run is instructed to land only the next independently shippable slice. Mark the plan or queue item closed only when the plan is genuinely complete or intentionally deferred.
+A plan can stay `pending` across multiple Ralph iterations. This is intentional: each Codex run is instructed to land the next coherent reviewable phase, not the smallest possible micro-slice. Codex may mark the plan `Status:` as `done` only when the full plan is genuinely complete and verified; the controller queue status is still a manual cursor.
 
 ## Dry Run
 
@@ -69,6 +70,18 @@ pnpm ralph:next -- --execute
 4. runs `pnpm ralph:run -- --task <id> --execute --reuse-worktree`.
 
 Without `--execute`, it prints the selected task and command only.
+
+## Task Until Done
+
+```bash
+pnpm ralph:task -- --task task-view-boundary --execute --merge-main --push-main
+```
+
+`ralph:task` repeatedly runs one specified task until that task closes through queue status or plan `Status:`. It is a wrapper around `ralph:loop --until-task-done`.
+
+Execution mode requires `--merge-main` because the controller decides completion from the base checkout after each verified task branch is merged. Without a merge, a plan `Status: done` change would remain only on the task branch and the controller could not safely observe completion.
+
+The default safety limit is 25 iterations. Use `--limit <n>` to make that limit smaller or larger. Reaching the limit while the task is still open fails the command so unattended runs do not silently stop halfway.
 
 ## Loop
 

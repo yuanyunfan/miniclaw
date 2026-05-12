@@ -67,13 +67,19 @@ Run up to three serialized iterations through `main`:
 pnpm ralph:loop -- --limit 3 --execute --merge-main --push-main
 ```
 
+Run one task until its plan or queue status closes:
+
+```bash
+pnpm ralph:task -- --task task-view-boundary --execute --merge-main --push-main
+```
+
 ## Execution Model
 
 1. `ralph:run` resolves a task from `docs/ralph/queue.json`.
 2. It checks that the controller checkout is clean.
 3. It creates an isolated Git worktree under `../miniclaw-ralph/<task-id>` by default.
 4. It starts Codex with `codex exec --ephemeral --sandbox workspace-write`.
-5. Codex receives a strict prompt: implement only the first independently shippable slice, do not commit, do not push, update the plan notes.
+5. Codex receives a strict prompt: implement the largest coherent reviewable phase from the plan, prefer behavior wiring plus focused tests, do not commit, do not push, update the plan notes, and mark the plan `Status:` as `done` only when the full plan is genuinely complete and verified.
 6. The controller checks for a non-empty diff.
 7. The controller runs `pnpm ralph:verify`.
 8. If verification passes, the controller commits the worktree branch.
@@ -87,10 +93,13 @@ pnpm ralph:loop -- --limit 3 --execute --merge-main --push-main
 4. With `--push-main`, it pushes the base branch after each merge and lets the existing pre-push hook run `quality:push`.
 5. It reloads the queue before the next iteration.
 
+`ralph:task` is the fixed-task variant. It requires a `--task` id and, when executing, requires `--merge-main` so completion can be observed from the base checkout. It stops when that task's queue status or plan `Status:` becomes closed. If the safety `--limit` is reached while the task is still open, the command fails and asks for a higher limit or manual inspection.
+
 ## Safety Boundaries
 
 - `ralph:run` defaults to dry-run.
 - Codex is instructed not to commit or push.
+- Codex is instructed to avoid micro-slices; a Ralph iteration should normally complete a plan phase rather than only one helper, type, or test.
 - Raw Codex JSONL/stdout/stderr logs are written under ignored `.ralph/`.
 - The controller refuses to run from a dirty checkout unless `--force` is used.
 - `--push` is explicit; local branch commit is the default execute behavior.
@@ -104,7 +113,7 @@ pnpm ralph:loop -- --limit 3 --execute --merge-main --push-main
 
 ## Current Limits
 
-- Queue status is not auto-mutated. A plan can remain `pending` across several slice iterations until the plan or queue entry is explicitly closed.
+- Queue status is not auto-mutated. A plan can remain `pending` across several phase iterations until the plan or queue entry is explicitly closed.
 - Raw run logs are local-only under `.ralph/`.
 - Automatic retry is not implemented.
 - Parallel execution is possible by choosing different tasks, but `ralph:loop --merge-main` is intentionally serial.

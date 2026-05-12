@@ -104,6 +104,40 @@ Responsibilities:
 
 It may depend on Discord channel/message types and existing formatter helpers. It should not parse Claude/Codex SDK events.
 
+## Ralph Iteration Targets
+
+Ralph should treat each target below as one coherent reviewable phase. Do not land only a single helper, type, or test unless the selected target explicitly says that is the whole phase.
+
+### Target 1: Contracts And Characterization
+
+Status: landed across slices 1-4; do not repeat except for cleanup required by later targets.
+
+- Lock current rendering behavior with focused fake-runtime tests.
+- Add the provider-neutral `TaskViewEvent` contract.
+- Add the `TaskRunner` contract.
+- Add the runner selection boundary in `executeTask`.
+- Preserve current task behavior and keep production runtime wiring minimal.
+
+### Target 2: Runner Extraction
+
+Next Ralph phase target.
+
+- Extract fake, Claude, and Codex runner modules behind the `TaskRunner` contract.
+- Move provider-specific SDK setup and event parsing out of `src/agent/task.ts`.
+- Convert provider stream events into redacted `TaskViewEvent` values and separate trace callbacks.
+- Keep `executeTask(params)` public shape, DB lifecycle writes, abort ownership, and current session id formats stable.
+- Add runner-focused tests plus fake-runtime regression coverage in the same phase.
+
+### Target 3: Discord View Reporter And Docs
+
+Final Ralph phase target for this plan.
+
+- Add `src/discord/task-view-reporter.ts`.
+- Move progress, final output, embed, chunking, and delivery-failure rendering out of `src/agent/task.ts`.
+- Keep `TaskReporter` focused on structured trace persistence, or rename it only with compatibility re-exports.
+- Update architecture and Discord task output docs.
+- Run the full task-runtime verification profile; when complete and verified, mark this plan `Status: done`.
+
 ## Implementation Plan
 
 1. Add tests around the current rendering behavior before moving code.

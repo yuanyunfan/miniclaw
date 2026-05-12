@@ -26,7 +26,10 @@ interface RalphTask {
 interface Args {
   queuePath: string;
   limit: number;
+  limitWasSet: boolean;
+  taskId?: string;
   execute: boolean;
+  untilTaskDone: boolean;
   mergeMain: boolean;
   pushMain: boolean;
   pushBranch: boolean;
@@ -48,7 +51,9 @@ function parseArgs(argv: string[]): Args {
   const args: Args = {
     queuePath: "docs/ralph/queue.json",
     limit: 1,
+    limitWasSet: false,
     execute: false,
+    untilTaskDone: false,
     mergeMain: false,
     pushMain: false,
     pushBranch: false,
@@ -64,10 +69,15 @@ function parseArgs(argv: string[]): Args {
       continue;
     } else if (arg === "--queue") {
       args.queuePath = requireValue(argv, ++i, arg);
+    } else if (arg === "--task") {
+      args.taskId = requireValue(argv, ++i, arg);
     } else if (arg === "--limit") {
       args.limit = parsePositiveInt(requireValue(argv, ++i, arg), arg);
+      args.limitWasSet = true;
     } else if (arg === "--execute") {
       args.execute = true;
+    } else if (arg === "--until-task-done" || arg === "--until-done") {
+      args.untilTaskDone = true;
     } else if (arg === "--merge-main") {
       args.mergeMain = true;
     } else if (arg === "--push-main") {
@@ -106,6 +116,15 @@ function parseArgs(argv: string[]): Args {
   if (args.mergeMain && args.skipCommit) {
     throw new Error("--merge-main cannot be used with --skip-commit");
   }
+  if (args.untilTaskDone && !args.taskId) {
+    throw new Error("--until-task-done requires --task <id>");
+  }
+  if (args.untilTaskDone && args.execute && !args.mergeMain) {
+    throw new Error("--until-task-done requires --merge-main when executing so the base checkout can observe plan completion");
+  }
+  if (args.untilTaskDone && !args.limitWasSet) {
+    args.limit = 25;
+  }
 
   return args;
 }
@@ -129,8 +148,10 @@ function printHelp(): void {
     "Usage: pnpm ralph:loop -- --limit <n> [--execute] [--merge-main] [--push-main]",
     "",
     "Common options:",
+    "  --task <id>               Restrict selection to one queue task",
     "  --limit <n>              Maximum Ralph iterations to run; default: 1",
     "  --execute                Run Codex. Without this flag, print the first selected task only",
+    "  --until-task-done        Keep running --task until its queue or plan status is closed; default safety limit: 25",
     "  --merge-main             Fast-forward the base branch to each verified task branch",
     "  --push-main              Push the base branch after each merge; requires --merge-main",
     "  --push                   Push each Ralph task branch after its task commit",
@@ -139,7 +160,7 @@ function printHelp(): void {
     "  --sandbox <mode>         Forwarded to ralph:run",
     "",
     "Selection rule:",
-    "  The loop picks the first queue task whose queue status and plan Status are still open.",
+    "  The loop picks the requested --task, or the first queue task whose queue status and plan Status are still open.",
     "  If that plan remains open after a merge, the next iteration continues the same plan.",
     "",
   ].join("\n"));
@@ -218,6 +239,20 @@ function isOpenTask(repoRoot: string, task: RalphTask): boolean {
   return !status || !CLOSED_PLAN_STATUSES.has(status);
 }
 
+function findTask(queue: RalphQueue, taskId: string): RalphTask {
+  const task = queue.tasks.find((item) => item.id === taskId);
+  if (!task) throw new Error(`task not found in queue: ${taskId}`);
+  return task;
+}
+
+function ensureTaskBranchReady(repoRoot: string, queue: RalphQueue, task: RalphTask, args: Args): void {
+  const ref = baseRef(queue, args);
+  const branch = taskBranch(queue, task);
+  if (args.mergeMain && branchExists(repoRoot, branch) && !branchMergedInto(repoRoot, branch, ref)) {
+    throw new Error(`task branch ${branch} exists and is not merged into ${ref}; review, merge, or delete it before continuing`);
+  }
+}
+
 function branchExists(repoRoot: string, branch: string): boolean {
   return gitOk(["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], repoRoot);
 }
@@ -246,15 +281,16 @@ function syncBaseFromOrigin(repoRoot: string, ref: string): void {
 }
 
 function selectNextTask(repoRoot: string, queue: RalphQueue, args: Args): RalphTask | undefined {
-  const ref = baseRef(queue, args);
+  if (args.taskId) {
+    const task = findTask(queue, args.taskId);
+    if (!isOpenTask(repoRoot, task)) return undefined;
+    ensureTaskBranchReady(repoRoot, queue, task, args);
+    return task;
+  }
+
   for (const task of queue.tasks) {
     if (!isOpenTask(repoRoot, task)) continue;
-
-    const branch = taskBranch(queue, task);
-    if (args.mergeMain && branchExists(repoRoot, branch) && !branchMergedInto(repoRoot, branch, ref)) {
-      throw new Error(`task branch ${branch} exists and is not merged into ${ref}; review, merge, or delete it before continuing`);
-    }
-
+    ensureTaskBranchReady(repoRoot, queue, task, args);
     return task;
   }
   return undefined;
@@ -292,6 +328,8 @@ function printDryRun(repoRoot: string, queuePath: string, queue: RalphQueue, tas
   const lines = [
     "MiniClaw Ralph loop dry-run",
     `- limit: ${args.limit}`,
+    `- task filter: ${args.taskId ?? "(first open task)"}`,
+    `- until task done: ${args.untilTaskDone}`,
     `- base ref: ${ref}`,
     `- merge main: ${args.mergeMain}`,
     `- push main: ${args.pushMain}`,
@@ -373,6 +411,13 @@ try {
 
     runIteration(repoRoot, queuePath, queue, task, args, index);
     ran += 1;
+  }
+
+  if (args.untilTaskDone && args.taskId) {
+    queue = readQueue(queuePath);
+    if (isOpenTask(repoRoot, findTask(queue, args.taskId))) {
+      throw new Error(`task ${args.taskId} is still open after ${ran}/${args.limit} iteration(s); increase --limit or inspect the plan`);
+    }
   }
 
   process.stdout.write(`MiniClaw Ralph loop completed: ${ran} iteration(s).\n`);
