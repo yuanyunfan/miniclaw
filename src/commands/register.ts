@@ -2,6 +2,7 @@ import "../proxy.js";
 import { REST, Routes, SlashCommandBuilder } from "discord.js";
 import { config } from "../config.js";
 import { createLogger } from "../lib/log.js";
+import { INCIDENT_STATUSES } from "../store/incidents.js";
 
 const log = createLogger("register");
 
@@ -75,6 +76,39 @@ const commands = [
   new SlashCommandBuilder()
     .setName("incidents")
     .setDescription("查看 Auto Doctor open incidents")
+    .addStringOption((opt) =>
+      opt
+        .setName("status")
+        .setDescription("按 incident status 筛选；默认显示 open 状态集合")
+        .setRequired(false)
+        .addChoices(...INCIDENT_STATUSES.map((status) => ({ name: status, value: status })))
+    )
+    .addStringOption((opt) =>
+      opt.setName("type").setDescription("按 incident type 筛选，如 task_failed 或 cron_failed").setRequired(false)
+    )
+    .addStringOption((opt) =>
+      opt
+        .setName("severity")
+        .setDescription("按 severity 筛选")
+        .setRequired(false)
+        .addChoices(
+          { name: "info", value: "info" },
+          { name: "warning", value: "warning" },
+          { name: "critical", value: "critical" },
+        )
+    )
+    .addStringOption((opt) =>
+      opt.setName("category").setDescription("按 diagnosis category 筛选，如 miniclaw_bug").setRequired(false)
+    )
+    .addStringOption((opt) =>
+      opt.setName("provider").setDescription("按 source provider 筛选，如 codex 或 wechat-mp").setRequired(false)
+    )
+    .addStringOption((opt) =>
+      opt.setName("route").setDescription("按 source route 筛选，如 task_channel 或 cron_task").setRequired(false)
+    )
+    .addStringOption((opt) =>
+      opt.setName("repair_status").setDescription("按最新 repair run status 筛选，如 repair_pushed").setRequired(false)
+    )
     .addIntegerOption((opt) =>
       opt.setName("limit").setDescription("最多显示多少条（默认 10，最多 25）").setRequired(false)
     ),

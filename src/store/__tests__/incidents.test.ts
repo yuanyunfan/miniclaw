@@ -1,7 +1,8 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { initDb } from "../db.js";
+import { getDb, initDb } from "../db.js";
 import {
   appendIncidentEvent,
+  countIncidents,
   countOpenIncidents,
   countRepairRunsByStatus,
   countRepairRunsSince,
@@ -10,6 +11,7 @@ import {
   getIncident,
   getLatestRepairRunForIncident,
   listIncidentEvents,
+  listIncidents,
   listIncidentsByIdPrefix,
   listOpenIncidents,
   listRepairRunsForIncident,
@@ -138,5 +140,56 @@ describe("incidents store", () => {
     expect(listIncidentsByIdPrefix(incident.id.slice(0, 8), 5).some((row) => row.id === incident.id)).toBe(true);
     expect(listIncidentsByIdPrefix("does-not-exist", 5)).toEqual([]);
     expect(listIncidentsByIdPrefix("%", 5)).toEqual([]);
+  });
+
+  it("filters incidents by operator fields and sorts critical incidents first", () => {
+    const unique = `incident-filter-${Date.now()}`;
+    const warning = createOrUpdateIncident({
+      dedupeKey: `${unique}:warning`,
+      type: "task_failed",
+      severity: "warning",
+      title: "Warning task failed",
+      subjectId: `${unique}-task-warning`,
+      subjectType: "task",
+      source: { route: "task_channel", provider: "codex" },
+      diagnosis: { category: unique, repairAllowed: true },
+    }).row;
+    const critical = createOrUpdateIncident({
+      dedupeKey: `${unique}:critical`,
+      type: "task_failed",
+      severity: "critical",
+      title: "Critical task failed",
+      subjectId: `${unique}-task-critical`,
+      subjectType: "task",
+      source: { route: "task_channel", providerName: "codex" },
+      diagnosis: { category: unique, repairAllowed: true },
+    }).row;
+    const resolved = createOrUpdateIncident({
+      dedupeKey: `${unique}:resolved`,
+      type: "cron_failed",
+      severity: "critical",
+      status: "resolved",
+      title: "Resolved cron failed",
+      subjectId: `${unique}-cron`,
+      subjectType: "cron",
+      source: { route: "cron_task", provider_name: "stock-pulse" },
+      diagnosis: { category: unique, repairAllowed: false },
+    }).row;
+
+    createRepairRun({ incidentId: warning.id, status: "blocked" });
+    createRepairRun({ incidentId: critical.id, status: "repair_pushed" });
+    getDb().prepare("UPDATE incidents SET updated_at = ? WHERE id = ?").run("2026-05-13T01:00:00.000Z", warning.id);
+    getDb().prepare("UPDATE incidents SET updated_at = ? WHERE id = ?").run("2026-05-13T00:00:00.000Z", critical.id);
+
+    const openMatches = listIncidents({ category: unique, provider: "codex", route: "task_channel" }, 10);
+    expect(openMatches.map((row) => row.id)).toEqual([critical.id, warning.id]);
+    expect(openMatches.some((row) => row.id === resolved.id)).toBe(false);
+
+    const repaired = listIncidents({ category: unique, repairStatus: "repair_pushed" }, 10);
+    expect(repaired.map((row) => row.id)).toEqual([critical.id]);
+    expect(countIncidents({ category: unique })).toBe(2);
+
+    const closed = listIncidents({ status: "resolved", category: unique }, 10);
+    expect(closed.map((row) => row.id)).toEqual([resolved.id]);
   });
 });

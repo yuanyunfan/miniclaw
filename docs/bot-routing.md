@@ -241,7 +241,7 @@ chunkMessage 切 2000 字  ← Discord 单消息上限
 - `/cron-run`
 - `/health`
 - `/doctor`
-- `/incidents`
+- `/incidents`（默认 open status set，可选 `status/type/severity/category/provider/route/repair_status/limit` 过滤）
 - `/incident`
 - `/agent-config`
 - `/cancel`

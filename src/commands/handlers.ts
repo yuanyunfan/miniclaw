@@ -22,21 +22,26 @@ import { resolveTaskCwd } from "../routing/cwd.js";
 import { buildTaskPromptWithContext } from "../routing/task-context.js";
 import { formatDoctorReport, runDoctor, type DoctorMode } from "../ops/doctor.js";
 import { resolveDoctorSummaryChannel } from "../ops/doctor-discord.js";
-import { collectRepairMetrics, formatRepairMetrics } from "../ops/doctor-metrics.js";
 import { evaluateRepairPolicy } from "../ops/doctor-repair.js";
 import { formatDoctorShipResult, runDoctorShip } from "../ops/doctor-ship.js";
 import {
   appendIncidentEvent,
+  countIncidents,
   countOpenIncidents,
   getIncident,
+  getLatestRepairRunForIncident,
   listIncidentEvents,
   listIncidentsByIdPrefix,
-  listOpenIncidents,
+  listIncidents,
   listRepairRunsForIncident,
   markIncidentStatus,
+  type IncidentListFilters,
   type IncidentRow,
+  type IncidentSeverity,
+  type IncidentStatus,
 } from "../store/incidents.js";
 import { formatIncidentDetail, formatIncidentResolution } from "./incident-detail.js";
+import { buildIncidentListReply, normalizeIncidentFilterValue, normalizeIncidentListLimit } from "./incidents.js";
 import { buildTaskLogReply, formatTaskTraceError } from "./task-log.js";
 import { buildCronRunDetailReply, buildCronRunsReply } from "./cron-runs.js";
 import { buildTaskTraceModel, resolveTaskForTrace } from "../store/task-trace-export.js";
@@ -210,23 +215,24 @@ export async function handleIncidents(interaction: ChatInputCommandInteraction):
     return;
   }
 
-  const limit = Math.min(Math.max(interaction.options.getInteger("limit") ?? 10, 1), 25);
-  const incidents = listOpenIncidents(limit);
-  const lines = incidents.length
-    ? incidents.map((incident) => [
-      `**${incident.id.slice(0, 8)}** [${incident.severity}/${incident.status}] ${incident.title}`,
-      `  ↳ type=${incident.type} subject=${incident.subject_type ?? "unknown"}:${incident.subject_id ?? "-"}`,
-    ].join("\n")).join("\n")
-    : "(无 open incident)";
+  const filters: IncidentListFilters = {
+    status: normalizeIncidentFilterValue(interaction.options.getString("status")) as IncidentStatus | undefined,
+    type: normalizeIncidentFilterValue(interaction.options.getString("type")),
+    severity: normalizeIncidentFilterValue(interaction.options.getString("severity")) as IncidentSeverity | undefined,
+    category: normalizeIncidentFilterValue(interaction.options.getString("category")),
+    provider: normalizeIncidentFilterValue(interaction.options.getString("provider")),
+    route: normalizeIncidentFilterValue(interaction.options.getString("route")),
+    repairStatus: normalizeIncidentFilterValue(interaction.options.getString("repair_status")),
+  };
+  const limit = normalizeIncidentListLimit(interaction.options.getInteger("limit"));
+  const incidents = listIncidents(filters, limit);
+  const total = countIncidents(filters);
+  const repairStatuses = new Map(
+    incidents.map((incident) => [incident.id, getLatestRepairRunForIncident(incident.id)?.status ?? "none"])
+  );
 
   await interaction.reply({
-    content: [
-      `MiniClaw open incidents (${incidents.length})`,
-      "",
-      lines,
-      "",
-      formatRepairMetrics(collectRepairMetrics({ sinceDays: 14, limit: 100 })),
-    ].join("\n").slice(0, 1900),
+    content: buildIncidentListReply({ incidents, total, filters, repairStatuses }),
     ephemeral: true,
   });
 }

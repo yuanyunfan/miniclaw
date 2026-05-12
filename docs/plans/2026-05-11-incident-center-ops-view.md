@@ -193,3 +193,18 @@ Do not add schema fields until the formatter proves the current stored JSON cann
 
 Record new filters, formatter behavior, command output examples, and verification evidence here when implemented.
 
+### 2026-05-13 - Ralph incident list filters
+
+- Implemented the first reviewable phase: `/incidents` now supports optional `status`, `type`, `severity`, `category`, `provider`, `route`, `repair_status`, and `limit` filters while preserving the default open-status-set behavior.
+- Added `listIncidents(filters, limit)` and `countIncidents(filters)` in `src/store/incidents.ts`; category/provider/route are read from existing JSON payloads, and `repair_status` matches the latest `repair_runs.status`. No schema fields were added.
+- Added compact incident list formatting in `src/commands/incidents.ts`: active filter summary, severity/type groups, rows with short id, severity/status, type, latest repair state, updated age, subject, source route/provider when present, and operator hints.
+- Wired the slash command options in `src/commands/register.ts` and `handleIncidents` in `src/commands/handlers.ts`.
+- Updated docs in `docs/features/13-auto-doctor.md`, `docs/bot-routing.md`, and `docs/architecture.md` for the new filter surface and store query behavior.
+- Focused verification passed:
+  - `pnpm vitest run src/store/__tests__/incidents.test.ts src/commands/__tests__/incidents.test.ts src/commands/__tests__/incident-detail.test.ts` - 13 tests passed.
+  - `pnpm run typecheck` - passed.
+  - `pnpm run lint` - passed.
+  - `pnpm run quality:docs` - passed after architecture docs were synced.
+- Ralph doctor profile passed:
+  - `pnpm run ralph:verify -- --task incident-center-ops-view --profile doctor` - passed; included doctor scheduler/repair/ship tests, incident detail tests, typecheck, lint, and docs drift.
+- Remaining plan items: richer `/incident view` links, repair review formatter, post-ship monitoring hints, and future cron/task trace deep links beyond this list-filter phase.

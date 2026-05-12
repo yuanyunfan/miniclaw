@@ -13,6 +13,18 @@ export type IncidentStatus =
   | "resolved"
   | "ignored";
 
+export const INCIDENT_STATUSES: readonly IncidentStatus[] = [
+  "open",
+  "diagnosing",
+  "diagnosed",
+  "repair_blocked",
+  "repairing",
+  "repair_ready",
+  "shipped",
+  "resolved",
+  "ignored",
+] as const;
+
 export const OPEN_INCIDENT_STATUSES: readonly IncidentStatus[] = [
   "open",
   "diagnosing",
@@ -91,6 +103,16 @@ export interface IncidentInput {
   diagnosis?: unknown;
 }
 
+export interface IncidentListFilters {
+  status?: IncidentStatus;
+  type?: string;
+  severity?: IncidentSeverity;
+  category?: string;
+  provider?: string;
+  route?: string;
+  repairStatus?: string;
+}
+
 export interface CreateOrUpdateIncidentResult {
   row: IncidentRow;
   created: boolean;
@@ -115,6 +137,99 @@ function nowSql(): string {
 
 function isOpen(status: string): boolean {
   return (OPEN_INCIDENT_STATUSES as readonly string[]).includes(status);
+}
+
+function normalizedText(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
+}
+
+function jsonExtract(column: string, path: string): string {
+  return `CASE WHEN ${column} IS NOT NULL AND json_valid(${column}) THEN json_extract(${column}, '${path}') END`;
+}
+
+const DIAGNOSIS_CATEGORY_SQL = jsonExtract("diagnosis_json", "$.category");
+const SOURCE_PROVIDER_SQL = `COALESCE(
+  ${jsonExtract("source_json", "$.provider")},
+  ${jsonExtract("source_json", "$.providerName")},
+  ${jsonExtract("source_json", "$.provider_name")},
+  ${jsonExtract("evidence_json", "$.provider")},
+  ${jsonExtract("evidence_json", "$.providerName")},
+  ${jsonExtract("evidence_json", "$.provider_name")},
+  ${jsonExtract("diagnosis_json", "$.provider")}
+)`;
+const SOURCE_ROUTE_SQL = `COALESCE(
+  ${jsonExtract("source_json", "$.route")},
+  ${jsonExtract("source_json", "$.route_type")},
+  ${jsonExtract("source_json", "$.source_route_type")},
+  ${jsonExtract("evidence_json", "$.route")},
+  ${jsonExtract("evidence_json", "$.task.source_route_type")},
+  ${jsonExtract("diagnosis_json", "$.route")}
+)`;
+const LATEST_REPAIR_STATUS_SQL = `(
+  SELECT rr.status
+  FROM repair_runs rr
+  WHERE rr.incident_id = incidents.id
+  ORDER BY datetime(rr.created_at) DESC, rr.id DESC
+  LIMIT 1
+)`;
+
+function buildIncidentListWhere(filters: IncidentListFilters = {}): { whereSql: string; params: unknown[] } {
+  const where: string[] = [];
+  const params: unknown[] = [];
+
+  if (filters.status) {
+    where.push("status = ?");
+    params.push(filters.status);
+  } else {
+    const placeholders = OPEN_INCIDENT_STATUSES.map(() => "?").join(", ");
+    where.push(`status IN (${placeholders})`);
+    params.push(...OPEN_INCIDENT_STATUSES);
+  }
+
+  const type = normalizedText(filters.type);
+  if (type) {
+    where.push("type = ?");
+    params.push(type);
+  }
+
+  if (filters.severity) {
+    where.push("severity = ?");
+    params.push(filters.severity);
+  }
+
+  const category = normalizedText(filters.category);
+  if (category) {
+    where.push(`${DIAGNOSIS_CATEGORY_SQL} = ?`);
+    params.push(category);
+  }
+
+  const provider = normalizedText(filters.provider);
+  if (provider) {
+    where.push(`${SOURCE_PROVIDER_SQL} = ?`);
+    params.push(provider);
+  }
+
+  const route = normalizedText(filters.route);
+  if (route) {
+    where.push(`${SOURCE_ROUTE_SQL} = ?`);
+    params.push(route);
+  }
+
+  const repairStatus = normalizedText(filters.repairStatus);
+  if (repairStatus) {
+    where.push(`${LATEST_REPAIR_STATUS_SQL} = ?`);
+    params.push(repairStatus);
+  }
+
+  return {
+    whereSql: where.length ? `WHERE ${where.join(" AND ")}` : "",
+    params,
+  };
+}
+
+function normalizeLimit(limit: number): number {
+  return Math.min(Math.max(Math.floor(limit), 1), 100);
 }
 
 export function createOrUpdateIncident(input: IncidentInput): CreateOrUpdateIncidentResult {
@@ -213,6 +328,31 @@ export function listOpenIncidents(limit = 20): IncidentRow[] {
   return getDb()
     .prepare(`SELECT * FROM incidents WHERE status IN (${placeholders}) ORDER BY updated_at DESC, created_at DESC LIMIT ?`)
     .all(...OPEN_INCIDENT_STATUSES, limit) as IncidentRow[];
+}
+
+export function listIncidents(filters: IncidentListFilters = {}, limit = 20): IncidentRow[] {
+  const { whereSql, params } = buildIncidentListWhere(filters);
+  return getDb()
+    .prepare(`
+      SELECT *
+      FROM incidents
+      ${whereSql}
+      ORDER BY
+        CASE severity WHEN 'critical' THEN 2 WHEN 'warning' THEN 1 ELSE 0 END DESC,
+        datetime(updated_at) DESC,
+        datetime(created_at) DESC,
+        id DESC
+      LIMIT ?
+    `)
+    .all(...params, normalizeLimit(limit)) as IncidentRow[];
+}
+
+export function countIncidents(filters: IncidentListFilters = {}): number {
+  const { whereSql, params } = buildIncidentListWhere(filters);
+  const row = getDb()
+    .prepare(`SELECT COUNT(*) AS count FROM incidents ${whereSql}`)
+    .get(...params) as { count?: number } | undefined;
+  return Number(row?.count ?? 0);
 }
 
 export function countOpenIncidents(): number {

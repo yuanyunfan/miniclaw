@@ -34,6 +34,7 @@ Discord:
 /doctor task_id:<task-id-prefix>
 /doctor cron:<job-name>
 /incidents
+/incidents status:<optional> type:<optional> severity:<optional> category:<optional> provider:<optional> route:<optional> repair_status:<optional> limit:<optional>
 /incident view id:<incident-id-or-prefix>
 /incident resolve id:<incident-id-or-prefix> reason:<optional-reason>
 /incident ignore id:<incident-id-or-prefix> reason:<optional-reason>
@@ -119,7 +120,17 @@ When automatic diagnosis is enabled, MiniClaw stores actionable symptoms as inci
 - connectivity degradation
 - PM2 unstable restarts
 
-Incidents use deterministic dedupe keys, so repeated scheduled scans update the same incident instead of posting duplicate alerts. `/health` includes the open incident count, and `/incidents` lists open incidents.
+Incidents use deterministic dedupe keys, so repeated scheduled scans update the same incident instead of posting duplicate alerts. `/health` includes the open incident count, and `/incidents` lists open incidents by default.
+
+`/incidents` supports operator filters without changing the default open-only behavior:
+
+- `status`: exact incident status; when omitted, the open status set is used.
+- `type`, `severity`, and `category`: match incident type, severity, and `diagnosis_json.category`.
+- `provider` and `route`: match source metadata such as Discord task route or provider name when present.
+- `repair_status`: matches the latest repair run status for the incident.
+- `limit`: clamps to 1-25 rows.
+
+The list output shows the active filters, severity/type groups, compact rows with subject, source route/provider when present, latest repair state, updated age, and a detail command hint.
 
 ## Incident Detail And Lifecycle
 
@@ -140,9 +151,9 @@ Lifecycle commands keep the incident record auditable:
 - `/incident retry-repair` reopens an eligible incident as `diagnosed` so the scheduled Auto Doctor loop can attempt repair again under the existing repair policy and rate limits.
 - `/incident ship-preview` runs the guarded `doctor:ship` dry-run path and records a `ship_preview_requested` event.
 
-Resolved and ignored incidents are excluded from the default `/incidents` open list. Retry repair does not execute a long-running repair inside the Discord interaction and does not bypass `doctor.auto_repair_enabled`, category/type policy, path allowlists, dirty-worktree checks, or approval gates.
+Resolved and ignored incidents are excluded from the default `/incidents` open list, but can be inspected with explicit `status:` filters. Retry repair does not execute a long-running repair inside the Discord interaction and does not bypass `doctor.auto_repair_enabled`, category/type policy, path allowlists, dirty-worktree checks, or approval gates.
 
-`/incidents` also includes a compact repair metrics block over recent `repair_runs`: attempts, successful repairs, pushed branches, shipped repairs, possible post-ship regression incidents within 72 hours, blocked/verification-failed runs, status/type/category counts, average changed file count, average verification gate duration, and promotion-policy blockers. The promotion policy is intentionally conservative: approval relaxation remains ineligible until there is enough successful repair history, no recent repair failures or possible post-ship regression incidents, and live restart continues to use safe-restart without `--force`.
+Repair metrics are still collected from recent `repair_runs`: attempts, successful repairs, pushed branches, shipped repairs, possible post-ship regression incidents within 72 hours, blocked/verification-failed runs, status/type/category counts, average changed file count, average verification gate duration, and promotion-policy blockers. The promotion policy is intentionally conservative: approval relaxation remains ineligible until there is enough successful repair history, no recent repair failures or possible post-ship regression incidents, and live restart continues to use safe-restart without `--force`.
 
 ## Task Trace Events
 
