@@ -680,6 +680,45 @@ export const config = {
   },
   dbPath,
   memoryPath,
+  state: {
+    retention: {
+      chatHistoryDays: positiveInt(
+        ["state", "retention", "chat_history_days"],
+        "MINICLAW_STATE_RETENTION_CHAT_HISTORY_DAYS",
+        90
+      ),
+      taskEventsDays: positiveInt(
+        ["state", "retention", "task_events_days"],
+        "MINICLAW_STATE_RETENTION_TASK_EVENTS_DAYS",
+        90
+      ),
+      smartRouterDecisionsDays: positiveInt(
+        ["state", "retention", "smart_router_decisions_days"],
+        "MINICLAW_STATE_RETENTION_SMART_ROUTER_DECISIONS_DAYS",
+        180
+      ),
+      incidentsDays: positiveInt(
+        ["state", "retention", "incidents_days"],
+        "MINICLAW_STATE_RETENTION_INCIDENTS_DAYS",
+        365
+      ),
+      repairRunsDays: positiveInt(
+        ["state", "retention", "repair_runs_days"],
+        "MINICLAW_STATE_RETENTION_REPAIR_RUNS_DAYS",
+        365
+      ),
+      marketForecastsDays: positiveInt(
+        ["state", "retention", "market_forecasts_days"],
+        "MINICLAW_STATE_RETENTION_MARKET_FORECASTS_DAYS",
+        730
+      ),
+      dryRunDefault: boolValue(
+        ["state", "retention", "dry_run_default"],
+        "MINICLAW_STATE_RETENTION_DRY_RUN_DEFAULT",
+        true
+      ),
+    },
+  },
   e2e: {
     mode: e2eMode,
     senderUserIds: e2eSenderUserIds,

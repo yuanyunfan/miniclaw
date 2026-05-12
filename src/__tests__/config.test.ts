@@ -66,6 +66,13 @@ const ENV_KEYS = [
   "MINICLAW_MCP_ALLOWLIST",
   "MINICLAW_DB_PATH",
   "MINICLAW_MEMORY_PATH",
+  "MINICLAW_STATE_RETENTION_CHAT_HISTORY_DAYS",
+  "MINICLAW_STATE_RETENTION_TASK_EVENTS_DAYS",
+  "MINICLAW_STATE_RETENTION_SMART_ROUTER_DECISIONS_DAYS",
+  "MINICLAW_STATE_RETENTION_INCIDENTS_DAYS",
+  "MINICLAW_STATE_RETENTION_REPAIR_RUNS_DAYS",
+  "MINICLAW_STATE_RETENTION_MARKET_FORECASTS_DAYS",
+  "MINICLAW_STATE_RETENTION_DRY_RUN_DEFAULT",
   "MINICLAW_E2E_MODE",
   "MINICLAW_E2E_SENDER_USER_IDS",
   "MINICLAW_DISABLE_SCHEDULER",
@@ -213,6 +220,15 @@ mcp:
 storage:
   db_path: "${join(tmpDir, "data.db")}"
   memory_path: "${memoryPath}"
+state:
+  retention:
+    chat_history_days: 14
+    task_events_days: 30
+    smart_router_decisions_days: 60
+    incidents_days: 120
+    repair_runs_days: 180
+    market_forecasts_days: 365
+    dry_run_default: false
 tasks:
   trace_auto_attach:
     enabled: true
@@ -292,6 +308,15 @@ notifications:
     expect(config.mcp).toEqual({ configPath: mcpConfig, allowlist: ["exa", "context7"] });
     expect(config.dbPath).toBe(join(tmpDir, "data.db"));
     expect(config.memoryPath).toBe(memoryPath);
+    expect(config.state.retention).toEqual({
+      chatHistoryDays: 14,
+      taskEventsDays: 30,
+      smartRouterDecisionsDays: 60,
+      incidentsDays: 120,
+      repairRunsDays: 180,
+      marketForecastsDays: 365,
+      dryRunDefault: false,
+    });
     expect(config.taskChannelIds).toEqual(["task-yaml"]);
     expect(config.channelDefaults["task-yaml"]).toEqual({ cwd: tmpDir });
     expect(config.tasks.traceAutoAttach).toEqual({
@@ -404,6 +429,15 @@ storage:
       minEventCount: 0,
       maxBytes: 120000,
     });
+    expect(config.state.retention).toEqual({
+      chatHistoryDays: 90,
+      taskEventsDays: 90,
+      smartRouterDecisionsDays: 180,
+      incidentsDays: 365,
+      repairRunsDays: 365,
+      marketForecastsDays: 730,
+      dryRunDefault: true,
+    });
     expect(config.audioTranscription).toEqual({
       enabled: true,
       provider: "auto",
@@ -515,6 +549,47 @@ storage:
       minDurationMs: 900000,
       minEventCount: 42,
       maxBytes: 32768,
+    });
+  });
+
+  it("supports state retention env overrides", async () => {
+    const cfg = join(tmpDir, "config.yaml");
+    writeFileSync(cfg, `
+discord:
+  client_id: "client-yaml"
+  guild_id: "guild-yaml"
+  allowed_user_id: "user-yaml"
+agent:
+  provider: codex
+  default_cwd: "${tmpDir}"
+storage:
+  db_path: "${join(tmpDir, "data.db")}"
+  memory_path: "${join(tmpDir, "MEMORY.md")}"
+state:
+  retention:
+    chat_history_days: 90
+    task_events_days: 90
+`);
+    process.env.MINICLAW_CONFIG = cfg;
+    process.env.DISCORD_TOKEN = "token-env";
+    process.env.MINICLAW_STATE_RETENTION_CHAT_HISTORY_DAYS = "7";
+    process.env.MINICLAW_STATE_RETENTION_TASK_EVENTS_DAYS = "8";
+    process.env.MINICLAW_STATE_RETENTION_SMART_ROUTER_DECISIONS_DAYS = "9";
+    process.env.MINICLAW_STATE_RETENTION_INCIDENTS_DAYS = "10";
+    process.env.MINICLAW_STATE_RETENTION_REPAIR_RUNS_DAYS = "11";
+    process.env.MINICLAW_STATE_RETENTION_MARKET_FORECASTS_DAYS = "12";
+    process.env.MINICLAW_STATE_RETENTION_DRY_RUN_DEFAULT = "false";
+
+    const { config } = await import("../config.js");
+
+    expect(config.state.retention).toEqual({
+      chatHistoryDays: 7,
+      taskEventsDays: 8,
+      smartRouterDecisionsDays: 9,
+      incidentsDays: 10,
+      repairRunsDays: 11,
+      marketForecastsDays: 12,
+      dryRunDefault: false,
     });
   });
 

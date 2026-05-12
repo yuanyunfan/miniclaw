@@ -426,3 +426,25 @@ For each completed slice, record:
   - `pnpm ralph:verify -- --task complexity-hotspot-refactor --profile standard` passed: `pnpm run typecheck`, `pnpm run lint`, `pnpm run quality:docs`.
 - Public API changes: none for initialized store usage. `getDb()`, task helpers, chat helpers, and Smart Router helpers continue to be re-exported from `src/store/db.ts`.
 - Follow-up cleanup: retention config, dry-run cleanup command, and shared diagnostic redaction policy remain future Slice F work; broader config work belongs to Slice G.
+
+### 2026-05-12 - Slice F DB State Retention Cleanup Boundary
+
+- Slice name: Slice F partial, state retention cleanup boundary.
+- Changed files:
+  - `src/store/state-cleanup.ts`: added cleanup target planning plus dry-run savepoint simulation and transaction-backed execute behavior for `chat_history`, `task_events`, `smart_router_decisions`, incidents/incident events, repair runs, and market forecasts.
+  - `scripts/state-cleanup.ts`, `package.json`: added `pnpm run state:cleanup -- [--dry-run | --execute] [--table <scope>] [--older-than-days <n>]`.
+  - `src/config.ts`, `src/__tests__/config.test.ts`, `config.example.yaml`: added `state.retention.*` defaults and env override coverage.
+  - `src/store/__tests__/state-cleanup.test.ts`: added focused tests for dry-run rollback, single-scope cleanup, market forecast child-before-parent deletion, and closed incident cleanup safety.
+  - `docs/architecture.md`, `docs/continuous-improvement-report.md`, `docs/plans/2026-05-11-db-migrations-state-lifecycle.md`: documented the cleanup boundary, defaults, and remaining redaction-policy gap.
+- Behavior parity tests:
+  - `pnpm vitest run src/store/__tests__/state-cleanup.test.ts` passed, 6 tests.
+  - `pnpm vitest run src/__tests__/config.test.ts` passed, 17 tests.
+  - `pnpm vitest run src/store` passed, 7 files / 51 tests.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm run quality:docs` passed with schema v10.
+  - `pnpm run build` passed; generated ignored `dist/` artifacts were removed after verification.
+  - Temp DB smoke `pnpm run state:cleanup -- --dry-run --table task_events --older-than-days 30` passed with 0 candidates against `/private/tmp/miniclaw-state-cleanup-smoke.db`; temp DB artifacts were removed after verification.
+  - `pnpm ralph:verify -- --task complexity-hotspot-refactor --profile standard` passed: `pnpm run typecheck`, `pnpm run lint`, `pnpm run quality:docs`.
+- Public API changes: none for existing DB facade consumers. New state cleanup helpers are direct imports from `src/store/state-cleanup.ts`; the CLI defaults to dry-run.
+- Follow-up cleanup: shared diagnostic redaction policy remains future Slice F work; broader schema-first config split still belongs to Slice G.

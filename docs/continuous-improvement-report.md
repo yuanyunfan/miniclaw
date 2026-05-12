@@ -246,7 +246,7 @@ state lifecycle 也需要明确：
 2. 已完成：增加 `schema_version_history`，记录迁移执行时间和版本。
 3. 已完成：把 `tasks`、`chat_history`、`smart_router_decisions` 拆到 `src/store/repositories/*`，并保留 `src/store/db.ts` compatibility facade。
 4. 已有：`incidents`、`task_events`、`market_forecasts` 位于独立 store module，并改为直接依赖 `src/store/connection.ts`。
-5. 后续：增加 state retention 配置和清理命令。
+5. 已完成：增加 `state.retention.*` 配置和 `pnpm run state:cleanup` dry-run-first 清理命令。
 6. 后续：对 prompt preview、provider payload、email/account data 做明确 redaction policy。
 
 ### 验收标准
@@ -428,7 +428,7 @@ Stage CLI 有独立 persona、orchestrator、TUI 和 smoke/e2e，但它和 Disco
 2. 改造 1 个 provider 作为 manifest + health + dry-run + replay fixture 样板。
 3. 建立 `src/store/migrations/`。
 4. 拆分 `src/config.ts` 的 load/schema/resolve/runtime。
-5. 增加 state retention 和 redaction policy。
+5. 已增加 state retention 和 dry-run-first cleanup；下一步补 redaction policy。
 
 ### 90 天
 

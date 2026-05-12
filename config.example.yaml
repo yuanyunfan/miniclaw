@@ -114,6 +114,18 @@ storage:
   db_path: "~/.miniclaw/data.db"
   memory_path: "~/.miniclaw/memories/MEMORY.md"
 
+state:
+  retention:
+    # Cleanup is dry-run by default. Use `pnpm run state:cleanup -- --execute`
+    # only after reviewing the dry-run candidate counts.
+    dry_run_default: true
+    chat_history_days: 90
+    task_events_days: 90
+    smart_router_decisions_days: 180
+    incidents_days: 365
+    repair_runs_days: 365
+    market_forecasts_days: 730
+
 doctor:
   enabled: true
   # Keep false until the summary channel is configured and a manual /doctor smoke test passes.
