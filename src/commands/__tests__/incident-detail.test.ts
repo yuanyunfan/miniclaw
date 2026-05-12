@@ -91,4 +91,43 @@ describe("incident detail formatting", () => {
   it("renders resolution summaries", () => {
     expect(formatIncidentResolution("resolved", incident(), "fixed manually")).toContain("fixed manually");
   });
+
+  it("redacts diagnostic fields from incident detail output", () => {
+    const text = formatIncidentDetail({
+      incident: incident({
+        summary: "Provider failed with Authorization: Bearer abcdefghijklmnop for user@example.com",
+        evidence_json: JSON.stringify({
+          trace: [{
+            task_id: "task-abc",
+            event_type: "provider_error",
+            severity: "error",
+            message: "session_id=codex:session-1 token=secret-token-123456",
+            created_at: "2026-05-10T01:08:00.000Z",
+          }],
+        }),
+      }),
+      events: [event({
+        payload_json: JSON.stringify({
+          repair_run_id: "repair-1",
+          cookie: "sid=secret",
+          session_id: "codex:session-1",
+          account_number: "123456789012",
+        }),
+      })],
+      repairRuns: [repair({ workspace_path: "/tmp/miniclaw-repairs/incident-123456?token=secret-token-123456" })],
+    });
+
+    expect(text).toContain("Authorization: [REDACTED]");
+    expect(text).toContain("[redacted-email]");
+    expect(text).toContain("session_id=[REDACTED]");
+    expect(text).toContain("\"session_id\":\"[redacted-session:");
+    expect(text).toContain("\"account_number\":\"[redacted-account:");
+    expect(text).toContain("\"cookie\":\"[redacted-credential]\"");
+    expect(text).toContain("token=[REDACTED]");
+    expect(text).not.toContain("secret-token-123456");
+    expect(text).not.toContain("codex:session-1");
+    expect(text).not.toContain("123456789012");
+    expect(text).not.toContain("user@example.com");
+    expect(text).not.toContain("sid=secret");
+  });
 });

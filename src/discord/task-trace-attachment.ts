@@ -63,7 +63,7 @@ export async function sendTaskTraceAutoAttachment(
   const payload: MessageCreateOptions = {
     content: [
       `${formatTaskTraceSummary(model.value)} | auto-attach: ${reason}`,
-      "Markdown trace 已自动附加。默认 trace 不包含 prompt/raw provider payload/cookie/token/email body。",
+      "Markdown trace 已自动附加。默认 trace 不包含 prompt/raw provider payload/cookie/token/session/account/email body。",
     ].join("\n").slice(0, 1900),
     files: [
       new AttachmentBuilder(Buffer.from(markdown, "utf8"), {

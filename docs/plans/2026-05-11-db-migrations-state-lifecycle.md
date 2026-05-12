@@ -1,6 +1,6 @@
 # DB Migrations And State Lifecycle Governance
 
-Status: draft
+Status: done
 Date: 2026-05-11
 
 ## Background
@@ -265,3 +265,27 @@ Record migration versions, repository splits, retention defaults, and verificati
   - `pnpm ralph:verify -- --task complexity-hotspot-refactor --profile standard` passed: `pnpm run typecheck`, `pnpm run lint`, `pnpm run quality:docs`.
 - Public API changes: none for existing DB facade consumers. New cleanup helpers live in `src/store/state-cleanup.ts`; the cleanup command defaults to dry-run unless config or CLI selects execute mode.
 - Follow-up cleanup: shared diagnostic redaction policy remains future Slice F work.
+
+### 2026-05-12 Slice 4: Shared Diagnostic Redaction Boundary
+
+- Scope: final DB lifecycle/state governance phase. Added a reusable diagnostic redaction policy and connected it to task trace export plus Auto Doctor incident detail rendering.
+- Redaction policy:
+  - `src/privacy/diagnostic-redaction.ts` owns shared text/object redaction for authorization headers, cookies, tokens, prompt/body fields, raw provider payload fields, email/phone text, and session/account identifiers.
+  - Session/account identifiers are replaced with deterministic short hashes for correlation without exposing raw values.
+  - Task trace export remains allowlist-first; disallowed payload keys continue to be counted as `redacted_payload_keys`.
+- Changed files:
+  - `src/privacy/diagnostic-redaction.ts`: added shared diagnostic redaction helpers and policy text.
+  - `src/store/task-trace-export.ts`: replaced local redaction regex with shared diagnostic redaction and redacted task/session ids in exported models/Markdown.
+  - `src/commands/incident-detail.ts`: routed summary, source/diagnosis fields, trace snippets, repair paths, and incident event payload text through the shared diagnostic redaction policy.
+  - `src/commands/task-log.ts`, `src/discord/task-trace-attachment.ts`: updated user-facing safety copy to include session/account redaction.
+  - `src/privacy/__tests__/diagnostic-redaction.test.ts`, `src/store/__tests__/task-trace-export.test.ts`, `src/commands/__tests__/incident-detail.test.ts`: covered credential text, recursive object redaction, hashed session/account identifiers, trace export redaction, and incident detail redaction.
+  - `docs/architecture.md`, `docs/features/03-discord-task-output.md`, `docs/features/13-auto-doctor.md`, `docs/continuous-improvement-report.md`: documented the shared diagnostic redaction boundary and updated hotspot status.
+- Verification:
+  - `pnpm vitest run src/privacy/__tests__/diagnostic-redaction.test.ts src/store/__tests__/task-trace-export.test.ts src/commands/__tests__/incident-detail.test.ts` passed, 12 tests.
+  - `pnpm vitest run src/commands/__tests__/task-log.test.ts src/discord/__tests__/task-view-reporter.test.ts` passed, 11 tests.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm run quality:docs` passed with schema v10.
+  - `pnpm ralph:verify -- --task complexity-hotspot-refactor --profile standard` passed: `pnpm run typecheck`, `pnpm run lint`, `pnpm run quality:docs`.
+- Public API changes: existing task trace functions remain exported; exported trace models now contain redacted session identifiers rather than raw session ids.
+- Follow-up cleanup: DB migration/state lifecycle plan is complete. Future provider dry-run or diagnostic bundle work should reuse `src/privacy/diagnostic-redaction.ts` rather than introducing provider-local generic secret regex.

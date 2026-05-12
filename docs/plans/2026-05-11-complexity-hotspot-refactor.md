@@ -448,3 +448,23 @@ For each completed slice, record:
   - `pnpm ralph:verify -- --task complexity-hotspot-refactor --profile standard` passed: `pnpm run typecheck`, `pnpm run lint`, `pnpm run quality:docs`.
 - Public API changes: none for existing DB facade consumers. New state cleanup helpers are direct imports from `src/store/state-cleanup.ts`; the CLI defaults to dry-run.
 - Follow-up cleanup: shared diagnostic redaction policy remains future Slice F work; broader schema-first config split still belongs to Slice G.
+
+### 2026-05-12 - Slice F Shared Diagnostic Redaction Boundary
+
+- Slice name: Slice F completion, shared diagnostic redaction policy boundary.
+- Changed files:
+  - `src/privacy/diagnostic-redaction.ts`: added shared diagnostic redaction helpers for credential text, raw prompt/body/provider payload fields, email/phone text, and hashed session/account identifiers.
+  - `src/store/task-trace-export.ts`: replaced task-trace-local redaction regex with the shared policy and redacted exported task/session ids while preserving allowlist payload projection and `redacted_payload_keys`.
+  - `src/commands/incident-detail.ts`: routed incident summary/source/diagnosis values, task trace snippets, repair paths, and event payload rendering through shared diagnostic redaction.
+  - `src/commands/task-log.ts`, `src/discord/task-trace-attachment.ts`: updated safety copy to mention session/account redaction.
+  - `src/privacy/__tests__/diagnostic-redaction.test.ts`, `src/store/__tests__/task-trace-export.test.ts`, `src/commands/__tests__/incident-detail.test.ts`: added focused redaction coverage.
+  - `docs/architecture.md`, `docs/features/03-discord-task-output.md`, `docs/features/13-auto-doctor.md`, `docs/continuous-improvement-report.md`, `docs/plans/2026-05-11-db-migrations-state-lifecycle.md`: documented the shared diagnostic redaction boundary and marked the DB lifecycle sub-plan done.
+- Behavior parity tests:
+  - `pnpm vitest run src/privacy/__tests__/diagnostic-redaction.test.ts src/store/__tests__/task-trace-export.test.ts src/commands/__tests__/incident-detail.test.ts` passed, 12 tests.
+  - `pnpm vitest run src/commands/__tests__/task-log.test.ts src/discord/__tests__/task-view-reporter.test.ts` passed, 11 tests.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm run quality:docs` passed with schema v10.
+  - `pnpm ralph:verify -- --task complexity-hotspot-refactor --profile standard` passed: `pnpm run typecheck`, `pnpm run lint`, `pnpm run quality:docs`.
+- Public API changes: no function signature changes. Task trace exported models/Markdown now redact raw session ids as hashed identifiers.
+- Follow-up cleanup: Slice F is now complete. Remaining complexity-hotspot work should move to Slice G config schema-first refactor or another explicitly selected hotspot; future provider dry-run/diagnostic bundles should reuse `src/privacy/diagnostic-redaction.ts`.

@@ -15,11 +15,12 @@
 - Claude / Codex / fake runtime 已抽到 `src/agent/runners/*-task-runner.ts`，由 runner 把 SDK 原始事件转换为 provider-neutral `TaskViewEvent`。
 - `src/discord/task-view-reporter.ts` 已负责 status embed、progress message、Execution Summary、最终 Markdown/raw output 和 Discord delivery failure callback。
 - `src/agent/task-reporter.ts` 已作为观测边界落地，把 task lifecycle、provider/tool event、Discord delivery failure 等规范化写入 SQLite `task_events`。
-- Auto Doctor 已读取 `task_events`，用于区分 provider、Discord delivery、network 和 MiniClaw runtime 类问题。
+- `src/store/task-trace-export.ts`、`/task-log`、`pnpm run task:trace` 和 `tasks.trace_auto_attach` 已生成安全 Markdown trace；脱敏由 `src/privacy/diagnostic-redaction.ts` 统一处理。
+- Auto Doctor 已读取 `task_events`，用于区分 provider、Discord delivery、network 和 MiniClaw runtime 类问题；`/incident view` 渲染 trace/evidence 前也复用 shared diagnostic redaction。
 
 仍未落地的扩展：
 
-- 完整 trace 附件尚未实现；当前完整结构化 trace 先进 `task_events`，Discord 主消息只保留最近步骤摘要。
+- provider dry-run / diagnostic bundle 还没有统一 manifest；新增诊断入口必须复用 shared diagnostic redaction，不要直接输出 raw provider payload。
 
 ## 背景
 
@@ -42,6 +43,8 @@
 - `src/discord/task-view-reporter.ts`: Discord status/progress/final output renderer。
 - `src/agent/task-reporter.ts`: 规范化 task lifecycle / provider / tool / Discord delivery 事件，写入 `task_events`；不负责 Discord rendering。
 - `src/store/task-events.ts`: `task_events` 表的 append/list/count store API。
+- `src/store/task-trace-export.ts`: 把 `task_events` 投影为 allowlist-only 的安全 Markdown trace。
+- `src/privacy/diagnostic-redaction.ts`: task trace、incident detail 等诊断导出的共享脱敏策略。
 - `src/discord/progress.ts`: 维护一条实时进度消息。
 - `src/discord/formatter.ts`: 构造 task start / complete / error embed。
 - `src/discord/chunks.ts`: 普通 Discord 消息分片。

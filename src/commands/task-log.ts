@@ -29,7 +29,7 @@ export function buildTaskLogReply(
   const summary = [
     formatTaskTraceSummary(model),
     "",
-    "Trace 较长，已附加 Markdown 文件。默认 trace 不包含 prompt/raw provider payload/cookie/token/email body。",
+    "Trace 较长，已附加 Markdown 文件。默认 trace 不包含 prompt/raw provider payload/cookie/token/session/account/email body。",
   ].join("\n");
 
   return {

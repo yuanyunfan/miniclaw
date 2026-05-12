@@ -1,5 +1,12 @@
 import { getDb, getTask, type TaskRow } from "./db.js";
 import { countTaskEvents, listTaskEvents, type TaskEventRow, type TaskEventSeverity } from "./task-events.js";
+import {
+  DEFAULT_DIAGNOSTIC_TEXT_CHARS,
+  DIAGNOSTIC_REDACTION_POLICY,
+  redactDiagnosticText,
+  redactDiagnosticValue,
+  type DiagnosticJsonValue,
+} from "../privacy/diagnostic-redaction.js";
 
 export type TaskTraceErrorCode = "missing_id" | "not_found" | "ambiguous_prefix" | "no_events";
 
@@ -13,13 +20,7 @@ export type TaskTraceResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: TaskTraceError };
 
-export type TaskTracePayloadValue =
-  | string
-  | number
-  | boolean
-  | null
-  | TaskTracePayloadValue[]
-  | { [key: string]: TaskTracePayloadValue };
+export type TaskTracePayloadValue = DiagnosticJsonValue;
 
 export interface TaskTraceEvent {
   id: number;
@@ -67,10 +68,9 @@ export interface TaskTraceRenderOptions {
 }
 
 const DEFAULT_MAX_EVENTS = 200;
-const DEFAULT_FIELD_CHARS = 500;
+const DEFAULT_FIELD_CHARS = DEFAULT_DIAGNOSTIC_TEXT_CHARS;
 const DEFAULT_MARKDOWN_BYTES = 96_000;
-const REDACTION_POLICY =
-  "payload allowlist only; prompt/raw provider/email/cookie/token fields omitted; free text redacted and truncated";
+const REDACTION_POLICY = DIAGNOSTIC_REDACTION_POLICY;
 
 const BASE_ALLOWED_PAYLOAD_KEYS = new Set([
   "attachments",
@@ -124,37 +124,8 @@ const USAGE_ALLOWED_KEYS = new Set([
   "reasoning_output_tokens",
 ]);
 
-const AUTHORIZATION_PATTERN = /\b(authorization\s*[:=]\s*)(?:Bearer\s+)?[A-Za-z0-9._~+/=-]+/gi;
-const COOKIE_PATTERN = /\b((?:set-)?cookie\s*[:=]\s*)[^\s,]+/gi;
-const SECRET_ASSIGNMENT_PATTERN =
-  /\b(api[_-]?key|access[_-]?token|refresh[_-]?token|token|secret|password|pwd|session[_-]?id|session|account(?:[_-]?number)?|acct|card(?:[_-]?number)?)\b(\s*[:=]\s*)(["']?)[^\s"',;]+["']?/gi;
-const BODY_ASSIGNMENT_PATTERN =
-  /\b(email[_ -]?body|raw[_ -]?email|message[_ -]?body|full[_ -]?prompt|prompt)\b(\s*[:=]\s*)(["']?)[^"']{8,}/gi;
-const STANDALONE_BEARER_PATTERN = /\b(Bearer\s+)[A-Za-z0-9._~+/=-]{8,}/gi;
-const KNOWN_TOKEN_PATTERN = /\b(?:sk-[A-Za-z0-9_-]{8,}|gh[pousr]_[A-Za-z0-9_]{8,}|xox[baprs]-[A-Za-z0-9-]{8,}|AKIA[0-9A-Z]{12,})\b/g;
-
-function truncateText(value: string, maxChars: number): string {
-  if (value.length <= maxChars) return value;
-  if (maxChars <= 3) return value.slice(0, Math.max(0, maxChars));
-  return `${value.slice(0, maxChars - 3)}...`;
-}
-
 export function redactTaskTraceText(value: string, maxChars = DEFAULT_FIELD_CHARS): string {
-  const compact = value.replace(/\s+/g, " ").trim();
-  const redacted = compact
-    .replace(AUTHORIZATION_PATTERN, (_match, prefix: string) => `${prefix}[REDACTED]`)
-    .replace(COOKIE_PATTERN, (_match, prefix: string) => `${prefix}[REDACTED]`)
-    .replace(SECRET_ASSIGNMENT_PATTERN, (_match, key: string, separator: string, quote: string) => {
-      const q = quote || "";
-      return `${key}${separator}${q}[REDACTED]${q}`;
-    })
-    .replace(BODY_ASSIGNMENT_PATTERN, (_match, key: string, separator: string, quote: string) => {
-      const q = quote || "";
-      return `${key}${separator}${q}[REDACTED]${q}`;
-    })
-    .replace(STANDALONE_BEARER_PATTERN, (_match, prefix: string) => `${prefix}[REDACTED]`)
-    .replace(KNOWN_TOKEN_PATTERN, "[REDACTED]");
-  return truncateText(redacted, maxChars);
+  return redactDiagnosticText(value, { maxChars });
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -209,11 +180,7 @@ function payloadValue(
   if (value === undefined) return { redactedKeys: 0 };
   if (key === "usage") return usageValue(value);
   if (value === null || typeof value === "number" || typeof value === "boolean") return { value, redactedKeys: 0 };
-  if (typeof value === "string") return { value: redactTaskTraceText(value, maxChars), redactedKeys: 0 };
-  if (Array.isArray(value) || isPlainObject(value)) {
-    return { value: redactTaskTraceText(JSON.stringify(value), maxChars), redactedKeys: 0 };
-  }
-  return { value: redactTaskTraceText(String(value), maxChars), redactedKeys: 0 };
+  return { value: redactDiagnosticValue(key, value, { maxChars }), redactedKeys: 0 };
 }
 
 function projectPayload(
@@ -254,7 +221,7 @@ function traceTask(row: TaskRow): TaskTraceModel["task"] {
     id: row.id,
     status: row.status,
     cwd: row.cwd,
-    sessionId: row.session_id,
+    sessionId: row.session_id ? String(redactDiagnosticValue("session_id", row.session_id)) : null,
     durationMs: row.duration_ms,
     costUsd: row.cost_usd,
     createdAt: row.created_at,

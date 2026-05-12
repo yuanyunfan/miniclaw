@@ -1,4 +1,5 @@
 import type { IncidentEventRow, IncidentRow, RepairRunRow } from "../store/incidents.js";
+import { formatDiagnosticValue, redactDiagnosticText } from "../privacy/diagnostic-redaction.js";
 
 function parseJsonObject(value: string | null): Record<string, unknown> {
   if (!value) return {};
@@ -12,22 +13,14 @@ function parseJsonObject(value: string | null): Record<string, unknown> {
   }
 }
 
-function stringifyValue(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "-";
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
-  return JSON.stringify(value);
-}
-
 function truncate(value: string, max = 180): string {
-  const singleLine = value.replace(/\s+/g, " ").trim();
-  if (singleLine.length <= max) return singleLine;
-  return `${singleLine.slice(0, Math.max(0, max - 1))}...`;
+  return redactDiagnosticText(value, { maxChars: max });
 }
 
 function field(obj: Record<string, unknown>, key: string): string | undefined {
   const value = obj[key];
   if (value === undefined || value === null || value === "") return undefined;
-  return truncate(stringifyValue(value));
+  return formatDiagnosticValue(value, { maxChars: 180 });
 }
 
 function arrayField(obj: Record<string, unknown>, key: string): unknown[] {
@@ -38,12 +31,21 @@ function arrayField(obj: Record<string, unknown>, key: string): unknown[] {
 function traceLine(value: unknown): string | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const row = value as Record<string, unknown>;
-  const created = stringifyValue(row.created_at);
-  const task = stringifyValue(row.task_id).slice(0, 8);
-  const severity = stringifyValue(row.severity);
-  const type = stringifyValue(row.event_type);
-  const message = row.message ? ` ${truncate(stringifyValue(row.message), 120)}` : "";
+  const created = formatDiagnosticValue(row.created_at, { maxChars: 80 });
+  const task = formatDiagnosticValue(row.task_id, { maxChars: 80 }).slice(0, 8);
+  const severity = formatDiagnosticValue(row.severity, { maxChars: 40 });
+  const type = formatDiagnosticValue(row.event_type, { maxChars: 80 });
+  const message = row.message ? ` ${formatDiagnosticValue(row.message, { maxChars: 120 })}` : "";
   return `- ${created} ${task} ${severity}/${type}${message}`;
+}
+
+function eventPayloadText(payloadJson: string | null): string {
+  if (!payloadJson) return "-";
+  try {
+    return formatDiagnosticValue(JSON.parse(payloadJson) as unknown, { maxChars: 240 });
+  } catch {
+    return redactDiagnosticText(payloadJson, { maxChars: 240 });
+  }
 }
 
 function formatCommandLines(incident: IncidentRow): string[] {
@@ -114,15 +116,15 @@ export function formatIncidentDetail(params: {
     "Latest Repair",
     ...(latestRepair ? [
       `- id/status: ${latestRepair.id} / ${latestRepair.status}`,
-      `- branch: ${latestRepair.branch ?? "-"}`,
-      `- commit: ${latestRepair.commit_sha ?? "-"}`,
-      `- workspace: ${latestRepair.workspace_path ?? "-"}`,
+      `- branch: ${formatDiagnosticValue(latestRepair.branch, { maxChars: 180 })}`,
+      `- commit: ${formatDiagnosticValue(latestRepair.commit_sha, { maxChars: 180 })}`,
+      `- workspace: ${formatDiagnosticValue(latestRepair.workspace_path, { maxChars: 180 })}`,
       `- completed_at: ${latestRepair.completed_at ?? "-"}`,
     ] : ["- (none)"]),
     "",
     "Recent Events",
     ...(events.length
-      ? events.map((event) => `- ${event.created_at} ${event.event_type} ${truncate(event.payload_json ?? "", 120)}`)
+      ? events.map((event) => `- ${event.created_at} ${event.event_type} ${eventPayloadText(event.payload_json)}`)
       : ["- (none)"]),
     "",
     "Operator Commands",

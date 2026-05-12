@@ -90,6 +90,15 @@ describe("task trace export", () => {
     });
     appendTaskEvent({
       taskId: id,
+      eventType: "session_started",
+      message: "codex:session-1",
+      payload: {
+        provider: "codex",
+        session_id: "codex:session-1",
+      },
+    });
+    appendTaskEvent({
+      taskId: id,
       eventType: "provider_error",
       severity: "error",
       message: "Authorization: Bearer secret-token-123456 email_body: private email body",
@@ -105,18 +114,22 @@ describe("task trace export", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
 
-    expect(result.value.events.map((event) => event.eventType)).toEqual(["task_started", "provider_error"]);
+    expect(result.value.task.sessionId).toMatch(/^\[redacted-session:[a-f0-9]{12}\]$/);
+    expect(result.value.events.map((event) => event.eventType)).toEqual(["task_started", "session_started", "provider_error"]);
     expect(result.value.events[0]?.payload).toMatchObject({ provider: "codex", model: "gpt-test" });
     expect(result.value.events[0]?.redactedPayloadKeys).toBe(1);
-    expect(result.value.events[1]?.message).toContain("Authorization: [REDACTED]");
-    expect(result.value.events[1]?.message).toContain("email_body: [REDACTED]");
-    expect(result.value.events[1]?.payload).toEqual({ provider: "codex", event_type: "turn.failed" });
-    expect(result.value.events[1]?.redactedPayloadKeys).toBe(2);
+    expect(result.value.events[1]?.message).toMatch(/^\[redacted-session:[a-f0-9]{12}\]$/);
+    expect(result.value.events[1]?.payload.session_id).toMatch(/^\[redacted-session:[a-f0-9]{12}\]$/);
+    expect(result.value.events[2]?.message).toContain("Authorization: [REDACTED]");
+    expect(result.value.events[2]?.message).toContain("email_body: [REDACTED]");
+    expect(result.value.events[2]?.payload).toEqual({ provider: "codex", event_type: "turn.failed" });
+    expect(result.value.events[2]?.redactedPayloadKeys).toBe(2);
 
     const markdown = renderTaskTraceMarkdown(result.value);
     expect(markdown).toContain("# Task Trace:");
     expect(markdown).toContain("- prompt: [redacted]");
     expect(markdown).not.toContain("do not export this prompt");
+    expect(markdown).not.toContain("codex:session-1");
     expect(markdown).not.toContain("secret-token-123456");
     expect(markdown).not.toContain("private email body");
   });
@@ -147,7 +160,7 @@ describe("task trace export", () => {
 
   it("redacts common credential shapes and caps markdown bytes", () => {
     expect(redactTaskTraceText("Cookie: a=b; token=abc123 Authorization: Bearer abcdefghijklmnop sk-1234567890abcdef account_number=123456789012"))
-      .toBe("Cookie: [REDACTED] token=[REDACTED] Authorization: [REDACTED] [REDACTED] account_number=[REDACTED]");
+      .toBe("Cookie: [REDACTED]; token=[REDACTED] Authorization: [REDACTED] [REDACTED] account_number=[REDACTED]");
 
     const id = makeTask();
     appendTaskEvent({ taskId: id, eventType: "tool_event", message: "x".repeat(5000), payload: { provider: "codex" } });

@@ -149,6 +149,8 @@ The `TaskReporter` boundary records task lifecycle and runtime signals:
 
 Auto Doctor reads these events for selected or recent task candidates. Classification uses structured trace signals before falling back to raw process logs, so Discord delivery failures, provider auth/data/network failures, and MiniClaw runtime bugs can be separated more reliably. Persisted task incidents include the relevant trace slice in `evidence_json.trace`, and `/incident view` renders it under `Task Trace`.
 
+Incident detail rendering is a diagnostic export boundary, so it must not print raw evidence JSON directly. `src/privacy/diagnostic-redaction.ts` is the shared policy for incident detail and task trace Markdown: authorization headers, cookies, tokens, prompt/body fields and provider payloads are removed or redacted; session/account identifiers are replaced with short hashes for correlation without disclosure.
+
 ## Guarded Repair Worker
 
 `doctor:repair` loads one persisted incident and evaluates the repair policy before doing any work. The default mode is dry-run, which prints the target isolated worktree, repair branch, policy result, and generated repair prompt without creating a worktree or running Codex.

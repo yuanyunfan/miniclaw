@@ -67,22 +67,21 @@
 
 ### 当前问题
 
-`task_events` 已经能记录 task accepted、context captured、session/turn/tool/provider error、Discord delivery failure 和 final status。Auto Doctor 和 `/incident view` 也能读取部分 trace。
+`task_events` 已经能记录 task accepted、context captured、session/turn/tool/provider error、Discord delivery failure 和 final status。`/task-log`、`pnpm run task:trace`、trace auto-attach 和 Auto Doctor `/incident view` 都复用同一份安全 trace export。
 
-剩余缺口是用户视图：
+剩余缺口已从用户视图转为 provider/diagnostic bundle 的一致治理：
 
-- 没有 `/task-log` 或 `/task trace`。
-- 没有 `task-<id>-trace.md` 导出。
-- 长任务完成后，Discord 里仍主要依赖 tail summary 和 final message。
-- trace retention、redaction、附件大小阈值还没有明确策略。
+- provider dry-run / diagnostic bundle 还没有统一 manifest。
+- provider-specific raw payload 仍需要继续保持 allowlist 输出。
+- 新诊断入口必须复用 `src/privacy/diagnostic-redaction.ts`，避免各自实现脱敏规则。
 
 ### 建议改动
 
-1. 新增 `src/store/task-trace-export.ts`，从 `task_events` 生成用户可读 Markdown。
-2. 新增 slash command：`/task-log id:<prefix>` 或 `/task trace id:<prefix>`。
-3. 长任务按阈值自动附加 trace 文件，例如事件数、耗时或错误 severity 达到阈值才上传。
-4. trace export 默认脱敏 provider payload，只保留 event type、severity、message、关键 ids、耗时和错误类型。
-5. Auto Doctor 的 incident detail 链接到同一 trace exporter，避免 incident view 和 task-log 各自实现一套格式。
+1. 已完成：`src/store/task-trace-export.ts` 从 `task_events` 生成用户可读 Markdown。
+2. 已完成：`/task-log id:<prefix>` 和 `pnpm run task:trace -- --id <prefix>` 可导出安全 trace。
+3. 已完成：长任务可按 `tasks.trace_auto_attach` 阈值自动附加 trace 文件。
+4. 已完成：trace export 默认脱敏 provider payload，只保留 event type、severity、message、关键 ids、耗时和错误类型。
+5. 已完成：Auto Doctor incident detail 复用同一类诊断脱敏策略，不直接渲染 raw evidence payload。
 
 ### 验收标准
 
@@ -247,7 +246,7 @@ state lifecycle 也需要明确：
 3. 已完成：把 `tasks`、`chat_history`、`smart_router_decisions` 拆到 `src/store/repositories/*`，并保留 `src/store/db.ts` compatibility facade。
 4. 已有：`incidents`、`task_events`、`market_forecasts` 位于独立 store module，并改为直接依赖 `src/store/connection.ts`。
 5. 已完成：增加 `state.retention.*` 配置和 `pnpm run state:cleanup` dry-run-first 清理命令。
-6. 后续：对 prompt preview、provider payload、email/account data 做明确 redaction policy。
+6. 已完成：`src/privacy/diagnostic-redaction.ts` 定义 shared diagnostic redaction policy，task trace export 和 `/incident view` 已接入；prompt/raw provider/email/cookie/token/session/account 字段不会明文输出。
 
 ### 验收标准
 
@@ -428,7 +427,7 @@ Stage CLI 有独立 persona、orchestrator、TUI 和 smoke/e2e，但它和 Disco
 2. 改造 1 个 provider 作为 manifest + health + dry-run + replay fixture 样板。
 3. 建立 `src/store/migrations/`。
 4. 拆分 `src/config.ts` 的 load/schema/resolve/runtime。
-5. 已增加 state retention 和 dry-run-first cleanup；下一步补 redaction policy。
+5. 已增加 state retention、dry-run-first cleanup 和 shared diagnostic redaction policy；下一步是拆分 `src/config.ts` 的 load/schema/resolve/runtime。
 
 ### 90 天
 
