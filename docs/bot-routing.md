@@ -1,6 +1,6 @@
 # `src/bot.ts` / `src/bot/*` 消息路由全解析
 
-> `src/bot.ts` 只注册 **3 个 Discord 事件监听器**，每个负责一类事件；interaction dispatch 的细节已经下沉到 `src/bot/*`。
+> `src/bot.ts` 只注册 **3 个 Discord 事件监听器**，每个负责一类事件；MessageCreate 分支和 interaction dispatch 的细节已经下沉到 `src/bot/*`。
 > 看完这一篇你就能改触发词 / 加新命令 / 调整路由规则。
 
 ---
@@ -77,7 +77,7 @@ flowchart TD
 
 | 位置 | 事件 | 干什么 |
 |------|------|--------|
-| `createBot()` | `MessageCreate` | 处理普通消息（thread 续话 / task intake 频道 / @mention / 自动 chat 频道 / 记忆指令） |
+| `createBot()` | `MessageCreate` | 计算外层 message route，并委托 `message-thread-continuation.ts` / `message-task-channel.ts` / `message-chat.ts` |
 | `createBot()` | `InteractionCreate` | 委托 `button-dispatch.ts` 先处理 cron retry 按钮、再处理 smart router 按钮；随后委托 `slash-dispatch.ts` 处理 slash commands |
 | `createBot()` | `ClientReady` | 登录成功后恢复中断任务 |
 
@@ -327,6 +327,9 @@ SIGINT / SIGTERM 由 `src/index.ts` 的 graceful shutdown 处理：先停止 mon
 - `src/agent/task.ts` — `/task` Supervisor 模式细节
 - `src/cron/scheduler.ts` — cron 调度引擎
 - `src/commands/handlers.ts` — 13 个 top-level slash command 的实现
+- `src/bot/message-thread-continuation.ts` — task thread 续话、session provider guard、resume task 创建
+- `src/bot/message-task-channel.ts` — dedicated task channel 的普通消息 intake
+- `src/bot/message-chat.ts` — chat route 内的记忆指令、smart router、附件处理和 chat 回复
 - `src/bot/button-dispatch.ts` — cron retry / smart router 按钮顺序和错误回复
 - `src/bot/slash-dispatch.ts` — slash command 到 handler 的映射和错误回复
 - `src/bot/message-smart-router.ts` — smart router confirmation prompt、button component 和 decision log helpers

@@ -253,3 +253,23 @@ For each completed slice, record:
   - `pnpm run build` passed.
 - Public API changes: none. `createBot()` remains exported from `src/bot.ts`; interaction order remains cron retry button, smart router button, then slash command.
 - Follow-up cleanup: MessageCreate chat/task/thread paths still live in `src/bot.ts`; future Slice A phases can extract `message-task-channel.ts`, `message-chat.ts`, and `message-thread-continuation.ts` with focused tests.
+
+### 2026-05-12 - Slice A MessageCreate Dispatch Extraction
+
+- Slice name: Slice A completion, MessageCreate dispatch boundary.
+- Changed files:
+  - `src/bot.ts`: kept `createBot()` as the public Discord client entry, retained route calculation/draining guard/client-ready recovery, and delegated MessageCreate business paths to `src/bot/*`.
+  - `src/bot/message-thread-continuation.ts`: extracted task thread resume/session compatibility guard, follow-up attachment handling, task row creation, reporter events, and `executeTask(... resumeSessionId ...)` wiring.
+  - `src/bot/message-task-channel.ts`: extracted dedicated task channel intake, bot mention stripping, capacity check, task context capture, and shared `createAndRunDiscordTask()` call.
+  - `src/bot/message-chat.ts`: extracted chat route prechecks, explicit memory short-circuit, smart router auto/confirm/chat routing, attachment cleanup, typing/progress callbacks, and chat error formatting.
+  - `src/bot/__tests__/message-task-channel.test.ts`, `src/bot/__tests__/message-chat.test.ts`, `src/bot/__tests__/message-thread-continuation.test.ts`: added focused characterization tests for the extracted message handlers.
+  - `docs/bot-routing.md`, `docs/architecture.md`, `docs/chat-router-current-logic.md`: updated bot dispatch boundary documentation to point at the extracted MessageCreate modules.
+- Behavior parity tests:
+  - `pnpm vitest run src/bot/__tests__/message-task-channel.test.ts src/bot/__tests__/message-chat.test.ts src/bot/__tests__/message-thread-continuation.test.ts src/bot/__tests__/button-dispatch.test.ts src/bot/__tests__/slash-dispatch.test.ts src/routing/__tests__/message-route.test.ts` passed, 23 tests.
+  - `pnpm vitest run src/routing/__tests__/intent.test.ts src/routing/__tests__/confirmations.test.ts src/agent/__tests__/e2e-fake-runtime.test.ts` passed, 31 tests.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm run build` passed.
+  - `pnpm ralph:verify -- --task complexity-hotspot-refactor --profile standard` passed: `pnpm run typecheck`, `pnpm run lint`, `pnpm run quality:docs`.
+- Public API changes: none. `createBot()` remains exported from `src/bot.ts`; message route order remains ignore/draining/thread continuation/task channel/chat, and interaction order remains unchanged.
+- Follow-up cleanup: Slice A is now extracted enough for future changes to happen inside path-specific modules. Remaining complexity-hotspot work should move to another slice from this plan, not continue broadening `src/bot.ts`.

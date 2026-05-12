@@ -78,7 +78,11 @@ flowchart TD
 
 ## Code Map
 
-- `src/bot.ts`: Discord `MessageCreate` / button interaction 的主编排。
+- `src/bot.ts`: Discord event registration、draining guard、外层 `MessageCreate` route 计算。
+- `src/bot/message-chat.ts`: chat route 内的记忆指令、smart router、附件处理和 chat 回复。
+- `src/bot/message-task-channel.ts`: dedicated task channel 的普通消息 intake。
+- `src/bot/message-thread-continuation.ts`: task thread 续话和 provider session guard。
+- `src/bot/button-dispatch.ts`, `src/bot/slash-dispatch.ts`: interaction dispatch。
 - `src/routing/message-route.ts`: 外层 message route，决定是否进入 thread continuation、task channel、chat 或 ignore。
 - `src/routing/intent.ts`: smart router 的客观事实提取、LLM capability 到 route intent 的映射、频道策略。
 - `src/routing/llm.ts`: 可选 LLM capability classifier，只判断能力需求，不直接决定最终 route。
@@ -147,7 +151,7 @@ flowchart TD
 
 ## Layer 2: Chat Entry Prechecks
 
-进入 `chat` route 后，`src/bot.ts` 继续做本地短路判断：
+进入 `chat` route 后，`src/bot/message-chat.ts` 继续做本地短路判断：
 
 1. 对 `message.id` 做内存去重。Map 上限 500 条，旧记录按 5 分钟窗口清理。
 2. 移除 bot mention，得到 `content`。
