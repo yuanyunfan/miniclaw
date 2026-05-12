@@ -139,16 +139,16 @@
 
 ### 当前问题
 
-当前文件规模显示复杂度中心已经明显：
+当前文件规模显示复杂度中心仍然集中，但 bot/task/doctor scheduler 已完成第一轮边界拆分，剩余热点应继续按职责推进：
 
-- `src/providers/market-intel/collectors/official.ts`：1095 行。
-- `src/agent/task.ts`：955 行。
-- `src/ops/doctor-scheduler.ts`：848 行。
-- `src/bot.ts`：816 行。
+- `src/store/db.ts`：930 行。
+- `src/config.ts`：811 行。
 - `src/ops/doctor-repair.ts`：775 行。
-- `src/store/db.ts`：764 行。
-- `src/config.ts`：746 行。
+- `src/providers/market-intel/collectors/official.ts`：739 行，已把 source-specific parsing 拆到 `collectors/parsers/*`，collector orchestration 仍集中。
 - `src/ops/doctor.ts`：734 行。
+- `src/agent/task.ts`：367 行，已保留 task lifecycle orchestration，provider runners 和 Discord view reporter 已外置。
+- `src/ops/doctor-scheduler.ts`：310 行，已保留 scan orchestration，grouping/notification/repair-policy/state 已外置。
+- `src/bot.ts`：116 行，已保留 Discord event registration 和 route shell，message/interaction path 已外置。
 
 这些不是单纯“行数太多”的问题，而是职责集中导致变更风险升高。AI agent 后续参与维护时，也更容易在错误层级修问题。
 
@@ -181,10 +181,9 @@
 
 `src/providers/market-intel/collectors/official.ts` 拆成：
 
-- calendar/news/events collectors。
-- quote/macro source adapters。
-- scoring input builder。
-- source-specific parsers and fixtures。
+- 已完成：source-specific parsers and fixtures（`collectors/parsers/shared.ts`、`macro.ts`、`filings.ts`、`risk.ts`）。
+- 后续：macro/news/filings/risk collector orchestration 继续按 source family 拆分。
+- 后续：format drift、staleness、redaction 继续在 parser fixture 层先复现，再改 network-facing collector。
 
 ### 验收标准
 

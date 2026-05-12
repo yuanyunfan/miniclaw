@@ -294,3 +294,25 @@ For each completed slice, record:
   - `pnpm ralph:verify -- --task complexity-hotspot-refactor --profile standard` passed: `pnpm run typecheck`, `pnpm run lint`, `pnpm run quality:docs`.
 - Public API changes: none. `createDoctorScheduler()`, `startDoctorScheduler()`, `DoctorNotificationGroup`, `DoctorNotificationItem`, and repair skip types remain exported from `src/ops/doctor-scheduler.ts`.
 - Follow-up cleanup: Remaining complexity-hotspot work should move to Slice D/E/F/G; `doctor-scheduler.ts` now keeps the scan orchestration boundary and should not regain notification formatting or policy helpers.
+
+### 2026-05-12 - Slice D Official Parser Extraction
+
+- Slice name: Slice D partial, source-specific parser boundary.
+- Changed files:
+  - `src/providers/market-intel/collectors/official.ts`: kept `collectMarketIntelOfficialEvidence()` and source status/warning orchestration stable, delegated Treasury/BLS/Fed/SEC/SSE/SZSE/HKEX/PBOC/NBS parsing to `collectors/parsers/*`.
+  - `src/providers/market-intel/collectors/parsers/shared.ts`: extracted pure record/string/date/freshness/HTML-link parsing helpers.
+  - `src/providers/market-intel/collectors/parsers/macro.ts`: extracted Treasury XML, BLS JSON, and Federal Reserve RSS parser logic plus BLS series ids.
+  - `src/providers/market-intel/collectors/parsers/filings.ts`: extracted SEC ticker/submission parsing, JSONP parsing, and SSE/SZSE/HKEX announcement parsers.
+  - `src/providers/market-intel/collectors/parsers/risk.ts`: extracted derived risk keyword classification.
+  - `src/providers/market-intel/__tests__/official-parsers.test.ts`: added fixture tests for macro, SEC, exchange announcement, dated HTML, and risk parser behavior.
+  - `docs/architecture.md`, `docs/features/14-market-intel-provider.md`, `docs/continuous-improvement-report.md`: documented the parser/orchestration boundary and updated remaining hotspot status.
+- Behavior parity tests:
+  - `pnpm vitest run src/providers/market-intel/__tests__/official-parsers.test.ts src/providers/market-intel/__tests__/official-collectors.test.ts` passed, 7 tests.
+  - `pnpm vitest run src/providers/market-intel` passed, 27 tests.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm run quality:docs` passed.
+  - `pnpm run build` passed.
+  - `pnpm ralph:verify -- --task complexity-hotspot-refactor --profile standard` passed: `pnpm run typecheck`, `pnpm run lint`, `pnpm run quality:docs`.
+- Public API changes: none. `MarketIntelOfficialHttpClient`, `buildEmptyMarketIntelEvidenceCollection()`, and `collectMarketIntelOfficialEvidence()` remain exported from `src/providers/market-intel/collectors/official.ts`.
+- Follow-up cleanup: Continue Slice D by splitting `official.ts` orchestration by source family, then move remaining Slice E/F/G hotspots through their dedicated plans.

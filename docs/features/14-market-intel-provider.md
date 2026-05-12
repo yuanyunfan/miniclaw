@@ -32,6 +32,8 @@ cron task
 
 `market-intel` 的职责是提供可审计事实：每条 evidence 都应有 `id`、`source`、`source_tier`、`captured_at` 和 freshness 信息。LLM 的职责是引用 evidence IDs、提出情景推理、输出概率、触发条件和风险。
 
+官方证据采集分成两层：`src/providers/market-intel/collectors/official.ts` 负责按 config 调用 SEC/BLS/Treasury/Federal Reserve/PBOC/NBS/SSE/SZSE/HKEX endpoint、记录 source status 和 warnings；`src/providers/market-intel/collectors/parsers/*` 负责纯解析、HTML/JSON/XML normalization、freshness 和 fixture-level 行为测试。新增或修复 source format drift 时优先补 parser fixture test，再改 collector orchestration。
+
 ## Provider 配置
 
 用户级配置放在：
@@ -161,6 +163,7 @@ pnpm market-calibration -- --days 7 --write-config --min-samples 5
 
 ```bash
 pnpm vitest run src/providers/market-intel src/providers/market-forecast-evaluation src/store/__tests__/market-forecasts.test.ts
+pnpm vitest run src/providers/market-intel/__tests__/official-parsers.test.ts src/providers/market-intel/__tests__/official-collectors.test.ts
 pnpm run typecheck
 pnpm run lint
 pnpm run build
