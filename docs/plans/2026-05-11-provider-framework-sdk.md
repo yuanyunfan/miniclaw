@@ -233,3 +233,19 @@ Record pilot provider, manifest fields, CLI commands, cron integration state, an
   - `pnpm run typecheck` passed.
   - `pnpm run lint` passed.
   - `pnpm run quality:docs` passed.
+
+2026-05-12 Ralph iteration 2:
+
+- Migrated `eastmoney-jywg-readonly` as the first sensitive provider module after the stock-pulse pilot.
+- Manifest values: `kind=stock`, `privacy=sensitive`, `sideEffects=state_commit_after_success`, `supportsDryRun=true`, `supportsHealthCheck=true`, `outputSchemaVersion=eastmoney-jywg-readonly.payload.v1`.
+- `eastmoney-jywg-readonly` health check loads provider/profile/session config and calls the read-only broker client health endpoint. Safe details include profile, market session, redaction mode, include flags, host, cookie count, and last verification time; they do not include account alias, cookie values, session secret path, or raw broker payload.
+- `eastmoney-jywg-readonly` dry-run executes the read-only broker snapshot path and builds the structured payload, but the preview is a redacted summary only: included section flags, market session, position/top-position counts, and warning count. Updated broker sessions are not saved during dry-run.
+- Compatibility state: existing `runEastmoneyJywgProvider()` now uses `runProviderModuleAsPreProvider()`, so updated session persistence remains delayed until the downstream cron task succeeds and invokes `commit()`.
+- Registry state: `eastmoney-jywg-readonly` is now exposed through `getProviderManifest()`, `listProviderManifests()`, `runProviderHealthCheck()`, and `runProviderDryRun()`.
+- Documentation sync: updated `docs/features/16-provider-framework.md` and `docs/architecture.md` to describe the sensitive provider lifecycle and privacy boundary.
+- Verification:
+  - `pnpm vitest run src/providers/eastmoney-jywg-readonly/__tests__/framework.test.ts src/providers/eastmoney-jywg-readonly/__tests__/index.test.ts src/providers/__tests__/index.test.ts` passed: 3 files, 7 tests.
+  - `pnpm run provider:health -- --provider eastmoney-jywg-readonly --config __missing__ --json` returned expected exit 1 with `category=config` for a missing profile.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm run ralph:verify -- --task provider-framework-sdk --profile provider` passed: `src/providers` 44 files, 129 tests; typecheck, lint, and `quality:docs` passed.

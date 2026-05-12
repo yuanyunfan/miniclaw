@@ -1,6 +1,6 @@
 # MiniClaw Provider Framework SDK
 
-> 结论：provider framework 给 cron pre-provider 增加 manifest、health check、dry-run、structured output 和 failure taxonomy，但保留现有 `PreProviderResult` 兼容层。本阶段已用 `stock-pulse` 作为 pilot；cron runner 仍只调用 `runPreProvider()`，不会因为本阶段改动改变生产调度行为。
+> 结论：provider framework 给 cron pre-provider 增加 manifest、health check、dry-run、structured output 和 failure taxonomy，但保留现有 `PreProviderResult` 兼容层。当前已迁移 `stock-pulse` 和 `eastmoney-jywg-readonly`；cron runner 仍只调用 `runPreProvider()`，不会因为本阶段改动改变生产调度行为。
 
 ## 范围
 
@@ -11,6 +11,7 @@
 - `src/providers/framework.ts`: provider manifest、context、health/dry-run result、failure taxonomy、lifecycle module 和 `PreProviderResult` adapter。
 - `src/providers/index.ts`: legacy pre-provider registry、framework manifest registry、health/dry-run runner。
 - `src/providers/stock-pulse/index.ts`: `stock-pulse` pilot provider module。
+- `src/providers/eastmoney-jywg-readonly/index.ts`: sensitive broker provider module，覆盖 session health、redacted dry-run 和 delayed session persistence。
 - `scripts/provider-health.ts`: provider health CLI。
 - `scripts/provider-dry-run.ts`: provider dry-run CLI，默认只输出 redacted preview。
 
@@ -54,12 +55,29 @@ Health check 当前只验证配置可加载，并返回安全摘要：profile、
 
 Dry-run 会实际执行 scan，但默认 preview 只返回 redacted summary：run context、universe counts、position/alert/failure/warning counts。它不会执行 nested provider commit。
 
+## Eastmoney JYWG Sensitive Provider
+
+`eastmoney-jywg-readonly` 的 manifest：
+
+- `kind`: `stock`
+- `privacy`: `sensitive`
+- `sideEffects`: `state_commit_after_success`
+- `supportsDryRun`: `true`
+- `supportsHealthCheck`: `true`
+- `outputSchemaVersion`: `eastmoney-jywg-readonly.payload.v1`
+
+Health check 会加载 provider profile 和本地 session，并调用只读 `client.healthCheck()` 验证 session 可用性。返回内容只包含 profile、market session、redaction mode、include flags、host、cookie count 和 last verified time；不会输出 account alias、cookie value、session secret path 或原始 broker payload。
+
+Dry-run 会执行一次只读 broker snapshot 采集和 formatter 前 structured payload 构建，但 preview 只输出 redacted summary：是否包含 report/snapshot/positions/asset summary、position/top-position/warning count 和 market session。即使 broker 返回 updated session，dry-run 也不会保存 session；只有兼容 adapter 返回的 `commit()` 在 downstream task 成功后才保存 updated session。
+
 ## CLI
 
 ```bash
 pnpm provider:health -- --provider stock-pulse --config us-hourly
+pnpm provider:health -- --provider eastmoney-jywg-readonly --config daily-stock-market
 pnpm provider:health -- --all --json
 pnpm provider:dry-run -- --provider stock-pulse --config us-hourly
+pnpm provider:dry-run -- --provider eastmoney-jywg-readonly --config daily-stock-market
 pnpm provider:dry-run -- --provider stock-pulse --config us-hourly --json
 ```
 
@@ -97,6 +115,7 @@ pnpm provider:dry-run -- --provider stock-pulse --config us-hourly --json
 
 ```bash
 pnpm vitest run src/providers
+pnpm vitest run src/providers/eastmoney-jywg-readonly/__tests__/framework.test.ts
 pnpm run provider:health -- --provider stock-pulse --config __missing__
 pnpm run typecheck
 ```

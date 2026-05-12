@@ -2,7 +2,7 @@ import type { PreProviderResult, PreProviderRunArgs } from "./types.js";
 import type { ProviderDryRunResult, ProviderHealthResult, ProviderManifest, ProviderModule } from "./framework.js";
 import { providerContextFromPreProviderArgs, runProviderModuleAsPreProvider } from "./framework.js";
 import { runCmbCreditCardEmailProvider } from "./cmb-credit-card-email/index.js";
-import { runEastmoneyJywgProvider } from "./eastmoney-jywg-readonly/index.js";
+import { eastmoneyJywgProvider, runEastmoneyJywgProvider } from "./eastmoney-jywg-readonly/index.js";
 import { runEmailQueryProvider } from "./email-query/index.js";
 import { runFutuStockProvider } from "./futu-stock/index.js";
 import { runMarketForecastEvaluationProvider } from "./market-forecast-evaluation/index.js";
@@ -26,6 +26,7 @@ const PRE_PROVIDERS = {
 export type PreProviderName = keyof typeof PRE_PROVIDERS;
 
 const PROVIDER_MODULES: Partial<Record<PreProviderName, ProviderModule<any>>> = {
+  "eastmoney-jywg-readonly": eastmoneyJywgProvider,
   "stock-pulse": stockPulseProvider,
 };
 

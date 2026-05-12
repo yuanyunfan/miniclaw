@@ -11,7 +11,18 @@ describe("provider registry", () => {
       supportsHealthCheck: true,
       outputSchemaVersion: "stock-pulse.payload.v1",
     });
-    expect(listProviderManifests().map((manifest) => manifest.name)).toContain("stock-pulse");
+    expect(getProviderManifest("eastmoney-jywg-readonly")).toMatchObject({
+      name: "eastmoney-jywg-readonly",
+      kind: "stock",
+      privacy: "sensitive",
+      supportsDryRun: true,
+      supportsHealthCheck: true,
+      outputSchemaVersion: "eastmoney-jywg-readonly.payload.v1",
+    });
+    expect(listProviderManifests().map((manifest) => manifest.name)).toEqual([
+      "eastmoney-jywg-readonly",
+      "stock-pulse",
+    ]);
     expect(getProviderManifest("stock-portfolio")).toBeUndefined();
   });
 });

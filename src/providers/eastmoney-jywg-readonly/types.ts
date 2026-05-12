@@ -1,4 +1,5 @@
 import type {
+  EastmoneyJywgSession,
   EastmoneyJywgAccountSnapshot,
   EastmoneyJywgPositionSummary,
   EastmoneyJywgRedactionLevel,
@@ -72,6 +73,28 @@ export interface EastmoneyJywgProviderPayload {
   asset_summary?: AssetAllocationSummary;
   warnings: string[];
   usage_notes: string[];
+}
+
+export interface EastmoneyJywgProviderRunResult {
+  payload: EastmoneyJywgProviderPayload;
+  session_secret_path: string;
+  updated_session: EastmoneyJywgSession;
+}
+
+export interface EastmoneyJywgDryRunSummary {
+  generated_at: string;
+  source: "eastmoney-jywg-readonly";
+  profile: string;
+  market_session: string;
+  redaction: EastmoneyJywgRedactionLevel;
+  account_alias_present: boolean;
+  report_included: boolean;
+  snapshot_included: boolean;
+  positions_summary_included: boolean;
+  asset_summary_included: boolean;
+  positions_count: number;
+  top_positions_count: number;
+  warning_count: number;
 }
 
 export type EastmoneyJywgProviderSnapshotInput = EastmoneyJywgAccountSnapshot;
