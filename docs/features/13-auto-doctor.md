@@ -52,6 +52,14 @@ Automatic scan:
 - Summary notifications go to `doctor.summary_channel_id` when an explicit channel ID is configured; otherwise MiniClaw resolves `doctor.summary_channel_name`, which defaults to `#miniclaw-auto-improve`.
 - If `doctor.auto_repair_enabled: true`, repair-eligible incidents are passed to the guarded repair worker after the scan.
 
+Scheduler module boundary:
+
+- `src/ops/doctor-scheduler.ts` is the public scheduler entry. It owns dependency wiring, `runOnce()`, `startDoctorScheduler()`, DB incident writes, notification event writes, and repair invocation.
+- `src/ops/doctor-scheduler/state.ts` owns scan concurrency state and MiniClaw log fingerprint calculation.
+- `src/ops/doctor-scheduler/grouping.ts` owns pure incident notification grouping and signature normalization.
+- `src/ops/doctor-scheduler/notifications.ts` owns Discord summary and repair notification text plus channel delivery.
+- `src/ops/doctor-scheduler/repair-policy.ts` owns repair eligibility and rate-limit skip decisions.
+
 ## Evidence Sources
 
 - SQLite task DB: recent failed, interrupted, and long-running running tasks.

@@ -273,3 +273,24 @@ For each completed slice, record:
   - `pnpm ralph:verify -- --task complexity-hotspot-refactor --profile standard` passed: `pnpm run typecheck`, `pnpm run lint`, `pnpm run quality:docs`.
 - Public API changes: none. `createBot()` remains exported from `src/bot.ts`; message route order remains ignore/draining/thread continuation/task channel/chat, and interaction order remains unchanged.
 - Follow-up cleanup: Slice A is now extracted enough for future changes to happen inside path-specific modules. Remaining complexity-hotspot work should move to another slice from this plan, not continue broadening `src/bot.ts`.
+
+### 2026-05-12 - Slice C Doctor Scheduler Split
+
+- Slice name: Slice C completion, doctor scheduler state/grouping/notification/repair-policy boundary.
+- Changed files:
+  - `src/ops/doctor-scheduler.ts`: kept `createDoctorScheduler()` and `startDoctorScheduler()` as the public scheduler entry, retained scan-loop DB writes, notification event writes, repair invocation, and dependency injection wiring.
+  - `src/ops/doctor-scheduler/state.ts`: extracted MiniClaw log fingerprint calculation plus running/fingerprint scheduler state.
+  - `src/ops/doctor-scheduler/grouping.ts`: extracted pure notification grouping, diagnosis/source helpers, problem-text selection, and normalized signature generation.
+  - `src/ops/doctor-scheduler/notifications.ts`: extracted single/group/digest incident notification text, repair notification text, and Discord summary-channel delivery.
+  - `src/ops/doctor-scheduler/repair-policy.ts`: extracted repair eligibility, UTC day bucket, and parallel/daily repair rate-limit skip decisions.
+  - `src/ops/__tests__/doctor-scheduler-boundaries.test.ts`: added direct tests for grouping normalization, notification text through the extracted formatter, repair policy skip reasons, and scheduler state behavior.
+  - `docs/architecture.md`, `docs/features/13-auto-doctor.md`: documented the new Auto Doctor scheduler module boundary.
+- Behavior parity tests:
+  - `pnpm vitest run src/ops/__tests__/doctor-scheduler*.test.ts` passed, 12 tests.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm run build` passed.
+  - `pnpm run quality:docs` passed.
+  - `pnpm ralph:verify -- --task complexity-hotspot-refactor --profile standard` passed: `pnpm run typecheck`, `pnpm run lint`, `pnpm run quality:docs`.
+- Public API changes: none. `createDoctorScheduler()`, `startDoctorScheduler()`, `DoctorNotificationGroup`, `DoctorNotificationItem`, and repair skip types remain exported from `src/ops/doctor-scheduler.ts`.
+- Follow-up cleanup: Remaining complexity-hotspot work should move to Slice D/E/F/G; `doctor-scheduler.ts` now keeps the scan orchestration boundary and should not regain notification formatting or policy helpers.

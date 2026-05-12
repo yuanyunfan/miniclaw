@@ -449,7 +449,7 @@ flowchart LR
 
 `ops/doctor.ts` 是只读诊断入口，CLI 通过 `pnpm run doctor`，Discord 通过 `/doctor`、`/incidents` 和 `/incident` 操作。它读取 SQLite task / task_events / incidents / repair_runs、cron state、connectivity state、PM2 状态、MiniClaw 日志和 Git 状态，然后输出 incident type、severity、likely category、repairAllowed 和 recommended action。
 
-`ops/doctor-scheduler.ts` 在 Discord `ClientReady` 后启动，但自动扫描默认需要显式打开 `doctor.auto_diagnose_enabled`。scheduled scan 会把 actionable symptom 持久化到 `incidents` / `incident_events`；如果 `doctor.auto_repair_enabled` 打开，才会把 repair-eligible incident 交给 `doctor:repair`。
+`ops/doctor-scheduler.ts` 在 Discord `ClientReady` 后启动，但自动扫描默认需要显式打开 `doctor.auto_diagnose_enabled`。scheduled scan 会把 actionable symptom 持久化到 `incidents` / `incident_events`；如果 `doctor.auto_repair_enabled` 打开，才会把 repair-eligible incident 交给 `doctor:repair`。调度入口只保留 scan loop 和 dependency wiring；log fingerprint/concurrency state 在 `ops/doctor-scheduler/state.ts`，incident 分组在 `ops/doctor-scheduler/grouping.ts`，Discord 通知文案在 `ops/doctor-scheduler/notifications.ts`，repair eligibility/rate-limit policy 在 `ops/doctor-scheduler/repair-policy.ts`。
 
 `ops/doctor-repair.ts` 的执行边界是隔离 worktree + `doctor-repair/<incident-id>` 分支。它拒绝 provider auth、provider data、network、Discord、third-party 类问题，检查 allowed/blocked paths，运行质量门禁，验证通过后可按配置 commit/push repair branch；它不会直接改 live main worktree。
 
