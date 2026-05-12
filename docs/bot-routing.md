@@ -1,6 +1,6 @@
-# `src/bot.ts` 消息路由全解析
+# `src/bot.ts` / `src/bot/*` 消息路由全解析
 
-> 整个文件只注册了 **3 个 Discord 事件监听器**，每个负责一类事件。
+> `src/bot.ts` 只注册 **3 个 Discord 事件监听器**，每个负责一类事件；interaction dispatch 的细节已经下沉到 `src/bot/*`。
 > 看完这一篇你就能改触发词 / 加新命令 / 调整路由规则。
 
 ---
@@ -78,7 +78,7 @@ flowchart TD
 | 位置 | 事件 | 干什么 |
 |------|------|--------|
 | `createBot()` | `MessageCreate` | 处理普通消息（thread 续话 / task intake 频道 / @mention / 自动 chat 频道 / 记忆指令） |
-| `createBot()` | `InteractionCreate` | 先处理 cron retry 按钮，再处理 smart router 按钮，最后处理 slash commands |
+| `createBot()` | `InteractionCreate` | 委托 `button-dispatch.ts` 先处理 cron retry 按钮、再处理 smart router 按钮；随后委托 `slash-dispatch.ts` 处理 slash commands |
 | `createBot()` | `ClientReady` | 登录成功后恢复中断任务 |
 
 另外 `src/index.ts` 也在同一个 Discord client 上注册 `ClientReady`，用于启动 connectivity monitor、Auto Doctor scheduler 和 cron scheduler。
@@ -223,9 +223,14 @@ chunkMessage 切 2000 字  ← Discord 单消息上限
 
 ## InteractionCreate 的简单 switch
 
-现在先处理 `interaction.isButton()` 的 cron retry 按钮和 smart router 确认按钮，再处理 `isChatInputCommand`（slash command）。其他按钮或菜单仍忽略。
+现在 `src/bot.ts` 只判断 interaction 类型：
 
-13 个 top-level slash command **直接转发到 `commands/handlers.ts`** 的对应 handler，`bot.ts` 不做业务逻辑：
+- `interaction.isButton()` → `src/bot/button-dispatch.ts`
+- `interaction.isChatInputCommand()` → `src/bot/slash-dispatch.ts`
+
+按钮仍然先处理 cron retry，再处理 smart router 确认。其他按钮或菜单仍忽略。
+
+13 个 top-level slash command 由 `slash-dispatch.ts` **直接转发到 `commands/handlers.ts`** 的对应 handler，dispatch 层不做业务逻辑：
 
 - `/task`
 - `/status`
@@ -280,7 +285,7 @@ SIGINT / SIGTERM 由 `src/index.ts` 的 graceful shutdown 处理：先停止 mon
 - `miniclaw:cron:retry:<runId>`：cron 失败通知的立即重试按钮，由 `handleCronRetryButton()` 处理。
 - `miniclaw:smart:*`：smart router 的 task/chat/cancel 确认按钮，由 `handleSmartRouterButton()` 处理。
 
-cron retry 按钮先于 smart router 按钮处理，避免误落到普通 slash command 分支。它只接受 `config.allowedUserId` 操作；custom id 里只放随机 `runId`，不会放 cron name、prompt、provider 配置、script args 或任何账号数据。真正执行时由 `requestCronRetryNow()` 在本机读取 `~/.miniclaw/cron/*.yaml`，如果失败 run 仍在 backoff，就唤醒当前 retry sleep；如果已经不在运行，则启动一次单独的立即重试。
+`button-dispatch.ts` 保持 cron retry 按钮先于 smart router 按钮处理，避免误落到普通 slash command 分支。它只接受 `config.allowedUserId` 操作；custom id 里只放随机 `runId`，不会放 cron name、prompt、provider 配置、script args 或任何账号数据。真正执行时由 `requestCronRetryNow()` 在本机读取 `~/.miniclaw/cron/*.yaml`，如果失败 run 仍在 backoff，就唤醒当前 retry sleep；如果已经不在运行，则启动一次单独的立即重试。
 
 ---
 
@@ -304,12 +309,12 @@ cron retry 按钮先于 smart router 按钮处理，避免误落到普通 slash 
 
 | 想做什么 | 改哪里 |
 |----------|--------|
-| 加**新触发词**（如 `/search`） | `register.ts` 加定义 → `handlers.ts` 加 handler → `bot.ts` 的 slash command switch 加 case |
+| 加**新触发词**（如 `/search`） | `register.ts` 加定义 → `handlers.ts` 加 handler → `src/bot/slash-dispatch.ts` 加 handler 映射 |
 | 让 bot **只响应 @mention** | 设置 `MINICLAW_AUTO_REPLY_CHANNELS=none` 或 YAML `routing.auto_reply_channels: []` |
 | 新增**免 @ task 频道** | 创建 Discord 频道 → 把频道 ID 加到 `MINICLAW_TASK_CHANNELS` → 重启 bot |
 | 在 chat 入口启用自然语言 task 识别 | `routing.smart_router.enabled: true`，必要时配置 `confirm_channels` / `auto_task_channels` |
 | 加**多用户支持** | 把 `config.allowedUserId` 改成数组，并同步 hard filter 的判断 |
-| 让 bot 响应**新按钮点击** | `InteractionCreate` 现已有 `interaction.isButton()` 分支，新增按钮需避免和 `miniclaw:smart:*` custom id 冲突 |
+| 让 bot 响应**新按钮点击** | 在 `src/bot/button-dispatch.ts` 加新的按钮 handler，新增 custom id 需避免和 `miniclaw:smart:*` / `miniclaw:cron:retry:*` 冲突 |
 | **关掉 thread 续话** | 调整 Path 1 的 thread continuation 分支（保留 Path 2） |
 | 加**新 cron job** | 不改代码，写 `~/.miniclaw/cron/<name>.yaml` 重启 bot |
 
@@ -322,3 +327,6 @@ cron retry 按钮先于 smart router 按钮处理，避免误落到普通 slash 
 - `src/agent/task.ts` — `/task` Supervisor 模式细节
 - `src/cron/scheduler.ts` — cron 调度引擎
 - `src/commands/handlers.ts` — 13 个 top-level slash command 的实现
+- `src/bot/button-dispatch.ts` — cron retry / smart router 按钮顺序和错误回复
+- `src/bot/slash-dispatch.ts` — slash command 到 handler 的映射和错误回复
+- `src/bot/message-smart-router.ts` — smart router confirmation prompt、button component 和 decision log helpers

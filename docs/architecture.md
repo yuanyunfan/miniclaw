@@ -19,7 +19,7 @@ flowchart LR
     subgraph LocalMac["本机 (Mac)"]
         Term([终端 TTY])
         subgraph MiniClaw["MiniClaw bot 进程 (Node 22)"]
-            BOT["bot.ts<br/>事件路由 + thread 续话"]
+            BOT["bot.ts + bot/*<br/>事件路由 + thread 续话"]
             CHAT["agent/chat.ts<br/>@mention provider chat"]
             TASK["agent/task.ts<br/>/task provider task"]
             CODEX["agent/codex.ts<br/>Codex SDK 封装"]
@@ -166,6 +166,7 @@ flowchart LR
 - **可控继承本机 Agent 配置**：Codex 可用 `inherit` 回落到 `~/.codex/config.toml`；Claude task 显式加载 `user/project/local` settings，默认禁用 hooks；MCP 仍通过 `mcp.allowlist` 控制
 - **Task runtime 三边界**：`src/agent/runners/*-task-runner.ts` 负责 Claude / Codex / fake runtime parsing；`src/discord/task-view-reporter.ts` 负责 Discord status/progress/final output；`src/agent/task-reporter.ts` 只写 SQLite trace
 - **Discord task 三层输出**：状态 embed 只放元数据；progress message 执行中持续 edit、完成后保留 Execution Summary；最终结果走普通 Markdown 分片
+- **Bot dispatch 边界**：`src/bot.ts` 保留 Discord event registration 和 MessageCreate 主流程；`src/bot/button-dispatch.ts` 负责 cron retry / smart router 按钮顺序和错误回复；`src/bot/slash-dispatch.ts` 负责 slash command 到 `commands/handlers.ts` 的映射
 - **Task trace 观测层**：`src/agent/task-reporter.ts` 把 task lifecycle、provider/tool event、Discord delivery failure 写入 `task_events`；`src/store/task-trace-export.ts` 用 payload allowlist + redaction 生成安全 Markdown trace，供 `pnpm run task:trace`、`/task-log` 和 Auto Doctor incident hint 使用；`tasks.trace_auto_attach` 可在 task final output 后按失败、耗时或事件数阈值自动附加同一份安全 trace
 - **pre-provider 扩展点**：cron `task` 可先运行 provider 采集结构化数据，再把 JSON 注入 prompt；微信公众号日报通过 `wechat-mp` provider 落地，邮件类任务通过通用 `email` capability + `email-query` / `cmb-credit-card-email` provider 复用同一只读邮箱基础能力
 - **Auto Doctor / guarded repair**：`/doctor` 和 scheduled scan 聚合 DB、cron state、connectivity、PM2、日志与 Git 证据；自动修复只允许隔离 worktree/repair branch，ship 到 `main` 必须走显式 operator approval 和 safe-restart guard
@@ -746,9 +747,9 @@ erDiagram
 
 ## 阅读建议
 
-1. **第一次接触** → 看图 1 + 用户级目录布局，对照 `src/index.ts` + `src/bot.ts` 通读
+1. **第一次接触** → 看图 1 + 用户级目录布局，对照 `src/index.ts`、`src/bot.ts` 和 `src/bot/*` 通读
 2. **想改 chat 行为** → 看图 2，集中改 `src/agent/chat.ts`
 3. **想加新 subagent** → 看图 3 + Supervisor 表，新增 `agents/<name>.md`（repo） 或 `~/.miniclaw/skills/<name>.md`（user）
 4. **想加新 cron** → 看图 4，写 `~/.miniclaw/cron/<name>.yaml` 重启 bot
 5. **想改微信公众号日报** → 看 `docs/features/02-wechat-mp-provider.md`，重点是 provider config、固定窗口、登录态刷新和 dedupe state
-6. **想加新 slash command** → `register.ts` 注册 + `handlers.ts` 处理 + `bot.ts` switch case
+6. **想加新 slash command** → `register.ts` 注册 + `handlers.ts` 处理 + `src/bot/slash-dispatch.ts` 映射

@@ -1,15 +1,9 @@
 import "./proxy.js";
 import {
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
   Client,
   Events,
   GatewayIntentBits,
   Partials,
-  type Attachment,
-  type ButtonInteraction,
-  type ChatInputCommandInteraction,
   type Message,
 } from "discord.js";
 import { config } from "./config.js";
@@ -17,17 +11,12 @@ import { chat, type ChatCallbacks } from "./agent/chat.js";
 import { TaskReporter } from "./agent/task-reporter.js";
 import {
   replyChunkedTextWithDeferredLinkPreviews,
-  sendChunkedTextWithDeferredLinkPreviews,
 } from "./discord/text.js";
-import { handleTask, handleStatus, handleTaskLog, handleHealth, handleDoctor, handleIncidents, handleIncident, handleAgentConfig, handleCancel, handleResume, handleRemember, handleForget, handleMemories } from "./commands/handlers.js";
 import { executeTask } from "./agent/task.js";
 import { recoverInterruptedTasks } from "./agent/recovery.js";
 import {
   createTask,
-  getChatHistory,
   getTaskByThreadId,
-  recordSmartRouterDecision,
-  recordSmartRouterUserChoice,
   updateSmartRouterDecision,
 } from "./store/db.js";
 import { v4 as uuid } from "uuid";
@@ -42,320 +31,23 @@ import {
   resolveReplyParentContext,
   withTaskThreadMetadata,
 } from "./discord/task-context.js";
-import { buildSmartTaskPrompt } from "./routing/context.js";
 import { resolveTaskCwd } from "./routing/cwd.js";
 import { resolveDiscordMessageRoute } from "./routing/message-route.js";
 import { buildChatRuntimeContext } from "./routing/chat-context.js";
-import { buildTaskPromptWithContext, type TaskContextEnvelope } from "./routing/task-context.js";
-import { hashPrompt, promptPreview } from "./routing/decision-log.js";
-import { classifySmartRoute, resolveSmartRouterAction, type RouteDecision } from "./routing/intent.js";
+import { buildTaskPromptWithContext } from "./routing/task-context.js";
+import { classifySmartRoute, resolveSmartRouterAction } from "./routing/intent.js";
 import { classifyRouteWithLlm } from "./routing/llm.js";
 import { isAllowedDiscordMessageAuthor } from "./e2e/safety.js";
-import { handleCronRetryButton } from "./cron/retry-interactions.js";
 import {
-  buildSmartRouterCustomId,
-  consumePendingConfirmation,
-  createPendingConfirmation,
-  getPendingConfirmation,
-  parseSmartRouterCustomId,
-  type ConfirmationAction,
-  type PendingTaskConfirmation,
-} from "./routing/confirmations.js";
+  askForTaskUpgrade,
+  buildSmartTaskPromptForChannel,
+  recordRouteDecisionForMessage,
+} from "./bot/message-smart-router.js";
+import { dispatchButtonInteraction } from "./bot/button-dispatch.js";
+import { dispatchSlashCommand } from "./bot/slash-dispatch.js";
 import { DRAINING_MESSAGE, isDraining } from "./runtime/shutdown.js";
 
 const log = createLogger("bot");
-
-type SmartRouterDecisionInput = Parameters<typeof recordSmartRouterDecision>[0];
-
-function smartRouterEvaluationFields(actionResult: string): Partial<SmartRouterDecisionInput> {
-  if (actionResult === "chat") {
-    return {
-      final_route: "chat",
-      task_final_status: "not_created",
-      correction_type: "none",
-      resolved_at: new Date().toISOString(),
-    };
-  }
-  if (actionResult === "auto_task_start") {
-    return {
-      user_choice: "auto_task_no_choice",
-      final_route: "task",
-      correction_type: "none",
-    };
-  }
-  return {};
-}
-
-function recordRouteDecisionForMessage(
-  message: Message,
-  prompt: string,
-  decision: RouteDecision,
-  actionResult: string,
-  createdTaskId?: string
-): number | undefined {
-  if (!config.smartRouter.decisionLog.enabled) return undefined;
-  try {
-    return recordSmartRouterDecision({
-      message_id: message.id,
-      channel_id: message.channel.id,
-      user_id: message.author.id,
-      prompt_hash: hashPrompt(prompt),
-      prompt_preview: promptPreview(prompt, config.smartRouter.decisionLog.promptPreviewChars),
-      ...(config.smartRouter.decisionLog.storeFullPrompt ? { full_prompt: prompt } : {}),
-      intent: decision.intent,
-      confidence: decision.confidence,
-      reason: decision.reason,
-      matched_signals: decision.matchedSignals,
-      risk_flags: decision.riskFlags,
-      ...(decision.capabilities ? { capabilities_json: JSON.stringify(decision.capabilities) } : {}),
-      ...(decision.capabilities?.classifierElapsedMs !== undefined
-        ? { classifier_elapsed_ms: decision.capabilities.classifierElapsedMs }
-        : {}),
-      ...(decision.capabilities?.classifierErrorType
-        ? { classifier_error_type: decision.capabilities.classifierErrorType }
-        : {}),
-      ...(decision.capabilities?.classifierErrorMessage
-        ? { classifier_error_message: decision.capabilities.classifierErrorMessage }
-        : {}),
-      action_result: actionResult,
-      ...smartRouterEvaluationFields(actionResult),
-      ...(createdTaskId ? { created_task_id: createdTaskId } : {}),
-    });
-  } catch (err) {
-    log.error("Failed to record smart-router decision:", err);
-    return undefined;
-  }
-}
-
-function buildSmartTaskPromptForChannel(channelId: string, prompt: string): string {
-  const rows = getChatHistory(channelId, config.smartRouter.context.recentTurns * 2).reverse();
-  return buildSmartTaskPrompt(prompt, rows, config.smartRouter.context);
-}
-
-function buttonLabel(action: ConfirmationAction): string {
-  if (action === "task") return "转为 task";
-  if (action === "chat") return "继续 chat";
-  return "取消";
-}
-
-function confirmationComponents(id: string): ActionRowBuilder<ButtonBuilder>[] {
-  return [
-    new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId(buildSmartRouterCustomId("task", id))
-        .setLabel(buttonLabel("task"))
-        .setStyle(ButtonStyle.Primary),
-      new ButtonBuilder()
-        .setCustomId(buildSmartRouterCustomId("chat", id))
-        .setLabel(buttonLabel("chat"))
-        .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder()
-        .setCustomId(buildSmartRouterCustomId("cancel", id))
-        .setLabel(buttonLabel("cancel"))
-        .setStyle(ButtonStyle.Danger),
-    ),
-  ];
-}
-
-function routerPromptText(decision: RouteDecision, prompt: string): string {
-  const preview = promptPreview(prompt, 500) || "(仅附件)";
-  const headline = decision.intent === "task_suggest"
-    ? "这个请求可能更适合 task 模式。"
-    : "这个请求需要 task 模式执行，因为它可能修改文件或运行命令。";
-  return [
-    headline,
-    "",
-    `原因：${decision.reason}`,
-    "",
-    "Task preview:",
-    "```text",
-    preview,
-    "```",
-  ].join("\n");
-}
-
-async function askForTaskUpgrade(
-  message: Message,
-  decision: RouteDecision,
-  prompt: string,
-  cwd: string,
-  attachments: Attachment[]
-): Promise<void> {
-  const logId = recordRouteDecisionForMessage(message, prompt, decision, "confirmation_pending");
-  const parentContext = await resolveReplyParentContext(message);
-  const taskContext: TaskContextEnvelope = {
-    source: buildTaskSourceFromMessage(message, "smart_router_confirmed", {
-      cwd,
-      wasMentioned: message.client.user ? message.mentions.has(message.client.user) : false,
-    }),
-    ...(parentContext ? { parent: parentContext } : {}),
-  };
-  const pending = createPendingConfirmation({
-    userId: message.author.id,
-    channelId: message.channel.id,
-    messageId: message.id,
-    prompt,
-    cwd,
-    attachments,
-    decision,
-    taskContext,
-    ...(logId !== undefined ? { decisionLogId: logId } : {}),
-    ttlMs: config.smartRouter.confirmation.timeoutSeconds * 1000,
-  });
-  await message.reply({
-    content: routerPromptText(decision, prompt),
-    components: confirmationComponents(pending.id),
-  });
-}
-
-async function continueChatFromConfirmation(
-  interaction: ButtonInteraction,
-  confirmation: PendingTaskConfirmation
-): Promise<void> {
-  const channel = interaction.channel;
-  if (!channel?.isSendable()) {
-    await interaction.followUp({ content: "❌ 当前频道不支持发送 chat 回复", ephemeral: true });
-    return;
-  }
-
-  let attachmentBlocks: Awaited<ReturnType<typeof processAttachments>>["blocks"] = [];
-  let attachmentCodexInputs: Awaited<ReturnType<typeof processAttachments>>["codexInputs"] = [];
-  const attachmentScope = confirmation.attachments.length ? { scope: `smart-chat-${confirmation.id}` } : null;
-
-  try {
-    if (attachmentScope) {
-      const processed = await processAttachments(confirmation.attachments, attachmentScope);
-      attachmentBlocks = processed.blocks;
-      attachmentCodexInputs = processed.codexInputs;
-      for (const notice of processed.notices) {
-        await channel.send(notice).catch(() => {});
-      }
-    }
-    await channel.sendTyping().catch(() => {});
-    const reply = await chat(
-      confirmation.channelId,
-      confirmation.userId,
-      confirmation.prompt,
-      attachmentBlocks,
-      undefined,
-      attachmentCodexInputs,
-      buildChatRuntimeContext(confirmation.taskContext)
-    );
-    await sendChunkedTextWithDeferredLinkPreviews(channel, reply);
-  } finally {
-    if (attachmentScope) cleanupAttachmentScope(attachmentScope);
-  }
-}
-
-async function handleSmartRouterButton(interaction: ButtonInteraction): Promise<boolean> {
-  const parsed = parseSmartRouterCustomId(interaction.customId);
-  if (!parsed) return false;
-
-  if (interaction.user.id !== config.allowedUserId) {
-    await interaction.reply({ content: "⛔ 无权限", ephemeral: true });
-    return true;
-  }
-
-  const pending = getPendingConfirmation(parsed.id);
-  if (pending?.status === "expired") {
-    if (pending.decisionLogId !== undefined) {
-      recordSmartRouterUserChoice(pending.decisionLogId, "ignored", "none", {
-        action_result: "confirmation_expired",
-        task_final_status: "not_created",
-        correction_type: "none",
-        correction_note: "confirmation expired before user choice",
-      });
-    }
-    await interaction.reply({ content: "确认已过期，请重新发送请求。", ephemeral: true });
-    return true;
-  }
-
-  const consumed = consumePendingConfirmation(parsed.id, parsed.action, interaction.user.id);
-  if (!consumed.ok) {
-    const msg = consumed.reason === "unauthorized"
-      ? "⛔ 只有原始请求用户可以操作这个确认。"
-      : consumed.reason === "expired" || consumed.reason === "missing"
-        ? "确认已过期，请重新发送请求。"
-        : "这个确认已经被处理。";
-    await interaction.reply({ content: msg, ephemeral: true });
-    return true;
-  }
-
-  const confirmation = consumed.confirmation;
-
-  if (parsed.action === "cancel") {
-    if (confirmation.decisionLogId !== undefined) {
-      recordSmartRouterUserChoice(confirmation.decisionLogId, "cancelled", "none", {
-        action_result: "cancelled",
-        task_final_status: "not_created",
-        correction_type: "user_override",
-        correction_note: "user cancelled smart router confirmation",
-      });
-    }
-    await interaction.update({ content: "已取消 task 升级。", components: [] });
-    return true;
-  }
-
-  if (parsed.action === "chat") {
-    if (confirmation.decisionLogId !== undefined) {
-      recordSmartRouterUserChoice(confirmation.decisionLogId, "continued_chat", "chat", {
-        action_result: "continued_chat",
-        task_final_status: "not_created",
-        correction_type: "user_override",
-        correction_note: "user chose chat from smart router confirmation",
-      });
-    }
-    await interaction.update({ content: "已选择继续 chat，正在回复...", components: [] });
-    try {
-      await continueChatFromConfirmation(interaction, confirmation);
-    } catch (err) {
-      log.error("Continue-chat confirmation failed:", err);
-      await interaction.followUp({ content: `❌ chat 回复失败: ${err instanceof Error ? err.message : String(err)}`, ephemeral: true });
-    }
-    return true;
-  }
-
-  await interaction.update({ content: "已确认，正在创建 task 线程...", components: [] });
-  try {
-    const taskPrompt = buildSmartTaskPromptForChannel(confirmation.channelId, confirmation.prompt);
-    const result = await createAndRunDiscordTask({
-      prompt: taskPrompt,
-      displayPrompt: confirmation.displayPrompt,
-      cwd: confirmation.cwd,
-      userId: confirmation.userId,
-      attachments: confirmation.attachments,
-      taskContext: confirmation.taskContext,
-      createThread: (name) => interaction.message.startThread({
-        name,
-        autoArchiveDuration: 1440,
-      }),
-      onCreated: async (created) => {
-        await interaction.followUp(`✅ 任务已创建，请查看线程 <#${created.threadId}>`);
-      },
-      onCompleted: async (created, taskResult) => {
-        await interaction.message.reply(formatTaskCompletionNotice(created, taskResult));
-      },
-    });
-    if (confirmation.decisionLogId !== undefined) {
-      recordSmartRouterUserChoice(confirmation.decisionLogId, "accepted_task", "task", {
-        action_result: "confirmed_task_created",
-        created_task_id: result.taskId,
-      });
-    }
-  } catch (err) {
-    if (confirmation.decisionLogId !== undefined) {
-      recordSmartRouterUserChoice(confirmation.decisionLogId, "accepted_task", "none", {
-        action_result: "task_creation_failed",
-        task_final_status: "not_created",
-        correction_type: "none",
-        correction_note: "task creation failed before execution",
-      });
-    }
-    log.error("Confirmed task creation failed:", err);
-    await interaction.followUp({ content: `❌ 创建任务失败: ${err instanceof Error ? err.message : String(err)}`, ephemeral: true });
-  }
-  return true;
-}
 
 function formatChatErrorReply(err: unknown): string {
   const message = err instanceof Error ? err.message : String(err);
@@ -798,86 +490,12 @@ export function createBot(): Client {
 
   client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.isButton()) {
-      try {
-        const cronRetryHandled = await handleCronRetryButton(interaction);
-        if (cronRetryHandled) return;
-        const handled = await handleSmartRouterButton(interaction);
-        if (handled) return;
-      } catch (err) {
-        log.error("Button interaction error:", err);
-        try {
-          if (interaction.deferred || interaction.replied) {
-            await interaction.followUp({ content: "❌ 按钮处理出错", ephemeral: true });
-          } else {
-            await interaction.reply({ content: "❌ 按钮处理出错", ephemeral: true });
-          }
-        } catch (replyErr) {
-          log.error("Failed to send button error reply:", replyErr);
-        }
-        return;
-      }
+      const handled = await dispatchButtonInteraction(interaction);
+      if (handled) return;
     }
 
     if (!interaction.isChatInputCommand()) return;
-    const cmd = interaction as ChatInputCommandInteraction;
-
-    try {
-      switch (cmd.commandName) {
-        case "task":
-          await handleTask(cmd);
-          break;
-        case "status":
-          await handleStatus(cmd);
-          break;
-        case "task-log":
-          await handleTaskLog(cmd);
-          break;
-        case "health":
-          await handleHealth(cmd);
-          break;
-        case "doctor":
-          await handleDoctor(cmd);
-          break;
-        case "incidents":
-          await handleIncidents(cmd);
-          break;
-        case "incident":
-          await handleIncident(cmd);
-          break;
-        case "agent-config":
-          await handleAgentConfig(cmd);
-          break;
-        case "cancel":
-          await handleCancel(cmd);
-          break;
-        case "resume":
-          await handleResume(cmd);
-          break;
-        case "remember":
-          await handleRemember(cmd);
-          break;
-        case "forget":
-          await handleForget(cmd);
-          break;
-        case "memories":
-          await handleMemories(cmd);
-          break;
-        default:
-          await cmd.reply({ content: "未知命令", ephemeral: true });
-      }
-    } catch (err) {
-      log.error("Command error:", err);
-      const reply = { content: "❌ 命令执行出错", ephemeral: true };
-      try {
-        if (cmd.deferred || cmd.replied) {
-          await cmd.editReply(reply.content);
-        } else {
-          await cmd.reply(reply);
-        }
-      } catch (replyErr) {
-        log.error("Failed to send error reply:", replyErr);
-      }
-    }
+    await dispatchSlashCommand(interaction);
   });
 
   client.once(Events.ClientReady, (c) => {

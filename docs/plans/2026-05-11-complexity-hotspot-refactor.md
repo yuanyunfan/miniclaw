@@ -236,3 +236,20 @@ For each completed slice, record:
 - any public API changes
 - follow-up cleanup
 
+### 2026-05-12 - Slice A Interaction Dispatch Extraction
+
+- Slice name: Slice A partial, interaction dispatch boundary.
+- Changed files:
+  - `src/bot.ts`: kept `createBot()` and MessageCreate flow as the public entry, delegated button and slash interactions to `src/bot/*`.
+  - `src/bot/message-smart-router.ts`: extracted smart router decision logging, task prompt context building, and confirmation prompt/button construction.
+  - `src/bot/button-dispatch.ts`: extracted cron retry + smart router button dispatch order and shared button error reply behavior.
+  - `src/bot/slash-dispatch.ts`: extracted slash command name to `commands/handlers.ts` mapping and shared command error reply behavior.
+  - `src/bot/__tests__/button-dispatch.test.ts`: added characterization tests for cron-before-smart-router ordering, unclaimed buttons, and button error replies.
+  - `src/bot/__tests__/slash-dispatch.test.ts`: added characterization tests for handler routing, unknown command reply, and pre/post-defer error replies.
+  - `docs/bot-routing.md`, `docs/architecture.md`: documented the new bot dispatch module boundary and updated slash/button extension guidance.
+- Behavior parity tests:
+  - `pnpm vitest run src/bot/__tests__/button-dispatch.test.ts src/bot/__tests__/slash-dispatch.test.ts src/routing/__tests__/message-route.test.ts` passed, 15 tests.
+  - `pnpm ralph:verify -- --task complexity-hotspot-refactor --profile standard` passed: `pnpm run typecheck`, `pnpm run lint`, `pnpm run quality:docs`.
+  - `pnpm run build` passed.
+- Public API changes: none. `createBot()` remains exported from `src/bot.ts`; interaction order remains cron retry button, smart router button, then slash command.
+- Follow-up cleanup: MessageCreate chat/task/thread paths still live in `src/bot.ts`; future Slice A phases can extract `message-task-channel.ts`, `message-chat.ts`, and `message-thread-continuation.ts` with focused tests.
