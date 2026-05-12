@@ -10,7 +10,9 @@ import {
   markTaskInterrupted,
   getInterruptedTasks,
   getSchemaVersion,
+  listSmartRouterReviewRows,
   recordSmartRouterDecision,
+  recordSmartRouterUserChoice,
   updateSmartRouterDecision,
   getRecentSmartRouterDecisions,
   __testables,
@@ -103,6 +105,12 @@ describe("schema migrations", () => {
     expect(__testables.columnExists("smart_router_decisions", "classifier_elapsed_ms")).toBe(true);
     expect(__testables.columnExists("smart_router_decisions", "classifier_error_type")).toBe(true);
     expect(__testables.columnExists("smart_router_decisions", "classifier_error_message")).toBe(true);
+    expect(__testables.columnExists("smart_router_decisions", "user_choice")).toBe(true);
+    expect(__testables.columnExists("smart_router_decisions", "final_route")).toBe(true);
+    expect(__testables.columnExists("smart_router_decisions", "task_final_status")).toBe(true);
+    expect(__testables.columnExists("smart_router_decisions", "correction_type")).toBe(true);
+    expect(__testables.columnExists("smart_router_decisions", "correction_note")).toBe(true);
+    expect(__testables.columnExists("smart_router_decisions", "resolved_at")).toBe(true);
   });
 
   it("ensures task source context columns exist", () => {
@@ -226,6 +234,68 @@ describe("smart router decisions", () => {
       needsShell: true,
       classifierElapsedMs: 30012,
       classifierErrorType: "timeout",
+    });
+  });
+
+  it("records user choice fields for confirmation outcomes", () => {
+    const id = recordSmartRouterDecision({
+      message_id: "msg-choice",
+      channel_id: "ch-choice",
+      user_id: "user-choice",
+      prompt_hash: "hash-choice",
+      intent: "task_suggest",
+      confidence: 0.7,
+      action_result: "confirmation_pending",
+    });
+
+    recordSmartRouterUserChoice(id, "continued_chat", "chat", {
+      action_result: "continued_chat",
+      task_final_status: "not_created",
+      correction_type: "user_override",
+      correction_note: "user chose chat from smart router confirmation",
+    });
+
+    const row = getRecentSmartRouterDecisions(10).find((r) => r.id === id);
+    expect(row).toMatchObject({
+      user_choice: "continued_chat",
+      final_route: "chat",
+      task_final_status: "not_created",
+      correction_type: "user_override",
+      correction_note: "user chose chat from smart router confirmation",
+      action_result: "continued_chat",
+    });
+    expect(row?.resolved_at).toBeTruthy();
+  });
+
+  it("links created smart-router tasks to final task outcome and review rows", () => {
+    const { id: taskId } = makeTask();
+    const decisionId = recordSmartRouterDecision({
+      message_id: "msg-task-outcome",
+      channel_id: "ch-task-outcome",
+      user_id: "user-task-outcome",
+      prompt_hash: "hash-task-outcome",
+      intent: "task_confirm",
+      confidence: 0.9,
+      action_result: "confirmed_task_created",
+      created_task_id: taskId,
+      user_choice: "accepted_task",
+      final_route: "task",
+      correction_type: "none",
+    });
+
+    updateTask(taskId, { status: "failed", completed_at: new Date().toISOString() });
+
+    const row = getRecentSmartRouterDecisions(10).find((r) => r.id === decisionId);
+    expect(row?.task_final_status).toBe("failed");
+    expect(row?.final_route).toBe("task");
+    expect(row?.resolved_at).toBeTruthy();
+
+    const review = listSmartRouterReviewRows({ channelId: "ch-task-outcome", limit: 5 });
+    expect(review[0]).toMatchObject({
+      id: decisionId,
+      created_task_id: taskId,
+      task_final_status: "failed",
+      linked_task_status: "failed",
     });
   });
 });

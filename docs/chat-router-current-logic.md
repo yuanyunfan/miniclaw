@@ -363,8 +363,21 @@ smart router decision 会写入 SQLite `smart_router_decisions`：
 - `capabilities_json`
 - `action_result`
 - `created_task_id`
+- `user_choice`：确认按钮或自动 task 的用户选择事实，例如 `accepted_task`、`continued_chat`、`cancelled`、`ignored`、`auto_task_no_choice`
+- `final_route`：最终实际走向，取值为 `chat`、`task`、`none`
+- `task_final_status`：关联 task 的最终状态，或未创建时的 `not_created`
+- `correction_type` / `correction_note`：只记录显式 override、手工标注或清晰失败类型，不从 prompt 内容自动推断 false positive/negative
+- `resolved_at`：chat/none 路径或 task outcome 已知时的终止时间
 
-这张表是排查“消息 router 到哪里”的主证据。`matched_signals` 字段为历史兼容名；新逻辑里主要存 classifier evidence，例如 `llm_classifier`、`external_url`、`url_only`、`classifier_failed`。运行日志里的 `[bot] route decision ...` 只保留 channel 尾号、intent、confidence 和 evidence 列表；完整 prompt preview 要查 SQLite。
+这张表是排查“消息 router 到哪里”和后续评估闭环的主证据。`matched_signals` 字段为历史兼容名；新逻辑里主要存 classifier evidence，例如 `llm_classifier`、`external_url`、`url_only`、`classifier_failed`。运行日志里的 `[bot] route decision ...` 只保留 channel 尾号、intent、confidence 和 evidence 列表；完整 prompt preview 要查 SQLite。
+
+本地评估报告入口：
+
+```bash
+pnpm run router:review -- --days 7
+```
+
+报告按 channel、intent、classifier error、user choice、final route、task outcome 和 correction type 聚合；recent 列表只展示 decision id、hash 前缀和状态字段，不输出完整 prompt。
 
 ## Current Edge Cases From Real Prompts
 

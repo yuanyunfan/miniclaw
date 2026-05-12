@@ -52,6 +52,12 @@ for (const field of [
   "INTEGER classifier_elapsed_ms",
   "TEXT classifier_error_type",
   "TEXT classifier_error_message",
+  "TEXT user_choice",
+  "TEXT final_route",
+  "TEXT task_final_status",
+  "TEXT correction_type",
+  "TEXT correction_note",
+  "TEXT resolved_at",
 ]) {
   if (!architecture.includes(field)) {
     findings.push({

@@ -1,6 +1,6 @@
 # Smart Router Evaluation Loop
 
-Status: draft
+Status: done
 Date: 2026-05-11
 
 ## Background
@@ -165,3 +165,18 @@ CREATE TABLE smart_router_feedback (
 
 Record schema version, added fields, report command, fixture categories, and verification output here when implemented.
 
+2026-05-12 Ralph implementation:
+
+- Bumped DB schema to v9 and added nullable `smart_router_decisions` evaluation fields: `user_choice`, `final_route`, `task_final_status`, `correction_type`, `correction_note`, `resolved_at`; added `idx_smart_router_decisions_task`.
+- Added store helpers for confirmation choice, task outcome writeback, and review listing: `recordSmartRouterUserChoice`, `recordSmartRouterTaskOutcome`, `listSmartRouterReviewRows`.
+- Wired Smart Router decisions so direct chat, auto task, confirmed task, continued chat, cancel, expired click, and task creation failure write final route/choice facts. Task status updates now backfill linked Smart Router rows by `created_task_id`.
+- Added local review report: `pnpm run router:review -- --days 7`, backed by `src/routing/router-review.ts`; report aggregates channel, intent, classifier error, user choice, final route, task outcome, and correction type without printing full prompts.
+- Added focused tests for DB schema/helper behavior and review rendering. Added an ambiguous follow-up implementation fixture to existing router eval fixtures.
+- Synced docs: `docs/architecture.md`, `docs/bot-routing.md`, `docs/chat-router-current-logic.md`, `docs/features/04-smart-task-router.md`, `docs/features/05-smart-task-router.en.md`, and `scripts/quality-docs.ts`.
+- Verification passed:
+  - `pnpm vitest run src/routing/__tests__/router-review.test.ts src/store/__tests__/db.test.ts` -> 19 tests passed.
+  - `pnpm run typecheck` -> passed.
+  - `pnpm run lint` -> passed.
+  - `pnpm run quality:docs` -> passed, schema v9.
+  - `pnpm run router:review -- --days 7 --limit 5` with a temporary DB -> rendered an empty report successfully.
+  - `pnpm ralph:verify -- --task smart-router-evaluation-loop --profile router` -> 57 tests passed; typecheck, lint, and quality docs passed.

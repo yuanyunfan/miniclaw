@@ -624,6 +624,10 @@ smart router decision 是 router 对每条消息的判断记录，例如：
 - risk flags
 - classifier reason
 - final action：chat、suggest、confirm、auto task、cancelled、continued_chat
+- user choice：accepted_task、continued_chat、cancelled、ignored、auto_task_no_choice
+- final route：chat、task、none
+- task final status：completed、failed、cancelled、interrupted、not_created
+- correction metadata：correction_type、correction_note、resolved_at
 
 写 SQLite 的价值：
 
@@ -647,7 +651,10 @@ smart router decision 是 router 对每条消息的判断记录，例如：
 - intent、confidence、matched signals、risk flags；
 - action result；
 - created task id，如果有；
+- 用户按钮选择、最终 route、task outcome、显式 correction metadata；
 - created_at。
+
+本地评估报告由 `pnpm run router:review -- --days 7` 输出，聚合 channel、intent、classifier error、user choice、final route、task outcome 和 correction type。报告不输出完整 prompt；recent 列表只展示 prompt hash 前缀和状态字段。
 
 如果后续需要 debug，再通过可配置开关临时记录更详细内容。默认不落完整 prompt。
 

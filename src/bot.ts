@@ -22,7 +22,14 @@ import {
 import { handleTask, handleStatus, handleTaskLog, handleHealth, handleDoctor, handleIncidents, handleIncident, handleAgentConfig, handleCancel, handleResume, handleRemember, handleForget, handleMemories } from "./commands/handlers.js";
 import { executeTask } from "./agent/task.js";
 import { recoverInterruptedTasks } from "./agent/recovery.js";
-import { createTask, getChatHistory, getTaskByThreadId, recordSmartRouterDecision, updateSmartRouterDecision } from "./store/db.js";
+import {
+  createTask,
+  getChatHistory,
+  getTaskByThreadId,
+  recordSmartRouterDecision,
+  recordSmartRouterUserChoice,
+  updateSmartRouterDecision,
+} from "./store/db.js";
 import { v4 as uuid } from "uuid";
 import { parseExplicitMemory } from "./memory/parse.js";
 import { addMemory } from "./store/memory.js";
@@ -49,6 +56,7 @@ import {
   buildSmartRouterCustomId,
   consumePendingConfirmation,
   createPendingConfirmation,
+  getPendingConfirmation,
   parseSmartRouterCustomId,
   type ConfirmationAction,
   type PendingTaskConfirmation,
@@ -56,6 +64,27 @@ import {
 import { DRAINING_MESSAGE, isDraining } from "./runtime/shutdown.js";
 
 const log = createLogger("bot");
+
+type SmartRouterDecisionInput = Parameters<typeof recordSmartRouterDecision>[0];
+
+function smartRouterEvaluationFields(actionResult: string): Partial<SmartRouterDecisionInput> {
+  if (actionResult === "chat") {
+    return {
+      final_route: "chat",
+      task_final_status: "not_created",
+      correction_type: "none",
+      resolved_at: new Date().toISOString(),
+    };
+  }
+  if (actionResult === "auto_task_start") {
+    return {
+      user_choice: "auto_task_no_choice",
+      final_route: "task",
+      correction_type: "none",
+    };
+  }
+  return {};
+}
 
 function recordRouteDecisionForMessage(
   message: Message,
@@ -89,6 +118,7 @@ function recordRouteDecisionForMessage(
         ? { classifier_error_message: decision.capabilities.classifierErrorMessage }
         : {}),
       action_result: actionResult,
+      ...smartRouterEvaluationFields(actionResult),
       ...(createdTaskId ? { created_task_id: createdTaskId } : {}),
     });
   } catch (err) {
@@ -226,6 +256,20 @@ async function handleSmartRouterButton(interaction: ButtonInteraction): Promise<
     return true;
   }
 
+  const pending = getPendingConfirmation(parsed.id);
+  if (pending?.status === "expired") {
+    if (pending.decisionLogId !== undefined) {
+      recordSmartRouterUserChoice(pending.decisionLogId, "ignored", "none", {
+        action_result: "confirmation_expired",
+        task_final_status: "not_created",
+        correction_type: "none",
+        correction_note: "confirmation expired before user choice",
+      });
+    }
+    await interaction.reply({ content: "确认已过期，请重新发送请求。", ephemeral: true });
+    return true;
+  }
+
   const consumed = consumePendingConfirmation(parsed.id, parsed.action, interaction.user.id);
   if (!consumed.ok) {
     const msg = consumed.reason === "unauthorized"
@@ -238,22 +282,29 @@ async function handleSmartRouterButton(interaction: ButtonInteraction): Promise<
   }
 
   const confirmation = consumed.confirmation;
-  const updateDecision = (actionResult: string, taskId?: string) => {
-    if (confirmation.decisionLogId === undefined) return;
-    updateSmartRouterDecision(confirmation.decisionLogId, {
-      action_result: actionResult,
-      ...(taskId ? { created_task_id: taskId } : {}),
-    });
-  };
 
   if (parsed.action === "cancel") {
-    updateDecision("cancelled");
+    if (confirmation.decisionLogId !== undefined) {
+      recordSmartRouterUserChoice(confirmation.decisionLogId, "cancelled", "none", {
+        action_result: "cancelled",
+        task_final_status: "not_created",
+        correction_type: "user_override",
+        correction_note: "user cancelled smart router confirmation",
+      });
+    }
     await interaction.update({ content: "已取消 task 升级。", components: [] });
     return true;
   }
 
   if (parsed.action === "chat") {
-    updateDecision("continued_chat");
+    if (confirmation.decisionLogId !== undefined) {
+      recordSmartRouterUserChoice(confirmation.decisionLogId, "continued_chat", "chat", {
+        action_result: "continued_chat",
+        task_final_status: "not_created",
+        correction_type: "user_override",
+        correction_note: "user chose chat from smart router confirmation",
+      });
+    }
     await interaction.update({ content: "已选择继续 chat，正在回复...", components: [] });
     try {
       await continueChatFromConfirmation(interaction, confirmation);
@@ -285,9 +336,21 @@ async function handleSmartRouterButton(interaction: ButtonInteraction): Promise<
         await interaction.message.reply(formatTaskCompletionNotice(created, taskResult));
       },
     });
-    updateDecision("confirmed_task_created", result.taskId);
+    if (confirmation.decisionLogId !== undefined) {
+      recordSmartRouterUserChoice(confirmation.decisionLogId, "accepted_task", "task", {
+        action_result: "confirmed_task_created",
+        created_task_id: result.taskId,
+      });
+    }
   } catch (err) {
-    updateDecision("task_creation_failed");
+    if (confirmation.decisionLogId !== undefined) {
+      recordSmartRouterUserChoice(confirmation.decisionLogId, "accepted_task", "none", {
+        action_result: "task_creation_failed",
+        task_final_status: "not_created",
+        correction_type: "none",
+        correction_note: "task creation failed before execution",
+      });
+    }
     log.error("Confirmed task creation failed:", err);
     await interaction.followUp({ content: `❌ 创建任务失败: ${err instanceof Error ? err.message : String(err)}`, ephemeral: true });
   }
@@ -617,7 +680,14 @@ export function createBot(): Client {
               }
             } catch (err) {
               if (decisionLogId !== undefined) {
-                updateSmartRouterDecision(decisionLogId, { action_result: "auto_task_failed" });
+                updateSmartRouterDecision(decisionLogId, {
+                  action_result: "auto_task_failed",
+                  final_route: "none",
+                  task_final_status: "not_created",
+                  correction_type: "none",
+                  correction_note: "auto task creation failed before execution",
+                  resolved_at: new Date().toISOString(),
+                });
               }
               log.error("Auto task creation failed:", err);
               await message.reactions.cache.get("👀")?.users.remove(client.user!.id).catch(() => {});

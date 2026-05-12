@@ -17,6 +17,7 @@
     "restart": "pnpm safe-restart",
     "doctor": "tsx scripts/doctor.ts",
     "task:trace": "tsx scripts/task-trace.ts",
+    "router:review": "tsx scripts/router-review.ts",
     "doctor:repair": "tsx scripts/doctor-repair.ts",
     "doctor:ship": "tsx scripts/doctor-ship.ts",
     "ralph:run": "tsx scripts/ralph-run.ts",

@@ -80,6 +80,21 @@
     }
   },
   {
+    "name": "ambiguous follow-up implementation",
+    "prompt": "按你刚才的方案继续，把实现落到代码里并跑测试",
+    "expectedRoute": "task_confirm",
+    "expectedCapabilities": ["needsFileWrite", "needsShell"],
+    "classifierCapabilities": {
+      "needsFileWrite": true,
+      "needsShell": true,
+      "needsLongRunning": true,
+      "estimatedEffort": "medium",
+      "reason": "follow-up asks to continue prior plan with code edits and tests",
+      "evidence": ["follow_up_implementation", "validation"],
+      "riskFlags": ["writes_files", "runs_commands"]
+    }
+  },
+  {
     "name": "ordinary read-only summary",
     "prompt": "总结一下这段文字的核心观点",
     "expectedRoute": "chat",

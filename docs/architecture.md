@@ -566,7 +566,7 @@ classify by mime + ext
 
 ## 9. 数据库 schema
 
-`~/.miniclaw/data.db`（SQLite WAL 模式）。schema 版本使用 SQLite `PRAGMA user_version` 管理，当前版本由 `src/store/db.ts` 的 `SCHEMA_VERSION = 8` 定义。
+`~/.miniclaw/data.db`（SQLite WAL 模式）。schema 版本使用 SQLite `PRAGMA user_version` 管理，当前版本由 `src/store/db.ts` 的 `SCHEMA_VERSION = 9` 定义。
 
 ```mermaid
 erDiagram
@@ -618,6 +618,12 @@ erDiagram
         TEXT classifier_error_message
         TEXT action_result
         TEXT created_task_id
+        TEXT user_choice
+        TEXT final_route
+        TEXT task_final_status
+        TEXT correction_type
+        TEXT correction_note
+        TEXT resolved_at
         TEXT created_at
     }
     task_events {

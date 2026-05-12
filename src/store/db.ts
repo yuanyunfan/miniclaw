@@ -4,7 +4,7 @@ import { dirname } from "path";
 import { config } from "../config.js";
 
 let db: Database.Database;
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
 
 export function getDb(): Database.Database {
   return db;
@@ -111,10 +111,17 @@ export function initDb(): void {
       classifier_error_message TEXT,
       action_result TEXT,
       created_task_id TEXT,
+      user_choice TEXT,
+      final_route TEXT,
+      task_final_status TEXT,
+      correction_type TEXT,
+      correction_note TEXT,
+      resolved_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_smart_router_decisions_message ON smart_router_decisions(message_id);
     CREATE INDEX IF NOT EXISTS idx_smart_router_decisions_created_at ON smart_router_decisions(created_at);
+    CREATE INDEX IF NOT EXISTS idx_smart_router_decisions_task ON smart_router_decisions(created_task_id);
     CREATE TABLE IF NOT EXISTS incidents (
       id TEXT PRIMARY KEY,
       dedupe_key TEXT NOT NULL UNIQUE,
@@ -267,10 +274,17 @@ function runMigrations(): void {
         classifier_error_message TEXT,
         action_result TEXT,
         created_task_id TEXT,
+        user_choice TEXT,
+        final_route TEXT,
+        task_final_status TEXT,
+        correction_type TEXT,
+        correction_note TEXT,
+        resolved_at TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
       CREATE INDEX IF NOT EXISTS idx_smart_router_decisions_message ON smart_router_decisions(message_id);
       CREATE INDEX IF NOT EXISTS idx_smart_router_decisions_created_at ON smart_router_decisions(created_at);
+      CREATE INDEX IF NOT EXISTS idx_smart_router_decisions_task ON smart_router_decisions(created_task_id);
     `);
     setSchemaVersion(2);
   }
@@ -422,6 +436,18 @@ function runMigrations(): void {
     setSchemaVersion(8);
   }
 
+  // v9: persist router evaluation-loop facts: user choice, final route, task outcome, and correction metadata.
+  if (current < 9) {
+    ensureColumn("smart_router_decisions", "user_choice", "TEXT");
+    ensureColumn("smart_router_decisions", "final_route", "TEXT");
+    ensureColumn("smart_router_decisions", "task_final_status", "TEXT");
+    ensureColumn("smart_router_decisions", "correction_type", "TEXT");
+    ensureColumn("smart_router_decisions", "correction_note", "TEXT");
+    ensureColumn("smart_router_decisions", "resolved_at", "TEXT");
+    db.exec("CREATE INDEX IF NOT EXISTS idx_smart_router_decisions_task ON smart_router_decisions(created_task_id)");
+    setSchemaVersion(9);
+  }
+
   const after = getSchemaVersion();
   if (after < SCHEMA_VERSION) {
     throw new Error(`Database schema migration incomplete: user_version=${after}, expected=${SCHEMA_VERSION}`);
@@ -499,7 +525,10 @@ export function updateTask(
   const sets = safeKeys.map((k) => `${k} = @${k}`).join(", ");
   const params: Record<string, unknown> = { id };
   for (const k of safeKeys) params[k] = (updates as Record<string, unknown>)[k];
-  db.prepare(`UPDATE tasks SET ${sets} WHERE id = @id`).run(params);
+  const result = db.prepare(`UPDATE tasks SET ${sets} WHERE id = @id`).run(params);
+  if (result.changes > 0 && typeof updates.status === "string") {
+    recordSmartRouterTaskOutcome(id, updates.status);
+  }
 }
 
 function assertTaskRows(rows: unknown[]): TaskRow[] {
@@ -538,13 +567,14 @@ export function getInterruptedTasks(limit = 5): TaskRow[] {
 }
 
 export function markTaskInterrupted(id: string, resultSummary?: string): void {
-  db.prepare(
+  const result = db.prepare(
     `UPDATE tasks
      SET status = 'interrupted',
          result_summary = COALESCE(@result_summary, result_summary),
          completed_at = datetime('now')
      WHERE id = @id AND status = 'running'`
   ).run({ id, result_summary: resultSummary ?? null });
+  if (result.changes > 0) recordSmartRouterTaskOutcome(id, "interrupted");
 }
 
 export function getRecentTasks(limit = 10): TaskRow[] {
@@ -588,7 +618,33 @@ export interface SmartRouterDecisionRow {
   classifier_error_message: string | null;
   action_result: string | null;
   created_task_id: string | null;
+  user_choice: string | null;
+  final_route: string | null;
+  task_final_status: string | null;
+  correction_type: string | null;
+  correction_note: string | null;
+  resolved_at: string | null;
   created_at: string;
+}
+
+export type SmartRouterUserChoice =
+  | "accepted_task"
+  | "continued_chat"
+  | "cancelled"
+  | "ignored"
+  | "auto_task_no_choice";
+export type SmartRouterFinalRoute = "chat" | "task" | "none";
+export type SmartRouterTaskFinalStatus = "completed" | "failed" | "cancelled" | "interrupted" | "not_created";
+export type SmartRouterCorrectionType =
+  | "false_positive"
+  | "false_negative"
+  | "classifier_error"
+  | "policy_blocked"
+  | "user_override"
+  | "none";
+
+export interface SmartRouterReviewRow extends SmartRouterDecisionRow {
+  linked_task_status: string | null;
 }
 
 export function recordSmartRouterDecision(row: {
@@ -609,18 +665,26 @@ export function recordSmartRouterDecision(row: {
   classifier_error_message?: string;
   action_result?: string;
   created_task_id?: string;
+  user_choice?: SmartRouterUserChoice;
+  final_route?: SmartRouterFinalRoute;
+  task_final_status?: SmartRouterTaskFinalStatus;
+  correction_type?: SmartRouterCorrectionType;
+  correction_note?: string;
+  resolved_at?: string;
 }): number {
   const result = db.prepare(
     `INSERT INTO smart_router_decisions (
       message_id, channel_id, user_id, prompt_hash, prompt_preview, full_prompt,
       intent, confidence, reason, matched_signals, risk_flags, capabilities_json,
       classifier_elapsed_ms, classifier_error_type, classifier_error_message,
-      action_result, created_task_id
+      action_result, created_task_id, user_choice, final_route, task_final_status,
+      correction_type, correction_note, resolved_at
     ) VALUES (
       @message_id, @channel_id, @user_id, @prompt_hash, @prompt_preview, @full_prompt,
       @intent, @confidence, @reason, @matched_signals, @risk_flags, @capabilities_json,
       @classifier_elapsed_ms, @classifier_error_type, @classifier_error_message,
-      @action_result, @created_task_id
+      @action_result, @created_task_id, @user_choice, @final_route, @task_final_status,
+      @correction_type, @correction_note, @resolved_at
     )`
   ).run({
     message_id: row.message_id,
@@ -640,32 +704,134 @@ export function recordSmartRouterDecision(row: {
     classifier_error_message: row.classifier_error_message ?? null,
     action_result: row.action_result ?? null,
     created_task_id: row.created_task_id ?? null,
+    user_choice: row.user_choice ?? null,
+    final_route: row.final_route ?? null,
+    task_final_status: row.task_final_status ?? null,
+    correction_type: row.correction_type ?? null,
+    correction_note: row.correction_note ?? null,
+    resolved_at: row.resolved_at ?? null,
   });
   return Number(result.lastInsertRowid);
 }
 
+export interface SmartRouterDecisionUpdate {
+  action_result?: string | null;
+  created_task_id?: string | null;
+  user_choice?: SmartRouterUserChoice | null;
+  final_route?: SmartRouterFinalRoute | null;
+  task_final_status?: SmartRouterTaskFinalStatus | null;
+  correction_type?: SmartRouterCorrectionType | null;
+  correction_note?: string | null;
+  resolved_at?: string | null;
+}
+
 export function updateSmartRouterDecision(
   id: number,
-  updates: { action_result?: string; created_task_id?: string }
+  updates: SmartRouterDecisionUpdate
 ): void {
   const fields: string[] = [];
   const params: Record<string, unknown> = { id };
-  if (updates.action_result !== undefined) {
-    fields.push("action_result = @action_result");
-    params.action_result = updates.action_result;
-  }
-  if (updates.created_task_id !== undefined) {
-    fields.push("created_task_id = @created_task_id");
-    params.created_task_id = updates.created_task_id;
+  for (const key of [
+    "action_result",
+    "created_task_id",
+    "user_choice",
+    "final_route",
+    "task_final_status",
+    "correction_type",
+    "correction_note",
+    "resolved_at",
+  ] as const) {
+    if (updates[key] !== undefined) {
+      fields.push(`${key} = @${key}`);
+      params[key] = updates[key];
+    }
   }
   if (!fields.length) return;
   db.prepare(`UPDATE smart_router_decisions SET ${fields.join(", ")} WHERE id = @id`).run(params);
+}
+
+function resolvedAtNow(): string {
+  return new Date().toISOString();
+}
+
+function normalizeTaskFinalStatus(status: string): SmartRouterTaskFinalStatus | undefined {
+  if (status === "completed" || status === "failed" || status === "cancelled" || status === "interrupted") {
+    return status;
+  }
+  return undefined;
+}
+
+export function recordSmartRouterUserChoice(
+  id: number,
+  choice: SmartRouterUserChoice,
+  finalRoute: SmartRouterFinalRoute,
+  updates: Omit<SmartRouterDecisionUpdate, "user_choice" | "final_route"> = {}
+): void {
+  const terminal = finalRoute !== "task" || updates.task_final_status !== undefined;
+  updateSmartRouterDecision(id, {
+    user_choice: choice,
+    final_route: finalRoute,
+    correction_type: "none",
+    ...updates,
+    ...(terminal && updates.resolved_at === undefined ? { resolved_at: resolvedAtNow() } : {}),
+  });
+}
+
+export function recordSmartRouterTaskOutcome(taskId: string, status: string): number {
+  const taskFinalStatus = normalizeTaskFinalStatus(status);
+  if (!taskFinalStatus) return 0;
+  const result = db.prepare(
+    `UPDATE smart_router_decisions
+     SET task_final_status = @task_final_status,
+         final_route = COALESCE(final_route, 'task'),
+         correction_type = COALESCE(correction_type, 'none'),
+         resolved_at = @resolved_at
+     WHERE created_task_id = @task_id`
+  ).run({
+    task_id: taskId,
+    task_final_status: taskFinalStatus,
+    resolved_at: resolvedAtNow(),
+  });
+  return Number(result.changes ?? 0);
 }
 
 export function getRecentSmartRouterDecisions(limit = 20): SmartRouterDecisionRow[] {
   return db
     .prepare("SELECT * FROM smart_router_decisions ORDER BY created_at DESC, id DESC LIMIT ?")
     .all(limit) as SmartRouterDecisionRow[];
+}
+
+export function listSmartRouterReviewRows(options: {
+  since?: string;
+  until?: string;
+  channelId?: string;
+  limit?: number;
+} = {}): SmartRouterReviewRow[] {
+  const where: string[] = [];
+  const params: Record<string, unknown> = {
+    limit: Math.max(1, Math.min(options.limit ?? 200, 1000)),
+  };
+  if (options.since) {
+    where.push("d.created_at >= @since");
+    params.since = options.since;
+  }
+  if (options.until) {
+    where.push("d.created_at <= @until");
+    params.until = options.until;
+  }
+  if (options.channelId) {
+    where.push("d.channel_id = @channel_id");
+    params.channel_id = options.channelId;
+  }
+  const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  return db.prepare(
+    `SELECT d.*, t.status AS linked_task_status
+     FROM smart_router_decisions d
+     LEFT JOIN tasks t ON t.id = d.created_task_id
+     ${whereSql}
+     ORDER BY d.created_at DESC, d.id DESC
+     LIMIT @limit`
+  ).all(params) as SmartRouterReviewRow[];
 }
 
 // ===== Stage 子系统：scenes / scene_messages =====

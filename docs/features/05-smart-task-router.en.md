@@ -594,10 +594,16 @@ A smart router decision is the route record for one message:
 - classifier reason;
 - final action;
 - created task id, if any.
+- user choice;
+- final route;
+- task final status;
+- explicit correction metadata.
 
 Writing decisions to SQLite is useful for reviewing false positives and false negatives, tuning thresholds, measuring confirmation acceptance rate, and tracing how a task was upgraded from chat.
 
-The first version should store message id, channel id, user id, prompt hash, a capped prompt preview, intent, confidence, signals, risk flags, action result, created task id, and timestamp. Full prompt logging should require an explicit debug setting.
+The first version should store message id, channel id, user id, prompt hash, a capped prompt preview, intent, confidence, signals, risk flags, action result, created task id, user choice, final route, task outcome, explicit correction metadata, and timestamp. Full prompt logging should require an explicit debug setting.
+
+The local review entrypoint is `pnpm run router:review -- --days 7`. It aggregates channel, intent, classifier error, user choice, final route, task outcome, and correction type without printing full prompt text.
 
 ## Recommended MiniClaw Direction
 

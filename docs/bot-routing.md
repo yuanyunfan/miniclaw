@@ -183,11 +183,11 @@ if (!isAutoChannel && !isMentioned) return;
    - `task_suggest` / `task_confirm`：发送 `转为 task` / `继续 chat` / `取消` 按钮；
    - `task_auto`：仅在 `routing.smart_router.auto_task_channels` 中直接创建 task。
    - `routing.smart_router.confirm_channels: []` 或 `["*"]` 表示所有 eligible auto-reply / @mention channel 都允许展示确认按钮；写具体频道 ID 时只限制这些频道。
-6. route decision 写入 SQLite `smart_router_decisions`，默认只存 prompt hash、capped preview、capability JSON 和 action result，不存完整 prompt。
+6. route decision 写入 SQLite `smart_router_decisions`，默认只存 prompt hash、capped preview、capability JSON 和 action result，不存完整 prompt。后续确认按钮和 task 完成路径会补写 `user_choice`、`final_route`、`task_final_status`、`correction_type` 和 `resolved_at`，供 `pnpm run router:review -- --days 7` 聚合评估。
 
 确认按钮状态是 10 分钟内存态。按钮 `custom_id` 只包含短 token，不携带 prompt；重启后旧按钮会过期，用户重新发送即可。
 
-确认后的 task 通过 `src/discord/task-intake.ts` 进入和 `/task` 相同的创建线程、写 DB、发送 status embed、启动 `executeTask()` 流程。默认只把当前消息作为 task 指令；如果 prompt 明确引用“上面/刚才/your plan/continue”等上下文，才会注入最近少量 chat history，并标记为 untrusted context。
+确认后的 task 通过 `src/discord/task-intake.ts` 进入和 `/task` 相同的创建线程、写 DB、发送 status embed、启动 `executeTask()` 流程。Smart Router decision 会保留 `created_task_id`，`tasks.status` 最终变成 `completed`、`failed`、`cancelled` 或 `interrupted` 时同步写回 `task_final_status`。默认只把当前消息作为 task 指令；如果 prompt 明确引用“上面/刚才/your plan/continue”等上下文，才会注入最近少量 chat history，并标记为 untrusted context。
 
 附件处理细节见 `docs/architecture.md`「附件流」段：图片/PDF 下载后给 Claude 生成 base64 content blocks，同时给 Codex 生成 local_image/text 输入；文本内联，二进制落盘到 cwd 让 agent 用工具读取。
 

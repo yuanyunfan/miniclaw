@@ -44,7 +44,7 @@ const PROFILE_COMMANDS: Record<string, string[]> = {
     "pnpm run quality:docs",
   ],
   router: [
-    "pnpm vitest run src/routing/__tests__/intent.test.ts src/routing/__tests__/context.test.ts src/routing/__tests__/confirmations.test.ts src/routing/__tests__/router-eval.test.ts src/store/__tests__/db.test.ts",
+    "pnpm vitest run src/routing/__tests__/intent.test.ts src/routing/__tests__/context.test.ts src/routing/__tests__/confirmations.test.ts src/routing/__tests__/router-eval.test.ts src/routing/__tests__/router-review.test.ts src/store/__tests__/db.test.ts",
     "pnpm run typecheck",
     "pnpm run lint",
     "pnpm run quality:docs",
