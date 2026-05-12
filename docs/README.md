@@ -13,7 +13,7 @@
 
 ## Features
 
-- [`features/01-stage.md`](features/01-stage.md): Stage CLI 多 agent 控制台。
+- [`features/01-stage.md`](features/01-stage.md): Stage 实验性 CLI 多 agent 控制台及 Discord runtime 边界。
 - [`features/02-wechat-mp-provider.md`](features/02-wechat-mp-provider.md): 微信公众号文章采集 pre-provider。
 - [`features/03-discord-task-output.md`](features/03-discord-task-output.md): Discord task 输出、进度和 embed 设计。
 - [`features/04-smart-task-router.md`](features/04-smart-task-router.md): Smart Task Router 中文设计。

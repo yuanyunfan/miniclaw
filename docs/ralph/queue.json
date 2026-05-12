@@ -122,7 +122,7 @@
       "id": "stage-experimental-boundary",
       "title": "Stage Experimental Boundary",
       "priority": "P3",
-      "status": "pending",
+      "status": "done",
       "plan": "docs/plans/2026-05-11-stage-experimental-boundary.md",
       "branch": "ralph/stage-experimental-boundary",
       "verify_profile": "stage",

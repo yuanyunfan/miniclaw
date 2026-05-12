@@ -1,7 +1,7 @@
-# MiniClaw Stage — CLI 多 Agent 控制台
+# MiniClaw Stage — 实验性 CLI 多 Agent 控制台
 
-> 终端里的"多 agent 群聊"。三个内置 personas：CEO / Engineer / Tester（用户可在 `~/.miniclaw/personas/` 自定义覆盖），自由 @ 分派任务，做观察者看 agent 互相讨论。
-> Discord bot 子系统的"对偶"——同样复用 chat-tools / memory / db / log，只换载体。
+> 结论：Stage 是 experimental playground，用于 persona、多 agent turn-taking、CLI/TUI workflow 和调度策略研究；它不是 Discord bot 的默认 task runtime，也不定义 MiniClaw 的主产品面。
+> 当前可用入口仍是 `pnpm stage` 和 `pnpm stage:repl`。Stage 可以复用稳定的低层共享能力，但 Stage persona、TUI、orchestrator 和 multi-agent 协议不能反向牵动 Discord task 行为。
 
 ---
 
@@ -11,6 +11,34 @@
 pnpm stage         # Ink TUI（4 pane 主界面，推荐）
 pnpm stage:repl    # readline REPL（无 TUI，适合 ssh / log 友好场景）
 ```
+
+---
+
+## 实验边界
+
+Stage 的定位：
+
+- persona 和 multi-agent workflow 研究沙盒。
+- 终端内可观察的 turn-taking、budget guard、scene 保存/恢复实验面。
+- 未来可验证 `AgentRuntime`、`ModelClient` 或 prompt utility 是否适合复用的 playground。
+
+Stage 的非目标：
+
+- 不替代 Discord bot 的 `/task`、thread continuation、button routing 或 task view reporter。
+- 不让多 agent 成为 MiniClaw task 的默认执行路径。
+- 不引入 Stage-only UX 约束来重塑 Discord-native delivery。
+- 不把真实 Discord/LLM Stage E2E 加进 commit/push 门禁；Stage 仍以 focused tests 和手动 TTY smoke 为主。
+
+源码边界：
+
+- Stage 可以直接依赖低层共享模块，例如 `src/lib/log.ts`、只读 config summary、prompt utilities、scene persistence helper 和稳定的 runtime/model contracts。
+- Stage 不应 import `src/bot.ts`、`src/bot/*`、`src/discord/*` 或 `src/commands/*`。
+- Discord runtime 模块不应 import `src/stage/*`；Stage 的 persona、TUI state 和 orchestrator 不能成为默认 Discord task behavior。
+
+当前 runtime-contract 状态：
+
+- `AgentRuntime` / `ModelClient` 已经存在于共享 runtime 层，但当前 `AgentRuntime` adapters 主要服务长任务 `startTask`，没有提供 Stage 所需的 persona turn、streaming delta 和 tool callback contract。
+- Stage 继续保留自己的 `chatOnce` 路径，直到出现稳定的 Stage-compatible chat turn contract；不要为了抽象一致性把 Stage 强行接入 task runtime。
 
 ---
 
@@ -119,8 +147,8 @@ flowchart TB
 | `src/agent/chat-tools.ts` | 4 个工具的 schema + executor，agent.ts 直接调 |
 | `src/agent/subagents.ts` | `parseFrontmatter`，personas.ts 复用 |
 | `src/lib/log.ts` | logger（模块 tag: `[stage]` `[orchestrator]` `[agent]` `[scene-store]` `[stage-manager]` `[personas]`） |
-| `src/store/db.ts` | ALTER 加 `scenes` + `scene_messages` 两表 |
-| `src/config.ts` | `anthropicApiKey` / `anthropicBaseUrl` / `model` |
+| `src/store/db.ts` | Stage scene helper 写入 `scenes` + `scene_messages` |
+| `src/config.ts` | 读取 provider/model/base URL 等 runtime 配置，不拥有 Discord routing |
 
 ---
 
@@ -212,7 +240,7 @@ sequenceDiagram
 ## 验收
 
 ```bash
-pnpm test src/stage/                    # 31 个 stage 单测
+pnpm vitest run src/stage               # Stage 单测 + import boundary 静态检查
 pnpm exec tsc --noEmit                  # 类型通过
 pnpm stage                              # 真 TTY 跑 TUI（手 E2E）
 ```
@@ -243,3 +271,15 @@ $ pnpm stage
 - worker_threads 进程隔离（OOM 保护）
 - 跨 LLM 厂商（Codex / Gemini 通过 ACP）
 - Web UI 浏览器版
+
+---
+
+## Promotion Criteria
+
+Stage 只有在满足以下条件后，才应从 experimental playground 升级为 core MiniClaw capability：
+
+- 有稳定的 docs index 和 source-of-truth feature doc。
+- 有 runtime health、usage accounting 和 failure visibility。
+- 有独立的 Stage quality gates，且不会阻塞 Discord bot 的常规质量门禁。
+- 有清晰 Discord integration strategy，说明哪些 Stage 行为可以进入 Discord，哪些只能留在 CLI/TUI。
+- 有明确用户价值，且价值不只是“多 agent 看起来更强”。
