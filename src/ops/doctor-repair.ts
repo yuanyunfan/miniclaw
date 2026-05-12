@@ -37,7 +37,7 @@ import {
 export type { RepairAgentResult } from "./doctor-repair/agent.js";
 export type { RepairPolicyResult } from "./doctor-repair/policy.js";
 export { parseChangedFiles } from "./doctor-repair/path-policy.js";
-export { formatDoctorRepairResult } from "./doctor-repair/report.js";
+export { formatDoctorRepairResult, formatRepairReviewReport } from "./doctor-repair/report.js";
 export {
   repairVerificationCommands,
   selectTargetedTestCommands,

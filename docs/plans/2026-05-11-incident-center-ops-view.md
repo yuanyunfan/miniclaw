@@ -224,3 +224,19 @@ Record new filters, formatter behavior, command output examples, and verificatio
 - Ralph doctor profile passed:
   - `pnpm run ralph:verify -- --task incident-center-ops-view --profile doctor` - passed; included doctor scheduler/repair/ship tests, incident detail tests, typecheck, lint, and docs drift.
 - Remaining plan items: standalone reusable repair review formatter for `doctor:ship` dry-run/ship-preview, and future trace exporter deep links beyond the command hints already shown in `/incident view`.
+
+### 2026-05-13 - Ralph shared repair review report
+
+- Implemented the next reviewable phase: `doctor:ship` dry-run/execute formatting now uses a reusable repair review formatter built from existing `repair_runs.report_json` and `verification_json`; no schema fields were added.
+- Added `formatRepairReviewReport` in `src/ops/doctor-repair/report.ts` and wired `formatDoctorShipResult` to it, so local `pnpm run doctor:ship -- --incident <id>` and Discord `/incident ship-preview` share the same report body.
+- The review report now includes incident identity, ship state, repair branch and commit/base SHA, changed paths, diff summary when recorded, verification commands with inferred exit status, path-policy blockers, risks, rollback instructions, and local/Discord ship commands.
+- The formatter uses the shared diagnostic redaction policy before printing stored report fields and keeps the Discord path on changed paths/summaries rather than raw diffs.
+- Updated docs in `docs/features/13-auto-doctor.md` and `docs/bot-routing.md` for the shared dry-run/ship-preview review surface.
+- Focused verification passed:
+  - `pnpm vitest run src/ops/__tests__/doctor-ship.test.ts` - 8 tests passed.
+  - `pnpm run typecheck` - passed.
+  - `pnpm run lint` - passed.
+  - `pnpm run quality:docs` - passed.
+- Ralph doctor profile passed:
+  - `pnpm run ralph:verify -- --task incident-center-ops-view --profile doctor` - passed; included doctor scheduler/repair/ship tests, incident detail tests, typecheck, lint, and docs drift.
+- Remaining plan item: future trace exporter deep links beyond the command hints already shown in `/incident view`.

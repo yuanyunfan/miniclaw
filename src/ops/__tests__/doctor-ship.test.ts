@@ -307,3 +307,49 @@ describe("runDoctorShip", () => {
     expect(result.message).toContain("status=repair_pushed");
   });
 });
+
+describe("formatDoctorShipResult", () => {
+  it("renders a reusable repair review with diff, verification, risks, rollback, and ship commands", async () => {
+    writeConfig({ requireApproval: true });
+    const { formatDoctorShipResult } = await import("../doctor-ship.js");
+    const row = incident();
+    const repair = repairRun(row, {
+      report_json: JSON.stringify({
+        changedFiles: ["src/ops/doctor-ship.ts", "docs/features/13-auto-doctor.md"],
+        diffSummary: "2 files changed, 45 insertions, 8 deletions",
+        blockers: [".env: blocked path"],
+        pushError: "token=secret-token-123456 denied",
+      }),
+      verification_json: JSON.stringify([
+        { command: "pnpm run typecheck", ok: true, durationMs: 1200 },
+        { command: "pnpm run lint", ok: false, exitCode: 2, durationMs: 900 },
+      ]),
+    });
+
+    const text = formatDoctorShipResult({
+      ok: true,
+      status: "approval_required",
+      dryRun: true,
+      incident: row,
+      repairRun: repair,
+      branch: repair.branch ?? undefined,
+      commitSha: repair.commit_sha ?? undefined,
+      mainUpdated: false,
+      restartAttempted: false,
+      message: "main update requires explicit approval; rerun with --execute --approve-main",
+    });
+
+    expect(text).toContain("MiniClaw Doctor Ship: approval_required");
+    expect(text).toContain("Diff Summary");
+    expect(text).toContain("2 files changed, 45 insertions, 8 deletions");
+    expect(text).toContain("- ok exit=0: pnpm run typecheck");
+    expect(text).toContain("- failed exit=2: pnpm run lint");
+    expect(text).toContain("- blocker: .env: blocked path");
+    expect(text).toContain("main update still requires explicit approval");
+    expect(text).toContain("pre-ship: do not approve ship");
+    expect(text).toContain("pnpm run doctor:ship -- --incident incident-123456 --execute --approve-main --restart");
+    expect(text).toContain("token=[REDACTED]");
+    expect(text).not.toContain("secret-token-123456");
+    expect(text.length).toBeLessThan(1900);
+  });
+});

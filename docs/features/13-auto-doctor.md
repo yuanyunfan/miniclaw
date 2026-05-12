@@ -151,7 +151,7 @@ Lifecycle commands keep the incident record auditable:
 - `/incident resolve` marks a fixed or no-longer-relevant incident as `resolved`.
 - `/incident ignore` marks a non-actionable incident as `ignored`.
 - `/incident retry-repair` reopens an eligible incident as `diagnosed` so the scheduled Auto Doctor loop can attempt repair again under the existing repair policy and rate limits.
-- `/incident ship-preview` runs the guarded `doctor:ship` dry-run path and records a `ship_preview_requested` event.
+- `/incident ship-preview` runs the guarded `doctor:ship` dry-run path, records a `ship_preview_requested` event, and returns the same compact repair review report used by the local `doctor:ship` dry-run output.
 
 Resolved and ignored incidents are excluded from the default `/incidents` open list, but can be inspected with explicit `status:` filters. Retry repair does not execute a long-running repair inside the Discord interaction and does not bypass `doctor.auto_repair_enabled`, category/type policy, path allowlists, dirty-worktree checks, or approval gates.
 
@@ -209,6 +209,8 @@ pnpm run doctor:ship -- --incident <incident-id>
 
 The command loads the latest `repair_runs` row for the incident and requires `status=repair_pushed`, a branch, and a commit SHA. It does not run Codex or modify source files.
 
+Dry-run output is a reusable repair review report built from existing `repair_runs.report_json` and `repair_runs.verification_json`; no extra schema fields are required. The report includes incident identity, ship state, repair branch and commit, changed paths, diff summary when recorded, verification commands with inferred exit status, path-policy blockers, risks, rollback instructions, and local/Discord ship commands. It deliberately shows changed paths and summaries rather than raw diffs, and it uses the shared diagnostic redaction policy before printing stored report fields.
+
 Main update requires explicit approval while `doctor.require_approval_for_main=true`:
 
 ```bash
@@ -236,7 +238,7 @@ Repair summaries posted to the configured Auto Improve summary channel include t
 
 Discord operator shortcuts reuse the same server-side ship path:
 
-- `/incident ship-preview` runs the dry-run preview and records a preview event.
+- `/incident ship-preview` runs the dry-run preview, records a preview event, and returns the shared repair review report.
 - `/incident approve-ship` runs `doctor:ship` execute mode with explicit main approval; `restart:true` additionally requests safe restart without `--force`.
 - `/incident request-restart` runs the guarded ship path with safe restart requested. It does not bypass clean-worktree, branch SHA, fast-forward, push, or safe-restart checks.
 

@@ -8,6 +8,7 @@ import {
   type IncidentRow,
   type RepairRunRow,
 } from "../store/incidents.js";
+import { formatRepairReviewReport } from "./doctor-repair/report.js";
 import { runSafeRestart, type SafeRestartResult } from "./safe-restart.js";
 
 const DEFAULT_APP_NAME = "miniclaw";
@@ -345,21 +346,17 @@ export async function runDoctorShip(args: DoctorShipArgs, deps: DoctorShipDeps =
 }
 
 export function formatDoctorShipResult(result: DoctorShipResult): string {
-  return [
-    `MiniClaw Doctor Ship: ${result.status}`,
-    "",
-    `Incident: ${result.incident.id.slice(0, 8)} ${result.incident.title}`,
-    `Mode: ${result.dryRun ? "dry-run" : "execute"}`,
-    ...(result.repairRun ? [`Repair run: ${result.repairRun.id}`] : []),
-    ...(result.branch ? [`Branch: ${result.branch}`] : []),
-    ...(result.commitSha ? [`Commit SHA: ${result.commitSha}`] : []),
-    `Main updated: ${result.mainUpdated ? "yes" : "no"}`,
-    `Restart attempted: ${result.restartAttempted ? "yes" : "no"}`,
-    ...(result.restart ? [
-      `Restart result: ${result.restart.ok ? "ok" : result.restart.reason ?? "failed"}`,
-      `Running tasks during restart: ${result.restart.runningTasks.length}`,
-      `Active chats during restart: ${result.restart.runningChats.length}`,
-    ] : []),
-    `Message: ${result.message}`,
-  ].join("\n");
+  return formatRepairReviewReport({
+    title: `MiniClaw Doctor Ship: ${result.status}`,
+    incident: result.incident,
+    repairRun: result.repairRun,
+    ship: {
+      status: result.status,
+      dryRun: result.dryRun,
+      mainUpdated: result.mainUpdated,
+      restartAttempted: result.restartAttempted,
+      restart: result.restart,
+      message: result.message,
+    },
+  });
 }
