@@ -45,6 +45,7 @@ import { buildIncidentListReply, normalizeIncidentFilterValue, normalizeIncident
 import { buildTaskLogReply, formatTaskTraceError } from "./task-log.js";
 import { buildCronRunDetailReply, buildCronRunsReply } from "./cron-runs.js";
 import { buildTaskTraceModel, resolveTaskForTrace } from "../store/task-trace-export.js";
+import { listCronRunsForIncident } from "../store/cron-runs.js";
 
 const log = createLogger("handlers");
 
@@ -281,8 +282,9 @@ export async function handleIncident(interaction: ChatInputCommandInteraction): 
   if (subcommand === "view") {
     const events = listIncidentEvents(incident.id, 8);
     const repairRuns = listRepairRunsForIncident(incident.id, 5);
+    const cronRuns = incident.subject_type === "cron" ? listCronRunsForIncident(incident.id, 3) : [];
     await interaction.reply({
-      content: formatIncidentDetail({ incident, events, repairRuns }),
+      content: formatIncidentDetail({ incident, events, repairRuns, cronRuns }),
       ephemeral: true,
     });
     return;

@@ -457,7 +457,7 @@ Discord 侧只读查询面由 `/cron-runs job:<optional> limit:<n>` 和 `/cron-r
 
 `ops/doctor.ts` 是只读诊断 facade，CLI 通过 `pnpm run doctor`，Discord 通过 `/doctor`、`/incidents` 和 `/incident` 操作。公共导出保持在 `ops/doctor.ts`；CLI 参数解析在 `ops/doctor/args.ts`，SQLite task/task_events、cron state、connectivity state、PM2、MiniClaw 日志和 Git 状态采集在 `ops/doctor/evidence.ts`，incident type/severity/category/repairAllowed/recommended action 判断在 `ops/doctor/diagnosis.ts`，文本报告在 `ops/doctor/report.ts`，doctor-local redaction helper 在 `ops/doctor/redaction.ts`，共享类型在 `ops/doctor/types.ts`。
 
-Incident repository 查询边界在 `src/store/incidents.ts`：默认 list 仍只返回 open status set，`/incidents` 可额外按 exact status、type、severity、`diagnosis_json.category`、source provider、source route 和最新 `repair_runs.status` 过滤；查询结果按 severity 优先、再按更新时间排序，不新增 schema 字段。
+Incident repository 查询边界在 `src/store/incidents.ts`：默认 list 仍只返回 open status set，`/incidents` 可额外按 exact status、type、severity、`diagnosis_json.category`、source provider、source route 和最新 `repair_runs.status` 过滤；查询结果按 severity 优先、再按更新时间排序，不新增 schema 字段。`/incident view` 仍从 incident 记录、recent `incident_events`、latest `repair_runs` 和 linked `cron_runs.incident_id` 拼接 operator detail，不读取 raw evidence bundle 或私有 runtime payload。
 
 `ops/doctor-scheduler.ts` 在 Discord `ClientReady` 后启动，但自动扫描默认需要显式打开 `doctor.auto_diagnose_enabled`。scheduled scan 会把 actionable symptom 持久化到 `incidents` / `incident_events`；如果 `doctor.auto_repair_enabled` 打开，才会把 repair-eligible incident 交给 `doctor:repair`。调度入口只保留 scan loop 和 dependency wiring；log fingerprint/concurrency state 在 `ops/doctor-scheduler/state.ts`，incident 分组在 `ops/doctor-scheduler/grouping.ts`，Discord 通知文案在 `ops/doctor-scheduler/notifications.ts`，repair eligibility/rate-limit policy 在 `ops/doctor-scheduler/repair-policy.ts`。
 

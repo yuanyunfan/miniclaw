@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { formatIncidentDetail, formatIncidentResolution } from "../incident-detail.js";
 import type { IncidentEventRow, IncidentRow, RepairRunRow } from "../../store/incidents.js";
+import type { CronRunRow } from "../../store/cron-runs.js";
 
 function incident(overrides: Partial<IncidentRow> = {}): IncidentRow {
   return {
@@ -67,6 +68,31 @@ function repair(overrides: Partial<RepairRunRow> = {}): RepairRunRow {
   };
 }
 
+function cronRun(overrides: Partial<CronRunRow> = {}): CronRunRow {
+  return {
+    id: "cron-run-123456",
+    job_name: "daily-news",
+    job_type: "task",
+    status: "failed",
+    attempt: 2,
+    scheduled_at: "2026-05-10T01:00:00.000Z",
+    started_at: "2026-05-10T01:01:00.000Z",
+    completed_at: "2026-05-10T01:02:00.000Z",
+    duration_ms: 60000,
+    task_id: "task-cron-123456",
+    incident_id: "incident-123456",
+    provider_name: "stock-pulse",
+    provider_status: "failed",
+    provider_category: "provider_auth",
+    error_category: "provider_auth",
+    error_message: "session expired",
+    alert_message_id: "alert-1",
+    alert_channel_id: "channel-1",
+    metadata_json: null,
+    ...overrides,
+  };
+}
+
 describe("incident detail formatting", () => {
   it("renders core incident, source, repair, event, and operator command fields", () => {
     const text = formatIncidentDetail({
@@ -86,6 +112,68 @@ describe("incident detail formatting", () => {
     expect(text).toContain("/task-log id:task-abc");
     expect(text).toContain("/incident ship-preview id:incident");
     expect(text).toContain("/incident approve-ship id:incident");
+  });
+
+  it("renders cron links, repair review fields, ship state, restart state, and rollback hints", () => {
+    const row = incident({
+      type: "cron_failed",
+      status: "shipped",
+      title: "Cron failed: daily-news",
+      subject_type: "cron",
+      subject_id: "daily-news",
+      source_json: JSON.stringify({
+        route: "cron_task",
+        provider: "stock-pulse",
+        cron_name: "daily-news",
+        cron_run_id: "cron-run-123456",
+      }),
+      evidence_json: JSON.stringify({ logs: ["cron failed"] }),
+    });
+    const text = formatIncidentDetail({
+      incident: row,
+      cronRuns: [cronRun()],
+      events: [
+        event({
+          event_type: "live_restart_deferred",
+          payload_json: JSON.stringify({ app: "miniclaw", reason: "running_tasks", running_tasks: ["task-running"] }),
+          created_at: "2026-05-10T01:20:00.000Z",
+        }),
+        event({
+          event_type: "repair_main_updated",
+          payload_json: JSON.stringify({ main_sha: "commit-sha" }),
+          created_at: "2026-05-10T01:18:00.000Z",
+        }),
+        event({
+          event_type: "ship_preview_requested",
+          payload_json: JSON.stringify({ status: "approval_required" }),
+          created_at: "2026-05-10T01:16:00.000Z",
+        }),
+      ],
+      repairRuns: [repair({
+        status: "repair_pushed",
+        report_json: JSON.stringify({
+          changedFiles: ["src/commands/incident-detail.ts"],
+          blockers: [".env: blocked path"],
+        }),
+        verification_json: JSON.stringify([
+          { command: "pnpm run typecheck", ok: true, durationMs: 1200 },
+          { command: "pnpm run lint", ok: false, durationMs: 800 },
+        ]),
+      })],
+    });
+
+    expect(text).toContain("Cron Runs");
+    expect(text).toContain("id=cron-run");
+    expect(text).toContain("/cron-run id:cron-run");
+    expect(text).toContain("changed_files: src/commands/incident-detail.ts");
+    expect(text).toContain("blockers: .env: blocked path");
+    expect(text).toContain("ok: pnpm run typecheck");
+    expect(text).toContain("failed: pnpm run lint");
+    expect(text).toContain("ship_preview: 2026-05-10T01:16:00.000Z status=approval_required");
+    expect(text).toContain("main_sha=commit-sha");
+    expect(text).toContain("live_restart_deferred");
+    expect(text).toContain("main revert: git revert commit-sha");
+    expect(text).toContain("Clear the restart blocker");
   });
 
   it("renders resolution summaries", () => {

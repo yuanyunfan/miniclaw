@@ -139,7 +139,9 @@ The list output shows the active filters, severity/type groups, compact rows wit
 - status, severity, type, title, subject, and timestamps
 - diagnosis category, repair-allowed flag, and recommended action
 - source metadata such as task id, cron name, channel id, and Discord message URL when present
-- latest repair run branch, commit SHA, workspace, and completion state
+- linked cron run rows when a cron failure has durable `cron_runs.incident_id` history
+- latest repair run branch, base/commit SHA, workspace, changed files, blockers, verification commands, and completion state
+- ship preview state, main update event, restart event, rollback/revert hint, and one next recommended operator action
 - recent structured task trace events when the incident came from a Discord or cron task
 - recent incident events
 - suggested follow-up operator commands

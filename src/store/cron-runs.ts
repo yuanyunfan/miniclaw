@@ -337,6 +337,20 @@ export function listCronRuns(options: ListCronRunsOptions = {}): CronRunRow[] {
   ).all({ ...where.params, limit, offset }).map(assertCronRunRow);
 }
 
+export function listCronRunsForIncident(incidentId: string, limit = 5): CronRunRow[] {
+  const normalized = incidentId.trim();
+  if (!normalized) return [];
+  return getDb().prepare(
+    `SELECT * FROM cron_runs
+     WHERE incident_id = @incident_id
+     ORDER BY datetime(started_at) DESC, id DESC
+     LIMIT @limit`
+  ).all({
+    incident_id: normalized,
+    limit: normalizePositiveInteger(limit, 5, 50),
+  }).map(assertCronRunRow);
+}
+
 export function summarizeCronRuns(options: SummarizeCronRunsOptions = {}): CronRunSummaryRow[] {
   const limit = normalizePositiveInteger(options.limit, 20, 200);
   const where = whereClause(options);

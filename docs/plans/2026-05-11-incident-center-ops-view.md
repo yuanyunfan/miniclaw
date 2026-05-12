@@ -208,3 +208,19 @@ Record new filters, formatter behavior, command output examples, and verificatio
 - Ralph doctor profile passed:
   - `pnpm run ralph:verify -- --task incident-center-ops-view --profile doctor` - passed; included doctor scheduler/repair/ship tests, incident detail tests, typecheck, lint, and docs drift.
 - Remaining plan items: richer `/incident view` links, repair review formatter, post-ship monitoring hints, and future cron/task trace deep links beyond this list-filter phase.
+
+### 2026-05-13 - Ralph operator detail view
+
+- Implemented the next reviewable phase: `/incident view` now builds a compact operator detail view with core facts, diagnosis, source metadata, task trace, linked cron runs, latest repair review fields, ship/restart state, rollback hint, next action, operator commands, and recent events.
+- Added `listCronRunsForIncident(incidentId, limit)` in `src/store/cron-runs.ts` and wired `handleIncident(view)` to pass linked cron run history for cron incidents. No schema fields were added; the link uses existing `cron_runs.incident_id`.
+- Expanded latest repair rendering from existing `repair_runs.report_json` and `verification_json`: changed files, blockers, commit/push errors, and verification command statuses are displayed only when recorded, keeping the Discord output under the 1900 character guard.
+- Added ship/restart continuity from recent incident events: ship preview request, main update, live restart completed/deferred/failed, pre-ship vs shipped rollback hints, and a next recommended operator action based on current status and latest repair state.
+- Updated docs in `docs/features/13-auto-doctor.md`, `docs/bot-routing.md`, and `docs/architecture.md` for the richer operator view and cron-run link behavior.
+- Focused verification passed:
+  - `pnpm vitest run src/commands/__tests__/incident-detail.test.ts src/commands/__tests__/incidents.test.ts src/store/__tests__/cron-runs.test.ts` - 16 tests passed.
+  - `pnpm run typecheck` - passed.
+  - `pnpm run lint` - passed.
+  - `pnpm run quality:docs` - passed.
+- Ralph doctor profile passed:
+  - `pnpm run ralph:verify -- --task incident-center-ops-view --profile doctor` - passed; included doctor scheduler/repair/ship tests, incident detail tests, typecheck, lint, and docs drift.
+- Remaining plan items: standalone reusable repair review formatter for `doctor:ship` dry-run/ship-preview, and future trace exporter deep links beyond the command hints already shown in `/incident view`.

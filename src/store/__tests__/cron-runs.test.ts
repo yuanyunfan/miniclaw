@@ -7,6 +7,7 @@ import {
   getCronRunFailureWindow,
   getCronRun,
   listCronRuns,
+  listCronRunsForIncident,
   listCronRunsByIdPrefix,
   markCronRunCompleted,
   markCronRunFailed,
@@ -178,6 +179,54 @@ describe("cron run persistence", () => {
       last_status: "failed",
     });
     expect(getCronRun("daily-success")?.status).toBe("success");
+  });
+
+  it("lists cron runs linked to one incident newest-first", () => {
+    db.prepare(
+      `INSERT INTO incidents (id, dedupe_key, type, severity, status, title)
+       VALUES ('incident-linked', 'cron:linked', 'cron_failed', 'warning', 'diagnosed', 'Cron failed')`
+    ).run();
+    db.prepare(
+      `INSERT INTO incidents (id, dedupe_key, type, severity, status, title)
+       VALUES ('incident-other', 'cron:other', 'cron_failed', 'warning', 'diagnosed', 'Other cron failed')`
+    ).run();
+
+    createCronRun({
+      id: "linked-old",
+      jobName: "linked-job",
+      jobType: "task",
+      startedAt: "2026-05-12T01:00:00.000Z",
+    });
+    markCronRunFailed("linked-old", {
+      completedAt: "2026-05-12T01:00:01.000Z",
+      incidentId: "incident-linked",
+    });
+    createCronRun({
+      id: "linked-new",
+      jobName: "linked-job",
+      jobType: "task",
+      startedAt: "2026-05-12T02:00:00.000Z",
+    });
+    markCronRunFailed("linked-new", {
+      completedAt: "2026-05-12T02:00:01.000Z",
+      incidentId: "incident-linked",
+    });
+    createCronRun({
+      id: "other-run",
+      jobName: "linked-job",
+      jobType: "task",
+      startedAt: "2026-05-12T03:00:00.000Z",
+    });
+    markCronRunFailed("other-run", {
+      completedAt: "2026-05-12T03:00:01.000Z",
+      incidentId: "incident-other",
+    });
+
+    expect(listCronRunsForIncident("incident-linked", 10).map((row) => row.id)).toEqual([
+      "linked-new",
+      "linked-old",
+    ]);
+    expect(listCronRunsForIncident(" ", 10)).toEqual([]);
   });
 
   it("resolves cron run ids by exact id or unique prefix", () => {

@@ -4,8 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setDb } from "../../store/connection.js";
 import { ensureBaseSchema, runMigrations } from "../../store/schema.js";
 import { createOrUpdateIncident, createRepairRun } from "../../store/incidents.js";
+import { createCronRun, markCronRunFailed } from "../../store/cron-runs.js";
 import { buildIncidentListReply, normalizeIncidentListLimit } from "../incidents.js";
-import { handleIncidents } from "../handlers.js";
+import { handleIncident, handleIncidents } from "../handlers.js";
 
 let db: Database.Database;
 
@@ -57,6 +58,7 @@ function fakeInteraction(options: {
   userId?: string;
   strings?: Record<string, string>;
   integers?: Record<string, number>;
+  subcommand?: string;
 } = {}): ChatInputCommandInteraction & { reply: ReturnType<typeof vi.fn> } {
   const reply = vi.fn(async (_payload: unknown) => undefined);
   const strings = options.strings ?? {};
@@ -67,6 +69,7 @@ function fakeInteraction(options: {
     options: {
       getString: vi.fn((name: string) => strings[name] ?? null),
       getInteger: vi.fn((name: string) => integers[name] ?? null),
+      getSubcommand: vi.fn(() => options.subcommand ?? "view"),
     },
   } as unknown as ChatInputCommandInteraction & { reply: ReturnType<typeof vi.fn> };
 }
@@ -139,6 +142,47 @@ describe("incident list slash handler", () => {
     expect(content).toContain("repair_status=repair_pushed");
     expect(content).toContain("repair=repair_pushed");
     expect(content).not.toContain(resolvedId.slice(0, 8));
+  });
+
+  it("wires incident view to linked cron run history", async () => {
+    const incident = createOrUpdateIncident({
+      dedupeKey: "incident-command:cron-view",
+      type: "cron_failed",
+      severity: "warning",
+      status: "diagnosed",
+      title: "Cron failed from view test",
+      subjectId: "cron-view-job",
+      subjectType: "cron",
+      source: { route: "cron_task", provider: "stock-pulse", cron_name: "cron-view-job" },
+      diagnosis: { category: "provider_auth", repairAllowed: false },
+    }).row;
+    createCronRun({
+      id: "cron-view-run-123456",
+      jobName: "cron-view-job",
+      jobType: "task",
+      startedAt: "2026-05-13T03:00:00.000Z",
+    });
+    markCronRunFailed("cron-view-run-123456", {
+      completedAt: "2026-05-13T03:00:03.000Z",
+      incidentId: incident.id,
+      errorCategory: "provider_auth",
+      errorMessage: "session expired",
+    });
+
+    const interaction = fakeInteraction({
+      subcommand: "view",
+      strings: { id: incident.id.slice(0, 8) },
+    });
+
+    await handleIncident(interaction);
+
+    expect(interaction.reply).toHaveBeenCalledWith({
+      content: expect.stringContaining("Cron Runs"),
+      ephemeral: true,
+    });
+    const payload = interaction.reply.mock.calls[0]?.[0] as { content: string };
+    expect(payload.content).toContain("id=cron-vie");
+    expect(payload.content).toContain("/cron-run id:cron-vie");
   });
 
   it("rejects unauthorized users before reading incident filters", async () => {
