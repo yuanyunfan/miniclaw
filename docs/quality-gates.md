@@ -105,7 +105,7 @@ MiniClaw 特有 lint 规则：
 - cron 纯逻辑：`loader`、`state`、`template`、retry 算法。
 - routing 纯逻辑：intent、context、confirmation token。
 - Discord formatter/chunking：embed 字段、2000 字限制、代码块切分。
-- provider parser/formatter/redaction：微信、email、futu、stock 等。
+- provider parser/formatter/redaction：微信、email、futu、stock 等。迁移到 provider framework 的 provider 还要覆盖 manifest、health check、dry-run redaction、structured output adapter 和 `commit()` 延迟提交语义。
 - prompt snapshot：prompt 模板变更必须可见。
 - task helper/session/usage：session id、token summary、status summary。
 

@@ -1,4 +1,6 @@
 import type { PreProviderResult, PreProviderRunArgs } from "../types.js";
+import type { ProviderContext, ProviderDryRunResult, ProviderHealthResult, ProviderManifest, ProviderModule } from "../framework.js";
+import { providerDryRunFromError, providerHealthFromError, runProviderModuleAsPreProvider } from "../framework.js";
 import { runStockPortfolioProvider } from "../stock-portfolio/index.js";
 import { loadStockPulseProviderConfig } from "./config.js";
 import { analyzeStockPulseSeries, buildStockPulsePositionSnapshot } from "./analyzer.js";
@@ -10,11 +12,13 @@ import type {
   StockPulsePayload,
   StockPulsePositionGroups,
   StockPulsePositionSnapshot,
+  StockPulseProviderRunResult,
   StockPulseQuoteFailure,
   StockPulsePortfolioRunner,
   StockPulseProviderConfig,
   StockPulseQuoteClient,
   StockPulseSymbol,
+  StockPulseDryRunSummary,
   StockPulseUniverseSymbol,
 } from "./types.js";
 
@@ -23,6 +27,16 @@ export interface StockPulseProviderDeps {
   portfolioRunner?: StockPulsePortfolioRunner;
   quoteClient?: StockPulseQuoteClient;
 }
+
+export const stockPulseProviderManifest: ProviderManifest = {
+  name: "stock-pulse",
+  kind: "stock",
+  privacy: "private",
+  sideEffects: "state_commit_after_success",
+  supportsDryRun: true,
+  supportsHealthCheck: true,
+  outputSchemaVersion: "stock-pulse.payload.v1",
+};
 
 interface StockPulseQuoteResult {
   position?: StockPulsePositionSnapshot;
@@ -174,10 +188,10 @@ function buildPayload(params: {
   };
 }
 
-export async function runStockPulseProvider(
+async function runStockPulseStructured(
   args: PreProviderRunArgs,
   deps: StockPulseProviderDeps = {},
-): Promise<PreProviderResult> {
+): Promise<StockPulseProviderRunResult> {
   const configName = args.configName ?? "default";
   const config = (deps.loadProviderConfig ?? loadStockPulseProviderConfig)(configName);
   const quoteClient = deps.quoteClient ?? new YahooStockPulseQuoteClient();
@@ -204,7 +218,7 @@ export async function runStockPulseProvider(
       failures: [],
       warnings,
     });
-    return { text: JSON.stringify(payload, null, 2) };
+    return { payload, commits };
   }
 
   if (!config.universe.enabled) {
@@ -224,7 +238,7 @@ export async function runStockPulseProvider(
       failures: [],
       warnings,
     });
-    return { text: JSON.stringify(payload, null, 2) };
+    return { payload, commits };
   }
 
   const portfolioSymbols = await collectPortfolioSymbols({
@@ -304,12 +318,90 @@ export async function runStockPulseProvider(
     warnings,
   });
 
+  return { payload, commits };
+}
+
+function buildDryRunSummary(payload: StockPulseProviderRunResult["payload"]): StockPulseDryRunSummary {
   return {
-    text: JSON.stringify(payload, null, 2),
-    commit: commits.length
-      ? async () => {
-        for (const commit of commits) await commit();
-      }
-      : undefined,
+    generated_at: payload.generated_at,
+    source: payload.source,
+    profile: payload.profile,
+    market_scope: payload.market_scope,
+    run_context: payload.run_context,
+    universe: payload.universe,
+    position_count: payload.positions.length,
+    alert_count: payload.alerts.length,
+    failure_count: payload.failures.length,
+    warning_count: payload.warnings.length,
   };
+}
+
+export function createStockPulseProvider(deps: StockPulseProviderDeps = {}): ProviderModule<StockPulseProviderRunResult> {
+  const loadProviderConfig = deps.loadProviderConfig ?? loadStockPulseProviderConfig;
+  return {
+    manifest: stockPulseProviderManifest,
+    async healthCheck(context: ProviderContext): Promise<ProviderHealthResult> {
+      const checkedAt = new Date();
+      try {
+        const configName = context.configName ?? "default";
+        const config = loadProviderConfig(configName);
+        const activeWindowOk = isActiveWindow(context.runAt, config.active_window);
+        const openMarkets = openMarketsAt(context.runAt, config.markets);
+        return {
+          ok: true,
+          message: `stock-pulse config ${configName} is loadable`,
+          checkedAt: checkedAt.toISOString(),
+          safeDetails: {
+            profile: configName,
+            market_scope: config.market_scope,
+            active_window_ok: activeWindowOk,
+            open_markets: openMarkets,
+            configured_symbols: config.universe.symbols.length,
+            include_portfolio: config.universe.include_portfolio,
+            include_sources: config.universe.include_sources,
+            source_count: config.universe.sources.length,
+            max_symbols: config.universe.max_symbols,
+            quote_provider: config.quote.provider,
+            quote_interval: config.quote.interval,
+            quote_range: config.quote.range,
+          },
+        };
+      } catch (err) {
+        return providerHealthFromError(err, checkedAt);
+      }
+    },
+    async dryRun(context: ProviderContext): Promise<ProviderDryRunResult<StockPulseDryRunSummary>> {
+      try {
+        const result = await runStockPulseStructured(context, deps);
+        const summary = buildDryRunSummary(result.payload);
+        return {
+          ok: true,
+          structured: summary,
+          previewText: JSON.stringify(summary, null, 2),
+          redacted: true,
+          warnings: result.payload.warnings,
+        };
+      } catch (err) {
+        return providerDryRunFromError(err);
+      }
+    },
+    async run(context: ProviderContext): Promise<StockPulseProviderRunResult> {
+      return await runStockPulseStructured(context, deps);
+    },
+    async format(result: StockPulseProviderRunResult): Promise<PreProviderResult> {
+      return { text: JSON.stringify(result.payload, null, 2) };
+    },
+    async commit(result: StockPulseProviderRunResult): Promise<void> {
+      for (const commit of result.commits) await commit();
+    },
+  };
+}
+
+export const stockPulseProvider = createStockPulseProvider();
+
+export async function runStockPulseProvider(
+  args: PreProviderRunArgs,
+  deps: StockPulseProviderDeps = {},
+): Promise<PreProviderResult> {
+  return await runProviderModuleAsPreProvider(createStockPulseProvider(deps), args);
 }

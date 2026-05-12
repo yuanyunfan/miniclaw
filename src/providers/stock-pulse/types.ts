@@ -227,3 +227,21 @@ export interface StockPulsePayload {
 }
 
 export type StockPulsePortfolioRunner = (args: PreProviderRunArgs) => Promise<PreProviderResult>;
+
+export interface StockPulseProviderRunResult {
+  payload: StockPulsePayload;
+  commits: Array<() => Promise<void>>;
+}
+
+export interface StockPulseDryRunSummary {
+  generated_at: string;
+  source: "stock-pulse";
+  profile: string;
+  market_scope: StockPulseMarketScope;
+  run_context: StockPulsePayload["run_context"];
+  universe: StockPulsePayload["universe"];
+  position_count: number;
+  alert_count: number;
+  failure_count: number;
+  warning_count: number;
+}

@@ -1,6 +1,6 @@
 # Provider Framework SDK
 
-Status: draft
+Status: in_progress
 Date: 2026-05-11
 
 ## Background
@@ -214,3 +214,22 @@ Every new provider should specify:
 
 Record pilot provider, manifest fields, CLI commands, cron integration state, and verification output here when implemented.
 
+2026-05-12 Ralph iteration:
+
+- Implemented the first coherent provider framework phase: `src/providers/framework.ts` now defines manifest/lifecycle/failure taxonomy/health/dry-run result types plus the `runProviderModuleAsPreProvider()` compatibility adapter.
+- Extended `src/providers/index.ts` with framework manifest discovery, `runProviderAsPreProvider()`, `runProviderHealthCheck()`, and `runProviderDryRun()` while keeping `runPreProvider()` stable for cron.
+- Migrated `stock-pulse` as the pilot provider. Manifest values: `kind=stock`, `privacy=private`, `sideEffects=state_commit_after_success`, `supportsDryRun=true`, `supportsHealthCheck=true`, `outputSchemaVersion=stock-pulse.payload.v1`.
+- `stock-pulse` health check is config-only and side-effect free: it validates profile loading and reports safe counts/settings without querying portfolio or quote clients.
+- `stock-pulse` dry-run executes the scan but returns a redacted summary only: run context, universe counts, and position/alert/failure/warning counts. Nested provider `commit()` is not called during dry-run.
+- Added CLI entries: `pnpm provider:health -- --provider stock-pulse --config us-hourly`, `pnpm provider:health -- --all --json`, and `pnpm provider:dry-run -- --provider stock-pulse --config us-hourly`.
+- Cron integration state: cron runner behavior was intentionally unchanged; existing cron `pre_provider` calls still enter through `runPreProvider()` and provider commits remain delayed until downstream task success.
+- Documentation sync: added `docs/features/16-provider-framework.md`, updated `docs/README.md`, `docs/architecture.md`, and `docs/quality-gates.md`.
+- Verification:
+  - `pnpm vitest run src/providers` passed: 43 files, 125 tests.
+  - `pnpm vitest run src/providers/__tests__/framework.test.ts src/providers/__tests__/index.test.ts src/providers/stock-pulse/__tests__/framework.test.ts src/providers/stock-pulse/__tests__/index.test.ts` passed: 4 files, 7 tests.
+  - `pnpm run provider:health -- --provider stock-pulse --config __missing__ --json` returned expected exit 1 with `category=config` for a missing profile.
+  - `pnpm run provider:dry-run -- --help` passed.
+  - `pnpm run provider:health -- --help` passed.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm run quality:docs` passed.
