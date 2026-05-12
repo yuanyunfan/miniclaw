@@ -46,12 +46,17 @@ function traceLine(value: unknown): string | undefined {
   return `- ${created} ${task} ${severity}/${type}${message}`;
 }
 
-function formatCommandLines(id: string, status: string): string[] {
+function formatCommandLines(incident: IncidentRow): string[] {
+  const id = incident.id;
+  const status = incident.status;
   const lines = [
     `- View: /incident view id:${id.slice(0, 8)}`,
     `- Resolve: /incident resolve id:${id.slice(0, 8)}`,
     `- Ignore: /incident ignore id:${id.slice(0, 8)}`,
   ];
+  if (incident.subject_type === "task" && incident.subject_id) {
+    lines.push(`- Task trace: /task-log id:${incident.subject_id.slice(0, 8)}`);
+  }
   if (["open", "diagnosed", "repair_blocked"].includes(status)) {
     lines.push(`- Retry repair: /incident retry-repair id:${id.slice(0, 8)}`);
   }
@@ -121,7 +126,7 @@ export function formatIncidentDetail(params: {
       : ["- (none)"]),
     "",
     "Operator Commands",
-    ...formatCommandLines(incident.id, incident.status),
+    ...formatCommandLines(incident),
   ];
 
   return lines.join("\n").slice(0, 1900);

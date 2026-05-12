@@ -30,6 +30,13 @@ const commands = [
     .setDescription("查看当前活跃任务"),
 
   new SlashCommandBuilder()
+    .setName("task-log")
+    .setDescription("导出最近任务的安全 Markdown trace")
+    .addStringOption((opt) =>
+      opt.setName("id").setDescription("任务 ID 或前缀").setRequired(true)
+    ),
+
+  new SlashCommandBuilder()
     .setName("health")
     .setDescription("查看 MiniClaw 运行健康状态"),
 

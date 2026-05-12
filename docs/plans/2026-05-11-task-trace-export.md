@@ -161,3 +161,18 @@ Use an allowlist first. Regex redaction is a second line of defense, not the mai
 
 Record command name, config defaults, redaction policy, and verification evidence here when implemented.
 
+- 2026-05-12 Ralph phase implemented the direct trace surface:
+  - Added `src/store/task-trace-export.ts` with `resolveTaskForTrace`, `buildTaskTraceModel`, `renderTaskTraceMarkdown`, prefix ambiguity errors, no-event errors, chronological event rendering, event limits, UTF-8 byte caps, and `task-<id>-trace.md` filenames.
+  - Redaction policy is allowlist-first: raw `payload_json` is never rendered; prompt/raw provider/email/cookie/token/account-like payload keys are omitted; free-text fields are regex-redacted and truncated; omitted payload keys are counted as `redacted_payload_keys`.
+  - Added local CLI `pnpm run task:trace -- --id <task-prefix> [--out path] [--json]` via `scripts/task-trace.ts`; no new config defaults were added in this phase.
+  - Added Discord slash command `/task-log id:<prefix>` with allowed-user check, ephemeral defer, inline short trace replies, and Markdown attachment for long traces.
+  - Added incident detail operator hint `Task trace: /task-log id:<task-prefix>` for task incidents without duplicating trace rendering in incident formatting.
+  - Updated `docs/architecture.md` and `docs/bot-routing.md`; `docs/zh/13-auto-doctor.zh.md` was not updated because that file does not exist in this checkout.
+  - Remaining plan item: threshold-based automatic trace attachment after task completion is not implemented yet; status stays `draft`.
+- Verification evidence:
+  - `pnpm vitest run src/store/__tests__/task-trace-export.test.ts src/commands/__tests__/task-log.test.ts src/commands/__tests__/incident-detail.test.ts` passed: 3 files, 11 tests.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm run quality:docs` passed: D1 docs drift check, 15 feature docs, schema v8.
+  - `pnpm test` passed: 126 files, 626 tests.
+  - CLI smoke passed after fixing `pnpm run` separator parsing: `pnpm run task:trace -- --help`.

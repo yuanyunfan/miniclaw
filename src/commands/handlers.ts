@@ -37,6 +37,8 @@ import {
   type IncidentRow,
 } from "../store/incidents.js";
 import { formatIncidentDetail, formatIncidentResolution } from "./incident-detail.js";
+import { buildTaskLogReply, formatTaskTraceError } from "./task-log.js";
+import { buildTaskTraceModel, resolveTaskForTrace } from "../store/task-trace-export.js";
 
 const log = createLogger("handlers");
 
@@ -118,6 +120,30 @@ export async function handleStatus(interaction: ChatInputCommandInteraction): Pr
     embeds: [statusOverviewEmbed({ active, interrupted, recent })],
     ephemeral: true,
   });
+}
+
+export async function handleTaskLog(interaction: ChatInputCommandInteraction): Promise<void> {
+  if (!isAllowed(interaction.user.id)) {
+    await interaction.reply({ content: "⛔ 无权限", ephemeral: true });
+    return;
+  }
+
+  const taskIdPrefix = interaction.options.getString("id", true);
+  await interaction.deferReply({ ephemeral: true });
+
+  const resolved = resolveTaskForTrace(taskIdPrefix);
+  if (!resolved.ok) {
+    await interaction.editReply(formatTaskTraceError(resolved.error));
+    return;
+  }
+
+  const model = buildTaskTraceModel(resolved.value.id, { maxEvents: 300 });
+  if (!model.ok) {
+    await interaction.editReply(formatTaskTraceError(model.error));
+    return;
+  }
+
+  await interaction.editReply(buildTaskLogReply(model.value));
 }
 
 export async function handleHealth(interaction: ChatInputCommandInteraction): Promise<void> {

@@ -47,6 +47,7 @@ flowchart TD
     IS -->|是| SW{"commandName<br/>switch"}
     SW --> T["/task → handleTask"]
     SW --> S["/status → handleStatus"]
+    SW --> TL["/task-log → handleTaskLog"]
     SW --> H["/health → handleHealth"]
     SW --> DR["/doctor → handleDoctor"]
     SW --> INCS["/incidents → handleIncidents"]
@@ -66,7 +67,7 @@ flowchart TD
     classDef route fill:#e6f7ff,stroke:#1890ff
     classDef drop fill:#fff1f0,stroke:#cf1322,color:#a8071a
     class F1,F2,F3,F4,P1,TCH,R0,R1,IS,SW filter
-    class CHAT,RES,TASKMSG,MEM,GREET,SMART,BTN,AUTOTASK,CRT,BACT,T,S,H,DR,INCS,INC,AC,C,RS,RM,FG,MM,RECOV,IDX route
+    class CHAT,RES,TASKMSG,MEM,GREET,SMART,BTN,AUTOTASK,CRT,BACT,T,S,TL,H,DR,INCS,INC,AC,C,RS,RM,FG,MM,RECOV,IDX route
     class X1,X2,X3,X4,X5 drop
 ```
 
@@ -224,10 +225,11 @@ chunkMessage 切 2000 字  ← Discord 单消息上限
 
 现在先处理 `interaction.isButton()` 的 cron retry 按钮和 smart router 确认按钮，再处理 `isChatInputCommand`（slash command）。其他按钮或菜单仍忽略。
 
-12 个 top-level slash command **直接转发到 `commands/handlers.ts`** 的对应 handler，`bot.ts` 不做业务逻辑：
+13 个 top-level slash command **直接转发到 `commands/handlers.ts`** 的对应 handler，`bot.ts` 不做业务逻辑：
 
 - `/task`
 - `/status`
+- `/task-log`
 - `/health`
 - `/doctor`
 - `/incidents`
@@ -319,4 +321,4 @@ cron retry 按钮先于 smart router 按钮处理，避免误落到普通 slash 
 - `src/agent/chat.ts` — chat 主流程的 LLM 调用细节
 - `src/agent/task.ts` — `/task` Supervisor 模式细节
 - `src/cron/scheduler.ts` — cron 调度引擎
-- `src/commands/handlers.ts` — 12 个 top-level slash command 的实现
+- `src/commands/handlers.ts` — 13 个 top-level slash command 的实现

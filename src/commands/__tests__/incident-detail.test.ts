@@ -83,6 +83,7 @@ describe("incident detail formatting", () => {
     expect(text).toContain("error/provider_error");
     expect(text).toContain("doctor-repair/incident-123456");
     expect(text).toContain("repair_ready");
+    expect(text).toContain("/task-log id:task-abc");
     expect(text).toContain("/incident ship-preview id:incident");
     expect(text).toContain("/incident approve-ship id:incident");
   });

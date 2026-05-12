@@ -19,7 +19,7 @@ import {
   replyChunkedTextWithDeferredLinkPreviews,
   sendChunkedTextWithDeferredLinkPreviews,
 } from "./discord/text.js";
-import { handleTask, handleStatus, handleHealth, handleDoctor, handleIncidents, handleIncident, handleAgentConfig, handleCancel, handleResume, handleRemember, handleForget, handleMemories } from "./commands/handlers.js";
+import { handleTask, handleStatus, handleTaskLog, handleHealth, handleDoctor, handleIncidents, handleIncident, handleAgentConfig, handleCancel, handleResume, handleRemember, handleForget, handleMemories } from "./commands/handlers.js";
 import { executeTask } from "./agent/task.js";
 import { recoverInterruptedTasks } from "./agent/recovery.js";
 import { createTask, getChatHistory, getTaskByThreadId, recordSmartRouterDecision, updateSmartRouterDecision } from "./store/db.js";
@@ -758,6 +758,9 @@ export function createBot(): Client {
           break;
         case "status":
           await handleStatus(cmd);
+          break;
+        case "task-log":
+          await handleTaskLog(cmd);
           break;
         case "health":
           await handleHealth(cmd);
