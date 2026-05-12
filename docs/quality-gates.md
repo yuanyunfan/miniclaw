@@ -234,20 +234,26 @@ MiniClaw 特有 lint 规则：
 
 MiniClaw 是 docs-first 项目，长期维护依赖 `docs/architecture.md`、`docs/bot-routing.md`、`docs/prompts.md`、`docs/features/*.md` 和 plan 文档。代码改了但 docs 不变，是后续 AI 误判的主要来源。
 
-建议规则：
+脚本化规则：
 
-- 改 `src/bot.ts`：必须同步 `docs/bot-routing.md`。
-- 改 `src/cron/*`：必须同步 `docs/architecture.md` 中 cron 部分。
-- 改 `src/agent/*` 或 provider 行为：必须同步 `docs/architecture.md` 或 `docs/features/` 下的对应 provider 文档。
-- 改 `prompts/*.md`：必须跑 prompt snapshot，并同步 `docs/prompts.md`。
-- 改 DB schema：必须同步 `docs/architecture.md` ER 图。
-- 改 `~/.miniclaw/` 文件布局：必须同步 `docs/architecture.md` 用户级目录布局。
+- 改 `src/bot.ts`、`src/commands/**`、`src/discord/**`、`src/routing/**`：必须同步 `docs/bot-routing.md`、`docs/chat-router-current-logic.md` 或一个 `docs/features/*.md`。
+- 改 `src/agent/**`：必须同步 `docs/architecture.md`、`docs/features/03-discord-task-output.md` 或一个 `docs/features/*.md`；`src/agent/prompts.ts` 走 prompt 规则。
+- 改 `src/cron/**` 或 `scripts/cron-*`：必须同步 `docs/architecture.md` 或一个 `docs/features/*.md`。
+- 改 `src/store/db.ts` 或 `src/store/**`：必须同步 `docs/architecture.md`。
+- 改 `src/providers/**`：必须同步 `docs/architecture.md` 或一个 `docs/features/*.md`。
+- 改 `src/config.ts` 或 `config.example.yaml`：必须同步 `docs/architecture.md` 或一个 `docs/features/*.md`。
+- 改 `prompts/**` 或 `src/agent/prompts.ts`：必须同步 `docs/prompts.md`，并同步 `src/__tests__/prompt-snapshot.test.ts`。
+- 改 `scripts/quality-*`、`src/quality/**`、`.github/workflows/**` 或 `scripts/git-hooks/**`：必须同步 `docs/quality-gates.md`。
+- 改 `src/ops/doctor*` 或 `scripts/doctor*`：必须同步 `docs/features/13-auto-doctor.md`。
+- 改 `src/stage/**`：必须同步 `docs/features/01-stage.md`。
 
 当前执行方式：
 
-- `pnpm run quality:docs` 运行 `scripts/quality-docs.ts`，检查 DB schema version、Smart Router ER 字段和 `docs/features/*.md` 索引。
-- 执行者仍需要在改动完成前按下面映射人工核对 changed-path docs drift。
-- 对紧急修复可以允许暂不改文档，但必须在 commit body、PR 或后续 plan 中写明原因和补文档路径。
+- `pnpm run quality:docs` 运行 `scripts/quality-docs.ts`，检查 DB schema version、Smart Router ER 字段、`docs/features/*.md` 索引，以及 changed-path 到 source-of-truth docs 的映射。
+- 默认模式先看 staged paths；如果没有 staged paths，则检查 `git diff HEAD` 加 untracked non-ignored files。也可显式使用 `--staged`、`--tree` 或 `--base <ref> [--head <ref>]`。
+- `docs/plans/**`、`docs/continuous-improvement-report.md`、`docs/private/**`、tests 和 fixtures 不作为 source trigger；`docs/plans/**` 也不能替代当前 source-of-truth docs。
+- 对紧急本地修复可用 `MINICLAW_DOCS_DRIFT_ALLOW=1 pnpm run quality:docs` 只绕过 changed-path 映射；DB schema、Smart Router ER 和 feature index invariant 仍会失败。
+- 如果确实暂不改文档，必须在 commit body、PR 或后续 plan 中写明原因和补文档路径。
 
 ## 推荐执行矩阵
 
@@ -255,7 +261,7 @@ pre-commit：
 
 - G0 staged safety check
 - G2 staged secret scan
-- D1 docs drift first slice
+- D1 docs drift invariants + changed-path mapping
 - G1 `lint + typecheck`
 - L1 `pnpm test`
 
@@ -264,7 +270,7 @@ pre-push：
 - G1 `build + lint`
 - `test:cov`
 - coverage ratchet
-- D1 docs drift first slice
+- D1 docs drift invariants + changed-path mapping
 - cron E2E fixture
 - G0 full-tree safety check
 - G2 full-tree secret scan / dependency scan
@@ -275,10 +281,10 @@ CI：
 - G0 install / lockfile / environment
 - G1 typecheck / lint / build
 - coverage run + coverage ratchet
-- D1 docs drift first slice
+- D1 docs drift invariants + changed-path mapping
 - cron E2E fixture
 - G2 full secret scan / dependency scan
-- changed-path docs drift 仍为人工/process gate
+- changed-path docs drift 可通过 `--base <ref>` / `MINICLAW_DOCS_DRIFT_BASE=<ref>` 做 range check
 
 manual/nightly：
 

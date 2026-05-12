@@ -1,6 +1,6 @@
 # Docs Drift Quality Gate Expansion
 
-Status: draft
+Status: done
 Date: 2026-05-11
 
 ## Background
@@ -144,5 +144,40 @@ For normal work, the right fix is to update the mapped doc or add a new source-o
 
 ## Execution Notes
 
-Record final mapping rules, command modes, and verification evidence here when implemented.
+Implemented on 2026-05-12.
 
+Final behavior:
+
+- Added testable changed-path mapping helpers in `src/quality/docs-drift.ts`; `scripts/quality-docs.ts` now keeps the fixed D1 invariant checks and wires git changed-path collection into those helpers.
+- `quality:docs` defaults to staged paths when any staged path exists; otherwise it checks `git diff HEAD` plus untracked non-ignored paths. It also supports `--staged`, `--tree`, `--base <ref> [--head <ref>]`, `MINICLAW_DOCS_DRIFT_BASE`, and `MINICLAW_DOCS_DRIFT_HEAD`.
+- `MINICLAW_DOCS_DRIFT_ALLOW=1` bypasses only changed-path mapping failures. Schema version, Smart Router ER fields, and feature-doc index invariants still fail normally.
+- Ignored source triggers: `docs/plans/**`, `docs/continuous-improvement-report.md`, `docs/private/**`, tests, specs, and fixtures. Plan docs are not accepted as source-of-truth docs for mapped source changes.
+
+Final mapping:
+
+- `src/bot.ts`, `src/commands/**`, `src/discord/**`, `src/routing/**` -> one of `docs/bot-routing.md`, `docs/chat-router-current-logic.md`, `docs/features/*.md`.
+- `src/agent/**` except `src/agent/prompts.ts` -> one of `docs/architecture.md`, `docs/features/03-discord-task-output.md`, `docs/features/*.md`.
+- `src/cron/**`, `scripts/cron-*` -> one of `docs/architecture.md`, `docs/features/*.md`.
+- `src/store/db.ts`, `src/store/**` -> `docs/architecture.md`.
+- `src/providers/**` -> one of `docs/architecture.md`, `docs/features/*.md`.
+- `src/config.ts`, `config.example.yaml` -> one of `docs/architecture.md`, `docs/features/*.md`.
+- `prompts/**`, `src/agent/prompts.ts` -> `docs/prompts.md` and `src/__tests__/prompt-snapshot.test.ts`.
+- `scripts/quality-*`, `src/quality/**`, `.github/workflows/**`, `scripts/git-hooks/**` -> `docs/quality-gates.md`.
+- `src/ops/doctor*`, `scripts/doctor*` -> `docs/features/13-auto-doctor.md`.
+- `src/stage/**` -> `docs/features/01-stage.md`.
+
+Documentation sync:
+
+- Updated `docs/quality-gates.md` D1 section with the scripted mapping, mode selection, ignored paths, and emergency local override.
+- No new source-of-truth docs page was added, so `docs/README.md` did not need a new index entry.
+
+Verification evidence:
+
+- `pnpm vitest run src/quality/__tests__/docs-drift.test.ts` -> passed, 9 tests.
+- `pnpm run typecheck` -> passed.
+- `pnpm run lint` -> passed.
+- `pnpm run quality:docs` on the final worktree -> passed: 15 feature docs, schema v9, 5 changed paths, 1 mapped rule, `tree(auto)`.
+- Manual simulation source-only failure: temporary `src/bot.ts` change without routing docs failed with actionable output naming `src/bot.ts` and expected `docs/bot-routing.md`, `docs/chat-router-current-logic.md`, or `docs/features/*.md`.
+- Manual simulation source + docs pass: temporary `src/bot.ts` plus `docs/bot-routing.md` changes passed; both temporary changes were reverted.
+- `pnpm test` full suite first run hit an unrelated concurrent sqlite lock in `src/discord/__tests__/task-view-reporter.test.ts`; the run otherwise reported 127 passed test files, 634 passed tests, and 8 skipped tests. Rerunning `pnpm vitest run src/discord/__tests__/task-view-reporter.test.ts` passed 8 tests.
+- `pnpm ralph:verify -- --task docs-drift-gate` -> passed docs profile (`pnpm run quality:docs`, `pnpm run lint`).

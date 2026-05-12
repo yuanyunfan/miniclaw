@@ -42,7 +42,7 @@
       "id": "docs-drift-gate",
       "title": "Docs Drift Quality Gate Expansion",
       "priority": "P1",
-      "status": "pending",
+      "status": "done",
       "plan": "docs/plans/2026-05-11-docs-drift-gate.md",
       "branch": "ralph/docs-drift-gate",
       "verify_profile": "docs",
