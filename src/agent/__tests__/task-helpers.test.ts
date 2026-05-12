@@ -15,6 +15,7 @@ const {
   rawTaskMessages,
   buildExecutionSummary,
   buildRealtimeProgress,
+  selectTaskRunner,
   addActiveTaskForTest,
   deleteActiveTaskForTest,
   resetTaskRuntimeForTest,
@@ -174,6 +175,18 @@ describe("buildRealtimeProgress", () => {
     expect(text).not.toContain("- step 5");
     expect(text).toContain("- step 6");
     expect(text).toContain("- step 30");
+  });
+});
+
+describe("selectTaskRunner", () => {
+  it("uses configured providers when fake runtime is disabled", () => {
+    expect(selectTaskRunner("claude", false)).toBe("claude");
+    expect(selectTaskRunner("codex", false)).toBe("codex");
+  });
+
+  it("routes both configured providers through the fake runner in e2e fake mode", () => {
+    expect(selectTaskRunner("claude", true)).toBe("fake");
+    expect(selectTaskRunner("codex", true)).toBe("fake");
   });
 });
 

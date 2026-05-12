@@ -230,3 +230,14 @@ Record the final module boundary, changed files, and verification commands here 
   - `pnpm run typecheck` passed.
   - `pnpm run lint` passed.
   - `pnpm ralph:verify -- --task task-view-boundary` passed with profile `task-runtime`, including fake runtime, trace reporter, task event store, typecheck, lint, and `pnpm run quality:docs`.
+
+### 2026-05-12 Slice 4: Runner Selection Boundary
+
+- Scope: first remaining independently shippable orchestration slice after Slice 3. Added only the local runner selection boundary in `executeTask`; no provider execution code, Discord rendering, DB lifecycle writes, or public `executeTask(params)` shape changed.
+- `src/agent/task.ts`: added `selectTaskRunner(agentProvider, fakeAgent)` to normalize configured Claude/Codex provider plus E2E fake override into the existing runner provider union, and routed the current fake/Codex/Claude execution branches through that selection result.
+- `src/agent/__tests__/task-helpers.test.ts`: added focused coverage for normal Claude/Codex selection and E2E fake override selection.
+- Verification:
+  - `pnpm vitest run src/agent/__tests__/task-helpers.test.ts src/agent/__tests__/task-runner-types.test.ts` passed: 2 files, 23 tests.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm ralph:verify -- --task task-view-boundary` passed with profile `task-runtime`, including fake runtime, trace reporter, task event store, typecheck, lint, and `pnpm run quality:docs`.

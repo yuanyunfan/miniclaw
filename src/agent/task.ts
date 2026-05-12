@@ -2,7 +2,7 @@ import type { Message, SendableChannels } from "discord.js";
 import type { ContentBlockParam } from "@anthropic-ai/sdk/resources/messages.js";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
-import { config } from "../config.js";
+import { config, type AgentProvider } from "../config.js";
 import { updateTask } from "../store/db.js";
 import { ProgressReporter } from "../discord/progress.js";
 import { taskCompleteEmbed, taskErrorEmbed, taskStartEmbed } from "../discord/formatter.js";
@@ -30,6 +30,7 @@ import { buildFakeTaskResult } from "../e2e/fake-agent.js";
 import { formatTaskPromptForSystem } from "../routing/task-context.js";
 import { appendTaskEvent, type TaskEventSeverity } from "../store/task-events.js";
 import { TaskReporter } from "./task-reporter.js";
+import type { TaskRunnerProvider } from "./runners/types.js";
 
 const log = createLogger("task");
 
@@ -107,6 +108,7 @@ export const __testables = {
   rawTaskMessages,
   buildExecutionSummary,
   buildRealtimeProgress,
+  selectTaskRunner,
   addActiveTaskForTest,
   deleteActiveTaskForTest,
   resetTaskRuntimeForTest,
@@ -233,6 +235,10 @@ function recordTaskEvent(taskId: string, eventType: string, severity: TaskEventS
   } catch {
     // Task events are observability-only; never break cancellation/drain paths.
   }
+}
+
+function selectTaskRunner(agentProvider: AgentProvider, fakeAgent: boolean): TaskRunnerProvider {
+  return fakeAgent ? "fake" : agentProvider;
 }
 
 function rawTaskMessages(taskId: string, result: TaskResult): string[] {
@@ -614,6 +620,7 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
   });
   const startedAt = Date.now();
   const shortId = params.taskId.slice(0, 8);
+  const runnerProvider = selectTaskRunner(config.agentProvider, config.e2e.fakeAgent);
   reporter.started({
     provider: config.agentProvider,
     model: config.model,
@@ -646,11 +653,11 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
       await progress.update(buildRealtimeProgress([], 0, 0), params.channel);
     }
 
-    if (config.e2e.fakeAgent) {
+    if (runnerProvider === "fake") {
       return await executeFakeTask(params, progress, abortController, startedAt, shortId, reporter);
     }
 
-    if (config.agentProvider === "codex") {
+    if (runnerProvider === "codex") {
       return await executeCodexTask(params, progress, abortController, startedAt, shortId, reporter);
     }
 
