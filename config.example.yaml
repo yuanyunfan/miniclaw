@@ -68,6 +68,17 @@ agent:
   shutdown_drain_timeout_ms: 1800000 # 30 minutes
   register_commands_on_start: false
 
+tasks:
+  trace_auto_attach:
+    # Conservative default: keep automatic trace uploads off unless explicitly enabled.
+    enabled: false
+    # When enabled, attach traces for failed/cancelled/interrupted task terminal statuses.
+    on_failure: true
+    # Optional success-task thresholds; 0 disables each threshold.
+    min_duration_ms: 0
+    min_event_count: 0
+    max_bytes: 120000
+
 anthropic:
   # Keep ANTHROPIC_API_KEY in .env.
   # base_url: "http://localhost:7024"

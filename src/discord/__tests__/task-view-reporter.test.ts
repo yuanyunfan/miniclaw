@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
+import { beforeAll, describe, expect, it } from "vitest";
 import { DiscordTaskViewReporter, __testables } from "../task-view-reporter.js";
+import { shouldAutoAttachTaskTrace } from "../task-trace-attachment.js";
+import { createTask, initDb, updateTask } from "../../store/db.js";
+import { appendTaskEvent } from "../../store/task-events.js";
 
 const {
   rawTaskMessages,
@@ -11,6 +15,7 @@ interface RecordedDiscordAction {
   type: "send" | "edit" | "delete";
   content?: string;
   embedTitles: string[];
+  fileCount: number;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -38,10 +43,12 @@ function embedTitle(embed: unknown): string | undefined {
 
 function recordDiscordAction(type: RecordedDiscordAction["type"], payload?: unknown): RecordedDiscordAction {
   const embeds = asRecord(payload)?.embeds;
+  const files = asRecord(payload)?.files;
   return {
     type,
     content: payloadContent(payload),
     embedTitles: Array.isArray(embeds) ? embeds.map(embedTitle).filter((title): title is string => Boolean(title)) : [],
+    fileCount: Array.isArray(files) ? files.length : 0,
   };
 }
 
@@ -73,6 +80,10 @@ function createRecordedChannel(): { channel: { send: (payload: unknown) => Promi
     },
   };
 }
+
+beforeAll(() => {
+  initDb();
+});
 
 describe("task view formatting", () => {
   it("uses a fallback for empty successful raw output", () => {
@@ -141,6 +152,46 @@ describe("task view formatting", () => {
   });
 });
 
+describe("task trace auto-attach policy", () => {
+  it("requires enabled config and matches failure, duration, or event thresholds", () => {
+    const base = {
+      taskId: "task-1",
+      status: "completed" as const,
+      durationMs: 1000,
+    };
+
+    expect(shouldAutoAttachTaskTrace(undefined, base, 10)).toBe(false);
+    expect(shouldAutoAttachTaskTrace({
+      enabled: false,
+      onFailure: true,
+      minDurationMs: 0,
+      minEventCount: 0,
+      maxBytes: 120000,
+    }, base, 10)).toBe(false);
+    expect(shouldAutoAttachTaskTrace({
+      enabled: true,
+      onFailure: true,
+      minDurationMs: 0,
+      minEventCount: 0,
+      maxBytes: 120000,
+    }, { ...base, status: "failed" }, 10)).toBe(true);
+    expect(shouldAutoAttachTaskTrace({
+      enabled: true,
+      onFailure: false,
+      minDurationMs: 900,
+      minEventCount: 0,
+      maxBytes: 120000,
+    }, base, 10)).toBe(true);
+    expect(shouldAutoAttachTaskTrace({
+      enabled: true,
+      onFailure: false,
+      minDurationMs: 0,
+      minEventCount: 10,
+      maxBytes: 120000,
+    }, base, 10)).toBe(true);
+  });
+});
+
 describe("DiscordTaskViewReporter", () => {
   it("renders start, progress summary, completed status, and final markdown from view events", async () => {
     const { actions, channel } = createRecordedChannel();
@@ -194,5 +245,63 @@ describe("DiscordTaskViewReporter", () => {
     expect(completionSummary?.content).toContain("- terminal: \"pnpm test\" (×2)");
     expect(actions.some((action) => action.type === "edit" && action.embedTitles.includes("✅ 任务完成"))).toBe(true);
     expect(actions.filter((action) => action.type === "send").map((action) => action.content)).toContain("final report");
+  });
+
+  it("auto-attaches a sanitized task trace for failed embed tasks when enabled", async () => {
+    const taskId = randomUUID();
+    createTask({
+      id: taskId,
+      discord_thread_id: "thread-" + taskId.slice(0, 8),
+      discord_user_id: "user-1",
+      prompt: "full prompt must stay out of trace attachments",
+      cwd: "/tmp/task-trace-auto",
+    });
+    updateTask(taskId, {
+      status: "failed",
+      duration_ms: 2500,
+      completed_at: new Date().toISOString(),
+    });
+    appendTaskEvent({
+      taskId,
+      eventType: "task_started",
+      payload: { provider: "codex", model: "gpt-test", prompt: "do not attach this raw prompt" },
+    });
+    appendTaskEvent({
+      taskId,
+      eventType: "provider_error",
+      severity: "error",
+      message: "Authorization: Bearer secret-token-123456",
+      payload: { provider: "codex", token: "secret-token-123456" },
+    });
+
+    const { actions, channel } = createRecordedChannel();
+    const reporter = new DiscordTaskViewReporter({
+      taskId,
+      prompt: "debug failed task",
+      cwd: "/tmp/task-trace-auto",
+      channel: channel as never,
+      provider: "codex",
+      model: "gpt-test",
+      traceAutoAttach: {
+        enabled: true,
+        onFailure: true,
+        minDurationMs: 0,
+        minEventCount: 0,
+        maxBytes: 8000,
+      },
+    });
+
+    await reporter.finish({
+      success: false,
+      sessionId: "",
+      costUsd: 0,
+      durationMs: 2500,
+      turns: 0,
+      result: "failed",
+    }, "failed");
+
+    const traceSend = actions.find((action) => action.type === "send" && action.fileCount === 1);
+    expect(traceSend?.content).toContain("auto-attach: terminal status is not completed");
+    expect(traceSend?.content).toContain("Task trace");
   });
 });

@@ -36,6 +36,11 @@ const ENV_KEYS = [
   "MINICLAW_CODEX_NETWORK_ACCESS",
   "MINICLAW_AUTO_REPLY_CHANNELS",
   "MINICLAW_TASK_CHANNELS",
+  "MINICLAW_TASK_TRACE_AUTO_ATTACH_ENABLED",
+  "MINICLAW_TASK_TRACE_AUTO_ATTACH_ON_FAILURE",
+  "MINICLAW_TASK_TRACE_AUTO_ATTACH_MIN_DURATION_MS",
+  "MINICLAW_TASK_TRACE_AUTO_ATTACH_MIN_EVENT_COUNT",
+  "MINICLAW_TASK_TRACE_AUTO_ATTACH_MAX_BYTES",
   "MINICLAW_SMART_ROUTER_ENABLED",
   "MINICLAW_SMART_ROUTER_DEFAULT_MODE",
   "MINICLAW_SMART_ROUTER_MIN_CONFIRM_CONFIDENCE",
@@ -208,6 +213,13 @@ mcp:
 storage:
   db_path: "${join(tmpDir, "data.db")}"
   memory_path: "${memoryPath}"
+tasks:
+  trace_auto_attach:
+    enabled: true
+    on_failure: true
+    min_duration_ms: 600000
+    min_event_count: 25
+    max_bytes: 65536
 attachments:
   max_mb: 16
   max_count: 3
@@ -282,6 +294,13 @@ notifications:
     expect(config.memoryPath).toBe(memoryPath);
     expect(config.taskChannelIds).toEqual(["task-yaml"]);
     expect(config.channelDefaults["task-yaml"]).toEqual({ cwd: tmpDir });
+    expect(config.tasks.traceAutoAttach).toEqual({
+      enabled: true,
+      onFailure: true,
+      minDurationMs: 600000,
+      minEventCount: 25,
+      maxBytes: 65536,
+    });
     expect(config.smartRouter).toMatchObject({
       enabled: true,
       defaultMode: "suggest",
@@ -378,6 +397,13 @@ storage:
     expect(config.doctor.summaryChannelName).toBe("miniclaw-auto-improve");
     expect(config.doctor.scanIntervalMs).toBe(7200000);
     expect(config.autoReplyChannelIds).toEqual(["*"]);
+    expect(config.tasks.traceAutoAttach).toEqual({
+      enabled: false,
+      onFailure: true,
+      minDurationMs: 0,
+      minEventCount: 0,
+      maxBytes: 120000,
+    });
     expect(config.audioTranscription).toEqual({
       enabled: true,
       provider: "auto",
@@ -456,6 +482,39 @@ storage:
       maxMb: 12,
       timeoutMs: 90000,
       language: "en",
+    });
+  });
+
+  it("supports task trace auto-attach env overrides", async () => {
+    const cfg = join(tmpDir, "config.yaml");
+    writeFileSync(cfg, `
+discord:
+  client_id: "client-yaml"
+  guild_id: "guild-yaml"
+  allowed_user_id: "user-yaml"
+agent:
+  provider: codex
+  default_cwd: "${tmpDir}"
+storage:
+  db_path: "${join(tmpDir, "data.db")}"
+  memory_path: "${join(tmpDir, "MEMORY.md")}"
+`);
+    process.env.MINICLAW_CONFIG = cfg;
+    process.env.DISCORD_TOKEN = "token-env";
+    process.env.MINICLAW_TASK_TRACE_AUTO_ATTACH_ENABLED = "true";
+    process.env.MINICLAW_TASK_TRACE_AUTO_ATTACH_ON_FAILURE = "false";
+    process.env.MINICLAW_TASK_TRACE_AUTO_ATTACH_MIN_DURATION_MS = "900000";
+    process.env.MINICLAW_TASK_TRACE_AUTO_ATTACH_MIN_EVENT_COUNT = "42";
+    process.env.MINICLAW_TASK_TRACE_AUTO_ATTACH_MAX_BYTES = "32768";
+
+    const { config } = await import("../config.js");
+
+    expect(config.tasks.traceAutoAttach).toEqual({
+      enabled: true,
+      onFailure: false,
+      minDurationMs: 900000,
+      minEventCount: 42,
+      maxBytes: 32768,
     });
   });
 

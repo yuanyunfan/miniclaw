@@ -256,6 +256,14 @@ function positiveNumber(paths: ConfigPath | readonly ConfigPath[], envKeys: stri
   return n;
 }
 
+function nonNegativeNumber(paths: ConfigPath | readonly ConfigPath[], envKeys: string | readonly string[], fallback: number): number {
+  const raw = readRaw(paths, envKeys, fallback);
+  const name = optionName(paths, envKeys);
+  const n = typeof raw === "number" ? raw : Number(scalarString(raw, name));
+  if (!Number.isFinite(n) || n < 0) throw new Error(`Invalid config ${name}: expected non-negative number`);
+  return n;
+}
+
 function confidenceNumber(paths: ConfigPath, envKeys: string | readonly string[], fallback: number): number {
   const raw = readRaw(paths, envKeys, fallback);
   const name = optionName(paths, envKeys);
@@ -269,6 +277,12 @@ function confidenceNumber(paths: ConfigPath, envKeys: string | readonly string[]
 function positiveInt(paths: ConfigPath | readonly ConfigPath[], envKeys: string | readonly string[], fallback: number): number {
   const n = positiveNumber(paths, envKeys, fallback);
   if (!Number.isInteger(n)) throw new Error(`Invalid config ${optionName(paths, envKeys)}: expected positive integer`);
+  return n;
+}
+
+function nonNegativeInt(paths: ConfigPath | readonly ConfigPath[], envKeys: string | readonly string[], fallback: number): number {
+  const n = nonNegativeNumber(paths, envKeys, fallback);
+  if (!Number.isInteger(n)) throw new Error(`Invalid config ${optionName(paths, envKeys)}: expected non-negative integer`);
   return n;
 }
 
@@ -522,6 +536,35 @@ export const config = {
   autoReplyChannelIds,
   taskChannelIds,
   channelDefaults: channelDefaultConfig,
+  tasks: {
+    traceAutoAttach: {
+      enabled: boolValue(
+        ["tasks", "trace_auto_attach", "enabled"],
+        "MINICLAW_TASK_TRACE_AUTO_ATTACH_ENABLED",
+        false
+      ),
+      onFailure: boolValue(
+        ["tasks", "trace_auto_attach", "on_failure"],
+        "MINICLAW_TASK_TRACE_AUTO_ATTACH_ON_FAILURE",
+        true
+      ),
+      minDurationMs: nonNegativeNumber(
+        ["tasks", "trace_auto_attach", "min_duration_ms"],
+        "MINICLAW_TASK_TRACE_AUTO_ATTACH_MIN_DURATION_MS",
+        0
+      ),
+      minEventCount: nonNegativeInt(
+        ["tasks", "trace_auto_attach", "min_event_count"],
+        "MINICLAW_TASK_TRACE_AUTO_ATTACH_MIN_EVENT_COUNT",
+        0
+      ),
+      maxBytes: positiveInt(
+        ["tasks", "trace_auto_attach", "max_bytes"],
+        "MINICLAW_TASK_TRACE_AUTO_ATTACH_MAX_BYTES",
+        120_000
+      ),
+    },
+  },
   smartRouter: {
     enabled: smartRouterEnabled,
     defaultMode: oneOf<SmartRouterDefaultMode>(

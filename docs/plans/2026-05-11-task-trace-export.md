@@ -1,6 +1,6 @@
 # Task Trace Export And Discord Task Log
 
-Status: draft
+Status: done
 Date: 2026-05-11
 
 ## Background
@@ -176,3 +176,20 @@ Record command name, config defaults, redaction policy, and verification evidenc
   - `pnpm run quality:docs` passed: D1 docs drift check, 15 feature docs, schema v8.
   - `pnpm test` passed: 126 files, 626 tests.
   - CLI smoke passed after fixing `pnpm run` separator parsing: `pnpm run task:trace -- --help`.
+- 2026-05-12 Ralph phase completed threshold-based automatic trace attachment:
+  - Added `tasks.trace_auto_attach` config with env overrides:
+    `MINICLAW_TASK_TRACE_AUTO_ATTACH_ENABLED`,
+    `MINICLAW_TASK_TRACE_AUTO_ATTACH_ON_FAILURE`,
+    `MINICLAW_TASK_TRACE_AUTO_ATTACH_MIN_DURATION_MS`,
+    `MINICLAW_TASK_TRACE_AUTO_ATTACH_MIN_EVENT_COUNT`, and
+    `MINICLAW_TASK_TRACE_AUTO_ATTACH_MAX_BYTES`.
+  - Config defaults are conservative: `enabled=false`, `on_failure=true`, `min_duration_ms=0`, `min_event_count=0`, and `max_bytes=120000`, so successful short tasks do not upload trace files by default.
+  - Added `src/discord/task-trace-attachment.ts` to evaluate failure, duration, and event-count thresholds, render the existing redacted trace Markdown, and attach `task-<id>-trace.md` after final embed-mode task output.
+  - Wired `executeTask` to pass config into `DiscordTaskViewReporter`; raw output mode still skips automatic trace upload.
+  - Discord delivery failures from auto attachment are reported as `discord_delivery_failed` with operation `trace_auto_attach_send`.
+  - Updated `config.example.yaml`, `docs/architecture.md`, and `docs/bot-routing.md`; all implementation plan items are now complete, so plan status is `done`.
+- Verification evidence:
+  - `pnpm vitest run src/discord/__tests__/task-view-reporter.test.ts src/__tests__/config.test.ts` passed: 2 files, 24 tests.
+  - `pnpm run typecheck` passed.
+  - `pnpm ralph:verify -- --task task-trace-export` passed `task-runtime`: e2e fake runtime, task reporter, task events, typecheck, lint, and docs drift.
+  - `pnpm test` passed: 126 files, 629 tests.

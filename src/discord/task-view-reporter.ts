@@ -5,6 +5,10 @@ import { chunkMessage } from "./chunks.js";
 import { taskCompleteEmbed, taskErrorEmbed, taskStartEmbed } from "./formatter.js";
 import { ProgressReporter } from "./progress.js";
 import { sendChunkedTextWithDeferredLinkPreviews } from "./text.js";
+import {
+  sendTaskTraceAutoAttachment,
+  type TaskTraceAutoAttachConfig,
+} from "./task-trace-attachment.js";
 
 const PROGRESS_TAIL_LINES = 25;
 
@@ -20,6 +24,7 @@ export interface DiscordTaskViewReporterOptions {
   outputMode?: "embed" | "raw";
   statusMessage?: Message;
   rawOutputTextTransform?: (text: string) => string;
+  traceAutoAttach?: TaskTraceAutoAttachConfig;
   onDeliveryError?: (operation: string, err: unknown) => void;
 }
 
@@ -262,6 +267,16 @@ export class DiscordTaskViewReporter {
       await sendMarkdownTaskResult(this.options.channel, result);
     } catch (err) {
       this.options.onDeliveryError?.("final_markdown_send", err);
+    }
+
+    try {
+      await sendTaskTraceAutoAttachment(this.options.channel, this.options.traceAutoAttach, {
+        taskId: this.options.taskId,
+        status,
+        durationMs: result.durationMs,
+      });
+    } catch (err) {
+      this.options.onDeliveryError?.("trace_auto_attach_send", err);
     }
   }
 

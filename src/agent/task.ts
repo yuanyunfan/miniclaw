@@ -268,6 +268,7 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
     provider: config.agentProvider,
     model: config.model,
     outputMode,
+    traceAutoAttach: config.tasks.traceAutoAttach,
     ...(params.statusMessage ? { statusMessage: params.statusMessage } : {}),
     ...(params.rawOutputTextTransform ? { rawOutputTextTransform: params.rawOutputTextTransform } : {}),
     onDeliveryError: (operation, err) => reporter.discordDeliveryFailed(operation, err),
