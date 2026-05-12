@@ -163,6 +163,18 @@ describe("buildRealtimeProgress", () => {
     expect(text).toContain("tools: 0");
     expect(text).toContain("- waiting for SDK events");
   });
+
+  it("keeps only the recent progress tail and reports omitted steps", () => {
+    const lines = Array.from({ length: 30 }, (_, idx) => `step ${idx + 1}`);
+    const text = buildRealtimeProgress(lines, 4, 30);
+
+    expect(text).toContain("turns: 4");
+    expect(text).toContain("tools: 30");
+    expect(text).toContain("omitted: 5 earlier steps");
+    expect(text).not.toContain("- step 5");
+    expect(text).toContain("- step 6");
+    expect(text).toContain("- step 30");
+  });
 });
 
 describe("task drain helpers", () => {

@@ -195,3 +195,13 @@ It may depend on Discord channel/message types and existing formatter helpers. I
 
 Record the final module boundary, changed files, and verification commands here when implemented.
 
+### 2026-05-12 Slice 1: Rendering Behavior Tests
+
+- Scope: first independently shippable slice only. Added tests around current rendering behavior before moving runner/view code. No production runtime code was changed.
+- `src/agent/__tests__/e2e-fake-runtime.test.ts`: added a recorded fake Discord channel test that locks current embed-mode fake task output: start embed send, initial `### Realtime Progress` message, `### Execution Summary` progress edit, completion embed edit, final Markdown result, DB completion fields, and persisted `progress_message_id`.
+- `src/agent/__tests__/task-helpers.test.ts`: added progress tail coverage for omitted earlier steps and the retained last 25 progress lines.
+- Verification:
+  - `pnpm vitest run src/agent/__tests__/e2e-fake-runtime.test.ts src/agent/__tests__/task-helpers.test.ts` passed: 2 files, 24 tests.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm run quality:docs` passed.
