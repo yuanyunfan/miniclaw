@@ -402,3 +402,27 @@ For each completed slice, record:
   - `pnpm ralph:verify -- --task complexity-hotspot-refactor --profile standard` passed: `pnpm run typecheck`, `pnpm run lint`, `pnpm run quality:docs`.
 - Public API changes: existing imports from `src/store/db.ts` remain valid, including `SCHEMA_VERSION`; new diagnostic helper `listSchemaVersionHistory()` is exported from the facade. SQLite schema version bumped from 9 to 10 for `schema_version_history`.
 - Follow-up cleanup: continue Slice F by splitting `tasks`, `chat_history`, and `smart_router_decisions` repository helpers out of `src/store/db.ts`; retention config, cleanup command, and shared diagnostic redaction policy remain future phases.
+
+### 2026-05-12 - Slice F DB Repository Boundary Extraction
+
+- Slice name: Slice F partial, connection and task/chat/Smart Router repository boundary.
+- Changed files:
+  - `src/store/db.ts`: reduced to DB init/schema facade, compatibility re-exports, and Stage scene helpers; existing imports from `src/store/db.ts` remain valid.
+  - `src/store/connection.ts`: added the shared live SQLite handle used by store modules.
+  - `src/store/repositories/tasks.ts`: extracted task row types, task creation, updates, lookup helpers, active/interrupted/recent listings, and Smart Router outcome writeback wiring.
+  - `src/store/repositories/chat-history.ts`: extracted chat history append/list helpers.
+  - `src/store/repositories/smart-router-decisions.ts`: extracted Smart Router decision/review types and decision logging, user choice, outcome, recent, and review helpers.
+  - `src/store/task-events.ts`, `src/store/incidents.ts`, `src/store/market-forecasts.ts`: switched existing split store modules to depend on `src/store/connection.ts` instead of the public DB facade.
+  - `src/store/__tests__/db.test.ts`: added direct repository characterization coverage for task status -> Smart Router outcome linkage and per-channel chat history ordering.
+  - `docs/architecture.md`, `docs/continuous-improvement-report.md`: documented the connection/repository boundary and updated remaining hotspot status.
+- Behavior parity tests:
+  - `pnpm vitest run src/store/__tests__/db.test.ts` passed, 22 tests.
+  - `pnpm vitest run src/store/__tests__/migrations.test.ts src/store/__tests__/db.test.ts` passed, 26 tests.
+  - `pnpm vitest run src/store` passed, 45 tests.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm run quality:docs` passed with schema v10.
+  - `pnpm run build` passed; generated ignored `dist/` artifacts were removed after verification.
+  - `pnpm ralph:verify -- --task complexity-hotspot-refactor --profile standard` passed: `pnpm run typecheck`, `pnpm run lint`, `pnpm run quality:docs`.
+- Public API changes: none for initialized store usage. `getDb()`, task helpers, chat helpers, and Smart Router helpers continue to be re-exported from `src/store/db.ts`.
+- Follow-up cleanup: retention config, dry-run cleanup command, and shared diagnostic redaction policy remain future Slice F work; broader config work belongs to Slice G.

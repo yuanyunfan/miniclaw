@@ -1,4 +1,4 @@
-import { getDb } from "./db.js";
+import { getDb } from "./connection.js";
 
 export type TaskEventSeverity = "debug" | "info" | "warning" | "error";
 

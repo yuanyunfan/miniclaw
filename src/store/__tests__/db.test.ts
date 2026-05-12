@@ -18,6 +18,20 @@ import {
   getRecentSmartRouterDecisions,
   __testables,
 } from "../db.js";
+import {
+  addChatMessage as addChatMessageFromRepository,
+  getChatHistory as getChatHistoryFromRepository,
+} from "../repositories/chat-history.js";
+import {
+  getRecentSmartRouterDecisions as getRecentSmartRouterDecisionsFromRepository,
+  listSmartRouterReviewRows as listSmartRouterReviewRowsFromRepository,
+  recordSmartRouterDecision as recordSmartRouterDecisionFromRepository,
+} from "../repositories/smart-router-decisions.js";
+import {
+  createTask as createTaskFromRepository,
+  getTask as getTaskFromRepository,
+  updateTask as updateTaskFromRepository,
+} from "../repositories/tasks.js";
 
 beforeAll(() => {
   initDb();
@@ -310,5 +324,64 @@ describe("smart router decisions", () => {
       task_final_status: "failed",
       linked_task_status: "failed",
     });
+  });
+});
+
+describe("store repositories", () => {
+  it("keeps direct task repository status updates linked to Smart Router outcomes", () => {
+    const taskId = uuid();
+    createTaskFromRepository({
+      id: taskId,
+      discord_thread_id: `thread-repository-${uuid().slice(0, 8)}`,
+      discord_user_id: "user-repository",
+      prompt: "repository test prompt",
+      cwd: "/tmp",
+    });
+    const decisionId = recordSmartRouterDecisionFromRepository({
+      message_id: `message-${uuid()}`,
+      channel_id: "repository-router-channel",
+      user_id: "user-repository",
+      prompt_hash: `hash-${uuid()}`,
+      intent: "task_confirm",
+      confidence: 0.91,
+      action_result: "confirmed_task_created",
+      created_task_id: taskId,
+      user_choice: "accepted_task",
+      final_route: "task",
+      correction_type: "none",
+    });
+
+    updateTaskFromRepository(taskId, {
+      status: "completed",
+      completed_at: new Date().toISOString(),
+      result_summary: "done",
+    });
+
+    expect(getTaskFromRepository(taskId)).toMatchObject({
+      status: "completed",
+      result_summary: "done",
+    });
+    expect(getRecentSmartRouterDecisionsFromRepository(20).find((row) => row.id === decisionId)).toMatchObject({
+      task_final_status: "completed",
+      final_route: "task",
+      correction_type: "none",
+    });
+    expect(listSmartRouterReviewRowsFromRepository({ channelId: "repository-router-channel", limit: 5 })[0]).toMatchObject({
+      id: decisionId,
+      created_task_id: taskId,
+      linked_task_status: "completed",
+    });
+  });
+
+  it("stores direct chat repository history per channel in newest-first order", () => {
+    const channelId = `repository-chat-${uuid()}`;
+    addChatMessageFromRepository(channelId, "user-repository", "user", "first prompt");
+    addChatMessageFromRepository(channelId, "assistant", "assistant", "assistant reply");
+    addChatMessageFromRepository(`other-${channelId}`, "user-repository", "user", "other channel");
+
+    expect(getChatHistoryFromRepository(channelId, 5)).toEqual([
+      { role: "assistant", content: "assistant reply" },
+      { role: "user", content: "first prompt" },
+    ]);
   });
 });

@@ -1,5 +1,5 @@
 import { v4 as uuid } from "uuid";
-import { getDb } from "./db.js";
+import { getDb } from "./connection.js";
 import type { MarketIntelPayload, MarketIntelScore } from "../providers/market-intel/types.js";
 
 export interface MarketForecastRow {

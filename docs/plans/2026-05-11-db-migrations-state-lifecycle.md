@@ -210,3 +210,28 @@ Record migration versions, repository splits, retention defaults, and verificati
   - `pnpm ralph:verify -- --task complexity-hotspot-refactor --profile standard` passed.
 - Public API changes: existing consumers can continue importing from `src/store/db.ts`; `listSchemaVersionHistory()` is a new diagnostic facade export.
 - Follow-up cleanup: split `tasks`, `chat_history`, and Smart Router decision helpers into repository modules; retention config/cleanup and diagnostic redaction remain future phases.
+
+### 2026-05-12 Slice 2: Store Repository Boundary
+
+- Scope: second DB lifecycle phase. Extracted task, chat history, and Smart Router decision helpers from `src/store/db.ts` into repository modules while keeping `src/store/db.ts` as the compatibility facade.
+- Repository split:
+  - `src/store/connection.ts` owns the live SQLite handle.
+  - `src/store/repositories/tasks.ts` owns task rows, creation, updates, lookups, active/interrupted/recent listings, and Smart Router outcome writeback on terminal status changes.
+  - `src/store/repositories/chat-history.ts` owns chat history append/list behavior.
+  - `src/store/repositories/smart-router-decisions.ts` owns decision logging, confirmation choice, task outcome, recent decision, and review listing helpers.
+  - Existing split store modules `task-events.ts`, `incidents.ts`, and `market-forecasts.ts` now depend on `connection.ts` directly instead of importing the public facade.
+- Changed files:
+  - `src/store/db.ts`: remains the public facade and re-exports repository helpers; Stage scene helpers remain in place.
+  - `src/store/__tests__/db.test.ts`: added direct repository characterization tests for task outcome linkage and chat history ordering.
+  - `docs/architecture.md`, `docs/continuous-improvement-report.md`: documented the repository boundary and updated current hotspot status.
+- Verification:
+  - `pnpm vitest run src/store/__tests__/db.test.ts` passed, 22 tests.
+  - `pnpm vitest run src/store/__tests__/migrations.test.ts src/store/__tests__/db.test.ts` passed, 26 tests.
+  - `pnpm vitest run src/store` passed, 45 tests.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm run quality:docs` passed with schema v10.
+  - `pnpm run build` passed; generated ignored `dist/` artifacts were removed after verification.
+  - `pnpm ralph:verify -- --task complexity-hotspot-refactor --profile standard` passed.
+- Public API changes: existing consumers can continue importing task, chat, Smart Router, schema, and `getDb()` helpers from `src/store/db.ts`.
+- Follow-up cleanup: retention config, dry-run cleanup command, and shared diagnostic redaction policy remain future phases.

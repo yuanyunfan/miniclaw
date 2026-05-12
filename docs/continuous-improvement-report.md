@@ -142,7 +142,7 @@
 
 当前文件规模显示复杂度中心仍然集中，但 bot/task/doctor scheduler 和 DB migration 已完成第一轮边界拆分，剩余热点应继续按职责推进：
 
-- `src/store/db.ts`：528 行，已保留 DB connection、task/chat/Smart Router facade 和 repository helpers；base schema、migration runner、schema version audit 已拆到 `src/store/schema.ts` 和 `src/store/migrations/*`。
+- `src/store/db.ts`：137 行，已保留 DB init/schema facade、compatibility re-export 和 Stage scene helpers；live connection 已拆到 `src/store/connection.ts`，`tasks`、`chat_history`、`smart_router_decisions` helper 已拆到 `src/store/repositories/*`。
 - `src/config.ts`：811 行。
 - `src/ops/doctor-repair.ts`：452 行，已保留 repair facade + incident/repair_run 状态编排；repair policy、path allowlist、prompt build、verification gate、worktree/branch/dependency/commit/push Git 操作、Codex repair agent streaming、CLI/report formatting 已拆到 `src/ops/doctor-repair/*`。
 - `src/providers/market-intel/collectors/official.ts`：35 行 public facade；source-family collector orchestration 已拆到 `collectors/macro.ts`、`news.ts`、`events.ts`，evidence section assembly / derived risk 已拆到 `collectors/scoring-input.ts`，HTTP client 与 source status/warning helpers 已拆到 `collectors/official-http.ts`、`official-shared.ts`。
@@ -230,7 +230,7 @@
 
 ### 当前问题
 
-`src/store/db.ts` 已不再集中处理 base schema、migration runner 和 schema version audit，但仍集中承载 task、chat history 和 Smart Router helper。随着 `task_events`、incidents、repair runs、market forecasts 继续增长，下一步风险会转移到 repository helper 继续堆在 facade。
+`src/store/db.ts` 已不再集中处理 base schema、migration runner、schema version audit、task、chat history 和 Smart Router helper。随着 `task_events`、incidents、repair runs、market forecasts 继续增长，下一步风险会转移到 state lifecycle、retention 和 diagnostic redaction，而不是继续把 table helper 堆回 facade。
 
 state lifecycle 也需要明确：
 
@@ -244,9 +244,10 @@ state lifecycle 也需要明确：
 
 1. 已完成：新增 `src/store/migrations/`，每个 schema version 一个 migration function。
 2. 已完成：增加 `schema_version_history`，记录迁移执行时间和版本。
-3. 后续：把 `tasks`、`smart_router_decisions`、`incidents`、`task_events`、`market_forecasts` 拆成 repository module。
-4. 后续：增加 state retention 配置和清理命令。
-5. 后续：对 prompt preview、provider payload、email/account data 做明确 redaction policy。
+3. 已完成：把 `tasks`、`chat_history`、`smart_router_decisions` 拆到 `src/store/repositories/*`，并保留 `src/store/db.ts` compatibility facade。
+4. 已有：`incidents`、`task_events`、`market_forecasts` 位于独立 store module，并改为直接依赖 `src/store/connection.ts`。
+5. 后续：增加 state retention 配置和清理命令。
+6. 后续：对 prompt preview、provider payload、email/account data 做明确 redaction policy。
 
 ### 验收标准
 

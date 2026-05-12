@@ -568,7 +568,7 @@ classify by mime + ext
 
 ## 9. 数据库 schema
 
-`~/.miniclaw/data.db`（SQLite WAL 模式）。schema 版本使用 SQLite `PRAGMA user_version` 管理，当前版本由 `src/store/schema.ts` 的 `SCHEMA_VERSION = 10` 定义。`src/store/db.ts` 仍是 public facade，初始化时调用 `ensureBaseSchema()` 和 `runMigrations()`；版本迁移函数位于 `src/store/migrations/*`，每次成功升级会写入 `schema_version_history`。
+`~/.miniclaw/data.db`（SQLite WAL 模式）。schema 版本使用 SQLite `PRAGMA user_version` 管理，当前版本由 `src/store/schema.ts` 的 `SCHEMA_VERSION = 10` 定义。`src/store/db.ts` 仍是 public facade，初始化时调用 `ensureBaseSchema()` 和 `runMigrations()`；live connection 由 `src/store/connection.ts` 持有，`tasks`、`chat_history`、`smart_router_decisions` 的 table-specific helper 位于 `src/store/repositories/*`，并继续通过 facade re-export 兼容既有 imports。版本迁移函数位于 `src/store/migrations/*`，每次成功升级会写入 `schema_version_history`。
 
 ```mermaid
 erDiagram
