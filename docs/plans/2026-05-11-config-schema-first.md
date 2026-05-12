@@ -1,6 +1,6 @@
 # Config Schema-First Refactor
 
-Status: draft
+Status: done
 Date: 2026-05-11
 
 ## Background
@@ -190,3 +190,22 @@ Record moved modules, compatibility behavior, env precedence, and verification c
   - `pnpm run build` passed; generated ignored `dist/` artifacts were removed after verification.
 - Public API changes: none. Existing imports from `src/config.ts` / `../config.js` remain valid, and no user-facing YAML/env key shape changed.
 - Follow-up cleanup: split `src/config/index.ts` by domain runtime builders, add deeper domain Zod schemas/default/env mapping tests, and freeze the final runtime config object when test mutation patterns have been removed.
+
+### 2026-05-12 - Config Runtime Domain Builder Extraction
+
+- Scope: completed the schema-first config boundary. Split final runtime composition out of `src/config/index.ts`, added domain runtime builders for agent/Codex/Claude, routing/Smart Router, storage/state, tasks trace attach, doctor/connectivity/notifications, attachments/audio transcription, provider endpoints, E2E, and MCP, and runtime-froze the final config object without changing public TypeScript config shapes.
+- Changed files:
+  - `src/config/index.ts`: reduced to public exports and the existing proxy side-effect import.
+  - `src/config/runtime.ts`: added `createRuntimeConfig()`, `config`, `assertE2eSafeRuntimePath()`, deep runtime freeze, provider base URL env side-effect preservation, auto-reply warning, and final E2E cross-field validation.
+  - `src/config/domains/*.ts`: added domain builders that keep defaults, YAML paths, env keys, enum/typed validators, and path resolution near each config domain.
+  - `src/config/__tests__/config-boundaries.test.ts`: added direct runtime composition and deep-freeze coverage without importing the singleton config facade.
+  - `docs/architecture.md`, `docs/continuous-improvement-report.md`: updated config boundary documentation and current hotspot status.
+- Behavior parity tests:
+  - `pnpm vitest run src/config/__tests__/config-boundaries.test.ts src/__tests__/config.test.ts src/e2e/__tests__/safety.test.ts` passed, 28 tests.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm run quality:docs` passed with schema v10.
+  - `pnpm run build` passed; generated ignored `dist/` artifacts were removed after verification.
+  - `pnpm ralph:verify -- --task complexity-hotspot-refactor --profile standard` passed: `pnpm run typecheck`, `pnpm run lint`, `pnpm run quality:docs`.
+- Public API changes: none. Existing `import { config } from "../config.js"` call sites remain valid; runtime freeze is enforced at runtime, but the public TypeScript shape was kept compatible to avoid widening this refactor into call-site type migration.
+- Follow-up cleanup: Config plan is complete. New config fields should land in the matching domain builder plus focused config tests, not in `src/config/index.ts`.

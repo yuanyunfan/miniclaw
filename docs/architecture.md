@@ -163,7 +163,7 @@ flowchart LR
   - 用户级数据全在 `~/.miniclaw/`（config / cron / skills / scripts / memories / channel-map）
 - **memories 走 markdown 不再走 SQLite 表**：`~/.miniclaw/memories/MEMORY.md` 可直接 vim 编辑、git diff、跨工具复用（hermes 同模式）
 - **分层配置**：结构化设置优先放 `~/.miniclaw/config.yaml`；`.env` 保留 secrets、代理和临时 override；优先级是内置默认值 < YAML < env
-- **Config runtime 边界**：`src/config.ts` 只是兼容 facade；`src/config/index.ts` 组装最终 runtime config，YAML loading 在 `src/config/load.ts`，env/type coercion reader 在 `src/config/env.ts`，Zod-backed raw object/enums 在 `src/config/schema.ts`，home/channel path resolution 在 `src/config/resolve.ts`，E2E isolation guard 在 `src/config/e2e-guard.ts`
+- **Config runtime 边界**：`src/config.ts` 只是兼容 facade；`src/config/index.ts` 保留 public exports 和 proxy side effect；`src/config/runtime.ts` 组装并 runtime-freeze 最终 config；YAML loading 在 `src/config/load.ts`，env/type coercion reader 在 `src/config/env.ts`，Zod-backed raw object/enums 在 `src/config/schema.ts`，home/channel path resolution 在 `src/config/resolve.ts`，E2E isolation guard 在 `src/config/e2e-guard.ts`，agent/routing/storage/tasks/doctor/attachments/provider/MCP runtime defaults 和 env key 映射在 `src/config/domains/*`
 - **可控继承本机 Agent 配置**：Codex 可用 `inherit` 回落到 `~/.codex/config.toml`；Claude task 显式加载 `user/project/local` settings，默认禁用 hooks；MCP 仍通过 `mcp.allowlist` 控制
 - **Task runtime 三边界**：`src/agent/runners/*-task-runner.ts` 负责 Claude / Codex / fake runtime parsing；`src/discord/task-view-reporter.ts` 负责 Discord status/progress/final output；`src/agent/task-reporter.ts` 只写 SQLite trace
 - **Discord task 三层输出**：状态 embed 只放元数据；progress message 执行中持续 edit、完成后保留 Execution Summary；最终结果走普通 Markdown 分片

@@ -492,3 +492,22 @@ For each completed slice, record:
   - `pnpm run build` passed; generated ignored `dist/` artifacts were removed after verification.
 - Public API changes: none. Existing `import { config } from "../config.js"` call sites remain valid, and no user-facing config fields/env keys changed.
 - Follow-up cleanup: continue Slice G by splitting `src/config/index.ts` into domain runtime builders, adding deeper domain schemas, and freezing the final runtime config object after mutation-prone tests are migrated.
+
+### 2026-05-12 - Slice G Config Runtime Domain Builder Extraction
+
+- Slice name: Slice G completion, config runtime/domain-builder boundary.
+- Changed files:
+  - `src/config/index.ts`: reduced to public exports and the existing proxy side-effect import.
+  - `src/config/runtime.ts`: added runtime composition, `createRuntimeConfig()`, `config`, provider base URL env side-effect preservation, auto-reply warning, final E2E cross-field validation, and runtime deep-freeze.
+  - `src/config/domains/agent.ts`, `routing.ts`, `storage.ts`, `tasks.ts`, `operations.ts`, `attachments.ts`, `providers.ts`, `e2e.ts`, `mcp.ts`: split domain defaults, YAML paths, env key mapping, enum/typed validators, and path resolution out of the runtime facade.
+  - `src/config/__tests__/config-boundaries.test.ts`: added direct runtime composition and deep-freeze tests without importing the singleton config facade.
+  - `docs/architecture.md`, `docs/continuous-improvement-report.md`, `docs/plans/2026-05-11-config-schema-first.md`: documented the completed config runtime boundary and updated remaining hotspot status.
+- Behavior parity tests:
+  - `pnpm vitest run src/config/__tests__/config-boundaries.test.ts src/__tests__/config.test.ts src/e2e/__tests__/safety.test.ts` passed, 28 tests.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm run quality:docs` passed with schema v10.
+  - `pnpm run build` passed; generated ignored `dist/` artifacts were removed after verification.
+  - `pnpm ralph:verify -- --task complexity-hotspot-refactor --profile standard` passed: `pnpm run typecheck`, `pnpm run lint`, `pnpm run quality:docs`.
+- Public API changes: none. Existing imports from `src/config.ts` / `../config.js` remain valid; no user-facing YAML/env key shape changed. Runtime config is frozen at runtime while preserving the prior public TypeScript shape for compatibility.
+- Follow-up cleanup: Slice G is complete. Remaining complexity-hotspot work should move to `src/ops/doctor.ts` or a separate explicit hotspot plan rather than adding config assembly back to `src/config/index.ts`.

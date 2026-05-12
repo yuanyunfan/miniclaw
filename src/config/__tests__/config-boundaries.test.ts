@@ -6,6 +6,7 @@ import { createConfigReader } from "../env.js";
 import { assertE2eIsolation } from "../e2e-guard.js";
 import { loadRuntimeConfigSource, loadYamlConfig } from "../load.js";
 import { channelDefaults, resolveHome } from "../resolve.js";
+import { createRuntimeConfig, deepFreeze } from "../runtime.js";
 import { parseRawConfigObject } from "../schema.js";
 
 let tmpDir: string;
@@ -83,6 +84,71 @@ describe("config env and resolve boundaries", () => {
       "task-channel": { cwd: tmpDir },
       "home-channel": { cwd: join(homedir(), "ProjectRepo") },
     });
+  });
+});
+
+describe("config runtime boundary", () => {
+  it("composes domain builders into a deeply frozen runtime config without importing the singleton", () => {
+    const cfg = join(tmpDir, "config.yaml");
+    writeFileSync(cfg, `
+discord:
+  client_id: client-runtime
+  guild_id: guild-runtime
+  allowed_user_id: user-runtime
+routing:
+  auto_reply_channels: ["chat-runtime"]
+  channel_defaults:
+    "chat-runtime":
+      cwd: "${tmpDir}"
+  smart_router:
+    default_mode: auto
+agent:
+  provider: codex
+  default_cwd: "${tmpDir}"
+codex:
+  reasoning_effort: high
+storage:
+  db_path: "${join(tmpDir, "runtime.db")}"
+  memory_path: "${join(tmpDir, "MEMORY.md")}"
+doctor:
+  summary_channel_name: runtime-auto-improve
+attachments:
+  max_count: 2
+`);
+    const env = {
+      MINICLAW_CONFIG: cfg,
+      DISCORD_TOKEN: "token-runtime",
+      OPENAI_BASE_URL: "https://openai.env.example/v1",
+    } as NodeJS.ProcessEnv;
+
+    const runtime = createRuntimeConfig(env);
+
+    expect(runtime.configFile).toEqual({ path: cfg, loaded: true });
+    expect(runtime.discord.clientId).toBe("client-runtime");
+    expect(runtime.agentProvider).toBe("codex");
+    expect(runtime.codex.reasoningEffort).toBe("high");
+    expect(runtime.channelDefaults["chat-runtime"]).toEqual({ cwd: tmpDir });
+    expect(runtime.smartRouter.defaultMode).toBe("auto");
+    expect(runtime.doctor.summaryChannelName).toBe("runtime-auto-improve");
+    expect(runtime.maxAttachments).toBe(2);
+    expect(runtime.openaiBaseUrl).toBe("https://openai.env.example/v1");
+    expect(Object.isFrozen(runtime)).toBe(true);
+    expect(Object.isFrozen(runtime.codex)).toBe(true);
+    expect(Object.isFrozen(runtime.doctor)).toBe(true);
+    expect(() => {
+      (runtime as { doctor: { enabled: boolean } }).doctor.enabled = false;
+    }).toThrow(TypeError);
+  });
+
+  it("deepFreeze recursively freezes nested arrays and objects", () => {
+    const frozen = deepFreeze({ items: [{ value: "a" }] });
+
+    expect(Object.isFrozen(frozen)).toBe(true);
+    expect(Object.isFrozen(frozen.items)).toBe(true);
+    expect(Object.isFrozen(frozen.items[0])).toBe(true);
+    expect(() => {
+      (frozen.items as Array<{ value: string }>).push({ value: "b" });
+    }).toThrow(TypeError);
   });
 });
 

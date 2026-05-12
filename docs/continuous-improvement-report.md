@@ -23,9 +23,9 @@
 - `src/agent/task.ts` 已保留 task lifecycle orchestration，Claude/Codex/fake runner parsing、progress line formatting 和 Discord view reporting 已经拆出。
 - `src/bot.ts` 已保留 Discord event registration、draining guard 和外层 route shell；MessageCreate、button、slash 和 Smart Router 路径已经拆到 `src/bot/*`。
 - `src/providers/types.ts` 的 provider contract 仍主要是 `PreProviderResult`：`text`、`attachments`、`skipTask`、`commit`。
-- `src/config.ts` 已降为兼容 facade；YAML loading、env/type coercion reader、raw schema/enums、path resolution 和 E2E isolation guard 已拆到 `src/config/*`，剩余复杂度集中在 `src/config/index.ts` 的 runtime config assembly。
+- `src/config.ts` 已降为兼容 facade；`src/config/index.ts` 只保留 public exports/proxy side effect；runtime config assembly 和 runtime freeze 已拆到 `src/config/runtime.ts`，agent/routing/storage/tasks/doctor/attachments/provider/MCP 等 domain defaults/env key mapping 已拆到 `src/config/domains/*`。
 - `src/providers/market-intel/collectors/official.ts` 已从集中 collector 降为 public facade；官方证据采集现在由 source-family collectors、scoring-input assembly、HTTP/shared helpers 和 parser fixtures 分层承载。
-- 最大复杂度热点仍集中在 `src/config/index.ts` 和 `src/ops/doctor.ts`；`src/store/db.ts`、`src/config.ts` 和 `src/ops/doctor-repair.ts` 已降为 facade，后续重点是防止 repository/config helper/repair helper 边界回流。
+- 最大复杂度热点现在集中在 `src/ops/doctor.ts`；`src/store/db.ts`、`src/config.ts`、`src/config/index.ts`、`src/config/runtime.ts` 和 `src/ops/doctor-repair.ts` 已降为 facade/orchestration shell，后续重点是防止 repository/config helper/repair helper 边界回流。
 
 ## P1: 任务展示边界仍未拆开
 
@@ -142,7 +142,7 @@
 当前文件规模显示复杂度中心仍然集中，但 bot/task/doctor scheduler 和 DB migration 已完成第一轮边界拆分，剩余热点应继续按职责推进：
 
 - `src/store/db.ts`：137 行，已保留 DB init/schema facade、compatibility re-export 和 Stage scene helpers；live connection 已拆到 `src/store/connection.ts`，`tasks`、`chat_history`、`smart_router_decisions` helper 已拆到 `src/store/repositories/*`。
-- `src/config.ts`：1 行兼容 facade；`src/config/index.ts`：559 行，仍承担最终 runtime config assembly。
+- `src/config.ts`：1 行兼容 facade；`src/config/index.ts`：23 行 public exports/proxy side effect；`src/config/runtime.ts`：99 行 runtime composition + E2E validation + freeze；domain builders 已拆到 `src/config/domains/*`。
 - `src/ops/doctor-repair.ts`：452 行，已保留 repair facade + incident/repair_run 状态编排；repair policy、path allowlist、prompt build、verification gate、worktree/branch/dependency/commit/push Git 操作、Codex repair agent streaming、CLI/report formatting 已拆到 `src/ops/doctor-repair/*`。
 - `src/providers/market-intel/collectors/official.ts`：35 行 public facade；source-family collector orchestration 已拆到 `collectors/macro.ts`、`news.ts`、`events.ts`，evidence section assembly / derived risk 已拆到 `collectors/scoring-input.ts`，HTTP client 与 source status/warning helpers 已拆到 `collectors/official-http.ts`、`official-shared.ts`。
 - `src/ops/doctor.ts`：734 行。
@@ -258,22 +258,21 @@ state lifecycle 也需要明确：
 
 ### 当前问题
 
-`src/config.ts` 已经变成兼容 facade，但 `src/config/index.ts` 仍集中组装最终 runtime config：
+`src/config.ts` 已经变成兼容 facade，`src/config/index.ts` 也已降为 public export/proxy side-effect 层。最终 runtime config 现在由 `src/config/runtime.ts` 组合，domain defaults/env key mapping 分散在 `src/config/domains/*`：
 
 - agent runtime config。
 - doctor/connectivity config。
 - Smart Router config。
 - attachments/audio transcription config。
 
-YAML loading、env/type coercion reader、raw object/enums、path resolution 和 E2E isolation guard 已经拆到 `src/config/*` 并可独立测试；剩余问题是各 domain 还没有 schema-first runtime builder，最终 config object 也还没有冻结。
+YAML loading、env/type coercion reader、raw object/enums、path resolution 和 E2E isolation guard 已经拆到 `src/config/*` 并可独立测试；最终 config object 已在创建后 runtime-freeze。剩余治理重点是防止新增配置字段绕过对应 domain builder / typed validator / 测试。
 
-### 建议改动
+### 当前守护点
 
-1. 按 domain 继续拆 `src/config/index.ts`：agent/Codex/Claude、routing/Smart Router、storage/state、doctor/connectivity、attachments/audio、notifications。
-2. 为每个 domain 增加 Zod schema 或 typed validators，并把 allowed enum/default/env key mapping 放在同一 review surface。
-3. 新增 `src/config/runtime.ts` 或 domain runtime builders，输出最终 readonly config object。
-4. 冻结最终 runtime config，避免测试或运行时意外 mutation。
-5. 新配置先进入 schema，再进入 runtime config，不再直接追加到 `src/config/index.ts` 的大对象。
+1. 新配置字段先进入 `src/config/schema.ts` 的 raw shape/enums 或对应 `src/config/domains/*` typed validator，再进入 `src/config/runtime.ts` composition。
+2. 默认值、YAML path、env key 和 fallback behavior 要和 domain builder 的 focused tests 一起 review。
+3. `config` singleton 已 runtime-freeze；测试要通过重新 import/config env 构造场景，不要 mutate live config。
+4. `src/config/index.ts` 不再承载业务字段组装，新增配置不要回流到该 facade。
 
 ### 验收标准
 
