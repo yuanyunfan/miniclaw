@@ -275,6 +275,23 @@ function branchExists(repoRoot: string, branch: string): boolean {
   }
 }
 
+function ensureWorktreeClean(worktreePath: string): void {
+  const status = gitText(["status", "--porcelain"], worktreePath);
+  if (status) {
+    throw new Error(`reused worktree is dirty; clean it before continuing\n${status}`);
+  }
+}
+
+function syncReusedWorktree(plan: RunPlan): void {
+  const branch = gitText(["rev-parse", "--abbrev-ref", "HEAD"], plan.worktreePath);
+  if (branch !== plan.branch) {
+    throw new Error(`reused worktree is on ${branch}, expected ${plan.branch}`);
+  }
+
+  ensureWorktreeClean(plan.worktreePath);
+  git(["merge", "--ff-only", plan.baseRef], plan.worktreePath);
+}
+
 function createOrReuseWorktree(plan: RunPlan, args: Args): void {
   mkdirSync(plan.worktreeRoot, { recursive: true });
 
@@ -282,6 +299,7 @@ function createOrReuseWorktree(plan: RunPlan, args: Args): void {
     if (!args.reuseWorktree) {
       throw new Error(`worktree path already exists: ${plan.worktreePath}; pass --reuse-worktree to reuse it`);
     }
+    syncReusedWorktree(plan);
     return;
   }
 
@@ -290,6 +308,7 @@ function createOrReuseWorktree(plan: RunPlan, args: Args): void {
       throw new Error(`branch already exists: ${plan.branch}; pass --reuse-worktree or choose --branch`);
     }
     git(["worktree", "add", plan.worktreePath, plan.branch], plan.repoRoot);
+    syncReusedWorktree(plan);
     return;
   }
 

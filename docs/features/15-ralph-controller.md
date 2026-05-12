@@ -5,7 +5,7 @@ Date: 2026-05-12
 
 ## TLDR
 
-MiniClaw Ralph 是一个轻量外部执行控制器：它不把 Codex 长会话当状态源，而是用 repo 内 plan、队列、Git worktree、验证命令和 commit/push 边界来驱动每个任务。每次任务执行都会启动新的 `codex exec --ephemeral`，从而获得 fresh context。第一版默认 dry-run，只有显式 `--execute` 才会创建 worktree 并运行 Codex。
+MiniClaw Ralph 是一个轻量外部执行控制器：它不把 Codex 长会话当状态源，而是用 repo 内 plan、队列、Git worktree、验证命令和 commit/push 边界来驱动每个任务。每次任务执行都会启动新的 `codex exec --ephemeral`，从而获得 fresh context。默认 dry-run，只有显式 `--execute` 才会创建 worktree 并运行 Codex。`ralph:next` / `ralph:loop` 在此基础上提供串行迭代入口，用 `main` 作为每轮任务之间的集成线。
 
 ## Purpose
 
@@ -26,6 +26,7 @@ MiniClaw 的持续优化任务已经被拆成 `docs/plans/2026-05-11-*.md`。这
 - `docs/ralph/learnings.md`: append-only lessons。
 - `.ralph/`: 本机 raw run logs，已被 `.gitignore` 忽略。
 - `scripts/ralph-run.ts`: worktree + fresh Codex session controller。
+- `scripts/ralph-loop.ts`: next/loop orchestrator for serial Ralph iterations.
 - `scripts/ralph-verify.ts`: per-task verification runner。
 
 ## Commands
@@ -54,6 +55,18 @@ Run verification for a task in the current checkout:
 pnpm ralph:verify -- --task task-view-boundary
 ```
 
+Run the next open Ralph iteration:
+
+```bash
+pnpm ralph:next -- --execute
+```
+
+Run up to three serialized iterations through `main`:
+
+```bash
+pnpm ralph:loop -- --limit 3 --execute --merge-main --push-main
+```
+
 ## Execution Model
 
 1. `ralph:run` resolves a task from `docs/ralph/queue.json`.
@@ -66,6 +79,14 @@ pnpm ralph:verify -- --task task-view-boundary
 8. If verification passes, the controller commits the worktree branch.
 9. If `--push` is set, the controller pushes the task branch to `origin`.
 
+`ralph:loop` wraps this single-task execution:
+
+1. It selects the first queue task whose queue status is `pending` and whose plan `Status:` is still open.
+2. It runs the task through `ralph:run --reuse-worktree`, so repeated slices of the same plan can reuse the same branch.
+3. With `--merge-main`, it fast-forwards the base branch to the verified task branch after each iteration.
+4. With `--push-main`, it pushes the base branch after each merge and lets the existing pre-push hook run `quality:push`.
+5. It reloads the queue before the next iteration.
+
 ## Safety Boundaries
 
 - `ralph:run` defaults to dry-run.
@@ -73,6 +94,8 @@ pnpm ralph:verify -- --task task-view-boundary
 - Raw Codex JSONL/stdout/stderr logs are written under ignored `.ralph/`.
 - The controller refuses to run from a dirty checkout unless `--force` is used.
 - `--push` is explicit; local branch commit is the default execute behavior.
+- `--push-main` is separate from `--push`: it publishes the integrated base branch, not the task branch.
+- Loop mode stops if a task branch exists but is not merged into the base branch.
 - Existing git hooks still run on controller-created commits.
 
 ## Relationship To Plans
@@ -81,8 +104,7 @@ pnpm ralph:verify -- --task task-view-boundary
 
 ## Current Limits
 
-- Queue status is not auto-mutated in the first version.
+- Queue status is not auto-mutated. A plan can remain `pending` across several slice iterations until the plan or queue entry is explicitly closed.
 - Raw run logs are local-only under `.ralph/`.
 - Automatic retry is not implemented.
-- Parallel execution is possible by choosing different tasks, but merging branches still needs human sequencing.
-
+- Parallel execution is possible by choosing different tasks, but `ralph:loop --merge-main` is intentionally serial.
