@@ -12,6 +12,7 @@ It is intentionally external to the bot runtime. The Discord bot does not call t
 - One coherent reviewable phase per task attempt by default; avoid committing micro-slices that only add a single helper, type, or test unless the plan explicitly defines that as the phase.
 - The controller verifies, commits, and optionally pushes.
 - `ralph:next` and `ralph:loop` keep `main` as the serial integration line when `--merge-main` is used.
+- `--push-main` is integration-safe: Ralph fetches the live base, rebases the task branch, handles conflicts when possible, re-verifies, lease-checks, and retries if the remote base moves before push.
 - Raw run logs are local and ignored under `.ralph/`.
 - Durable learning is append-only in `docs/ralph/learnings.md`.
 
@@ -108,18 +109,34 @@ The default safety limit is 25 iterations. Use `--limit <n>` to make that limit 
 pnpm ralph:loop -- --limit 3 --execute --merge-main --push-main
 ```
 
-Loop mode runs up to `--limit` Ralph iterations. With `--merge-main --push-main`, each iteration is serialized through `main`:
+Loop mode runs up to `--limit` Ralph iterations. With `--merge-main` alone, each iteration is serialized through the local base checkout:
 
 ```text
 select first open task
 -> run fresh Codex in that task worktree
 -> verify and commit task branch
 -> fast-forward main to the task branch
--> push main
 -> reload the queue and select again
 ```
 
-`--push-main` requires `--merge-main`; it pushes the base branch, so the repo's pre-push hook still runs the full `quality:push` gate. Use `--push` only when you also want to publish each intermediate `ralph/<task>` branch.
+With `--merge-main --push-main`, Ralph uses integration-safe push instead of a plain local merge + push:
+
+```text
+select first open task
+-> run fresh Codex in that task worktree
+-> verify and commit task branch
+-> fetch origin/main
+-> rebase the task branch onto origin/main
+-> if rebase conflicts, run a bounded Codex conflict-resolver pass
+-> re-run pnpm ralph:verify in the rebased task worktree
+-> check the live remote SHA
+-> push task branch to main with a force-with-lease guard
+-> if origin/main moved first, fetch/rebase/reverify/retry
+-> fast-forward the local main checkout to origin/main after push succeeds
+-> reload the queue and select again
+```
+
+`--push-main` requires `--merge-main`; it publishes the integrated base branch, so the repo's pre-push hook still runs the full `quality:push` gate. Use `--push` only when you also want to publish each intermediate `ralph/<task>` branch.
 
 If a task branch exists but has not been merged into the base branch, loop mode with `--merge-main` stops before starting another run. This prevents accidentally stacking new Codex work on an unreviewed branch.
 

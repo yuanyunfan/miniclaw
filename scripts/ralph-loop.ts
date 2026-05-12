@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 
 interface RalphQueue {
@@ -21,6 +21,7 @@ interface RalphTask {
   status?: string;
   plan: string;
   branch?: string;
+  verify_profile?: string;
 }
 
 interface Args {
@@ -46,6 +47,8 @@ interface Args {
 
 const CLOSED_QUEUE_STATUSES = new Set(["blocked", "done", "skipped"]);
 const CLOSED_PLAN_STATUSES = new Set(["blocked", "closed", "done", "shipped", "skipped", "superseded"]);
+const MAX_PUSH_ATTEMPTS = 3;
+const MAX_REBASE_CONFLICT_ATTEMPTS = 5;
 
 function parseArgs(argv: string[]): Args {
   const args: Args = {
@@ -153,7 +156,7 @@ function printHelp(): void {
     "  --execute                Run Codex. Without this flag, print the first selected task only",
     "  --until-task-done        Keep running --task until its queue or plan status is closed; default safety limit: 25",
     "  --merge-main             Fast-forward the base branch to each verified task branch",
-    "  --push-main              Push the base branch after each merge; requires --merge-main",
+    "  --push-main              Integration-safe push to the base branch after each iteration; requires --merge-main",
     "  --push                   Push each Ralph task branch after its task commit",
     "  --worktree-root <path>   Default comes from docs/ralph/queue.json",
     "  --base-ref <branch>      Default comes from docs/ralph/queue.json",
@@ -183,16 +186,30 @@ function git(args: string[], cwd: string): void {
   execFileSync("git", args, { cwd, stdio: "inherit" });
 }
 
-function runCommand(command: string, commandArgs: string[], cwd: string): void {
+function logRalph(message: string): void {
+  process.stdout.write(`[ralph-loop] ${message}\n`);
+}
+
+function runCommand(command: string, commandArgs: string[], cwd: string, extraEnv: NodeJS.ProcessEnv = {}): void {
+  logRalph(`run: ${command} ${commandArgs.join(" ")}`);
   const result = spawnSync(command, commandArgs, {
     cwd,
     stdio: "inherit",
-    env: process.env,
+    env: { ...process.env, ...extraEnv },
   });
   if (result.status !== 0) {
     const suffix = result.signal ? ` signal=${result.signal}` : "";
     throw new Error(`${command} ${commandArgs.join(" ")} failed (${result.status ?? "unknown"}${suffix})`);
   }
+}
+
+function commandStatus(command: string, commandArgs: string[], cwd: string, extraEnv: NodeJS.ProcessEnv = {}): number | null {
+  const result = spawnSync(command, commandArgs, {
+    cwd,
+    stdio: "inherit",
+    env: { ...process.env, ...extraEnv },
+  });
+  return result.status;
 }
 
 function readQueue(path: string): RalphQueue {
@@ -211,6 +228,10 @@ function relativeQueuePath(repoRoot: string, queuePath: string): string {
 
 function baseRef(queue: RalphQueue, args: Args): string {
   return args.baseRef ?? queue.defaults?.base_ref ?? "main";
+}
+
+function verifyProfile(queue: RalphQueue, task: RalphTask): string {
+  return task.verify_profile ?? queue.defaults?.verify_profile ?? "standard";
 }
 
 function taskBranch(queue: RalphQueue, task: RalphTask): string {
@@ -278,6 +299,265 @@ function ensureOnBaseBranch(repoRoot: string, ref: string): void {
 function syncBaseFromOrigin(repoRoot: string, ref: string): void {
   git(["fetch", "origin", ref], repoRoot);
   git(["merge", "--ff-only", `origin/${ref}`], repoRoot);
+}
+
+function remoteTrackingRef(ref: string): string {
+  return `origin/${ref}`;
+}
+
+function remoteBranchRef(ref: string): string {
+  return `refs/heads/${ref}`;
+}
+
+function timestamp(): string {
+  return new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+}
+
+function fetchRemoteBase(repoRoot: string, ref: string): string {
+  logRalph(`fetch origin ${ref}`);
+  git(["fetch", "origin", ref], repoRoot);
+  return gitText(["rev-parse", remoteTrackingRef(ref)], repoRoot);
+}
+
+function liveRemoteSha(repoRoot: string, ref: string): string {
+  const output = execFileSync("git", ["ls-remote", "origin", remoteBranchRef(ref)], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    maxBuffer: 1024 * 1024,
+  }).trim();
+  const sha = output.split(/\s+/)[0];
+  if (!sha) throw new Error(`remote ref not found: origin/${ref}`);
+  return sha;
+}
+
+function ensureBranchContains(repoRoot: string, branch: string, ancestorSha: string, label: string): void {
+  if (!gitOk(["merge-base", "--is-ancestor", ancestorSha, branch], repoRoot)) {
+    throw new Error(`${label}: ${branch} does not contain expected base ${ancestorSha}`);
+  }
+}
+
+function syncLocalBaseToRemote(repoRoot: string, ref: string): void {
+  ensureClean(repoRoot, false);
+  git(["merge", "--ff-only", remoteTrackingRef(ref)], repoRoot);
+}
+
+function gitPath(worktreePath: string, gitRelativePath: string): string {
+  const path = gitText(["rev-parse", "--git-path", gitRelativePath], worktreePath);
+  return isAbsolute(path) ? path : resolve(worktreePath, path);
+}
+
+function rebaseInProgress(worktreePath: string): boolean {
+  return existsSync(gitPath(worktreePath, "rebase-merge")) || existsSync(gitPath(worktreePath, "rebase-apply"));
+}
+
+function conflictedFiles(worktreePath: string): string[] {
+  return gitText(["diff", "--name-only", "--diff-filter=U"], worktreePath)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function ensureTaskWorktreeOnBranch(worktreePath: string, branch: string): void {
+  const current = gitText(["rev-parse", "--abbrev-ref", "HEAD"], worktreePath);
+  if (current !== branch) {
+    throw new Error(`task worktree is on ${current}, expected ${branch}`);
+  }
+}
+
+function ensureTaskWorktreeClean(worktreePath: string): void {
+  const status = gitText(["status", "--porcelain"], worktreePath);
+  if (status) {
+    throw new Error(`task worktree is dirty before integration\n${status}`);
+  }
+}
+
+function conflictPrompt(task: RalphTask, ref: string, files: string[]): string {
+  return [
+    "You are running inside the MiniClaw Ralph integration-safe conflict resolver.",
+    "",
+    `Task id: ${task.id}`,
+    `Task title: ${task.title ?? task.id}`,
+    `Plan: ${task.plan}`,
+    `Base branch: ${ref}`,
+    "",
+    "Git is currently paused during a rebase because the task branch conflicts with the latest base branch.",
+    "Resolve only the merge conflicts in this worktree.",
+    "Do not commit, push, abort the rebase, continue the rebase, or modify unrelated files.",
+    "After editing, leave all conflict markers removed. Ralph will stage files, continue the rebase, and re-run verification.",
+    "",
+    "Conflicted files:",
+    ...(files.length > 0 ? files.map((file) => `- ${file}`) : ["- (git did not report paths; inspect git status)"]),
+    "",
+    "Start now.",
+    "",
+  ].join("\n");
+}
+
+function runConflictResolver(repoRoot: string, task: RalphTask, worktreePath: string, ref: string, args: Args, attempt: number): void {
+  const files = conflictedFiles(worktreePath);
+  const runId = `${timestamp()}-${task.id}-integration-conflict-${attempt}`;
+  const runDir = join(repoRoot, ".ralph", "runs", task.id, runId);
+  mkdirSync(runDir, { recursive: true });
+
+  const prompt = conflictPrompt(task, ref, files);
+  writeFileSync(join(runDir, "prompt.md"), prompt);
+
+  const codexArgs = [
+    "exec",
+    "--ephemeral",
+    "--sandbox",
+    args.sandbox ?? "workspace-write",
+    "--cd",
+    worktreePath,
+    "--output-last-message",
+    join(runDir, "codex-final.md"),
+    "--json",
+  ];
+  if (args.model) codexArgs.push("--model", args.model);
+  codexArgs.push("-");
+
+  logRalph(`conflict resolver start: ${files.length} file(s), logs: ${runDir}`);
+  const result = spawnSync(args.codexBin ?? "codex", codexArgs, {
+    cwd: worktreePath,
+    input: prompt,
+    encoding: "utf8",
+    maxBuffer: 200 * 1024 * 1024,
+    env: process.env,
+  });
+
+  writeFileSync(join(runDir, "codex.jsonl"), result.stdout ?? "");
+  writeFileSync(join(runDir, "codex.stderr.log"), result.stderr ?? "");
+
+  if (result.status !== 0) {
+    const suffix = result.signal ? ` signal=${result.signal}` : "";
+    throw new Error(`conflict resolver failed (${result.status ?? "unknown"}${suffix}); logs: ${runDir}`);
+  }
+
+  const remaining = conflictedFiles(worktreePath);
+  if (remaining.length > 0) {
+    throw new Error(`conflict resolver left unmerged paths: ${remaining.join(", ")}; logs: ${runDir}`);
+  }
+}
+
+function continueRebaseWithResolver(repoRoot: string, queuePath: string, queue: RalphQueue, task: RalphTask, worktreePath: string, ref: string, args: Args): void {
+  for (let attempt = 1; attempt <= MAX_REBASE_CONFLICT_ATTEMPTS && rebaseInProgress(worktreePath); attempt += 1) {
+    if (conflictedFiles(worktreePath).length > 0) {
+      runConflictResolver(repoRoot, task, worktreePath, ref, args, attempt);
+    }
+
+    git(["add", "-A"], worktreePath);
+    const status = commandStatus("git", ["rebase", "--continue"], worktreePath, { GIT_EDITOR: "true" });
+    if (status === 0) continue;
+
+    if (!rebaseInProgress(worktreePath)) {
+      throw new Error("git rebase --continue failed without resolvable conflict markers; inspect the task worktree");
+    }
+
+    if (conflictedFiles(worktreePath).length === 0) {
+      const hasStagedChanges = !gitOk(["diff", "--cached", "--quiet"], worktreePath);
+      const hasWorktreeChanges = !gitOk(["diff", "--quiet"], worktreePath);
+      if (!hasStagedChanges && !hasWorktreeChanges) {
+        logRalph("rebase continue produced an empty commit; skipping it");
+        git(["rebase", "--skip"], worktreePath);
+        continue;
+      }
+      throw new Error("git rebase --continue failed without unmerged paths; inspect the task worktree");
+    }
+  }
+
+  if (rebaseInProgress(worktreePath)) {
+    throw new Error(`rebase still in progress after ${MAX_REBASE_CONFLICT_ATTEMPTS} conflict resolver attempt(s)`);
+  }
+
+  ensureTaskWorktreeClean(worktreePath);
+  runIntegrationVerify(repoRoot, queuePath, queue, task, worktreePath, args);
+}
+
+function rebaseTaskBranch(repoRoot: string, queuePath: string, queue: RalphQueue, task: RalphTask, worktreePath: string, branch: string, ref: string, args: Args): void {
+  ensureTaskWorktreeOnBranch(worktreePath, branch);
+  ensureTaskWorktreeClean(worktreePath);
+
+  const target = remoteTrackingRef(ref);
+  logRalph(`rebase ${branch} onto ${target}`);
+  const status = commandStatus("git", ["rebase", target], worktreePath);
+  if (status === 0) {
+    runIntegrationVerify(repoRoot, queuePath, queue, task, worktreePath, args);
+    return;
+  }
+
+  if (!rebaseInProgress(worktreePath)) {
+    throw new Error(`git rebase ${target} failed before creating a resolvable rebase state`);
+  }
+
+  continueRebaseWithResolver(repoRoot, queuePath, queue, task, worktreePath, ref, args);
+}
+
+function runIntegrationVerify(repoRoot: string, queuePath: string, queue: RalphQueue, task: RalphTask, worktreePath: string, args: Args): void {
+  if (args.skipVerify) {
+    logRalph("integration reverify skipped because --skip-verify was set");
+    return;
+  }
+
+  runCommand("pnpm", [
+    "ralph:verify",
+    "--",
+    "--task",
+    task.id,
+    "--queue",
+    relativeQueuePath(repoRoot, queuePath),
+    "--profile",
+    verifyProfile(queue, task),
+  ], worktreePath);
+}
+
+function tryPushBranchToBase(repoRoot: string, branch: string, ref: string, expectedRemoteSha: string): "pushed" | "stale" {
+  const liveSha = liveRemoteSha(repoRoot, ref);
+  if (liveSha !== expectedRemoteSha) {
+    logRalph(`lease changed before push: expected ${expectedRemoteSha}, live ${liveSha}`);
+    return "stale";
+  }
+
+  ensureBranchContains(repoRoot, branch, expectedRemoteSha, "lease check");
+  const status = commandStatus("git", [
+    "push",
+    `--force-with-lease=${remoteBranchRef(ref)}:${expectedRemoteSha}`,
+    "origin",
+    `${branch}:${remoteBranchRef(ref)}`,
+  ], repoRoot);
+  if (status === 0) return "pushed";
+
+  const afterFailureSha = fetchRemoteBase(repoRoot, ref);
+  if (afterFailureSha !== expectedRemoteSha) {
+    logRalph(`push lost race: expected ${expectedRemoteSha}, remote advanced to ${afterFailureSha}`);
+    return "stale";
+  }
+
+  throw new Error(`git push origin ${branch}:${remoteBranchRef(ref)} failed while remote ${ref} was still at ${expectedRemoteSha}`);
+}
+
+function integrateAndPushMain(repoRoot: string, queuePath: string, queue: RalphQueue, task: RalphTask, args: Args): void {
+  const ref = baseRef(queue, args);
+  const branch = taskBranch(queue, task);
+  const worktreePath = taskWorktreePath(repoRoot, queue, task, args);
+
+  for (let attempt = 1; attempt <= MAX_PUSH_ATTEMPTS; attempt += 1) {
+    logRalph(`integration attempt ${attempt}/${MAX_PUSH_ATTEMPTS}: ${branch} -> ${ref}`);
+    ensureClean(repoRoot, args.force);
+    const expectedRemoteSha = fetchRemoteBase(repoRoot, ref);
+
+    rebaseTaskBranch(repoRoot, queuePath, queue, task, worktreePath, branch, ref, args);
+    ensureBranchContains(repoRoot, branch, expectedRemoteSha, "pre-push integration check");
+
+    const pushResult = tryPushBranchToBase(repoRoot, branch, ref, expectedRemoteSha);
+    if (pushResult === "pushed") {
+      fetchRemoteBase(repoRoot, ref);
+      syncLocalBaseToRemote(repoRoot, ref);
+      logRalph(`integration pushed: ${gitText(["rev-parse", "--short", branch], repoRoot)} -> origin/${ref}`);
+      return;
+    }
+  }
+
+  throw new Error(`origin/${ref} kept changing after ${MAX_PUSH_ATTEMPTS} push attempt(s); retry Ralph later`);
 }
 
 function selectNextTask(repoRoot: string, queue: RalphQueue, args: Args): RalphTask | undefined {
@@ -368,13 +648,11 @@ function runIteration(repoRoot: string, queuePath: string, queue: RalphQueue, ta
 
   runCommand("pnpm", buildRunArgs(repoRoot, queuePath, queue, task, args), repoRoot);
 
-  if (args.mergeMain) {
+  if (args.pushMain) {
+    integrateAndPushMain(repoRoot, queuePath, queue, task, args);
+  } else if (args.mergeMain) {
     ensureClean(repoRoot, args.force);
     git(["merge", "--ff-only", branch], repoRoot);
-  }
-
-  if (args.pushMain) {
-    runCommand("git", ["push", "origin", ref], repoRoot);
   }
 }
 

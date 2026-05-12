@@ -5,7 +5,7 @@ Date: 2026-05-12
 
 ## TLDR
 
-MiniClaw Ralph 是一个轻量外部执行控制器：它不把 Codex 长会话当状态源，而是用 repo 内 plan、队列、Git worktree、验证命令和 commit/push 边界来驱动每个任务。每次任务执行都会启动新的 `codex exec --ephemeral`，从而获得 fresh context。默认 dry-run，只有显式 `--execute` 才会创建 worktree 并运行 Codex。`ralph:next` / `ralph:loop` 在此基础上提供串行迭代入口，用 `main` 作为每轮任务之间的集成线。
+MiniClaw Ralph 是一个轻量外部执行控制器：它不把 Codex 长会话当状态源，而是用 repo 内 plan、队列、Git worktree、验证命令和 commit/push 边界来驱动每个任务。每次任务执行都会启动新的 `codex exec --ephemeral`，从而获得 fresh context。默认 dry-run，只有显式 `--execute` 才会创建 worktree 并运行 Codex。`ralph:next` / `ralph:loop` 在此基础上提供串行迭代入口，用 `main` 作为每轮任务之间的集成线；`--push-main` 会在每轮发布前 fetch 最新 `main`、rebase 任务分支、处理冲突、重新验证、做 lease check，并在远端抢先变化时重试。
 
 ## Purpose
 
@@ -90,9 +90,10 @@ pnpm ralph:task -- --task task-view-boundary --execute --merge-main --push-main
 
 1. It selects the first queue task whose queue status is `pending` and whose plan `Status:` is still open.
 2. It runs the task through `ralph:run --reuse-worktree`, so repeated slices of the same plan can reuse the same branch.
-3. With `--merge-main`, it fast-forwards the base branch to the verified task branch after each iteration.
-4. With `--push-main`, it pushes the base branch after each merge and lets the existing pre-push hook run `quality:push`.
-5. It reloads the queue before the next iteration.
+3. With `--merge-main` alone, it fast-forwards the local base branch to the verified task branch after each iteration.
+4. With `--push-main`, it switches to integration-safe publication: fetch `origin/<base>`, rebase the task branch onto the live base, run a bounded Codex conflict resolver if the rebase stops on conflicts, re-run `pnpm ralph:verify`, check the live remote SHA, push the task branch to `refs/heads/<base>` with a lease guard, and retry the whole fetch/rebase/reverify/push sequence when the remote base moves first.
+5. After a successful `--push-main`, it fetches and fast-forwards the local base checkout to `origin/<base>`.
+6. It reloads the queue before the next iteration.
 
 `ralph:task` is the fixed-task variant. It requires a `--task` id and, when executing, requires `--merge-main` so completion can be observed from the base checkout. It stops when that task's queue status or plan `Status:` becomes closed. If the safety `--limit` is reached while the task is still open, the command fails and asks for a higher limit or manual inspection.
 
@@ -102,9 +103,10 @@ pnpm ralph:task -- --task task-view-boundary --execute --merge-main --push-main
 - Codex is instructed not to commit or push.
 - Codex is instructed to avoid micro-slices; a Ralph iteration should normally complete a plan phase rather than only one helper, type, or test.
 - Raw Codex JSONL/stdout/stderr logs are written under ignored `.ralph/`; the terminal only shows summarized redacted progress events.
+- Integration conflict-resolver logs are also written under ignored `.ralph/runs/<task-id>/...` and are local-only.
 - The controller refuses to run from a dirty checkout unless `--force` is used.
 - `--push` is explicit; local branch commit is the default execute behavior.
-- `--push-main` is separate from `--push`: it publishes the integrated base branch, not the task branch.
+- `--push-main` is separate from `--push`: it publishes the integrated base branch, not the task branch, after rebase, re-verification, and lease checking.
 - Loop mode stops if a task branch exists but is not merged into the base branch.
 - Existing git hooks still run on controller-created commits.
 
@@ -116,6 +118,6 @@ pnpm ralph:task -- --task task-view-boundary --execute --merge-main --push-main
 
 - Queue status is auto-synced only when the plan reaches a closed `Status:`. Ralph does not maintain transient queue states such as `running`.
 - Raw run logs are local-only under `.ralph/`.
-- Automatic retry is not implemented.
+- Automatic retry is limited to `--push-main` integration races where `origin/<base>` moves before push. General Codex execution failures, verification failures, and unresolved conflict-resolver failures still stop the run for inspection.
 - Parallel execution is possible by choosing different tasks, but `ralph:loop --merge-main` is intentionally serial.
 - Commit titles are per-run when Codex provides the required final metadata block; the queue `commit_title` remains only a fallback.
