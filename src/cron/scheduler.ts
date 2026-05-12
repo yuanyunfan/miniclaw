@@ -536,10 +536,24 @@ async function dispatch(
           ...alertMetadata(failureAlert),
         });
 
+        const incidentId = recordCronTimeoutIncident({
+          job,
+          cronRunId: cronRun.id,
+          failureRunId,
+          attempt,
+          maxAttempts: policy.maxAttempts,
+          durationMs,
+          err,
+          errorMessage: recordedError,
+        });
+
         if (notifyFailures) {
           try {
             failureAlert = await sendOrUpdateCronFailureAlert(client, job, {
               runId: failureRunId,
+              cronRunId: cronRun.id,
+              taskId: metadata.taskId,
+              incidentId,
               attempt,
               maxAttempts: policy.maxAttempts,
               durationMs,
@@ -554,17 +568,6 @@ async function dispatch(
             log.error(`${job.name} failed to send cron failure alert:`, notifyErr);
           }
         }
-
-        const incidentId = recordCronTimeoutIncident({
-          job,
-          cronRunId: cronRun.id,
-          failureRunId,
-          attempt,
-          maxAttempts: policy.maxAttempts,
-          durationMs,
-          err,
-          errorMessage: recordedError,
-        });
 
         markCronRunFailed(cronRun.id, {
           status: willRetry ? "retry_scheduled" : "failed",

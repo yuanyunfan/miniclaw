@@ -465,7 +465,15 @@ describe("cron scheduler dispatch", () => {
     expect(alertSends).toHaveLength(1);
     expect(JSON.stringify(alertSends[0])).toContain("定时任务执行失败");
     expect(JSON.stringify(alertSends[0])).toContain("立即重新执行");
+    expect(JSON.stringify(alertSends[0])).toContain("pnpm run cron:runs -- --id");
     expect(JSON.stringify(alertSends[0])).not.toContain("secret-value");
+    const rows = listCronRuns({ jobName: "slow-message", limit: 1 });
+    expect(rows[0]).toMatchObject({
+      status: "failed",
+      alert_message_id: "alert-1",
+      alert_channel_id: "1000000000000000000",
+    });
+    expect(JSON.stringify(alertSends[0])).toContain(rows[0]!.id);
     const state = getJobState("slow-message");
     expect(state?.last_status).toBe("error");
     expect(state?.failure_run_id).toBeTruthy();

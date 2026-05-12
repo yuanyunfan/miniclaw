@@ -282,10 +282,10 @@ SIGINT / SIGTERM 由 `src/index.ts` 的 graceful shutdown 处理：先停止 mon
 
 `InteractionCreate` 的按钮分支现在有两类 custom id 前缀：
 
-- `miniclaw:cron:retry:<runId>`：cron 失败通知的立即重试按钮，由 `handleCronRetryButton()` 处理。
+- `miniclaw:cron:retry:<runId>`：cron 失败通知的立即重试按钮，由 `handleCronRetryButton()` 处理；这里的 `runId` 是 retry chain 的 `failure_run_id`，不是 durable `cron_runs.id`。
 - `miniclaw:smart:*`：smart router 的 task/chat/cancel 确认按钮，由 `handleSmartRouterButton()` 处理。
 
-`button-dispatch.ts` 保持 cron retry 按钮先于 smart router 按钮处理，避免误落到普通 slash command 分支。它只接受 `config.allowedUserId` 操作；custom id 里只放随机 `runId`，不会放 cron name、prompt、provider 配置、script args 或任何账号数据。真正执行时由 `requestCronRetryNow()` 在本机读取 `~/.miniclaw/cron/*.yaml`，如果失败 run 仍在 backoff，就唤醒当前 retry sleep；如果已经不在运行，则启动一次单独的立即重试。
+`button-dispatch.ts` 保持 cron retry 按钮先于 smart router 按钮处理，避免误落到普通 slash command 分支。它只接受 `config.allowedUserId` 操作；custom id 里只放随机 `failure_run_id`，不会放 cron name、prompt、provider 配置、script args 或任何账号数据。真正执行时由 `requestCronRetryNow()` 在本机读取 `~/.miniclaw/cron/*.yaml`，如果失败 run 仍在 backoff，就唤醒当前 retry sleep；如果已经不在运行，则启动一次单独的立即重试。失败通知正文会单独显示 durable `cron_runs.id`，并给出 `pnpm run cron:runs -- --id <prefix>`、`/task-log id:<task-prefix>`、`/incident view id:<incident-prefix>` 等排查入口。
 
 ---
 

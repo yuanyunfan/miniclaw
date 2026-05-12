@@ -24,7 +24,14 @@ export interface CronFailureAlertRef {
 }
 
 export interface CronFailureDetails {
+  /**
+   * Retry-chain id used by the Discord retry button. This is intentionally
+   * separate from cronRunId because one failure chain can contain many attempts.
+   */
   runId: string;
+  cronRunId?: string;
+  taskId?: string;
+  incidentId?: string;
   attempt: number;
   maxAttempts: number;
   durationMs: number;
@@ -112,6 +119,27 @@ function failureComponents(runId: string): ActionRowBuilder<ButtonBuilder>[] {
   ];
 }
 
+function shortId(id: string): string {
+  return id.slice(0, 8);
+}
+
+function operatorHintLines(details: CronFailureDetails): string[] {
+  const lines: string[] = [];
+  if (details.cronRunId) {
+    lines.push(`- Cron run: \`${details.cronRunId}\``);
+    lines.push(`- Local detail: \`pnpm run cron:runs -- --id ${shortId(details.cronRunId)}\``);
+  } else {
+    lines.push(`- Retry chain: \`${details.runId}\``);
+  }
+  if (details.taskId) {
+    lines.push(`- Task trace: \`/task-log id:${shortId(details.taskId)}\``);
+  }
+  if (details.incidentId) {
+    lines.push(`- Incident: \`/incident view id:${shortId(details.incidentId)}\``);
+  }
+  return lines.length ? ["排查入口:", ...lines] : [];
+}
+
 export function buildCronFailurePayload(job: CronJob, details: CronFailureDetails): MessageCreateOptions & MessageEditOptions {
   const exhausted = details.attempt >= details.maxAttempts;
   const nextRetry = details.nextRetryAt
@@ -131,6 +159,8 @@ export function buildCronFailurePayload(job: CronJob, details: CronFailureDetail
       `耗时: ${formatDuration(details.durationMs)}`,
       `错误: ${sanitizeCronError(details.error)}`,
       nextRetry,
+      "",
+      ...operatorHintLines(details),
       "",
       "点击按钮可立即重新执行该定时任务。",
     ].join("\n").slice(0, 2000),

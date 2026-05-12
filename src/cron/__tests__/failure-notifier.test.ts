@@ -61,4 +61,24 @@ describe("cron failure notifier", () => {
     expect(payload.content).not.toContain("hello");
     expect(payload.components?.length).toBe(1);
   });
+
+  it("failure payload includes cron run, task trace, and incident operator hints", () => {
+    const payload = buildCronFailurePayload(messageJob(), {
+      runId: "retry-chain-1",
+      cronRunId: "12345678-cron-run",
+      taskId: "task-abcd-1234",
+      incidentId: "incident-9876",
+      attempt: 1,
+      maxAttempts: 1,
+      durationMs: 500,
+      error: "boom",
+      failedAt: new Date("2026-05-08T01:00:00.000Z"),
+    });
+
+    expect(payload.content).toContain("Cron run: `12345678-cron-run`");
+    expect(payload.content).toContain("pnpm run cron:runs -- --id 12345678");
+    expect(payload.content).toContain("/task-log id:task-abc");
+    expect(payload.content).toContain("/incident view id:incident");
+    expect(JSON.stringify(payload.components)).toContain("miniclaw:cron:retry:retry-chain-1");
+  });
 });

@@ -247,3 +247,19 @@ Record schema version, config defaults, query commands, and verification output 
   - `pnpm run lint` passed.
   - `pnpm run e2e:cron` passed: `Cron E2E fixture passed: cron-e2e-1778601660368`.
   - `pnpm run quality:docs` passed with schema v11.
+
+### 2026-05-13 Ralph iteration: failure alert links and local run query
+
+- Extended cron failure notifications so the retry button still uses the retry-chain `failure_run_id`, while the message body now includes the durable `cron_runs.id` plus operator hints for `pnpm run cron:runs -- --id <prefix>`, `/task-log id:<task-prefix>`, and `/incident view id:<incident-prefix>` when those linked records exist.
+- Reordered scheduler failure handling to create timeout incidents before sending the Discord failure alert, allowing timeout alerts to include incident detail hints and still persist alert channel/message ids back to the `cron_runs` row.
+- Added cron run id/prefix lookup helpers (`listCronRunsByIdPrefix`, `resolveCronRunByIdPrefix`) for local and future Discord detail surfaces.
+- Added `scripts/cron-runs.ts` and package script `cron:runs` for recent run lists, per-job summaries, JSON output, and single-run detail by id/prefix; the script initializes only the storage database path and does not require Discord runtime secrets for help or read-only query usage.
+- Updated `docs/architecture.md` and `docs/bot-routing.md` to document the distinction between retry-chain ids and durable run ids, plus the new local query command.
+- Verification:
+  - `pnpm exec vitest run src/cron/__tests__/failure-notifier.test.ts src/cron/__tests__/scheduler.test.ts src/store/__tests__/cron-runs.test.ts` passed: 3 files, 25 tests.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm run quality:docs` passed with schema v11.
+  - `pnpm run e2e:cron` passed: `Cron E2E fixture passed: cron-e2e-1778602168982`.
+  - `pnpm run cron:runs -- --help` passed without requiring `DISCORD_TOKEN`.
+  - `MINICLAW_DB_PATH=/private/tmp/miniclaw-cron-runs-smoke.db pnpm run cron:runs -- --limit 1` passed and printed an empty run list from a temporary database; the temporary SQLite files were cleaned up afterward.

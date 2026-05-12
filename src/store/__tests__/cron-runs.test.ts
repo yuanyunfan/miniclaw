@@ -7,8 +7,10 @@ import {
   getCronRunFailureWindow,
   getCronRun,
   listCronRuns,
+  listCronRunsByIdPrefix,
   markCronRunCompleted,
   markCronRunFailed,
+  resolveCronRunByIdPrefix,
   summarizeCronRuns,
 } from "../cron-runs.js";
 
@@ -176,6 +178,45 @@ describe("cron run persistence", () => {
       last_status: "failed",
     });
     expect(getCronRun("daily-success")?.status).toBe("success");
+  });
+
+  it("resolves cron run ids by exact id or unique prefix", () => {
+    createCronRun({
+      id: "run-prefix-alpha",
+      jobName: "lookup-job",
+      jobType: "message",
+      startedAt: "2026-05-12T01:00:00.000Z",
+    });
+    createCronRun({
+      id: "run-prefix-beta",
+      jobName: "lookup-job",
+      jobType: "message",
+      startedAt: "2026-05-12T02:00:00.000Z",
+    });
+
+    expect(resolveCronRunByIdPrefix("run-prefix-alpha")).toMatchObject({
+      ok: true,
+      value: { id: "run-prefix-alpha" },
+    });
+    expect(resolveCronRunByIdPrefix("run-prefix-b")).toMatchObject({
+      ok: true,
+      value: { id: "run-prefix-beta" },
+    });
+    expect(listCronRunsByIdPrefix("run-prefix-").map((row) => row.id)).toEqual([
+      "run-prefix-beta",
+      "run-prefix-alpha",
+    ]);
+    expect(resolveCronRunByIdPrefix("run-prefix-")).toMatchObject({
+      ok: false,
+      error: {
+        code: "ambiguous_prefix",
+        matches: ["run-prefix-beta", "run-prefix-alpha"],
+      },
+    });
+    expect(resolveCronRunByIdPrefix("missing")).toMatchObject({
+      ok: false,
+      error: { code: "not_found" },
+    });
   });
 
   it("computes failure windows from cron_runs and resets after a later success", () => {

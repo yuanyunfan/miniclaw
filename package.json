@@ -43,6 +43,7 @@
     "e2e:cron": "tsx scripts/e2e-cron-fixture.ts",
     "init": "bash init.sh",
     "cron:list": "tsx scripts/cron-list.ts",
+    "cron:runs": "tsx scripts/cron-runs.ts",
     "cron:test": "tsx scripts/cron-test.ts",
     "provider:health": "tsx scripts/provider-health.ts",
     "provider:dry-run": "tsx scripts/provider-dry-run.ts",

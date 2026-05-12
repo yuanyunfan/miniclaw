@@ -58,6 +58,15 @@ export interface CronRunFailureWindow {
   latest_success_at: string | null;
 }
 
+export type CronRunLookupError =
+  | { code: "empty_id"; message: string }
+  | { code: "not_found"; message: string }
+  | { code: "ambiguous_prefix"; message: string; matches: string[] };
+
+export type CronRunLookupResult =
+  | { ok: true; value: CronRunRow }
+  | { ok: false; error: CronRunLookupError };
+
 export interface CreateCronRunInput {
   id?: string;
   jobName: string;
@@ -216,6 +225,52 @@ export function createCronRun(input: CreateCronRunInput): CronRunRow {
 export function getCronRun(id: string): CronRunRow | undefined {
   const row = getDb().prepare("SELECT * FROM cron_runs WHERE id = ?").get(id);
   return row ? assertCronRunRow(row) : undefined;
+}
+
+export function listCronRunsByIdPrefix(idPrefix: string, limit = 10): CronRunRow[] {
+  const prefix = idPrefix.trim();
+  if (!prefix) return [];
+  return getDb().prepare(
+    `SELECT * FROM cron_runs
+     WHERE substr(id, 1, @prefix_length) = @prefix
+     ORDER BY datetime(started_at) DESC, id DESC
+     LIMIT @limit`
+  ).all({
+    prefix,
+    prefix_length: prefix.length,
+    limit: normalizePositiveInteger(limit, 10, 50),
+  }).map(assertCronRunRow);
+}
+
+export function resolveCronRunByIdPrefix(input: string): CronRunLookupResult {
+  const id = input.trim();
+  if (!id) {
+    return {
+      ok: false,
+      error: { code: "empty_id", message: "cron run id is required" },
+    };
+  }
+
+  const exact = getCronRun(id);
+  if (exact) return { ok: true, value: exact };
+
+  const matches = listCronRunsByIdPrefix(id, 6);
+  if (matches.length === 1) return { ok: true, value: matches[0]! };
+  if (matches.length > 1) {
+    return {
+      ok: false,
+      error: {
+        code: "ambiguous_prefix",
+        message: `cron run id prefix "${id}" matched multiple rows`,
+        matches: matches.map((row) => row.id),
+      },
+    };
+  }
+
+  return {
+    ok: false,
+    error: { code: "not_found", message: `cron run not found: ${id}` },
+  };
 }
 
 function finishCronRun(
