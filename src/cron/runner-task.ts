@@ -12,8 +12,9 @@ import type { CronJobTask, CronJobSkill } from "./types.js";
 import { renderTemplate } from "./template.js";
 import { resolve, join } from "node:path";
 import { createLogger } from "../lib/log.js";
-import { runPreProvider } from "../providers/index.js";
+import { runPreProvider, runProviderDryRun, runProviderHealthCheck } from "../providers/index.js";
 import type { PreProviderAttachment } from "../providers/types.js";
+import type { ProviderDryRunResult, ProviderHealthResult } from "../providers/framework.js";
 import type { MarketIntelPayload } from "../providers/market-intel/types.js";
 import { DRAINING_MESSAGE, isDraining } from "../runtime/shutdown.js";
 
@@ -69,6 +70,22 @@ function buildCronTaskPrompt(jobName: string, prependedContext: string, rendered
     prepended_context: prependedContext,
     user_prompt: renderedPrompt,
   });
+}
+
+function preflightModeLabel(mode: NonNullable<CronJobTask["pre_provider_preflight"]>): string {
+  return mode === "dry_run" ? "dry-run" : mode;
+}
+
+function healthFailureMessage(result: ProviderHealthResult): string {
+  const category = result.category ? `${result.category}: ` : "";
+  return `${category}${result.message}`;
+}
+
+function dryRunFailureMessage(result: ProviderDryRunResult): string {
+  const category = result.category ? `${result.category}: ` : "";
+  const message = result.previewText
+    ?? (result.warnings.length ? result.warnings.join("; ") : "provider dry-run returned ok=false");
+  return `${category}${message}`;
 }
 
 function parseMarketIntelPayload(providerText: string): MarketIntelPayload {
@@ -186,6 +203,30 @@ async function sendPreProviderAttachments(
   }
 }
 
+async function runPreProviderPreflight(job: CronJobTask, runAt: Date): Promise<void> {
+  if (!job.pre_provider || !job.pre_provider_preflight || job.pre_provider_preflight === "off") return;
+  const args = {
+    configName: job.pre_provider_config,
+    jobName: job.name,
+    channelId: job.channel,
+    runAt,
+  };
+  if (job.pre_provider_preflight === "health") {
+    const result = await runProviderHealthCheck(job.pre_provider, args);
+    if (!result.ok) {
+      throw new CronTaskRunError(healthFailureMessage(result));
+    }
+    log.info(`${job.name} pre_provider ${job.pre_provider} health preflight ok`);
+    return;
+  }
+
+  const result = await runProviderDryRun(job.pre_provider, args);
+  if (!result.ok) {
+    throw new CronTaskRunError(dryRunFailureMessage(result));
+  }
+  log.info(`${job.name} pre_provider ${job.pre_provider} dry-run preflight ok`);
+}
+
 export async function runTask(job: CronJobTask, client: Client): Promise<void> {
   assertNotDraining(job.name);
   const runAt = cronRunAt();
@@ -221,6 +262,16 @@ export async function runTask(job: CronJobTask, client: Client): Promise<void> {
     }
   }
   if (job.pre_provider) {
+    if (job.pre_provider_preflight && job.pre_provider_preflight !== "off") {
+      try {
+        await runPreProviderPreflight(job, runAt);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        const mode = preflightModeLabel(job.pre_provider_preflight);
+        await channel.send(`⏰ cron \`${job.name}\` ❌ pre_provider ${mode} preflight 失败: ${msg.slice(0, 1500)}`);
+        throw new CronTaskRunError(`pre_provider ${mode} preflight failed: ${msg}`);
+      }
+    }
     try {
       const result = await runPreProvider(job.pre_provider, {
         configName: job.pre_provider_config,

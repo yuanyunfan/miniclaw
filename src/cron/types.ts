@@ -1,4 +1,5 @@
 export type CronJobType = "task" | "script" | "skill" | "message";
+export type PreProviderPreflightMode = "off" | "health" | "dry_run";
 
 export interface CronJobBase {
   name: string;
@@ -27,6 +28,11 @@ export interface CronJobTask extends CronJobBase {
    */
   pre_provider?: string;
   pre_provider_config?: string;
+  /**
+   * Optional provider framework preflight before the legacy pre_provider run.
+   * Defaults to off to preserve existing cron behavior.
+   */
+  pre_provider_preflight?: PreProviderPreflightMode;
 }
 
 export interface CronJobScript extends CronJobBase {

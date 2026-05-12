@@ -73,6 +73,30 @@ prompt: "总结微信公众号更新"
     }
   });
 
+  it("解析 type=task + provider health preflight", () => {
+    write("stock-pulse.yaml", `
+name: stock-pulse
+schedule: "*/30 * * * *"
+enabled: true
+type: task
+channel: "${VALID_CHANNEL}"
+pre_provider: stock-pulse
+pre_provider_config: us-hourly
+pre_provider_preflight: health
+prompt: "总结盘中异动"
+`);
+    const r = loadCronJobs();
+    expect(r.errors).toEqual([]);
+    expect(r.jobs.length).toBe(1);
+    const j = r.jobs[0];
+    expect(j.type).toBe("task");
+    if (j.type === "task") {
+      expect(j.pre_provider).toBe("stock-pulse");
+      expect(j.pre_provider_config).toBe("us-hourly");
+      expect(j.pre_provider_preflight).toBe("health");
+    }
+  });
+
   it("解析 type=task + market-intel pre_provider", () => {
     write("market-intel.yaml", `
 name: us-stock-pre-market
@@ -265,6 +289,33 @@ prompt: hi
 `);
     const r = loadCronJobs();
     expect(r.errors[0].error).toMatch(/unknown pre_provider/);
+  });
+
+  it("未知 pre_provider_preflight → 拒绝", () => {
+    write("bad-provider-preflight.yaml", `
+name: x
+schedule: "0 9 * * *"
+type: task
+channel: "${VALID_CHANNEL}"
+pre_provider: stock-pulse
+pre_provider_preflight: full
+prompt: hi
+`);
+    const r = loadCronJobs();
+    expect(r.errors[0].error).toMatch(/pre_provider_preflight/);
+  });
+
+  it("pre_provider_preflight 没有 pre_provider → 拒绝", () => {
+    write("orphan-provider-preflight.yaml", `
+name: x
+schedule: "0 9 * * *"
+type: task
+channel: "${VALID_CHANNEL}"
+pre_provider_preflight: health
+prompt: hi
+`);
+    const r = loadCronJobs();
+    expect(r.errors[0].error).toMatch(/需要同时配置/);
   });
 
   it("timeout_sec > 1800 → 拒绝", () => {

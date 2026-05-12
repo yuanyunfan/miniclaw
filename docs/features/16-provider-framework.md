@@ -1,6 +1,6 @@
 # MiniClaw Provider Framework SDK
 
-> 结论：provider framework 给 cron pre-provider 增加 manifest、health check、dry-run、structured output 和 failure taxonomy，但保留现有 `PreProviderResult` 兼容层。当前已迁移 `stock-pulse` 和 `eastmoney-jywg-readonly`；cron runner 仍只调用 `runPreProvider()`，不会因为本阶段改动改变生产调度行为。
+> 结论：provider framework 给 cron pre-provider 增加 manifest、health check、dry-run、structured output 和 failure taxonomy，但保留现有 `PreProviderResult` 兼容层。当前已迁移 `stock-pulse` 和 `eastmoney-jywg-readonly`；cron runner 默认仍只调用 `runPreProvider()`，只有显式配置 `pre_provider_preflight` 才会先运行 health 或 dry-run gate。
 
 ## 范围
 
@@ -14,6 +14,7 @@
 - `src/providers/eastmoney-jywg-readonly/index.ts`: sensitive broker provider module，覆盖 session health、redacted dry-run 和 delayed session persistence。
 - `scripts/provider-health.ts`: provider health CLI。
 - `scripts/provider-dry-run.ts`: provider dry-run CLI，默认只输出 redacted preview。
+- `src/cron/loader.ts` / `src/cron/runner-task.ts`: opt-in cron preflight 配置解析和执行 gate。
 
 ## Contract
 
@@ -39,6 +40,24 @@ export type PreProviderRunner = (args: PreProviderRunArgs) => Promise<PreProvide
 - cron `pre_provider` 配置不需要改。
 - `skipTask`、attachments 和 prompt injection 行为继续由 cron runner 处理。
 - provider `commit()` 仍只在 downstream LLM task 成功后执行。
+
+## Cron Preflight
+
+cron task 默认不启用 preflight。需要在已有 `pre_provider` job 上显式配置：
+
+```yaml
+pre_provider: stock-pulse
+pre_provider_config: us-hourly
+pre_provider_preflight: health   # off | health | dry_run
+```
+
+语义：
+
+- 未配置或配置 `off`：保持旧行为，只执行 `runPreProvider()`。
+- `health`：先执行 `runProviderHealthCheck()`。如果返回 `ok=false` 或 provider 不支持 health check，本次 cron 在采集 provider payload 和创建 downstream task 前失败，由现有 cron retry/alert 流程接管。
+- `dry_run`：先执行 `runProviderDryRun()`。dry-run 输出只作为 redacted gate，不会拼进 prompt；通过后仍会执行真实 `runPreProvider()` 生成 prompt context。
+- 不允许在没有 `pre_provider` 的 job 上配置 `pre_provider_preflight`。
+- preflight 不改变 commit 语义：provider state/session commit 仍只在 downstream task 成功后执行。
 
 ## Stock Pulse Pilot
 
@@ -114,6 +133,7 @@ pnpm provider:dry-run -- --provider stock-pulse --config us-hourly --json
 本阶段的 focused 验证：
 
 ```bash
+pnpm vitest run src/cron/__tests__/loader.test.ts src/cron/__tests__/runner-task.test.ts
 pnpm vitest run src/providers
 pnpm vitest run src/providers/eastmoney-jywg-readonly/__tests__/framework.test.ts
 pnpm run provider:health -- --provider stock-pulse --config __missing__

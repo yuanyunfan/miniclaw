@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   executeTask: vi.fn(),
   getActiveTaskCount: vi.fn(() => 0),
   runPreProvider: vi.fn(),
+  runProviderHealthCheck: vi.fn(),
+  runProviderDryRun: vi.fn(),
   recordMarketForecastFromPayload: vi.fn(() => "forecast-1"),
   updateMarketForecastReport: vi.fn(() => ({ hasJson: true, insertedItemCount: 4 })),
 }));
@@ -38,6 +40,8 @@ vi.mock("../../agent/task-reporter.js", () => ({
 
 vi.mock("../../providers/index.js", () => ({
   runPreProvider: mocks.runPreProvider,
+  runProviderHealthCheck: mocks.runProviderHealthCheck,
+  runProviderDryRun: mocks.runProviderDryRun,
 }));
 
 function taskJob(): CronJobTask {
@@ -69,6 +73,8 @@ beforeEach(() => {
   mocks.getActiveTaskCount.mockReset();
   mocks.getActiveTaskCount.mockReturnValue(0);
   mocks.runPreProvider.mockReset();
+  mocks.runProviderHealthCheck.mockReset();
+  mocks.runProviderDryRun.mockReset();
   mocks.recordMarketForecastFromPayload.mockReset();
   mocks.recordMarketForecastFromPayload.mockReturnValue("forecast-1");
   mocks.updateMarketForecastReport.mockReset();
@@ -248,6 +254,100 @@ describe("cron task runner", () => {
     expect(mocks.runPreProvider).toHaveBeenCalledWith("stock-portfolio", expect.objectContaining({
       runAt: new Date("2026-05-08T12:45:00.000Z"),
     }));
+  });
+
+  it("runs provider health preflight before the legacy pre_provider when configured", async () => {
+    process.env.MINICLAW_CRON_TEST_RUN_AT = "2026-05-08T12:45:00.000Z";
+    const { runTask } = await import("../runner-task.js");
+    mocks.runProviderHealthCheck.mockResolvedValue({
+      ok: true,
+      message: "stock-pulse config is loadable",
+      checkedAt: "2026-05-08T12:45:00.000Z",
+    });
+    mocks.runPreProvider.mockResolvedValue({ text: "{\"status\":\"ok\"}" });
+    mocks.executeTask.mockResolvedValue({
+      success: true,
+      sessionId: "codex:thread-1",
+      costUsd: 0,
+      durationMs: 1000,
+      turns: 1,
+      result: "ok",
+    });
+
+    await expect(runTask({
+      ...taskJob(),
+      pre_provider: "stock-pulse",
+      pre_provider_config: "us-hourly",
+      pre_provider_preflight: "health",
+    }, client())).resolves.toBeUndefined();
+
+    expect(mocks.runProviderHealthCheck).toHaveBeenCalledWith("stock-pulse", expect.objectContaining({
+      configName: "us-hourly",
+      jobName: "daily-ai-news",
+      channelId: "1000000000000000000",
+      runAt: new Date("2026-05-08T12:45:00.000Z"),
+    }));
+    expect(mocks.runProviderHealthCheck.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.runPreProvider.mock.invocationCallOrder[0]);
+    expect(mocks.executeTask).toHaveBeenCalled();
+  });
+
+  it("stops before provider collection and task execution when health preflight fails", async () => {
+    const { runTask } = await import("../runner-task.js");
+    const send = vi.fn(async () => ({ id: "message-1" }));
+    mocks.runProviderHealthCheck.mockResolvedValue({
+      ok: false,
+      category: "config",
+      message: "stock-pulse provider config missing",
+      checkedAt: "2026-05-08T12:45:00.000Z",
+    });
+
+    await expect(runTask({
+      ...taskJob(),
+      pre_provider: "stock-pulse",
+      pre_provider_config: "missing",
+      pre_provider_preflight: "health",
+    }, client(send))).rejects.toThrow("pre_provider health preflight failed: config: stock-pulse provider config missing");
+
+    expect(send).toHaveBeenCalledWith(expect.stringContaining("pre_provider health preflight 失败"));
+    expect(mocks.runPreProvider).not.toHaveBeenCalled();
+    expect(mocks.createTask).not.toHaveBeenCalled();
+    expect(mocks.executeTask).not.toHaveBeenCalled();
+  });
+
+  it("runs provider dry-run preflight without injecting dry-run output into the prompt", async () => {
+    const { runTask } = await import("../runner-task.js");
+    mocks.runProviderDryRun.mockResolvedValue({
+      ok: true,
+      structured: { position_count: 2 },
+      previewText: "{\"position_count\":2}",
+      redacted: true,
+      warnings: [],
+    });
+    mocks.runPreProvider.mockResolvedValue({ text: "{\"real_provider_payload\":true}" });
+    mocks.executeTask.mockResolvedValue({
+      success: true,
+      sessionId: "codex:thread-1",
+      costUsd: 0,
+      durationMs: 1000,
+      turns: 1,
+      result: "ok",
+    });
+
+    await expect(runTask({
+      ...taskJob(),
+      pre_provider: "stock-pulse",
+      pre_provider_config: "us-hourly",
+      pre_provider_preflight: "dry_run",
+    }, client())).resolves.toBeUndefined();
+
+    expect(mocks.runProviderDryRun).toHaveBeenCalledWith("stock-pulse", expect.objectContaining({
+      configName: "us-hourly",
+    }));
+    expect(mocks.runPreProvider).toHaveBeenCalled();
+    const taskInput = mocks.executeTask.mock.calls[0]?.[0] as { prompt?: string } | undefined;
+    expect(taskInput?.prompt).toContain("\"real_provider_payload\":true");
+    expect(taskInput?.prompt).not.toContain("\"position_count\":2");
   });
 
   it("uploads pre_provider attachments after a successful raw cron task", async () => {

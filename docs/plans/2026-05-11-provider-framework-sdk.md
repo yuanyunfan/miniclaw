@@ -249,3 +249,18 @@ Record pilot provider, manifest fields, CLI commands, cron integration state, an
   - `pnpm run typecheck` passed.
   - `pnpm run lint` passed.
   - `pnpm run ralph:verify -- --task provider-framework-sdk --profile provider` passed: `src/providers` 44 files, 129 tests; typecheck, lint, and `quality:docs` passed.
+
+2026-05-12 Ralph iteration 3:
+
+- Implemented the opt-in cron preflight phase for framework providers.
+- Added cron config field `pre_provider_preflight` with values `off`, `health`, or `dry_run`; loader validation rejects unknown modes and rejects preflight without `pre_provider`.
+- Wired `runner-task` so `health` runs `runProviderHealthCheck()` and `dry_run` runs `runProviderDryRun()` before the real `runPreProvider()` call. If preflight fails, the runner sends a Discord failure notice and stops before provider collection, task creation, and downstream LLM execution.
+- Dry-run preflight output is used only as a redacted gate; it is not injected into the prompt. The real provider still runs after a passing dry-run preflight, preserving existing prompt and delayed `commit()` semantics.
+- Default cron behavior remains unchanged when `pre_provider_preflight` is omitted or set to `off`.
+- Documentation sync: updated `docs/features/16-provider-framework.md` and `docs/architecture.md` with the new cron preflight config and execution path.
+- Verification:
+  - `pnpm vitest run src/cron/__tests__/loader.test.ts src/cron/__tests__/runner-task.test.ts` passed: 2 files, 30 tests.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm run quality:docs` passed: D1 docs drift check passed with 16 feature docs and schema v10.
+  - `pnpm run ralph:verify -- --task provider-framework-sdk --profile provider` passed: provider tests 44 files, 129 tests; typecheck, lint, and `quality:docs` passed.

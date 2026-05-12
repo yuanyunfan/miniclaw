@@ -3,11 +3,12 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { load as yamlLoad } from "js-yaml";
 import cron from "node-cron";
-import type { CronJob, CronJobLoadResult, CronJobType } from "./types.js";
+import type { CronJob, CronJobLoadResult, CronJobType, PreProviderPreflightMode } from "./types.js";
 import { isPreProviderName } from "../providers/index.js";
 
 const CRON_DIR_DEFAULT = join(homedir(), ".miniclaw/cron");
 const VALID_TYPES: CronJobType[] = ["task", "script", "skill", "message"];
+const VALID_PRE_PROVIDER_PREFLIGHT_MODES: PreProviderPreflightMode[] = ["off", "health", "dry_run"];
 
 const EXAMPLE_YAML = `# 示例 cron job —— 默认 disabled，照抄改 name + enabled: true 即可
 # 文档: https://github.com/yuanyunfan/miniclaw#cron
@@ -111,6 +112,20 @@ function validateJob(raw: unknown, file: string): CronJob {
     if (preProviderConfig && (preProviderConfig.includes("/") || preProviderConfig.includes(".."))) {
       throw new Error(`${file}: 'pre_provider_config' 必须是配置名（不含路径分隔符）`);
     }
+    let preProviderPreflight: PreProviderPreflightMode | undefined;
+    if (r.pre_provider_preflight !== undefined) {
+      if (typeof r.pre_provider_preflight !== "string") {
+        throw new Error(`${file}: 'pre_provider_preflight' 必须是 ${VALID_PRE_PROVIDER_PREFLIGHT_MODES.join("|")}`);
+      }
+      const rawMode = r.pre_provider_preflight.trim();
+      if (!VALID_PRE_PROVIDER_PREFLIGHT_MODES.includes(rawMode as PreProviderPreflightMode)) {
+        throw new Error(`${file}: 'pre_provider_preflight' 必须是 ${VALID_PRE_PROVIDER_PREFLIGHT_MODES.join("|")}`);
+      }
+      if (!preProvider) {
+        throw new Error(`${file}: 'pre_provider_preflight' 需要同时配置 'pre_provider'`);
+      }
+      preProviderPreflight = rawMode as PreProviderPreflightMode;
+    }
     const preTimeout = typeof r.pre_script_timeout_sec === "number" ? r.pre_script_timeout_sec : 120;
     if (preTimeout > 600) throw new Error(`${file}: 'pre_script_timeout_sec' 上限 600 (10 分钟)`);
     return {
@@ -126,6 +141,9 @@ function validateJob(raw: unknown, file: string): CronJob {
       ...(preProvider ? {
         pre_provider: preProvider,
         pre_provider_config: preProviderConfig,
+        ...(preProviderPreflight && preProviderPreflight !== "off"
+          ? { pre_provider_preflight: preProviderPreflight }
+          : {}),
       } : {}),
     };
   }
