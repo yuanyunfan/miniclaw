@@ -6,7 +6,7 @@ import { runTask, runSkill } from "./runner-task.js";
 import { runMessage } from "./runner-message.js";
 import { runScript } from "./runner-script.js";
 import { recordRun, getAllJobStates, updateJobState, type JobState } from "./state.js";
-import type { CronJob, CronJobRunOutcome } from "./types.js";
+import type { CronJob, CronJobRunContext, CronJobRunOutcome } from "./types.js";
 import {
   sanitizeCronError,
   sendOrUpdateCronFailureAlert,
@@ -21,11 +21,12 @@ import {
   markCronRunFailed,
   type CronRunRow,
 } from "../store/cron-runs.js";
+import { appendIncidentEvent, createOrUpdateIncident } from "../store/incidents.js";
 
 const log = createLogger("cron");
 
 const tasks = new Map<string, ScheduledTask[]>();
-const runningJobs = new Set<string>();
+const runningJobCounts = new Map<string, number>();
 const retryWaiters = new Map<string, { runId: string; wake: () => void }>();
 
 const DEFAULT_MAX_ATTEMPTS = 5;
@@ -55,6 +56,19 @@ type CronRetryRequestOptions = {
 export type CronRetryRequestResult =
   | { ok: true; status: "woke" | "started"; jobName: string }
   | { ok: false; reason: "not_found" | "disabled" | "already_running"; message: string; jobName?: string };
+
+class CronJobTimeoutError extends Error {
+  taskId?: string;
+  readonly timeoutMs: number;
+  readonly errorCategory = "cron_timeout";
+
+  constructor(jobName: string, timeoutMs: number, taskId?: string) {
+    super(`${jobName} timed out after ${timeoutMs}ms`);
+    this.name = "CronJobTimeoutError";
+    this.timeoutMs = timeoutMs;
+    this.taskId = taskId;
+  }
+}
 
 const sleepMs = async (ms: number): Promise<void> => {
   await new Promise<void>((resolve) => {
@@ -104,6 +118,32 @@ function alertMetadata(ref: CronFailureAlertRef | undefined): Partial<JobState> 
   };
 }
 
+function getJobMaxConcurrency(job: CronJob): number {
+  const raw = job.max_concurrency ?? 1;
+  if (!Number.isFinite(raw)) return 1;
+  return Math.max(1, Math.floor(raw));
+}
+
+function getRunningJobCount(jobName: string): number {
+  return runningJobCounts.get(jobName) ?? 0;
+}
+
+function tryAcquireJobSlot(job: CronJob): boolean {
+  const count = getRunningJobCount(job.name);
+  if (count >= getJobMaxConcurrency(job)) return false;
+  runningJobCounts.set(job.name, count + 1);
+  return true;
+}
+
+function releaseJobSlot(jobName: string): void {
+  const count = getRunningJobCount(jobName);
+  if (count <= 1) {
+    runningJobCounts.delete(jobName);
+    return;
+  }
+  runningJobCounts.set(jobName, count - 1);
+}
+
 async function waitForRetryDelay(
   jobName: string,
   runId: string,
@@ -144,6 +184,20 @@ function errorMetadata(err: unknown): Partial<Pick<CronJobRunOutcome, "taskId" |
   };
 }
 
+function isCronTimeoutError(err: unknown): err is CronJobTimeoutError {
+  return err instanceof CronJobTimeoutError
+    || (Boolean(err) && typeof err === "object" && (err as Record<string, unknown>).errorCategory === "cron_timeout");
+}
+
+function cronTimeoutMetadata(err: unknown): { timeoutMs?: number; taskId?: string } {
+  if (!err || typeof err !== "object") return {};
+  const record = err as Record<string, unknown>;
+  return {
+    ...(typeof record.timeoutMs === "number" ? { timeoutMs: record.timeoutMs } : {}),
+    ...(typeof record.taskId === "string" ? { taskId: record.taskId } : {}),
+  };
+}
+
 function markRunSkipped(
   job: CronJob,
   scheduledAt: Date,
@@ -167,16 +221,129 @@ function markRunSkipped(
   });
 }
 
-async function runJob(job: CronJob, client: Client): Promise<CronJobRunOutcome> {
-  if (job.type === "task") return await runTask(job, client);
-  if (job.type === "script") return await runScript(job, client);
-  if (job.type === "skill") return await runSkill(job, client);
-  if (job.type === "message") return await runMessage(job, client);
+async function runJob(job: CronJob, client: Client, context: CronJobRunContext = {}): Promise<CronJobRunOutcome> {
+  if (job.type === "task") return await runTask(job, client, context);
+  if (job.type === "script") return await runScript(job, client, context);
+  if (job.type === "skill") return await runSkill(job, client, context);
+  if (job.type === "message") return await runMessage(job, client, context);
   return { status: "success" };
+}
+
+async function runJobWithTimeout(job: CronJob, client: Client, context: CronJobRunContext): Promise<CronJobRunOutcome> {
+  const timeoutMs = job.timeout_ms;
+  if (!timeoutMs) return await runJob(job, client, context);
+
+  const controller = new AbortController();
+  let observedTaskId: string | undefined;
+  let timedOut = false;
+  let timeoutError = new CronJobTimeoutError(job.name, timeoutMs);
+  const forwardAbort = () => {
+    controller.abort(context.signal?.reason ?? new Error("cron job aborted"));
+  };
+  if (context.signal?.aborted) forwardAbort();
+  else context.signal?.addEventListener("abort", forwardAbort, { once: true });
+
+  const timer = setTimeout(() => {
+    timedOut = true;
+    timeoutError = new CronJobTimeoutError(job.name, timeoutMs, observedTaskId);
+    controller.abort(timeoutError);
+  }, timeoutMs);
+  timer.unref?.();
+
+  const jobPromise = runJob(job, client, {
+    ...context,
+    signal: controller.signal,
+    onTaskId: (taskId) => {
+      observedTaskId = taskId;
+      context.onTaskId?.(taskId);
+    },
+  });
+  jobPromise.catch((err) => {
+    if (timedOut) {
+      log.warn(`${job.name} settled after timeout:`, err instanceof Error ? err.message : String(err));
+    }
+  });
+
+  try {
+    return await Promise.race([
+      jobPromise,
+      new Promise<never>((_resolve, reject) => {
+        controller.signal.addEventListener("abort", () => {
+          if (timedOut) reject(timeoutError);
+        }, { once: true });
+      }),
+    ]);
+  } catch (err) {
+    if (timedOut) {
+      const metadata = errorMetadata(err);
+      timeoutError.taskId = timeoutError.taskId ?? metadata.taskId ?? observedTaskId;
+      throw timeoutError;
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+    context.signal?.removeEventListener("abort", forwardAbort);
+  }
 }
 
 function getCronSchedules(job: CronJob): string[] {
   return Array.isArray(job.schedule) ? job.schedule : [job.schedule];
+}
+
+function recordCronTimeoutIncident(input: {
+  job: CronJob;
+  cronRunId: string;
+  failureRunId: string;
+  attempt: number;
+  maxAttempts: number;
+  durationMs: number;
+  err: unknown;
+  errorMessage: string;
+}): string | undefined {
+  if (!isCronTimeoutError(input.err)) return undefined;
+  const timeout = cronTimeoutMetadata(input.err);
+  const timeoutMs = timeout.timeoutMs ?? input.job.timeout_ms;
+  const result = createOrUpdateIncident({
+    dedupeKey: `cron:${input.job.name}:timeout:${input.failureRunId}`,
+    type: "cron_failed",
+    severity: "warning",
+    title: `Cron timed out: ${input.job.name}`,
+    summary: timeoutMs
+      ? `Cron job exceeded timeout_ms=${timeoutMs}.`
+      : "Cron job exceeded its configured timeout.",
+    subjectId: input.job.name,
+    subjectType: "cron",
+    source: {
+      cron_name: input.job.name,
+      cron_run_id: input.cronRunId,
+      failure_run_id: input.failureRunId,
+      attempt: input.attempt,
+      max_attempts: input.maxAttempts,
+      timeout_ms: timeoutMs,
+      task_id: timeout.taskId,
+    },
+    evidence: {
+      error: input.errorMessage,
+      duration_ms: input.durationMs,
+      job_type: input.job.type,
+    },
+    diagnosis: {
+      incidentType: "cron_failed",
+      severity: "warning",
+      category: "cron_timeout",
+      repairAllowed: false,
+      recommendedAction: "Review the job timeout, provider latency, and downstream task trace before widening timeout_ms.",
+    },
+  });
+  appendIncidentEvent(result.row.id, result.created ? "cron_timeout_created" : "cron_timeout_observed", {
+    cron_run_id: input.cronRunId,
+    failure_run_id: input.failureRunId,
+    attempt: input.attempt,
+    max_attempts: input.maxAttempts,
+    timeout_ms: timeoutMs,
+    task_id: timeout.taskId,
+  });
+  return result.row.id;
 }
 
 async function dispatch(
@@ -195,11 +362,15 @@ async function dispatch(
     return;
   }
 
-  if (runningJobs.has(job.name)) {
+  if (!tryAcquireJobSlot(job)) {
     const startedAt = new Date();
-    const msg = `${job.name} skipped: previous run still active`;
+    const active = getRunningJobCount(job.name);
+    const maxConcurrency = getJobMaxConcurrency(job);
+    const msg = maxConcurrency === 1
+      ? `${job.name} skipped: previous run still active`
+      : `${job.name} skipped: max_concurrency=${maxConcurrency} already active (${active})`;
     log.warn(msg);
-    markRunSkipped(job, scheduledAt, startedAt, msg, "already_running");
+    markRunSkipped(job, scheduledAt, startedAt, msg, maxConcurrency === 1 ? "already_running" : "max_concurrency");
     recordRun(job.name, false, 0, msg);
     return;
   }
@@ -208,7 +379,6 @@ async function dispatch(
   const notifyFailures = options.notifyFailures ?? false;
   const failureRunId = randomUUID();
   let failureAlert: CronFailureAlertRef | undefined = options.failureAlert;
-  runningJobs.add(job.name);
   try {
     for (let attempt = 1; attempt <= policy.maxAttempts; attempt++) {
       const startedAt = Date.now();
@@ -224,7 +394,7 @@ async function dispatch(
         if (attempt > 1) {
           log.info(`${job.name} retry attempt ${attempt}/${policy.maxAttempts}`);
         }
-        const outcome = await runJob(job, client);
+        const outcome = await runJobWithTimeout(job, client, {});
         const durationMs = Date.now() - startedAt;
         markCronRunCompleted(cronRun.id, {
           status: outcome.status,
@@ -290,10 +460,22 @@ async function dispatch(
           }
         }
 
+        const incidentId = recordCronTimeoutIncident({
+          job,
+          cronRunId: cronRun.id,
+          failureRunId,
+          attempt,
+          maxAttempts: policy.maxAttempts,
+          durationMs,
+          err,
+          errorMessage: recordedError,
+        });
+
         markCronRunFailed(cronRun.id, {
           status: willRetry ? "retry_scheduled" : "failed",
           durationMs,
           taskId: metadata.taskId,
+          incidentId,
           providerName: metadata.providerName,
           providerStatus: metadata.providerStatus,
           providerCategory: metadata.providerCategory,
@@ -315,7 +497,7 @@ async function dispatch(
       }
     }
   } finally {
-    runningJobs.delete(job.name);
+    releaseJobSlot(job.name);
   }
 }
 
@@ -395,15 +577,6 @@ export async function requestCronRetryNow(
     return { ok: true, status: "woke", jobName };
   }
 
-  if (runningJobs.has(jobName)) {
-    return {
-      ok: false,
-      reason: "already_running",
-      jobName,
-      message: "该定时任务正在执行中，请等待当前执行完成。",
-    };
-  }
-
   const { jobs } = loadCronJobs();
   const job = jobs.find((j) => j.name === jobName);
   if (!job) {
@@ -414,6 +587,16 @@ export async function requestCronRetryNow(
       message: `找不到定时任务配置: ${jobName}`,
     };
   }
+
+  if (getRunningJobCount(jobName) >= getJobMaxConcurrency(job)) {
+    return {
+      ok: false,
+      reason: "already_running",
+      jobName,
+      message: "该定时任务正在执行中，请等待当前执行完成。",
+    };
+  }
+
   if (!job.enabled) {
     return {
       ok: false,

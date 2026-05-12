@@ -5,7 +5,7 @@ import { join } from "node:path";
 import "../proxy.js";
 import type { Client, SendableChannels } from "discord.js";
 import { AttachmentBuilder } from "discord.js";
-import type { CronJobRunOutcome, CronJobScript } from "./types.js";
+import type { CronJobRunContext, CronJobRunOutcome, CronJobScript } from "./types.js";
 import { createLogger } from "../lib/log.js";
 
 const log = createLogger("cron");
@@ -18,6 +18,18 @@ class CronScriptRunError extends Error {
     super(message);
     this.name = "CronScriptRunError";
   }
+}
+
+function abortReason(signal?: AbortSignal): string {
+  const reason = signal?.reason;
+  if (reason instanceof Error && reason.message) return reason.message;
+  if (typeof reason === "string" && reason) return reason;
+  return "cron script run aborted";
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) return;
+  throw signal.reason instanceof Error ? signal.reason : new CronScriptRunError(abortReason(signal));
 }
 
 function getScriptsDir(): string {
@@ -139,7 +151,8 @@ function trimDiscordContent(text: string): string {
   return text.slice(0, 1900).trimEnd() + "\n\n... (truncated)";
 }
 
-export async function runScript(job: CronJobScript, client: Client): Promise<CronJobRunOutcome> {
+export async function runScript(job: CronJobScript, client: Client, context: CronJobRunContext = {}): Promise<CronJobRunOutcome> {
+  throwIfAborted(context.signal);
   const scriptsDir = getScriptsDir();
   const scriptPath = join(scriptsDir, job.script);
   if (!existsSync(scriptPath)) {
@@ -164,6 +177,7 @@ export async function runScript(job: CronJobScript, client: Client): Promise<Cro
   const timeoutMs = timeoutSec * 1000;
 
   const startedAt = Date.now();
+  throwIfAborted(context.signal);
   const child = spawn(scriptPath, args, {
     cwd: scriptsDir,
     env,
@@ -174,9 +188,21 @@ export async function runScript(job: CronJobScript, client: Client): Promise<Cro
   let stdout = "";
   let stderr = "";
   let killed = false;
+  let abortedReason: string | undefined;
   let forceKillTimer: NodeJS.Timeout | undefined;
 
+  const abortRun = () => {
+    if (killed) return;
+    killed = true;
+    abortedReason = abortReason(context.signal);
+    signalProcessTree(child, "SIGTERM");
+    forceKillTimer = setTimeout(() => signalProcessTree(child, "SIGKILL"), 5000);
+  };
+  if (context.signal?.aborted) abortRun();
+  else context.signal?.addEventListener("abort", abortRun, { once: true });
+
   const timer = setTimeout(() => {
+    if (killed) return;
     killed = true;
     signalProcessTree(child, "SIGTERM");
     forceKillTimer = setTimeout(() => signalProcessTree(child, "SIGKILL"), 5000);
@@ -192,6 +218,7 @@ export async function runScript(job: CronJobScript, client: Client): Promise<Cro
       done = true;
       clearTimeout(timer);
       if (forceKillTimer) clearTimeout(forceKillTimer);
+      context.signal?.removeEventListener("abort", abortRun);
       resolve();
     };
     child.on("close", finish);
@@ -204,10 +231,10 @@ export async function runScript(job: CronJobScript, client: Client): Promise<Cro
   const durationS = ((Date.now() - startedAt) / 1000).toFixed(1);
   const exitCode = child.exitCode ?? -1;
   const success = exitCode === 0 && !killed;
-  const status = killed ? `🛑 timeout(${timeoutSec}s)` : success ? `✅ exit=0` : `❌ exit=${exitCode}`;
+  const status = abortedReason ? "🛑 aborted" : killed ? `🛑 timeout(${timeoutSec}s)` : success ? `✅ exit=0` : `❌ exit=${exitCode}`;
   const failureDetail = firstLine(stderr || stdout);
   const failureReason = killed
-    ? `script timed out after ${timeoutSec}s`
+    ? abortedReason ?? `script timed out after ${timeoutSec}s`
     : success
       ? undefined
       : `script exited with code ${exitCode}${failureDetail ? `: ${failureDetail}` : ""}`;

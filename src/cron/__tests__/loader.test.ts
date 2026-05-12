@@ -166,11 +166,15 @@ name: morning
 schedule: "0 9 * * *"
 type: message
 channel: "${VALID_CHANNEL}"
+timeout_ms: 1800000
+max_concurrency: 2
 content: "早安 {{date}}"
 `);
     const r = loadCronJobs();
     expect(r.errors).toEqual([]);
     expect(r.jobs[0].enabled).toBe(true);
+    expect(r.jobs[0].timeout_ms).toBe(1800000);
+    expect(r.jobs[0].max_concurrency).toBe(2);
     if (r.jobs[0].type === "message") {
       expect(r.jobs[0].content).toBe("早安 {{date}}");
     }
@@ -329,6 +333,32 @@ timeout_sec: 3600
 `);
     const r = loadCronJobs();
     expect(r.errors[0].error).toMatch(/上限 1800/);
+  });
+
+  it("timeout_ms 非正整数 → 拒绝", () => {
+    write("bad-timeout-ms.yaml", `
+name: x
+schedule: "0 9 * * *"
+type: message
+channel: "${VALID_CHANNEL}"
+timeout_ms: 0
+content: hi
+`);
+    const r = loadCronJobs();
+    expect(r.errors[0].error).toMatch(/timeout_ms.*正整数/);
+  });
+
+  it("max_concurrency 非正整数 → 拒绝", () => {
+    write("bad-max-concurrency.yaml", `
+name: x
+schedule: "0 9 * * *"
+type: message
+channel: "${VALID_CHANNEL}"
+max_concurrency: 0
+content: hi
+`);
+    const r = loadCronJobs();
+    expect(r.errors[0].error).toMatch(/max_concurrency.*正整数/);
   });
 
   it("重名 job 第二个进 errors", () => {

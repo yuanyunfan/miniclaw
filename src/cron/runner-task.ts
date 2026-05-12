@@ -8,7 +8,7 @@ import { recordMarketForecastFromPayload, stripMarketForecastJsonForDisplay, upd
 import { executeTask, getActiveTaskCount, type TaskResult } from "../agent/task.js";
 import { TaskReporter } from "../agent/task-reporter.js";
 import { loadPrompt } from "../agent/prompts.js";
-import type { CronJobRunOutcome, CronJobTask, CronJobSkill } from "./types.js";
+import type { CronJobRunContext, CronJobRunOutcome, CronJobTask, CronJobSkill } from "./types.js";
 import { renderTemplate } from "./template.js";
 import { resolve, join } from "node:path";
 import { createLogger } from "../lib/log.js";
@@ -45,6 +45,18 @@ class CronTaskRunError extends Error {
     this.providerCategory = metadata.providerCategory;
     this.errorCategory = metadata.errorCategory;
   }
+}
+
+function abortReason(signal?: AbortSignal): string {
+  const reason = signal?.reason;
+  if (reason instanceof Error && reason.message) return reason.message;
+  if (typeof reason === "string" && reason) return reason;
+  return "cron task run aborted";
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) return;
+  throw signal.reason instanceof Error ? signal.reason : new CronTaskRunError(abortReason(signal));
 }
 
 function attachCronTaskRunMetadata(err: unknown, metadata: CronTaskRunErrorMetadata): Error {
@@ -188,7 +200,9 @@ async function runPreScript(
   jobName: string,
   channelId: string,
   runAt: Date,
+  signal?: AbortSignal,
 ): Promise<string> {
+  throwIfAborted(signal);
   const scriptPath = join(SCRIPTS_DIR, scriptName);
   if (!existsSync(scriptPath)) throw new Error(`pre_script not found: ${scriptPath}`);
   const stat = statSync(scriptPath);
@@ -208,21 +222,37 @@ async function runPreScript(
     let stdout = "";
     let stderr = "";
     let killed = false;
+    let abortedReason: string | undefined;
+    let forceKillTimer: NodeJS.Timeout | undefined;
+    const abortRun = () => {
+      if (killed) return;
+      killed = true;
+      abortedReason = abortReason(signal);
+      child.kill("SIGTERM");
+      forceKillTimer = setTimeout(() => child.kill("SIGKILL"), 5000);
+    };
+    if (signal?.aborted) abortRun();
+    else signal?.addEventListener("abort", abortRun, { once: true });
     const timer = setTimeout(() => {
+      if (killed) return;
       killed = true;
       child.kill("SIGTERM");
-      setTimeout(() => child.kill("SIGKILL"), 5000);
+      forceKillTimer = setTimeout(() => child.kill("SIGKILL"), 5000);
     }, timeoutSec * 1000);
 
     child.stdout?.on("data", (c) => { stdout += c.toString(); });
     child.stderr?.on("data", (c) => { stderr += c.toString(); });
     child.on("error", (err) => {
       clearTimeout(timer);
+      if (forceKillTimer) clearTimeout(forceKillTimer);
+      signal?.removeEventListener("abort", abortRun);
       rejectErr(err);
     });
     child.on("exit", (code) => {
       clearTimeout(timer);
-      if (killed) rejectErr(new Error(`pre_script timeout (${timeoutSec}s)`));
+      if (forceKillTimer) clearTimeout(forceKillTimer);
+      signal?.removeEventListener("abort", abortRun);
+      if (killed) rejectErr(new Error(abortedReason ?? `pre_script timeout (${timeoutSec}s)`));
       else if (code !== 0) rejectErr(new Error(`pre_script exit=${code}: ${stderr.slice(0, 500)}`));
       else resolveOk(stdout);
     });
@@ -261,8 +291,9 @@ async function sendPreProviderAttachments(
   }
 }
 
-async function runPreProviderPreflight(job: CronJobTask, runAt: Date): Promise<void> {
+async function runPreProviderPreflight(job: CronJobTask, runAt: Date, signal?: AbortSignal): Promise<void> {
   if (!job.pre_provider || !job.pre_provider_preflight || job.pre_provider_preflight === "off") return;
+  throwIfAborted(signal);
   const mode = job.pre_provider_preflight;
   const args = {
     configName: job.pre_provider_config,
@@ -275,6 +306,7 @@ async function runPreProviderPreflight(job: CronJobTask, runAt: Date): Promise<v
     if (!result.ok) {
       throw new CronTaskRunError(healthFailureMessage(result), preflightFailureMetadata(job, mode, result.category));
     }
+    throwIfAborted(signal);
     log.info(`${job.name} pre_provider ${job.pre_provider} health preflight ok`);
     return;
   }
@@ -283,10 +315,12 @@ async function runPreProviderPreflight(job: CronJobTask, runAt: Date): Promise<v
   if (!result.ok) {
     throw new CronTaskRunError(dryRunFailureMessage(result), preflightFailureMetadata(job, mode, result.category));
   }
+  throwIfAborted(signal);
   log.info(`${job.name} pre_provider ${job.pre_provider} dry-run preflight ok`);
 }
 
-export async function runTask(job: CronJobTask, client: Client): Promise<CronJobRunOutcome> {
+export async function runTask(job: CronJobTask, client: Client, context: CronJobRunContext = {}): Promise<CronJobRunOutcome> {
+  throwIfAborted(context.signal);
   assertNotDraining(job.name);
   const runAt = cronRunAt();
   if (getActiveTaskCount() >= config.maxConcurrentTasks) {
@@ -295,6 +329,7 @@ export async function runTask(job: CronJobTask, client: Client): Promise<CronJob
     throw new CronTaskRunError(msg);
   }
   const channel = await fetchSendableChannel(client, job.channel);
+  throwIfAborted(context.signal);
   const taskId = uuid();
   const cwd = resolveHome(job.cwd ?? config.defaultCwd);
 
@@ -312,6 +347,7 @@ export async function runTask(job: CronJobTask, client: Client): Promise<CronJob
         job.name,
         job.channel,
         runAt,
+        context.signal,
       );
       prependedContext = buildCronPreScriptBlock(job.pre_script, stdout);
     } catch (err) {
@@ -323,7 +359,7 @@ export async function runTask(job: CronJobTask, client: Client): Promise<CronJob
   if (job.pre_provider) {
     if (job.pre_provider_preflight && job.pre_provider_preflight !== "off") {
       try {
-        await runPreProviderPreflight(job, runAt);
+        await runPreProviderPreflight(job, runAt, context.signal);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         const mode = preflightModeLabel(job.pre_provider_preflight);
@@ -338,6 +374,7 @@ export async function runTask(job: CronJobTask, client: Client): Promise<CronJob
       }
     }
     try {
+      throwIfAborted(context.signal);
       const result = await runPreProvider(job.pre_provider, {
         configName: job.pre_provider_config,
         jobName: job.name,
@@ -382,6 +419,7 @@ export async function runTask(job: CronJobTask, client: Client): Promise<CronJob
     }
   }
 
+  throwIfAborted(context.signal);
   const renderedPrompt = renderTemplate(job.prompt, { "cron.name": job.name });
   const prompt = buildCronTaskPrompt(job.name, prependedContext, renderedPrompt);
 
@@ -396,6 +434,7 @@ export async function runTask(job: CronJobTask, client: Client): Promise<CronJob
     source_route_type: "cron_task",
     source_channel_id: job.channel,
   });
+  context.onTaskId?.(taskId);
   const marketForecastId = marketIntelPayload
     ? recordMarketForecastFromPayload({ taskId, payload: marketIntelPayload })
     : undefined;
@@ -421,6 +460,7 @@ export async function runTask(job: CronJobTask, client: Client): Promise<CronJob
       cwd,
       channel,
       outputMode: "raw",
+      signal: context.signal,
       ...(marketForecastId ? { rawOutputTextTransform: stripMarketForecastJsonForDisplay } : {}),
     });
   } catch (err) {
@@ -453,7 +493,8 @@ export async function runTask(job: CronJobTask, client: Client): Promise<CronJob
   };
 }
 
-export async function runSkill(job: CronJobSkill, client: Client): Promise<CronJobRunOutcome> {
+export async function runSkill(job: CronJobSkill, client: Client, context: CronJobRunContext = {}): Promise<CronJobRunOutcome> {
+  throwIfAborted(context.signal);
   assertNotDraining(job.name);
   if (getActiveTaskCount() >= config.maxConcurrentTasks) {
     const msg = `${job.name} skipped: hit MINICLAW_MAX_CONCURRENT_TASKS=${config.maxConcurrentTasks}`;
@@ -461,6 +502,7 @@ export async function runSkill(job: CronJobSkill, client: Client): Promise<CronJ
     throw new CronTaskRunError(msg);
   }
   const channel = await fetchSendableChannel(client, job.channel);
+  throwIfAborted(context.signal);
   const taskId = uuid();
   const cwd = resolveHome(job.cwd ?? config.defaultCwd);
 
@@ -477,6 +519,7 @@ export async function runSkill(job: CronJobSkill, client: Client): Promise<CronJ
     source_route_type: "cron_skill",
     source_channel_id: job.channel,
   });
+  context.onTaskId?.(taskId);
   const reporter = new TaskReporter(taskId);
   reporter.accepted({
     route: "cron_skill",
@@ -492,7 +535,7 @@ export async function runSkill(job: CronJobSkill, client: Client): Promise<CronJ
   });
   let result: TaskResult;
   try {
-    result = await executeTask({ taskId, prompt, cwd, channel, outputMode: "raw" });
+    result = await executeTask({ taskId, prompt, cwd, channel, outputMode: "raw", signal: context.signal });
   } catch (err) {
     throw attachCronTaskRunMetadata(err, { taskId });
   }

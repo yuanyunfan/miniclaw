@@ -8,6 +8,16 @@ export interface CronJobBase {
   enabled: boolean;
   type: CronJobType;
   channel: string; // Discord channel ID for output (除非 type=script 且 capture_output=false)
+  /**
+   * Optional full-job wall clock timeout. This wraps the complete cron path
+   * (pre-script/pre-provider/task/script/message) at scheduler level.
+   */
+  timeout_ms?: number;
+  /**
+   * Per-job concurrency limit by job name. Defaults to 1 to preserve the
+   * historical "skip if previous run is still active" behavior.
+   */
+  max_concurrency?: number;
 }
 
 export interface CronJobTask extends CronJobBase {
@@ -67,6 +77,11 @@ export interface CronJobRunOutcome {
   errorCategory?: string;
   errorMessage?: string;
   metadata?: Record<string, unknown>;
+}
+
+export interface CronJobRunContext {
+  signal?: AbortSignal;
+  onTaskId?: (taskId: string) => void;
 }
 
 export interface CronJobLoadResult {

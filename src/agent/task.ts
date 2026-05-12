@@ -126,6 +126,13 @@ function interruptedReason(taskId: string): string {
   return interruptedTasks.get(taskId) ?? "任务因 MiniClaw 重启/关闭被中断";
 }
 
+function cancelledReason(abortController: AbortController): string {
+  const reason = abortController.signal.reason;
+  if (reason instanceof Error && reason.message && reason.name !== "AbortError") return reason.message;
+  if (typeof reason === "string" && reason) return reason;
+  return "任务已被用户取消";
+}
+
 function finalTaskStatus(
   taskId: string,
   abortController: AbortController,
@@ -211,6 +218,7 @@ interface ExecuteTaskParams {
   outputMode?: "embed" | "raw";
   rawOutputTextTransform?: (text: string) => string;
   statusMessage?: Message;
+  signal?: AbortSignal;
 }
 
 function recordRuntimeTrace(reporter: TaskReporter, eventType: string, options: AgentRuntimeTraceOptions = {}): void {
@@ -230,7 +238,7 @@ function normalizeRuntimeResult(
     return { ...result, success: false, result: interruptedReason(taskId) };
   }
   if (wasCancelled(taskId, abortController)) {
-    return { ...result, success: false, result: "任务已被用户取消" };
+    return { ...result, success: false, result: cancelledReason(abortController) };
   }
   return result;
 }
@@ -285,6 +293,9 @@ function logTaskCompletion(
 
 export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult> {
   const abortController = new AbortController();
+  const forwardAbort = () => abortController.abort(params.signal?.reason);
+  if (params.signal?.aborted) forwardAbort();
+  else params.signal?.addEventListener("abort", forwardAbort, { once: true });
   activeTasks.set(params.taskId, abortController);
   const outputMode = params.outputMode ?? "embed";
   const reporter = new TaskReporter(params.taskId);
@@ -365,7 +376,7 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
     const errMsg = wasInterrupted(params.taskId)
       ? interruptedReason(params.taskId)
       : wasCancelled(params.taskId, abortController)
-      ? "任务已被用户取消"
+      ? cancelledReason(abortController)
       : err instanceof Error ? err.message : String(err);
     log.error(`✗ ${shortId} threw after ${durationMs}ms: ${errMsg}`);
     reporter.providerError(selectedRuntime.provider, errMsg, { duration_ms: durationMs });
@@ -395,6 +406,7 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
       result: errMsg,
     };
   } finally {
+    params.signal?.removeEventListener("abort", forwardAbort);
     activeTasks.delete(params.taskId);
     notifyActiveTaskChange();
     cancelledTasks.delete(params.taskId);

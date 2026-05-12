@@ -9,6 +9,8 @@ import { isPreProviderName } from "../providers/index.js";
 const CRON_DIR_DEFAULT = join(homedir(), ".miniclaw/cron");
 const VALID_TYPES: CronJobType[] = ["task", "script", "skill", "message"];
 const VALID_PRE_PROVIDER_PREFLIGHT_MODES: PreProviderPreflightMode[] = ["off", "health", "dry_run"];
+const MAX_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+const MAX_CONCURRENCY = 50;
 
 const EXAMPLE_YAML = `# 示例 cron job —— 默认 disabled，照抄改 name + enabled: true 即可
 # 文档: https://github.com/yuanyunfan/miniclaw#cron
@@ -26,6 +28,8 @@ timezone: Asia/Shanghai
 enabled: false
 type: message
 channel: "REPLACE_WITH_DISCORD_CHANNEL_ID"
+# timeout_ms: 1800000       # 可选：完整 job wall-clock 超时（毫秒）
+# max_concurrency: 1        # 可选：同名 job 并发上限，默认 1
 content: "早安！今天 {{date}} ({{weekday}})。"
 `;
 
@@ -65,6 +69,20 @@ function parseSchedule(value: unknown, file: string): string | string[] {
   throw new Error(`${file}: 'schedule' is required (crontab string or non-empty string array)`);
 }
 
+function parseOptionalPositiveInteger(
+  value: unknown,
+  file: string,
+  field: string,
+  max: number,
+): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value) || value < 1) {
+    throw new Error(`${file}: '${field}' 必须是正整数`);
+  }
+  if (value > max) throw new Error(`${file}: '${field}' 上限 ${max}`);
+  return value;
+}
+
 function validateJob(raw: unknown, file: string): CronJob {
   if (!isPlainObject(raw)) throw new Error(`${file}: top-level must be a YAML object`);
   const r = raw as Record<string, unknown>;
@@ -82,12 +100,16 @@ function validateJob(raw: unknown, file: string): CronJob {
 
   const enabled = r.enabled !== false; // 默认 true，除非显式 false
   const timezone = typeof r.timezone === "string" ? r.timezone : undefined;
+  const timeoutMs = parseOptionalPositiveInteger(r.timeout_ms, file, "timeout_ms", MAX_TIMEOUT_MS);
+  const maxConcurrency = parseOptionalPositiveInteger(r.max_concurrency, file, "max_concurrency", MAX_CONCURRENCY) ?? 1;
   const baseCommon = {
     name: r.name.trim(),
     schedule,
     timezone,
     enabled,
     channel: r.channel,
+    max_concurrency: maxConcurrency,
+    ...(timeoutMs !== undefined ? { timeout_ms: timeoutMs } : {}),
   };
 
   if (type === "task") {

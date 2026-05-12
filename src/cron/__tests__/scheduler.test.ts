@@ -9,6 +9,7 @@ import { getJobState, resetStateCache } from "../state.js";
 import type { CronJobMessage, CronJobTask } from "../types.js";
 import { setDb } from "../../store/connection.js";
 import { listCronRuns } from "../../store/cron-runs.js";
+import { getIncident } from "../../store/incidents.js";
 import { ensureBaseSchema, runMigrations } from "../../store/schema.js";
 
 function messageJob(): CronJobMessage {
@@ -105,6 +106,82 @@ describe("cron scheduler dispatch", () => {
 
     gate.resolve();
     await firstRun;
+  });
+
+  it("允许配置的同名 job 并发数，超过 max_concurrency 时跳过并记录 history", async () => {
+    const gate = deferred();
+    let sendStarted = 0;
+    const client = {
+      channels: {
+        fetch: async () => ({
+          isSendable: () => true,
+          send: async () => {
+            sendStarted++;
+            await gate.promise;
+            return {};
+          },
+        }),
+      },
+    } as unknown as Client;
+    const job = { ...messageJob(), name: "parallel-message", max_concurrency: 2 };
+
+    const firstRun = __testables.dispatch(job, client);
+    const secondRun = __testables.dispatch(job, client);
+    await waitFor(() => sendStarted === 2);
+
+    await __testables.dispatch(job, client);
+    expect(getJobState(job.name)?.last_status).toBe("error");
+    expect(getJobState(job.name)?.last_error).toContain("max_concurrency=2");
+
+    gate.resolve();
+    await Promise.all([firstRun, secondRun]);
+
+    const rows = listCronRuns({ jobName: job.name, limit: 10 });
+    expect(rows.map((row) => row.status).sort()).toEqual(["skipped", "success", "success"]);
+    expect(rows.find((row) => row.status === "skipped")).toMatchObject({
+      error_category: "max_concurrency",
+    });
+  });
+
+  it("timeout_ms 触发时记录 failed cron_run 并创建/更新 cron incident", async () => {
+    const client = {
+      channels: {
+        fetch: async () => ({
+          isSendable: () => true,
+          send: async () => await new Promise(() => {}),
+        }),
+      },
+    } as unknown as Client;
+    const job = { ...messageJob(), name: "history-timeout", timeout_ms: 5 };
+    const policy = {
+      ...__testables.DEFAULT_RETRY_POLICY,
+      maxAttempts: 1,
+    };
+
+    await __testables.dispatch(job, client, policy);
+
+    const rows = listCronRuns({ jobName: job.name, limit: 5 });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      job_name: "history-timeout",
+      status: "failed",
+      error_category: "cron_timeout",
+    });
+    expect(rows[0]?.error_message).toContain("timed out after 5ms");
+    expect(rows[0]?.incident_id).toBeTruthy();
+    const incident = getIncident(rows[0]!.incident_id!);
+    expect(incident).toMatchObject({
+      type: "cron_failed",
+      title: "Cron timed out: history-timeout",
+      subject_id: "history-timeout",
+      subject_type: "cron",
+    });
+    expect(JSON.parse(incident?.source_json ?? "{}")).toMatchObject({
+      cron_run_id: rows[0]!.id,
+      timeout_ms: 5,
+      attempt: 1,
+      max_attempts: 1,
+    });
   });
 
   it("失败后按 10m 起步指数退避重试，最多总尝试 5 次", async () => {

@@ -218,3 +218,18 @@ Record schema version, config defaults, query commands, and verification output 
   - `pnpm run lint` passed.
   - `pnpm run e2e:cron` passed: `Cron E2E fixture passed: cron-e2e-1778600152507`.
   - `pnpm run quality:docs` passed with schema v11.
+
+### 2026-05-12 Ralph iteration: per-job timeout and concurrency
+
+- Added cron YAML support for `timeout_ms` and `max_concurrency`; `max_concurrency` defaults to 1 to preserve the previous same-job single-run guard, while `timeout_ms` is opt-in.
+- Replaced scheduler same-name `Set` tracking with per-job running counts, so configured jobs can run up to their own concurrency limit and skipped overflow dispatches are persisted as `cron_runs.status=skipped` with `error_category=max_concurrency`.
+- Added scheduler-level full-job timeout wrapping. The timeout abort signal is propagated into task, skill, script, pre-script, and message runners; task execution now accepts an external abort signal and preserves the abort reason in task output.
+- Timeout failures are persisted in `cron_runs` with `error_category=cron_timeout`, linked task id when available, and a `cron_failed` incident row plus incident event keyed by the retry chain's `failure_run_id`.
+- Updated `docs/architecture.md` cron flow to document `max_concurrency`, `timeout_ms`, timeout history rows, and timeout incidents.
+- Verification:
+  - `pnpm exec vitest run src/cron/__tests__/loader.test.ts src/cron/__tests__/scheduler.test.ts src/cron/__tests__/runner-script.test.ts src/cron/__tests__/runner-task.test.ts` passed: 4 files, 53 tests.
+  - `pnpm exec vitest run src/agent/__tests__/task-helpers.test.ts src/agent/__tests__/e2e-fake-runtime.test.ts src/agent/__tests__/task-runtime-registry.test.ts` passed: 3 files, 23 tests.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm run e2e:cron` passed: `Cron E2E fixture passed: cron-e2e-1778601087271`.
+  - `pnpm run quality:docs` passed with schema v11.
