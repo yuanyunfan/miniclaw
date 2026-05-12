@@ -18,6 +18,8 @@
     "doctor": "tsx scripts/doctor.ts",
     "doctor:repair": "tsx scripts/doctor-repair.ts",
     "doctor:ship": "tsx scripts/doctor-ship.ts",
+    "ralph:run": "tsx scripts/ralph-run.ts",
+    "ralph:verify": "tsx scripts/ralph-verify.ts",
     "register": "tsx src/commands/register.ts",
     "test": "vitest run",
     "test:watch": "vitest",

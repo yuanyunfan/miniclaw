@@ -1,0 +1,132 @@
+{
+  "version": 1,
+  "description": "MiniClaw Ralph queue for the 2026-05 continuous-improvement plan set.",
+  "defaults": {
+    "base_ref": "main",
+    "branch_prefix": "ralph/",
+    "worktree_root": "../miniclaw-ralph",
+    "verify_profile": "standard"
+  },
+  "tasks": [
+    {
+      "id": "task-view-boundary",
+      "title": "Task View Boundary And Runner Refactor",
+      "priority": "P1",
+      "status": "pending",
+      "plan": "docs/plans/2026-05-11-task-view-boundary.md",
+      "branch": "ralph/task-view-boundary",
+      "verify_profile": "task-runtime",
+      "commit_title": "refactor: split task view boundary"
+    },
+    {
+      "id": "task-trace-export",
+      "title": "Task Trace Export And Discord Task Log",
+      "priority": "P1",
+      "status": "pending",
+      "plan": "docs/plans/2026-05-11-task-trace-export.md",
+      "branch": "ralph/task-trace-export",
+      "verify_profile": "task-runtime",
+      "commit_title": "feat: add task trace export"
+    },
+    {
+      "id": "smart-router-evaluation-loop",
+      "title": "Smart Router Evaluation Loop",
+      "priority": "P1",
+      "status": "pending",
+      "plan": "docs/plans/2026-05-11-smart-router-evaluation-loop.md",
+      "branch": "ralph/smart-router-evaluation-loop",
+      "verify_profile": "router",
+      "commit_title": "feat: add smart router evaluation loop"
+    },
+    {
+      "id": "docs-drift-gate",
+      "title": "Docs Drift Quality Gate Expansion",
+      "priority": "P1",
+      "status": "pending",
+      "plan": "docs/plans/2026-05-11-docs-drift-gate.md",
+      "branch": "ralph/docs-drift-gate",
+      "verify_profile": "docs",
+      "commit_title": "feat: expand docs drift gate"
+    },
+    {
+      "id": "complexity-hotspot-refactor",
+      "title": "Complexity Hotspot Refactor Plan",
+      "priority": "P1",
+      "status": "pending",
+      "plan": "docs/plans/2026-05-11-complexity-hotspot-refactor.md",
+      "branch": "ralph/complexity-hotspot-refactor",
+      "verify_profile": "standard",
+      "commit_title": "refactor: split complexity hotspot"
+    },
+    {
+      "id": "agent-runtime-contracts",
+      "title": "Agent Runtime, Model Client, IM Transport, And Data Provider Contracts",
+      "priority": "P1",
+      "status": "pending",
+      "plan": "docs/plans/2026-05-11-agent-runtime-contracts.md",
+      "branch": "ralph/agent-runtime-contracts",
+      "verify_profile": "standard",
+      "commit_title": "feat: add agent runtime contracts"
+    },
+    {
+      "id": "db-migrations-state-lifecycle",
+      "title": "DB Migrations And State Lifecycle Governance",
+      "priority": "P1",
+      "status": "pending",
+      "plan": "docs/plans/2026-05-11-db-migrations-state-lifecycle.md",
+      "branch": "ralph/db-migrations-state-lifecycle",
+      "verify_profile": "store",
+      "commit_title": "feat: add db migration governance"
+    },
+    {
+      "id": "config-schema-first",
+      "title": "Config Schema-First Refactor",
+      "priority": "P1",
+      "status": "pending",
+      "plan": "docs/plans/2026-05-11-config-schema-first.md",
+      "branch": "ralph/config-schema-first",
+      "verify_profile": "config",
+      "commit_title": "refactor: split config schema layers"
+    },
+    {
+      "id": "provider-framework-sdk",
+      "title": "Provider Framework SDK",
+      "priority": "P1",
+      "status": "pending",
+      "plan": "docs/plans/2026-05-11-provider-framework-sdk.md",
+      "branch": "ralph/provider-framework-sdk",
+      "verify_profile": "provider",
+      "commit_title": "feat: add provider framework sdk"
+    },
+    {
+      "id": "incident-center-ops-view",
+      "title": "Incident Center Operator View",
+      "priority": "P2",
+      "status": "pending",
+      "plan": "docs/plans/2026-05-11-incident-center-ops-view.md",
+      "branch": "ralph/incident-center-ops-view",
+      "verify_profile": "doctor",
+      "commit_title": "feat: expand incident center view"
+    },
+    {
+      "id": "cron-run-history-control",
+      "title": "Cron Run History And Per-Job Control",
+      "priority": "P2",
+      "status": "pending",
+      "plan": "docs/plans/2026-05-11-cron-run-history-control.md",
+      "branch": "ralph/cron-run-history-control",
+      "verify_profile": "cron",
+      "commit_title": "feat: add cron run history"
+    },
+    {
+      "id": "stage-experimental-boundary",
+      "title": "Stage Experimental Boundary",
+      "priority": "P3",
+      "status": "pending",
+      "plan": "docs/plans/2026-05-11-stage-experimental-boundary.md",
+      "branch": "ralph/stage-experimental-boundary",
+      "verify_profile": "stage",
+      "commit_title": "docs: define stage experimental boundary"
+    }
+  ]
+}
