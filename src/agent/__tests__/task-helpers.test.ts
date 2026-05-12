@@ -12,9 +12,6 @@ const {
   fmtTokens,
   formatUsage,
   finalTaskStatus,
-  rawTaskMessages,
-  buildExecutionSummary,
-  buildRealtimeProgress,
   selectTaskRunner,
   addActiveTaskForTest,
   deleteActiveTaskForTest,
@@ -104,77 +101,6 @@ describe("finalTaskStatus", () => {
 
     expect(ctrl.signal.aborted).toBe(true);
     expect(finalTaskStatus(taskId, ctrl, false)).toBe("interrupted");
-  });
-});
-
-describe("rawTaskMessages", () => {
-  it("uses a fallback for empty successful raw output", () => {
-    expect(rawTaskMessages("1234567890", {
-      success: true,
-      sessionId: "",
-      costUsd: 0,
-      durationMs: 0,
-      turns: 0,
-      result: "   ",
-    })).toEqual(["[无文字回复]"]);
-  });
-
-  it("uses a fallback for empty failed raw output", () => {
-    expect(rawTaskMessages("1234567890", {
-      success: false,
-      sessionId: "",
-      costUsd: 0,
-      durationMs: 0,
-      turns: 0,
-      result: "",
-    })).toEqual(["❌ `12345678` 失败: 任务失败且无错误详情"]);
-  });
-});
-
-describe("buildExecutionSummary", () => {
-  it("keeps a compact completed summary with recent tool steps", () => {
-    const text = buildExecutionSummary("completed", {
-      success: true,
-      sessionId: "codex:thread-12345678",
-      costUsd: 0,
-      durationMs: 12_340,
-      turns: 3,
-      result: "done",
-      tokensSummary: "in: 100 · out: 50",
-    }, [
-      "web_search: \"warp\"",
-      "terminal: \"pnpm test\"",
-    ], 2);
-
-    expect(text).toContain("status: completed");
-    expect(text).toContain("elapsed: 12.3s");
-    expect(text).toContain("turns: 3");
-    expect(text).toContain("tools: 2");
-    expect(text).toContain("tokens: in: 100 · out: 50");
-    expect(text).toContain("- terminal: \"pnpm test\"");
-  });
-});
-
-describe("buildRealtimeProgress", () => {
-  it("renders a running progress block even before tool events", () => {
-    const text = buildRealtimeProgress([], 0, 0);
-
-    expect(text).toContain("### Realtime Progress");
-    expect(text).toContain("status: running");
-    expect(text).toContain("tools: 0");
-    expect(text).toContain("- waiting for SDK events");
-  });
-
-  it("keeps only the recent progress tail and reports omitted steps", () => {
-    const lines = Array.from({ length: 30 }, (_, idx) => `step ${idx + 1}`);
-    const text = buildRealtimeProgress(lines, 4, 30);
-
-    expect(text).toContain("turns: 4");
-    expect(text).toContain("tools: 30");
-    expect(text).toContain("omitted: 5 earlier steps");
-    expect(text).not.toContain("- step 5");
-    expect(text).toContain("- step 6");
-    expect(text).toContain("- step 30");
   });
 });
 

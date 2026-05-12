@@ -164,6 +164,7 @@ flowchart LR
 - **memories 走 markdown 不再走 SQLite 表**：`~/.miniclaw/memories/MEMORY.md` 可直接 vim 编辑、git diff、跨工具复用（hermes 同模式）
 - **分层配置**：结构化设置优先放 `~/.miniclaw/config.yaml`；`.env` 保留 secrets、代理和临时 override；优先级是内置默认值 < YAML < env
 - **可控继承本机 Agent 配置**：Codex 可用 `inherit` 回落到 `~/.codex/config.toml`；Claude task 显式加载 `user/project/local` settings，默认禁用 hooks；MCP 仍通过 `mcp.allowlist` 控制
+- **Task runtime 三边界**：`src/agent/runners/*-task-runner.ts` 负责 Claude / Codex / fake runtime parsing；`src/discord/task-view-reporter.ts` 负责 Discord status/progress/final output；`src/agent/task-reporter.ts` 只写 SQLite trace
 - **Discord task 三层输出**：状态 embed 只放元数据；progress message 执行中持续 edit、完成后保留 Execution Summary；最终结果走普通 Markdown 分片
 - **Task trace 观测层**：`src/agent/task-reporter.ts` 把 task lifecycle、provider/tool event、Discord delivery failure 写入 `task_events`，Auto Doctor 优先读结构化 trace 再回退日志
 - **pre-provider 扩展点**：cron `task` 可先运行 provider 采集结构化数据，再把 JSON 注入 prompt；微信公众号日报通过 `wechat-mp` provider 落地，邮件类任务通过通用 `email` capability + `email-query` / `cmb-credit-card-email` provider 复用同一只读邮箱基础能力
@@ -268,6 +269,9 @@ sequenceDiagram
     participant D as Discord
     participant H as commands/handlers.ts
     participant T as agent/task.ts
+    participant VR as discord/task-view-reporter.ts
+    participant TR as agent/task-reporter.ts
+    participant RN as agent/runners/*<br/>TaskRunner
     participant SA as agent/subagents.ts
     participant Q as Provider<br/>Claude query() / Codex thread
     participant R as raven → Copilot
@@ -284,14 +288,18 @@ sequenceDiagram
     H->>D: send taskStartEmbed 状态卡片
     H->>T: executeTask 携带 taskId / prompt / cwd / channel / 可选 attachmentBlocks+codexInputs / statusMessage / outputMode=embed
 
-    T->>SA: loadSubagents()
+    T->>TR: started(provider/model/cwd/outputMode)
+    T->>VR: start()<br/>创建/复用 status embed + 初始化 Realtime Progress
+    T->>RN: run(TaskRunnerInput)<br/>signal + prompt + cwd + attachments + view/trace callbacks
+
+    RN->>SA: loadSubagents()
     SA->>SA: 读 agents/*.md (repo)<br/>+ ~/.miniclaw/skills/*.md (user)
-    SA-->>T: { researcher, code-investigator, planner, generator, evaluator, ...user skills }
+    SA-->>RN: { researcher, code-investigator, planner, generator, evaluator, ...user skills }
 
-    T->>T: buildMemoryPrompt() + supervisorBlock<br/>(能力图谱 + 选择原则 + 编排纪律)
+    RN->>RN: buildMemoryPrompt() + supervisorBlock<br/>(能力图谱 + 选择原则 + 编排纪律)
 
-    T->>Q: provider run
-    Note over T,Q: Claude: claude_code preset + settingSources + agents + MCP allowlist + canUseTool<br/>Codex: Codex SDK thread + 可继承本机 config + event progress<br/>abortController + provider-prefixed resume
+    RN->>Q: provider run
+    Note over RN,Q: Claude: claude_code preset + settingSources + agents + MCP allowlist + canUseTool<br/>Codex: Codex SDK thread + 可继承本机 config + event progress<br/>abortController + provider-prefixed resume
 
     Note over Q: Supervisor 按任务自由组合角色：<br/>简单任务可直接 generator 一步；<br/>调研类按是否需 Bash 选 researcher/code-investigator；<br/>不固定 1→2→3→4 流水线
 
@@ -314,23 +322,29 @@ sequenceDiagram
     end
 
     loop 主 agent 每个 turn
-        Q-->>T: msg.type=assistant
+        Q-->>RN: SDK stream event
         alt parent_tool_use_id 存在
-            T->>T: 标记 ↳ subagent
+            RN->>RN: 标记 ↳ subagent
         end
-        T->>T: toolCallLog.push + ProgressReporter.update<br/>edit persistent Realtime Progress 消息
+        RN-->>T: TaskViewEvent + trace fact
+        T->>TR: onTraceEvent(...) 写 task_events
+        T->>VR: handle(TaskViewEvent)<br/>edit persistent Realtime Progress 消息
     end
 
-    Q-->>T: msg.type=result  含 cost / turns / duration / usage
+    Q-->>RN: result  含 cost / turns / duration / usage
+    RN-->>T: TaskRunnerResult
 
     T->>DB: updateTask  status / result_summary / cost_usd ...
+    T->>TR: finished(status, provider/duration/turns/cost)
 
     alt outputMode=embed  /task 默认
-        T->>D: edit taskStartEmbed → taskCompleteEmbed<br/>只保留状态 / model / tokens / session 元数据
-        T->>D: edit Realtime Progress → Execution Summary
-        T->>D: chunkMessage 发送最终 Markdown 结果
+        T->>VR: finish(result, status, progressSnapshot)
+        VR->>D: edit taskStartEmbed → taskCompleteEmbed<br/>只保留状态 / model / tokens / session 元数据
+        VR->>D: edit Realtime Progress → Execution Summary
+        VR->>D: chunkMessage 发送最终 Markdown 结果
     else outputMode=raw  cron 触发
-        T->>D: 直接 chunkMessage 发文本
+        T->>VR: finish(result, status)
+        VR->>D: 直接 chunkMessage 发文本
     end
 ```
 

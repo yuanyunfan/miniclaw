@@ -4,10 +4,7 @@ import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { config, type AgentProvider } from "../config.js";
 import { updateTask } from "../store/db.js";
-import { ProgressReporter } from "../discord/progress.js";
-import { taskCompleteEmbed, taskErrorEmbed, taskStartEmbed } from "../discord/formatter.js";
-import { chunkMessage } from "../discord/chunks.js";
-import { sendChunkedTextWithDeferredLinkPreviews } from "../discord/text.js";
+import { DiscordTaskViewReporter } from "../discord/task-view-reporter.js";
 import { IDENTITY_LINE_TASK } from "./identity.js";
 import { createLogger } from "../lib/log.js";
 import type { CodexInputEntry } from "./codex.js";
@@ -18,13 +15,10 @@ import { buildSupervisorBlock } from "./supervisor.js";
 import { claudeTaskRunner } from "./runners/claude-task-runner.js";
 import { codexTaskRunner } from "./runners/codex-task-runner.js";
 import { createFakeTaskRunner } from "./runners/fake-task-runner.js";
-import { pushCompactedLine } from "./runners/progress-lines.js";
 import type { TaskRunner, TaskRunnerResult, TaskRunnerTraceOptions } from "./runners/types.js";
 import type { TaskViewEvent } from "./task-view-events.js";
 
 const log = createLogger("task");
-
-const PROGRESS_TAIL_LINES = 25;
 
 export interface TaskResult {
   success: boolean;
@@ -44,9 +38,6 @@ export const __testables = {
   buildSupervisorBlock,
   IDENTITY_LINE_TASK,
   finalTaskStatus,
-  rawTaskMessages,
-  buildExecutionSummary,
-  buildRealtimeProgress,
   selectTaskRunner,
   addActiveTaskForTest,
   deleteActiveTaskForTest,
@@ -176,132 +167,6 @@ function selectTaskRunner(agentProvider: AgentProvider, fakeAgent: boolean): Tas
   return agentProvider === "codex" ? codexTaskRunner : claudeTaskRunner;
 }
 
-function rawTaskMessages(taskId: string, result: TaskResult): string[] {
-  const fallback = result.success ? "[无文字回复]" : "任务失败且无错误详情";
-  const text = result.result.trim() ? result.result : fallback;
-  if (result.success) return chunkMessage(text);
-  return [`❌ \`${taskId.slice(0, 8)}\` 失败: ${text.slice(0, 1900)}`];
-}
-
-function rawDisplayTaskResult(params: ExecuteTaskParams, result: TaskResult): TaskResult {
-  if (!result.success || !params.rawOutputTextTransform) return result;
-  return { ...result, result: params.rawOutputTextTransform(result.result) };
-}
-
-async function sendRawTaskResult(channel: SendableChannels, taskId: string, result: TaskResult): Promise<void> {
-  if (result.success) {
-    const text = result.result.trim() ? result.result : "[无文字回复]";
-    await sendChunkedTextWithDeferredLinkPreviews(channel, text);
-    return;
-  }
-  await sendChunkedTextWithDeferredLinkPreviews(channel, rawTaskMessages(taskId, result)[0] ?? `❌ \`${taskId.slice(0, 8)}\` 失败`);
-}
-
-async function sendMarkdownTaskResult(channel: SendableChannels, result: TaskResult): Promise<void> {
-  const fallback = result.success ? "[无文字回复]" : "任务失败且无错误详情";
-  const prefix = result.success ? "" : "❌ **任务失败**\n\n";
-  await sendChunkedTextWithDeferredLinkPreviews(channel, prefix + (result.result.trim() || fallback));
-}
-
-function formatSeconds(ms: number): string {
-  return `${(ms / 1000).toFixed(1)}s`;
-}
-
-function buildExecutionSummary(
-  status: "completed" | "failed" | "cancelled" | "interrupted",
-  result: TaskResult,
-  toolCallLog: string[],
-  toolCount: number,
-): string {
-  const recent = toolCallLog.slice(-8);
-  const recentText = recent.length
-    ? recent.map((line) => `- ${line}`).join("\n")
-    : "- (no tool calls recorded)";
-  return [
-    "### Execution Summary",
-    `status: ${status}`,
-    `elapsed: ${formatSeconds(result.durationMs)}`,
-    `turns: ${result.turns}`,
-    `tools: ${toolCount}`,
-    ...(result.tokensSummary ? [`tokens: ${result.tokensSummary}`] : []),
-    "",
-    "recent steps:",
-    recentText,
-  ].join("\n").slice(0, 2000);
-}
-
-function buildRealtimeProgress(lines: string[], turns: number, toolCount: number): string {
-  const tail = lines.slice(-PROGRESS_TAIL_LINES);
-  const omitted = lines.length - tail.length;
-  const recent = tail.length
-    ? tail.map((line) => `- ${line}`).join("\n")
-    : "- waiting for SDK events";
-  return [
-    "### Realtime Progress",
-    "status: running",
-    `turns: ${turns || 0}`,
-    `tools: ${toolCount}`,
-    ...(omitted > 0 ? [`omitted: ${omitted} earlier steps`] : []),
-    "",
-    "recent steps:",
-    recent,
-  ].join("\n").slice(0, 2000);
-}
-
-async function updateStatusMessage(channel: SendableChannels, message: Message | undefined, embed: ReturnType<typeof taskCompleteEmbed>): Promise<void> {
-  if (message) {
-    try {
-      await message.edit({ embeds: [embed] });
-      return;
-    } catch {
-      // Fall back to sending a new status card below.
-    }
-  }
-  await channel.send({ embeds: [embed] });
-}
-
-async function sendEmbedTaskResult(
-  params: ExecuteTaskParams,
-  progress: ProgressReporter,
-  abortController: AbortController,
-  result: TaskResult,
-  toolCallLog: string[],
-  toolCount: number,
-  statusMessage?: Message,
-  reporter?: TaskReporter,
-): Promise<void> {
-  const status = finalTaskStatus(params.taskId, abortController, result.success);
-  await progress.complete(params.channel, {
-    finalText: buildExecutionSummary(status, result, toolCallLog, toolCount),
-  });
-
-  const embed = result.success
-    ? taskCompleteEmbed({
-        taskId: params.taskId,
-        durationMs: result.durationMs,
-        costUsd: result.costUsd,
-        turns: result.turns,
-        sessionId: result.sessionId,
-        provider: config.agentProvider,
-        model: config.model,
-        cwd: params.cwd,
-        toolCount,
-        ...(result.tokensSummary ? { tokensSummary: result.tokensSummary } : {}),
-      })
-    : taskErrorEmbed(params.taskId, result.result);
-
-  try {
-    await updateStatusMessage(params.channel, statusMessage, embed);
-  } catch (err) {
-    reporter?.discordDeliveryFailed("status_message_update", err);
-  }
-  try {
-    await sendMarkdownTaskResult(params.channel, result);
-  } catch (err) {
-    reporter?.discordDeliveryFailed("final_markdown_send", err);
-  }
-}
-
 interface ExecuteTaskParams {
   taskId: string;
   prompt: string;
@@ -317,57 +182,6 @@ interface ExecuteTaskParams {
   outputMode?: "embed" | "raw";
   rawOutputTextTransform?: (text: string) => string;
   statusMessage?: Message;
-}
-
-interface ViewProgressState {
-  lines: string[];
-  turns: number;
-  toolCount: number;
-}
-
-async function updateProgressTail(
-  progress: ProgressReporter,
-  channel: SendableChannels,
-  lines: string[],
-  turns: number,
-  toolCount: number,
-): Promise<void> {
-  await progress.update(buildRealtimeProgress(lines, turns, toolCount), channel);
-}
-
-function taskViewProgressLine(event: Extract<TaskViewEvent, { type: "tool_progress" | "assistant_progress" }>): string {
-  if (event.type === "assistant_progress") return event.text;
-  return event.detail ? `${event.title}: "${event.detail}"` : event.title;
-}
-
-async function handleTaskViewEvent(
-  event: TaskViewEvent,
-  params: ExecuteTaskParams,
-  progress: ProgressReporter,
-  state: ViewProgressState,
-  renderProgress: boolean,
-): Promise<void> {
-  switch (event.type) {
-    case "session_started": {
-      updateTask(params.taskId, { session_id: event.sessionId });
-      break;
-    }
-    case "turn_started": {
-      state.turns = event.turn;
-      break;
-    }
-    case "tool_progress":
-    case "assistant_progress": {
-      const line = taskViewProgressLine(event);
-      const added = pushCompactedLine(state.lines, line);
-      if (event.type === "tool_progress" && event.countAsTool !== false) state.toolCount++;
-      const countedToolEvent = event.type === "tool_progress" && event.countAsTool !== false;
-      if (renderProgress && (added || countedToolEvent)) {
-        await updateProgressTail(progress, params.channel, state.lines, state.turns, state.toolCount);
-      }
-      break;
-    }
-  }
 }
 
 function recordRunnerTrace(reporter: TaskReporter, eventType: string, options: TaskRunnerTraceOptions = {}): void {
@@ -446,9 +260,17 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
   activeTasks.set(params.taskId, abortController);
   const outputMode = params.outputMode ?? "embed";
   const reporter = new TaskReporter(params.taskId);
-  const progress = new ProgressReporter(params.taskId, {
-    minUpdateIntervalMs: 2000,
-    onDeliveryError: (operation, err) => reporter.discordDeliveryFailed(`progress_${operation}`, err),
+  const viewReporter = new DiscordTaskViewReporter({
+    taskId: params.taskId,
+    prompt: params.prompt,
+    cwd: params.cwd,
+    channel: params.channel,
+    provider: config.agentProvider,
+    model: config.model,
+    outputMode,
+    ...(params.statusMessage ? { statusMessage: params.statusMessage } : {}),
+    ...(params.rawOutputTextTransform ? { rawOutputTextTransform: params.rawOutputTextTransform } : {}),
+    onDeliveryError: (operation, err) => reporter.discordDeliveryFailed(operation, err),
   });
   const startedAt = Date.now();
   const shortId = params.taskId.slice(0, 8);
@@ -468,24 +290,8 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
   }
 
   try {
-    if (outputMode === "embed" && !params.statusMessage) {
-      try {
-        params.statusMessage = await params.channel.send({
-          embeds: [taskStartEmbed(params.taskId, params.prompt, params.cwd, {
-            provider: config.agentProvider,
-            model: config.model,
-          })],
-        });
-      } catch (err) {
-        reporter.discordDeliveryFailed("start_status_send", err);
-        // Status card is best-effort; task execution should continue.
-      }
-    }
-    if (outputMode === "embed") {
-      await progress.update(buildRealtimeProgress([], 0, 0), params.channel);
-    }
+    await viewReporter.start();
 
-    const progressState: ViewProgressState = { lines: [], turns: 0, toolCount: 0 };
     const runnerResult = await runner.run({
       taskId: params.taskId,
       prompt: params.prompt,
@@ -494,25 +300,21 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
       ...(params.attachmentBlocks ? { attachmentBlocks: params.attachmentBlocks } : {}),
       ...(params.attachmentCodexInputs ? { attachmentCodexInputs: params.attachmentCodexInputs } : {}),
       signal: abortController.signal,
-      onViewEvent: (event) => handleTaskViewEvent(event, params, progress, progressState, outputMode === "embed"),
+      onViewEvent: async (event: TaskViewEvent) => {
+        if (event.type === "session_started") updateTask(params.taskId, { session_id: event.sessionId });
+        await viewReporter.handle(event);
+      },
       onTraceEvent: (eventType, options) => recordRunnerTrace(reporter, eventType, options),
     });
     const lastResult = normalizeRunnerResult(params.taskId, abortController, runnerResult);
-    const toolCallLog = lastResult.progressLines ?? progressState.lines;
-    const toolStep = lastResult.toolCount ?? progressState.toolCount;
+    const progressSnapshot = viewReporter.snapshot();
+    const toolCallLog = lastResult.progressLines ?? progressSnapshot.lines;
+    const toolStep = lastResult.toolCount ?? progressSnapshot.toolCount;
 
-    completeTaskRow(params, abortController, lastResult, runner, reporter, toolStep);
+    const status = completeTaskRow(params, abortController, lastResult, runner, reporter, toolStep);
     logTaskCompletion(shortId, runner, lastResult, toolStep, startedAt);
 
-    if (outputMode === "raw") {
-      // 程序化触发（cron 等）：直接发结果文本，不带任何元数据装饰
-      await progress.complete(params.channel, lastResult.success ? undefined : { keepAsError: true });
-      await sendRawTaskResult(params.channel, params.taskId, rawDisplayTaskResult(params, lastResult));
-      return lastResult;
-    }
-
-    // outputMode === "embed"（/task 默认）
-    await sendEmbedTaskResult(params, progress, abortController, lastResult, toolCallLog, toolStep, params.statusMessage, reporter);
+    await viewReporter.finish(lastResult, status, { lines: toolCallLog, toolCount: toolStep });
 
     return lastResult;
   } catch (err) {
@@ -524,7 +326,6 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
       : err instanceof Error ? err.message : String(err);
     log.error(`✗ ${shortId} threw after ${durationMs}ms: ${errMsg}`);
     reporter.providerError(config.agentProvider, errMsg, { duration_ms: durationMs });
-    await progress.complete(params.channel, { keepAsError: true });
 
     const status = finalTaskStatus(params.taskId, abortController, false);
     updateTask(params.taskId, {
@@ -540,11 +341,7 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
       cost_usd: 0,
     });
 
-    try {
-      await params.channel.send({ embeds: [taskErrorEmbed(params.taskId, errMsg)] });
-    } catch (sendErr) {
-      reporter.discordDeliveryFailed("error_embed_send", sendErr);
-    }
+    await viewReporter.renderTaskError(errMsg);
 
     return {
       success: false,
