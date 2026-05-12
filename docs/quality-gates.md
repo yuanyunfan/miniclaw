@@ -239,7 +239,7 @@ MiniClaw 是 docs-first 项目，长期维护依赖 `docs/architecture.md`、`do
 - 改 `src/bot.ts`、`src/commands/**`、`src/discord/**`、`src/routing/**`：必须同步 `docs/bot-routing.md`、`docs/chat-router-current-logic.md` 或一个 `docs/features/*.md`。
 - 改 `src/agent/**`：必须同步 `docs/architecture.md`、`docs/features/03-discord-task-output.md` 或一个 `docs/features/*.md`；`src/agent/prompts.ts` 走 prompt 规则。
 - 改 `src/cron/**` 或 `scripts/cron-*`：必须同步 `docs/architecture.md` 或一个 `docs/features/*.md`。
-- 改 `src/store/db.ts` 或 `src/store/**`：必须同步 `docs/architecture.md`。
+- 改 `src/store/db.ts`、`src/store/schema.ts` 或 `src/store/**`：必须同步 `docs/architecture.md`。
 - 改 `src/providers/**`：必须同步 `docs/architecture.md` 或一个 `docs/features/*.md`。
 - 改 `src/config.ts` 或 `config.example.yaml`：必须同步 `docs/architecture.md` 或一个 `docs/features/*.md`。
 - 改 `prompts/**` 或 `src/agent/prompts.ts`：必须同步 `docs/prompts.md`，并同步 `src/__tests__/prompt-snapshot.test.ts`。
@@ -249,7 +249,7 @@ MiniClaw 是 docs-first 项目，长期维护依赖 `docs/architecture.md`、`do
 
 当前执行方式：
 
-- `pnpm run quality:docs` 运行 `scripts/quality-docs.ts`，检查 DB schema version、Smart Router ER 字段、`docs/features/*.md` 索引，以及 changed-path 到 source-of-truth docs 的映射。
+- `pnpm run quality:docs` 运行 `scripts/quality-docs.ts`，从 `src/store/schema.ts` 检查 DB schema version，并检查 Smart Router ER 字段、`docs/features/*.md` 索引，以及 changed-path 到 source-of-truth docs 的映射。
 - 默认模式先看 staged paths；如果没有 staged paths，则检查 `git diff HEAD` 加 untracked non-ignored files。也可显式使用 `--staged`、`--tree` 或 `--base <ref> [--head <ref>]`。
 - `docs/plans/**`、`docs/continuous-improvement-report.md`、`docs/private/**`、tests 和 fixtures 不作为 source trigger；`docs/plans/**` 也不能替代当前 source-of-truth docs。
 - 对紧急本地修复可用 `MINICLAW_DOCS_DRIFT_ALLOW=1 pnpm run quality:docs` 只绕过 changed-path 映射；DB schema、Smart Router ER 和 feature index invariant 仍会失败。

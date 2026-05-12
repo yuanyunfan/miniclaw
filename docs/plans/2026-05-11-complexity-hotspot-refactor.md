@@ -380,3 +380,25 @@ For each completed slice, record:
   - `pnpm ralph:verify -- --task complexity-hotspot-refactor --profile standard` passed: `pnpm run typecheck`, `pnpm run lint`, `pnpm run quality:docs`.
 - Public API changes: none for existing consumers. `runDoctorRepair()`, `parseDoctorRepairArgs()`, `evaluateRepairPolicy()`, `validateChangedPaths()`, `selectTargetedTestCommands()`, `formatDoctorRepairResult()`, and related facade type exports remain available from `src/ops/doctor-repair.ts`.
 - Follow-up cleanup: Slice E is now complete enough that new repair policy, Git/worktree behavior, agent streaming behavior, verification rules, and report text should land in the extracted modules with focused tests. Remaining complexity-hotspot work should move to Slice F/G or the next explicitly selected hotspot rather than broadening `src/ops/doctor-repair.ts`.
+
+### 2026-05-12 - Slice F DB Migration Boundary Extraction
+
+- Slice name: Slice F partial, schema/migration/audit boundary.
+- Changed files:
+  - `src/store/db.ts`: kept the public DB facade, connection init, task/chat/Smart Router helpers, `SCHEMA_VERSION` re-export, and compatibility `__testables`; delegated base schema creation and migration execution to `src/store/schema.ts`.
+  - `src/store/schema.ts`: added `SCHEMA_VERSION = 10`, `ensureBaseSchema()`, `runMigrations()`, schema version inspection, and `listSchemaVersionHistory()`.
+  - `src/store/migrations/*`: extracted current v1-v10 schema migrations into versioned migration modules plus shared column/history helpers.
+  - `src/store/__tests__/migrations.test.ts`: added in-memory SQLite tests for new DB migration history, legacy v4-to-current upgrades, idempotent reruns, and failed migration rollback behavior.
+  - `src/store/__tests__/db.test.ts`: covered the facade-level schema history table and history rows.
+  - `scripts/quality-docs.ts`, `docs/architecture.md`, `docs/quality-gates.md`, `docs/continuous-improvement-report.md`: moved schema-version source-of-truth to `src/store/schema.ts`, documented `schema_version_history`, and updated the remaining hotspot status.
+- Behavior parity tests:
+  - `pnpm vitest run src/store/__tests__/migrations.test.ts src/store/__tests__/db.test.ts` passed, 24 tests.
+  - `pnpm vitest run src/store` passed, 43 tests.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm run quality:docs` passed with schema v10.
+  - `pnpm test` passed, 137 files / 684 tests.
+  - `pnpm run build` passed; generated ignored `dist/` artifacts were removed after verification.
+  - `pnpm ralph:verify -- --task complexity-hotspot-refactor --profile standard` passed: `pnpm run typecheck`, `pnpm run lint`, `pnpm run quality:docs`.
+- Public API changes: existing imports from `src/store/db.ts` remain valid, including `SCHEMA_VERSION`; new diagnostic helper `listSchemaVersionHistory()` is exported from the facade. SQLite schema version bumped from 9 to 10 for `schema_version_history`.
+- Follow-up cleanup: continue Slice F by splitting `tasks`, `chat_history`, and `smart_router_decisions` repository helpers out of `src/store/db.ts`; retention config, cleanup command, and shared diagnostic redaction policy remain future phases.

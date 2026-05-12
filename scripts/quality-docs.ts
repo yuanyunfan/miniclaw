@@ -93,12 +93,12 @@ function extractSchemaVersion(source: string, path: string, pattern: RegExp): nu
 }
 
 const findings: Finding[] = [];
-const dbSource = readText("src/store/db.ts");
+const dbSource = readText("src/store/schema.ts");
 const architecture = readText("docs/architecture.md");
 
 const codeSchemaVersion = extractSchemaVersion(
   dbSource,
-  "src/store/db.ts",
+  "src/store/schema.ts",
   /export const SCHEMA_VERSION\s*=\s*(\d+)/
 );
 const docsSchemaVersion = extractSchemaVersion(

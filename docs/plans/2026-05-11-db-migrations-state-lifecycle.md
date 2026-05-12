@@ -185,3 +185,28 @@ This policy should be reused by task trace export, incident center, provider dry
 
 Record migration versions, repository splits, retention defaults, and verification commands here when implemented.
 
+### 2026-05-12 Slice 1: Schema Migration Runner And Audit Boundary
+
+- Scope: first DB lifecycle phase. Extracted base schema creation and current v1-v10 migrations from `src/store/db.ts` without moving task/chat/Smart Router repository helpers yet.
+- Migration versions:
+  - `SCHEMA_VERSION = 10` in `src/store/schema.ts`.
+  - v1-v9 preserve existing schema upgrade behavior.
+  - v10 adds `schema_version_history` plus a unique `to_version` index for idempotent audit rows.
+- Changed files:
+  - `src/store/db.ts`: remains the public facade and re-exports `SCHEMA_VERSION`; `initDb()` now opens SQLite, enables WAL, calls `ensureBaseSchema()`, and runs versioned migrations.
+  - `src/store/schema.ts`: owns schema version, base schema creation, migration runner, history listing, and test-only migration application helper.
+  - `src/store/migrations/*`: one module per schema version plus shared helpers/types.
+  - `src/store/__tests__/migrations.test.ts`: covers new DB migration history, old v4 upgrade, idempotent rerun, and failed migration rollback.
+  - `src/store/__tests__/db.test.ts`: covers facade-level history table presence and current history rows.
+  - `scripts/quality-docs.ts`, `docs/architecture.md`, `docs/quality-gates.md`, `docs/continuous-improvement-report.md`: moved the schema version source of truth to `src/store/schema.ts` and documented the audit table.
+- Verification:
+  - `pnpm vitest run src/store/__tests__/migrations.test.ts src/store/__tests__/db.test.ts` passed, 24 tests.
+  - `pnpm vitest run src/store` passed, 43 tests.
+  - `pnpm run typecheck` passed.
+  - `pnpm run lint` passed.
+  - `pnpm run quality:docs` passed with schema v10.
+  - `pnpm test` passed, 137 files / 684 tests.
+  - `pnpm run build` passed; generated ignored `dist/` artifacts were removed after verification.
+  - `pnpm ralph:verify -- --task complexity-hotspot-refactor --profile standard` passed.
+- Public API changes: existing consumers can continue importing from `src/store/db.ts`; `listSchemaVersionHistory()` is a new diagnostic facade export.
+- Follow-up cleanup: split `tasks`, `chat_history`, and Smart Router decision helpers into repository modules; retention config/cleanup and diagnostic redaction remain future phases.

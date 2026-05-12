@@ -568,7 +568,7 @@ classify by mime + ext
 
 ## 9. 数据库 schema
 
-`~/.miniclaw/data.db`（SQLite WAL 模式）。schema 版本使用 SQLite `PRAGMA user_version` 管理，当前版本由 `src/store/db.ts` 的 `SCHEMA_VERSION = 9` 定义。
+`~/.miniclaw/data.db`（SQLite WAL 模式）。schema 版本使用 SQLite `PRAGMA user_version` 管理，当前版本由 `src/store/schema.ts` 的 `SCHEMA_VERSION = 10` 定义。`src/store/db.ts` 仍是 public facade，初始化时调用 `ensureBaseSchema()` 和 `runMigrations()`；版本迁移函数位于 `src/store/migrations/*`，每次成功升级会写入 `schema_version_history`。
 
 ```mermaid
 erDiagram
@@ -730,6 +730,13 @@ erDiagram
         TEXT score_json
         TEXT notes
         TEXT created_at
+    }
+    schema_version_history {
+        INTEGER id PK
+        INTEGER from_version
+        INTEGER to_version
+        TEXT migration_name
+        TEXT applied_at
     }
     memories_LEGACY {
         TEXT NOTE "已迁移到 ~/.miniclaw/memories/MEMORY.md，表保留作冷备不再读写"

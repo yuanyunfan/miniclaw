@@ -140,9 +140,9 @@
 
 ### 当前问题
 
-当前文件规模显示复杂度中心仍然集中，但 bot/task/doctor scheduler 已完成第一轮边界拆分，剩余热点应继续按职责推进：
+当前文件规模显示复杂度中心仍然集中，但 bot/task/doctor scheduler 和 DB migration 已完成第一轮边界拆分，剩余热点应继续按职责推进：
 
-- `src/store/db.ts`：930 行。
+- `src/store/db.ts`：528 行，已保留 DB connection、task/chat/Smart Router facade 和 repository helpers；base schema、migration runner、schema version audit 已拆到 `src/store/schema.ts` 和 `src/store/migrations/*`。
 - `src/config.ts`：811 行。
 - `src/ops/doctor-repair.ts`：452 行，已保留 repair facade + incident/repair_run 状态编排；repair policy、path allowlist、prompt build、verification gate、worktree/branch/dependency/commit/push Git 操作、Codex repair agent streaming、CLI/report formatting 已拆到 `src/ops/doctor-repair/*`。
 - `src/providers/market-intel/collectors/official.ts`：35 行 public facade；source-family collector orchestration 已拆到 `collectors/macro.ts`、`news.ts`、`events.ts`，evidence section assembly / derived risk 已拆到 `collectors/scoring-input.ts`，HTTP client 与 source status/warning helpers 已拆到 `collectors/official-http.ts`、`official-shared.ts`。
@@ -230,7 +230,7 @@
 
 ### 当前问题
 
-`src/store/db.ts` 仍集中处理多张表创建、migration、schema version、task、chat history 和 Smart Router helper。随着 `task_events`、incidents、repair runs、market forecasts 继续增长，单文件 migration 会越来越难 review。
+`src/store/db.ts` 已不再集中处理 base schema、migration runner 和 schema version audit，但仍集中承载 task、chat history 和 Smart Router helper。随着 `task_events`、incidents、repair runs、market forecasts 继续增长，下一步风险会转移到 repository helper 继续堆在 facade。
 
 state lifecycle 也需要明确：
 
@@ -242,11 +242,11 @@ state lifecycle 也需要明确：
 
 ### 建议改动
 
-1. 新增 `src/store/migrations/`，每个 schema version 一个 migration function。
-2. 增加 `schema_version_history` 或 `schema_audit`，记录迁移执行时间和版本。
-3. 把 `tasks`、`smart_router_decisions`、`incidents`、`task_events`、`market_forecasts` 拆成 repository module。
-4. 增加 state retention 配置和清理命令。
-5. 对 prompt preview、provider payload、email/account data 做明确 redaction policy。
+1. 已完成：新增 `src/store/migrations/`，每个 schema version 一个 migration function。
+2. 已完成：增加 `schema_version_history`，记录迁移执行时间和版本。
+3. 后续：把 `tasks`、`smart_router_decisions`、`incidents`、`task_events`、`market_forecasts` 拆成 repository module。
+4. 后续：增加 state retention 配置和清理命令。
+5. 后续：对 prompt preview、provider payload、email/account data 做明确 redaction policy。
 
 ### 验收标准
 

@@ -10,6 +10,7 @@ import {
   markTaskInterrupted,
   getInterruptedTasks,
   getSchemaVersion,
+  listSchemaVersionHistory,
   listSmartRouterReviewRows,
   recordSmartRouterDecision,
   recordSmartRouterUserChoice,
@@ -94,8 +95,20 @@ describe("schema migrations", () => {
     expect(getSchemaVersion()).toBe(SCHEMA_VERSION);
   });
 
+  it("records schema migration history", () => {
+    const history = listSchemaVersionHistory();
+    expect(history.at(-1)?.to_version).toBe(SCHEMA_VERSION);
+    expect(new Set(history.map((row) => row.to_version)).size).toBe(history.length);
+  });
+
   it("ensures progress_message_id column exists", () => {
     expect(__testables.columnExists("tasks", "progress_message_id")).toBe(true);
+  });
+
+  it("ensures schema version history table exists", () => {
+    expect(__testables.columnExists("schema_version_history", "from_version")).toBe(true);
+    expect(__testables.columnExists("schema_version_history", "migration_name")).toBe(true);
+    expect(__testables.columnExists("schema_version_history", "applied_at")).toBe(true);
   });
 
   it("ensures smart router decisions table exists", () => {
