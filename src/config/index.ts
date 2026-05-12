@@ -17,6 +17,8 @@ export type {
   CodexReasoningEffort,
   CodexSandboxMode,
   CodexWebSearchMode,
+  IMTransportId,
+  ModelClientId,
   SmartRouterClassifierProvider,
   SmartRouterDefaultMode,
   SmtpEmailNotificationConfig,

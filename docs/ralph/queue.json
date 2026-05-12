@@ -62,7 +62,7 @@
       "id": "agent-runtime-contracts",
       "title": "Agent Runtime, Model Client, IM Transport, And Data Provider Contracts",
       "priority": "P1",
-      "status": "pending",
+      "status": "done",
       "plan": "docs/plans/2026-05-11-agent-runtime-contracts.md",
       "branch": "ralph/agent-runtime-contracts",
       "verify_profile": "standard",

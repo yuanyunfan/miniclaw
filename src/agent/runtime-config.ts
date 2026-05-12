@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, relative } from "node:path";
 import { config } from "../config.js";
+import { listPreProviderNames } from "../providers/index.js";
 import { loadMcpServers } from "./mcp.js";
 
 export interface AgentRuntimeSummary {
@@ -13,6 +14,20 @@ export interface AgentRuntimeSummary {
   };
   provider: string;
   model: string;
+  runtime: {
+    defaultAgent: string;
+  };
+  modelClient: {
+    defaultClient: string;
+    smartRouterClient: string;
+  };
+  transport: {
+    defaultTransport: string;
+    implemented: string[];
+  };
+  dataProviders: {
+    preProviders: string[];
+  };
   defaultCwd: string;
   codex: {
     model: string;
@@ -119,6 +134,20 @@ export function getAgentRuntimeSummary(): AgentRuntimeSummary {
     },
     provider: config.agentProvider,
     model: config.model,
+    runtime: {
+      defaultAgent: config.runtime.defaultAgent,
+    },
+    modelClient: {
+      defaultClient: config.modelClient.defaultClient,
+      smartRouterClient: config.smartRouter.llmClassifier.provider,
+    },
+    transport: {
+      defaultTransport: "discord",
+      implemented: ["discord"],
+    },
+    dataProviders: {
+      preProviders: listPreProviderNames(),
+    },
     defaultCwd: config.defaultCwd,
     codex: {
       model: inherited(config.codex.model),
@@ -148,7 +177,11 @@ export function getAgentRuntimeSummary(): AgentRuntimeSummary {
 export function formatAgentRuntimeSummary(summary = getAgentRuntimeSummary()): string {
   return [
     "**Agent Config**",
-    `Provider: ${code(summary.provider)} / Model: ${code(summary.model)}`,
+    `AgentRuntime: ${code(summary.runtime.defaultAgent)} / Model: ${code(summary.model)}`,
+    `Legacy provider alias: ${code(summary.provider)}`,
+    `ModelClient: default=${code(summary.modelClient.defaultClient)} smart-router=${code(summary.modelClient.smartRouterClient)}`,
+    `IMTransport: default=${code(summary.transport.defaultTransport)} implemented=${joinNames(summary.transport.implemented)}`,
+    `Data providers: ${joinNames(summary.dataProviders.preProviders)}`,
     `Config: ${code(summary.config.filePath)} (${summary.config.fileLoaded ? "loaded" : "not found, defaults/env only"})`,
     `Default CWD: ${code(summary.defaultCwd)}`,
     "",

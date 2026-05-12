@@ -1,6 +1,6 @@
 # Agent Runtime, Model Client, IM Transport, And Data Provider Contracts
 
-Status: draft
+Status: done
 Date: 2026-05-11
 
 ## Background
@@ -206,3 +206,5 @@ Record which phase landed, compatibility behavior, and verification commands her
 - Verification: `pnpm vitest run src/agent/__tests__/task-runtime-registry.test.ts src/agent/__tests__/task-helpers.test.ts src/agent/__tests__/runtime-registry.test.ts src/agent/__tests__/e2e-fake-runtime.test.ts`; `pnpm run typecheck`; `pnpm run lint`; `pnpm test` (144 files, 718 tests); `pnpm run quality:docs`.
 - 2026-05-12: Landed Phase 3 Smart Router `ModelClient` adapter wiring. Added provider-neutral model client adapters for Anthropic-compatible Messages, OpenAI-compatible chat completions, and read-only Codex thread completions; `src/routing/llm.ts` now classifies through the `ModelClient` contract instead of owning provider SDK calls directly. Preserved existing classifier provider selection, model inheritance, OpenAI system prompt, JSON response format, timeout behavior, optional Codex fallback, and read-only/no-network Codex classifier boundary. Auto Doctor currently has no short LLM call path to migrate, so docs now state that explicitly rather than implying a hidden doctor model client path.
 - Verification: `pnpm vitest run src/routing/__tests__/llm.test.ts src/runtime/__tests__/contracts.test.ts`; `pnpm run typecheck`; `pnpm run lint`; `pnpm run quality:docs`; `pnpm run build`; `pnpm test` (144 files, 719 tests).
+- 2026-05-12: Landed Phase 4 config shape and runtime display wiring. Added optional `runtime.default_agent` / `MINICLAW_RUNTIME_DEFAULT_AGENT` and `model.default_client` / `MINICLAW_MODEL_DEFAULT_CLIENT` config support while keeping legacy `agent.provider` as the fallback alias. Smart Router LLM provider selection now falls back to `model.default_client` unless the router-specific provider is configured. Task intake, `/resume`, thread continuation, and `/health` now use the effective default `AgentRuntime` for task display and session preflight checks. `/agent-config` now shows default AgentRuntime, legacy provider alias, ModelClient default/router client, Discord as the implemented IMTransport, and safe pre-provider names. Updated config example and docs to reflect the accepted config shape and Discord task boundary.
+- Verification: `pnpm vitest run src/__tests__/config.test.ts src/config/__tests__/config-boundaries.test.ts src/agent/__tests__/runtime-config.test.ts src/agent/__tests__/session.test.ts src/agent/__tests__/task-helpers.test.ts src/agent/__tests__/runtime-registry.test.ts`; `pnpm run typecheck`; `pnpm run lint`; `pnpm run quality:docs`; `pnpm run build`; `pnpm test` (144 files, 719 tests).

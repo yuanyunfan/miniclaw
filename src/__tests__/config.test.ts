@@ -13,6 +13,8 @@ const ENV_KEYS = [
   "OPENAI_BASE_URL",
   "MINICLAW_CONFIG",
   "MINICLAW_AGENT_PROVIDER",
+  "MINICLAW_RUNTIME_DEFAULT_AGENT",
+  "MINICLAW_MODEL_DEFAULT_CLIENT",
   "MINICLAW_ALLOWED_USER_ID",
   "MINICLAW_DEFAULT_CWD",
   "MINICLAW_MAX_CONCURRENT_TASKS",
@@ -200,6 +202,10 @@ agent:
   attachment_timeout_ms: 2000
   shutdown_drain_timeout_ms: 300000
   register_commands_on_start: true
+runtime:
+  default_agent: claude
+model:
+  default_client: openai
 claude:
   model: claude-test
   setting_sources: [user, local]
@@ -295,6 +301,9 @@ notifications:
     expect(config.discord.clientId).toBe("client-yaml");
     expect(config.allowedUserId).toBe("user-yaml");
     expect(config.agentProvider).toBe("codex");
+    expect(config.runtime.defaultAgent).toBe("claude");
+    expect(config.model).toBe("claude-test");
+    expect(config.modelClient.defaultClient).toBe("openai");
     expect(config.defaultCwd).toBe(tmpDir);
     expect(config.defaultBudgetUsd).toBeUndefined();
     expect(config.defaultMaxTurns).toBeUndefined();
@@ -701,6 +710,8 @@ storage:
     process.env.MINICLAW_CONFIG = cfg;
     process.env.DISCORD_TOKEN = "token-env";
     process.env.MINICLAW_AGENT_PROVIDER = "codex";
+    process.env.MINICLAW_RUNTIME_DEFAULT_AGENT = "claude";
+    process.env.MINICLAW_MODEL_DEFAULT_CLIENT = "raven";
     process.env.MINICLAW_ALLOWED_USER_ID = "user-env";
     process.env.MINICLAW_CODEX_MODEL = "env-model";
     process.env.MINICLAW_MCP_ALLOWLIST = "*";
@@ -710,6 +721,9 @@ storage:
     const { config } = await import("../config.js");
 
     expect(config.agentProvider).toBe("codex");
+    expect(config.runtime.defaultAgent).toBe("claude");
+    expect(config.modelClient.defaultClient).toBe("raven");
+    expect(config.smartRouter.llmClassifier.provider).toBe("raven");
     expect(config.allowedUserId).toBe("user-env");
     expect(config.codex.model).toBe("env-model");
     expect(config.mcp.allowlist).toEqual(["*"]);

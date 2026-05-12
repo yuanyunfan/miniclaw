@@ -13,7 +13,7 @@ describe("provider session ids", () => {
   });
 
   it("rejects provider mismatch", () => {
-    expect(() => assertProviderSession("claude:sess-abc", "codex")).toThrow(/无法恢复 claude session/);
+    expect(() => assertProviderSession("claude:sess-abc", "codex")).toThrow(/当前 default agent runtime=codex/);
   });
 
   it("displays provider and short raw id", () => {

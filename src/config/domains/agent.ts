@@ -28,10 +28,19 @@ export function buildAgentRuntimeConfig(reader: ConfigReader) {
     "claude-opus-4-7"
   );
   const codexModel = reader.stringOrInherit(["codex", "model"], "MINICLAW_CODEX_MODEL", "gpt-5.5");
+  const defaultAgentRuntime = reader.oneOf<AgentProvider>(
+    [["runtime", "default_agent"], ["runtime", "defaultAgent"]],
+    "MINICLAW_RUNTIME_DEFAULT_AGENT",
+    agentProvider,
+    agentProviderValues
+  );
   const defaultCwd = resolveHome(reader.requiredString(["agent", "default_cwd"], "MINICLAW_DEFAULT_CWD", "~/Code"));
 
   return {
     agentProvider,
+    runtime: {
+      defaultAgent: defaultAgentRuntime,
+    },
     defaultCwd,
     maxConcurrentTasks: reader.positiveInt(["agent", "max_concurrent_tasks"], "MINICLAW_MAX_CONCURRENT_TASKS", 3),
     defaultBudgetUsd: reader.numberOrUnlimited(["agent", "budget_usd"], "MINICLAW_DEFAULT_BUDGET_USD", 1.0),
@@ -54,7 +63,7 @@ export function buildAgentRuntimeConfig(reader: ConfigReader) {
     ),
     // Backward-compatible alias used by older code paths. New provider-aware code
     // should prefer claudeModel / codex.model.
-    model: agentProvider === "claude" ? claudeModel : (codexModel ?? "inherit"),
+    model: defaultAgentRuntime === "claude" ? claudeModel : (codexModel ?? "inherit"),
     claudeModel,
     claude: {
       settingSources: reader.settingSources(["claude", "setting_sources"], "MINICLAW_CLAUDE_SETTING_SOURCES", [

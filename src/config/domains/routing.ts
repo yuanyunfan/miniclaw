@@ -4,9 +4,9 @@ import {
   smartRouterClassifierProviderValues,
   smartRouterDefaultModeValues,
 } from "../schema.js";
-import type { SmartRouterClassifierProvider, SmartRouterDefaultMode } from "../types.js";
+import type { ModelClientId, SmartRouterClassifierProvider, SmartRouterDefaultMode } from "../types.js";
 
-export function buildRoutingRuntimeConfig(reader: ConfigReader) {
+export function buildRoutingRuntimeConfig(reader: ConfigReader, defaultModelClient: ModelClientId = "auto") {
   return {
     autoReplyChannelIds: reader.stringArray(["routing", "auto_reply_channels"], "MINICLAW_AUTO_REPLY_CHANNELS", ["*"]),
     taskChannelIds: reader.stringArray(["routing", "task_channels"], "MINICLAW_TASK_CHANNELS"),
@@ -51,7 +51,7 @@ export function buildRoutingRuntimeConfig(reader: ConfigReader) {
         provider: reader.oneOf<SmartRouterClassifierProvider>(
           ["routing", "smart_router", "llm_classifier", "provider"],
           "MINICLAW_SMART_ROUTER_LLM_PROVIDER",
-          "auto",
+          defaultModelClient,
           smartRouterClassifierProviderValues
         ),
         model: reader.stringOrInherit(

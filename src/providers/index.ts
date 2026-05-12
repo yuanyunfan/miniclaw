@@ -23,6 +23,10 @@ const PRE_PROVIDERS = {
 
 export type PreProviderName = keyof typeof PRE_PROVIDERS;
 
+export function listPreProviderNames(): PreProviderName[] {
+  return Object.keys(PRE_PROVIDERS).sort() as PreProviderName[];
+}
+
 export function isPreProviderName(name: string): name is PreProviderName {
   return name in PRE_PROVIDERS;
 }

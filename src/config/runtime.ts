@@ -6,6 +6,7 @@ import { buildAgentRuntimeConfig } from "./domains/agent.js";
 import { buildAttachmentRuntimeConfig } from "./domains/attachments.js";
 import { buildE2eRuntimeConfig } from "./domains/e2e.js";
 import { buildMcpRuntimeConfig } from "./domains/mcp.js";
+import { buildModelRuntimeConfig } from "./domains/model.js";
 import { buildOperationalRuntimeConfig } from "./domains/operations.js";
 import { applyProviderBaseUrlEnv, buildProviderRuntimeConfig } from "./domains/providers.js";
 import { buildRoutingRuntimeConfig } from "./domains/routing.js";
@@ -38,8 +39,9 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
   const reader = createConfigReader(configSource.data, env);
 
   const agent = buildAgentRuntimeConfig(reader);
+  const model = buildModelRuntimeConfig(reader);
   const provider = buildProviderRuntimeConfig(reader, agent.agentProvider);
-  const routing = buildRoutingRuntimeConfig(reader);
+  const routing = buildRoutingRuntimeConfig(reader, model.modelClient.defaultClient);
   const storage = buildStorageRuntimeConfig(reader);
   const e2e = buildE2eRuntimeConfig(reader);
   const operations = buildOperationalRuntimeConfig(reader, e2e.mode);
@@ -62,6 +64,7 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
       guildId: reader.requiredString(["discord", "guild_id"], "DISCORD_GUILD_ID"),
     },
     ...agent,
+    ...model,
     ...provider,
     allowedUserId: reader.requiredString(["discord", "allowed_user_id"], "MINICLAW_ALLOWED_USER_ID"),
     mcp: buildMcpRuntimeConfig(reader),

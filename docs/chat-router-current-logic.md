@@ -203,6 +203,7 @@ classifier prompt 的边界：
 
 Codex provider 下的 classifier 默认优先使用轻量 API，不再先创建 Codex thread：
 
+- 如果未设置 `routing.smart_router.llm_classifier.provider`，Smart Router 会先使用 `model.default_client`；两者都未配置时才等价于 `auto`。
 - `routing.smart_router.llm_classifier.provider: auto` 时，如果配置了 `ANTHROPIC_BASE_URL` + `ANTHROPIC_API_KEY`，优先走 Raven/Anthropic-compatible Messages API。这和当前 chat 路径使用本机 raven 反代的边界一致。
 - 如果没有 Raven/Anthropic-compatible 配置，`auto` 再检查 `OPENAI_API_KEY` / `OPENAI_BASE_URL`，走 OpenAI 或 OpenAI-compatible `chat/completions`。
 - 如果以上 API 配置都没有，最后才回退到 Codex thread。

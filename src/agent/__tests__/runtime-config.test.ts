@@ -42,6 +42,20 @@ describe("formatAgentRuntimeSummary", () => {
       },
       provider: "codex",
       model: "inherit",
+      runtime: {
+        defaultAgent: "codex",
+      },
+      modelClient: {
+        defaultClient: "openai",
+        smartRouterClient: "openai_compatible",
+      },
+      transport: {
+        defaultTransport: "discord",
+        implemented: ["discord"],
+      },
+      dataProviders: {
+        preProviders: ["email-query", "wechat-mp"],
+      },
       defaultCwd: "/Users/yuan/ProjectRepo",
       codex: {
         model: "inherit",
@@ -68,7 +82,11 @@ describe("formatAgentRuntimeSummary", () => {
     };
 
     const text = formatAgentRuntimeSummary(summary);
-    expect(text).toContain("Provider: `codex` / Model: `inherit`");
+    expect(text).toContain("AgentRuntime: `codex` / Model: `inherit`");
+    expect(text).toContain("Legacy provider alias: `codex`");
+    expect(text).toContain("ModelClient: default=`openai` smart-router=`openai_compatible`");
+    expect(text).toContain("IMTransport: default=`discord` implemented=`discord`");
+    expect(text).toContain("Data providers: `email-query`, `wechat-mp`");
     expect(text).toContain("Config: `/Users/yuan/.miniclaw/config.yaml` (loaded)");
     expect(text).toContain("MCP config=`/Users/yuan/.claude.json` allowlist=`exa,context7`");
     expect(text).toContain("MCP: `github`, `kusto`");

@@ -57,7 +57,17 @@ routing:
       prompt_preview_chars: 160
       store_full_prompt: false
 
+runtime:
+  # Preferred task runtime selector. Keep values aligned with implemented AgentRuntime ids.
+  default_agent: claude # claude | codex
+
+model:
+  # Preferred short-call ModelClient default for router/doctor-style calls.
+  # routing.smart_router.llm_classifier.provider overrides this when set.
+  default_client: auto # auto | raven | anthropic | openai | openai_compatible | codex
+
 agent:
+  # Legacy compatibility alias. Keep it during transition; new task execution uses runtime.default_agent.
   provider: claude # claude | codex
   default_cwd: "~/Code"
   max_concurrent_tasks: 3

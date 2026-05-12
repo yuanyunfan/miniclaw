@@ -13,7 +13,8 @@
 - progress 更新节流为约 2s，降低 Discord edit rate limit 风险。
 - `tasks.progress_message_id` 已持久化，用于进程重启后把悬挂任务标记为 interrupted。
 - Claude / Codex / fake runtime 已抽到 `src/agent/runners/*-task-runner.ts`，由 runner 把 SDK 原始事件转换为 provider-neutral `TaskViewEvent`。
-- `executeTask` 已通过 `src/agent/runtimes/registry.ts` 解析默认 `AgentRuntime` 并调用 `runtime.startTask`；legacy `agent.provider` 仍是当前默认 runtime alias，E2E fake task runner 也包装在同一 runtime contract 后面。
+- `executeTask` 已通过 `src/agent/runtimes/registry.ts` 解析默认 `AgentRuntime` 并调用 `runtime.startTask`；`runtime.default_agent` 是当前 task runtime 首选配置，legacy `agent.provider` 只作为未配置时的兼容 alias，E2E fake task runner 也包装在同一 runtime contract 后面。
+- `/task`、task channel、Smart Router auto-task 和 `/resume` 的开始 embed 统一展示 effective default `AgentRuntime` / model；resume 预检查也按 default runtime 校验 session 前缀，避免 `runtime.default_agent` 与 legacy `agent.provider` 不一致时误拒绝续话。
 - `src/discord/task-view-reporter.ts` 已负责 status embed、progress message、Execution Summary、最终 Markdown/raw output 和 Discord delivery failure callback。
 - `src/agent/task-reporter.ts` 已作为观测边界落地，把 task lifecycle、provider/tool event、Discord delivery failure 等规范化写入 SQLite `task_events`。
 - `src/store/task-trace-export.ts`、`/task-log`、`pnpm run task:trace` 和 `tasks.trace_auto_attach` 已生成安全 Markdown trace；脱敏由 `src/privacy/diagnostic-redaction.ts` 统一处理。
@@ -37,7 +38,7 @@
 
 - `src/commands/handlers.ts`: `/task` 入口、创建 thread、发送开始 embed。
 - `src/agent/task.ts`: orchestration shell，负责 runtime registry selection、abort、DB lifecycle、trace reporter 和 Discord view reporter wiring。
-- `src/agent/runtimes/registry.ts`: 默认 coding-agent runtime registry，当前把 legacy `agent.provider` 映射到 Claude / Codex `AgentRuntime`。
+- `src/agent/runtimes/registry.ts`: 默认 coding-agent runtime registry，优先使用 `runtime.default_agent`，未配置时才把 legacy `agent.provider` 映射到 Claude / Codex `AgentRuntime`。
 - `src/agent/runtimes/task-runner-runtime.ts`: 把现有 `TaskRunner` 适配成 `AgentRuntime.startTask`。
 - `src/agent/runners/claude-task-runner.ts`: Claude Agent SDK setup、tool permission/MCP/subagent wiring、stream parsing 和 `TaskViewEvent` emission。
 - `src/agent/runners/codex-task-runner.ts`: Codex SDK thread setup、timeout/session/usage handling、stream parsing 和 `TaskViewEvent` emission。

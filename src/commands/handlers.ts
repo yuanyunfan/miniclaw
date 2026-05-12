@@ -159,7 +159,7 @@ export async function handleHealth(interaction: ChatInputCommandInteraction): Pr
 
   await interaction.reply({
     embeds: [healthEmbed({
-      provider: config.agentProvider,
+      provider: config.runtime.defaultAgent,
       model: config.model,
       uptimeSec: process.uptime(),
       rssMb: mem.rss / 1024 / 1024,
@@ -453,7 +453,7 @@ export async function handleResume(interaction: ChatInputCommandInteraction): Pr
   }
 
   try {
-    assertProviderSession(match.session_id, config.agentProvider);
+    assertProviderSession(match.session_id, config.runtime.defaultAgent);
   } catch (err) {
     await interaction.reply({
       content: `❌ ${err instanceof Error ? err.message : String(err)}`,
@@ -515,7 +515,7 @@ export async function handleResume(interaction: ChatInputCommandInteraction): Pr
   try {
     statusMessage = await thread.send({
       embeds: [taskStartEmbed(newTaskId, `[恢复] ${followup}`, cwd, {
-        provider: config.agentProvider,
+        provider: config.runtime.defaultAgent,
         model: config.model,
       })],
     });

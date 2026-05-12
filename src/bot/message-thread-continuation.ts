@@ -34,7 +34,7 @@ export async function handleThreadContinuationMessage(
   if (!resumeSessionId) return;
 
   try {
-    assertProviderSession(resumeSessionId, config.agentProvider);
+    assertProviderSession(resumeSessionId, config.runtime.defaultAgent);
   } catch (err) {
     await message.reply(`❌ ${err instanceof Error ? err.message : String(err)}`);
     return;

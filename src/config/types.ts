@@ -6,6 +6,8 @@ export type CodexWebSearchMode = "disabled" | "cached" | "live";
 export type ClaudeSettingSource = "user" | "project" | "local";
 export type SmartRouterDefaultMode = "suggest" | "confirm" | "auto";
 export type SmartRouterClassifierProvider = "auto" | "raven" | "anthropic" | "openai" | "openai_compatible" | "codex";
+export type ModelClientId = SmartRouterClassifierProvider;
+export type IMTransportId = "discord";
 export type AudioTranscriptionProvider = "auto" | "openai" | "openai_compatible" | "local_faster_whisper";
 
 export interface SmtpEmailNotificationConfig {

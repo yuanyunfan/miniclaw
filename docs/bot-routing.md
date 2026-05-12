@@ -138,7 +138,7 @@ const isTaskChannel = config.taskChannelIds.includes(message.channel.id);
 6. 发送 `taskStartEmbed`
 7. `executeTask()` 在 thread 中运行
 
-这个路径和 `/task` 使用同一套 `executeTask()`、progress message、完成 embed 和最终 Markdown 输出。它只改变触发方式，不改变 provider、sandbox、cwd、附件处理和 session 存储。若 `tasks.trace_auto_attach.enabled` 打开，task final output 后还会按失败、耗时或事件数阈值自动附加安全 Markdown trace。
+这个路径和 `/task` 使用同一套 `executeTask()`、progress message、完成 embed 和最终 Markdown 输出。它只改变触发方式，不改变 runtime、sandbox、cwd、附件处理和 session 存储。task runtime 以 `runtime.default_agent` 为准；未配置时回退 legacy `agent.provider`。若 `tasks.trace_auto_attach.enabled` 打开，task final output 后还会按失败、耗时或事件数阈值自动附加安全 Markdown trace。
 
 `MINICLAW_AUTO_REPLY_CHANNELS` 默认等价于 `*`，即所有允许用户可见的 guild channel 普通消息都会进入 chat；设为 `none` 或 YAML `auto_reply_channels: []` 可恢复为只响应 @mention。若一个频道同时出现在 `MINICLAW_TASK_CHANNELS` 和 `MINICLAW_AUTO_REPLY_CHANNELS`，task channel 优先，避免写权限任务被误走 chat，也避免同一条消息双处理。
 

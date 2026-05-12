@@ -27,7 +27,7 @@ export function assertProviderSession(sessionId: string, provider: AgentProvider
   const parsed = parseSessionId(sessionId);
   if (parsed.provider !== provider) {
     throw new Error(
-      `无法恢复 ${parsed.provider} session：当前 MINICLAW_AGENT_PROVIDER=${provider}。请切回 ${parsed.provider} 或新建任务。`
+      `无法恢复 ${parsed.provider} session：当前 default agent runtime=${provider}。请切回 ${parsed.provider} 或新建任务。`
     );
   }
   return parsed.id;

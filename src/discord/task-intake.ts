@@ -120,7 +120,7 @@ export async function createAndRunDiscordTask(params: DiscordTaskIntakeParams): 
   try {
     statusMessage = await thread.send({
       embeds: [taskStartEmbed(taskId, displayPrompt, params.cwd, {
-        provider: config.agentProvider,
+        provider: config.runtime.defaultAgent,
         model: config.model,
       })],
     });

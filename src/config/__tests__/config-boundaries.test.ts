@@ -105,6 +105,10 @@ routing:
 agent:
   provider: codex
   default_cwd: "${tmpDir}"
+runtime:
+  default_agent: claude
+model:
+  default_client: openai_compatible
 codex:
   reasoning_effort: high
 storage:
@@ -126,6 +130,9 @@ attachments:
     expect(runtime.configFile).toEqual({ path: cfg, loaded: true });
     expect(runtime.discord.clientId).toBe("client-runtime");
     expect(runtime.agentProvider).toBe("codex");
+    expect(runtime.runtime.defaultAgent).toBe("claude");
+    expect(runtime.modelClient.defaultClient).toBe("openai_compatible");
+    expect(runtime.smartRouter.llmClassifier.provider).toBe("openai_compatible");
     expect(runtime.codex.reasoningEffort).toBe("high");
     expect(runtime.channelDefaults["chat-runtime"]).toEqual({ cwd: tmpDir });
     expect(runtime.smartRouter.defaultMode).toBe("auto");
