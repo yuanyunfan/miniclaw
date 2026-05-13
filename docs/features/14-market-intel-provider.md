@@ -1,6 +1,6 @@
 # MiniClaw Market Intel Provider
 
-> 结论：`market-intel` 把美股和 A/H 盘前报告从“LLM 自己找事实”升级为“provider 先收集结构化证据，LLM 只做多角色推理和 Forecast Editor 综合”。配套的 forecast persistence、post-market evaluation 和 calibration CLI 让每天的预测可以被盘后评分、按周复盘，而不是只依赖主观感觉。
+> 结论：`market-intel` 把美股和 A/H 盘前报告从“LLM 自己找事实”升级为“provider 先收集结构化证据，LLM 只做多角色推理和 Forecast Editor 综合”。盘前预测当前以 1 个月、3 个月、6 个月和 1 年的中长期 horizon 为主；forecast persistence 会保存这些 horizon items，post-market evaluation 只跟踪它们，不把当天收盘涨跌误当成命中/失败。
 
 ## 目标边界
 
@@ -30,7 +30,7 @@ cron task
   -> weekly market-calibration report
 ```
 
-`market-intel` 的职责是提供可审计事实：每条 evidence 都应有 `id`、`source`、`source_tier`、`captured_at` 和 freshness 信息。LLM 的职责是引用 evidence IDs、提出情景推理、输出概率、触发条件和风险。
+`market-intel` 的职责是提供可审计事实：每条 evidence 都应有 `id`、`source`、`source_tier`、`captured_at` 和 freshness 信息。LLM 的职责是引用 evidence IDs、提出情景推理、输出概率、触发条件和风险。盘前 Forecast Editor 不再输出下一交易日方向概率；它应输出 `horizon_probabilities`、`horizon_sector_opportunities` 和 `horizon_risk_alerts`，其中 horizon 固定覆盖 `1m`、`3m`、`6m`、`1y`。
 
 官方证据采集分成三层：`src/providers/market-intel/collectors/official.ts` 是 public facade，按 market scope 并行调用 source-family collectors；`collectors/macro.ts`、`news.ts`、`events.ts` 负责 SEC/BLS/Treasury/Federal Reserve/PBOC/NBS/SSE/SZSE/HKEX endpoint orchestration 和 source status/warnings，`collectors/scoring-input.ts` 负责 evidence section assembly / derived risk；`src/providers/market-intel/collectors/parsers/*` 负责纯解析、HTML/JSON/XML normalization、freshness 和 fixture-level 行为测试。新增或修复 source format drift 时优先补 parser fixture test，再改对应 source-family collector。
 
@@ -88,7 +88,7 @@ pre_provider_config: cn-pre-market
 - Risk, Scenario & Devil's Advocate Lead
 - Forecast Editor
 
-每个 analyst section 必须输出 conclusion、evidence IDs、confidence 和 what would change its view。Forecast Editor 必须输出 final probabilities、sector opportunities、risk alerts、data quality summary 和 compact JSON：
+每个 analyst section 必须输出 conclusion、evidence IDs、confidence 和 what would change its view。Forecast Editor 必须输出中长期 final probabilities、sector opportunities、risk alerts、data quality summary 和 compact JSON：
 
 ```text
 <market_forecast_json>
@@ -96,14 +96,14 @@ pre_provider_config: cn-pre-market
 </market_forecast_json>
 ```
 
-该 JSON 被 `src/cron/runner-task.ts` 提取后写入 `market_forecast_items`，供盘后校准使用。
+该 JSON 被 `src/cron/runner-task.ts` 提取后写入 `market_forecast_items`。`index_probabilities` 仍作为兼容格式存在，表示同日/短线预测并可被盘后校准；`horizon_probabilities` 是 1 个月以上视角，只用于中长期跟踪，不参与当天 hit/miss 或 Brier score。
 
 ## Forecast Persistence
 
 DB schema v7 增加三张表：
 
 - `market_forecasts`: 保存 provider payload、最终报告文本和运行上下文。
-- `market_forecast_items`: 保存 provider deterministic scores 和 LLM compact JSON 中的 index probabilities、sector calls、risk alerts。
+- `market_forecast_items`: 保存 provider deterministic scores 和 LLM compact JSON 中的 same-day index probabilities、horizon probabilities、sector calls、risk alerts。中长期 horizon 不新增 schema column，而是写入 `item_type=horizon_probability|horizon_sector_opportunity|horizon_risk_alert`，并把 horizon 前缀保存在 `target` / `rationale` 中，避免破坏旧数据。
 - `market_forecast_evaluations`: 保存盘后 benchmark outcome、hit/miss、Brier score 和 calibration note。
 
 只读查看最近 forecast：
@@ -121,7 +121,7 @@ pre_provider: market-forecast-evaluation
 pre_provider_config: us-post-market
 ```
 
-该 provider 会读取当天同 market scope/session 的最新盘前 forecast，优先用 `llm_report` 的 `index_probability`，如果没有则回退到 provider score；再拉 benchmark latest / previous close 快照，计算：
+该 provider 会读取当天同 market scope/session 的最新盘前 forecast。若 forecast 只有 `horizon_probability` / `horizon_sector_opportunity` / `horizon_risk_alert`，返回 `status=horizon_only`，并明确跳过 same-day hit/miss 与 Brier score；若存在 `llm_report` 的 `index_probability`，才按同日预测校准；如果没有 LLM 同日概率且也不是 horizon-only，才回退到 provider score。需要校准时会拉 benchmark latest / previous close 快照，计算：
 
 - index direction actual bucket: `up` / `range_bound` / `down` / `unknown`
 - sector opportunity benchmark/proxy attribution
@@ -151,10 +151,10 @@ pnpm market-calibration -- --days 7 --write-config --min-samples 5
 - totals：forecast 数、已评价 forecast 数、hit/miss、unknown、hit rate、avg Brier。
 - by market scope：US 与 CN 分开看。
 - by data quality：观察 `ok` / `partial` / `blocked` 与准确率的相关性。
-- by forecast source：区分 `llm_report` 与 `provider_score`。
+- by forecast source：区分 `llm_report`、`llm_horizon_report` 与 `provider_score`。
 - by score type：区分 index、sector、risk 的命中情况。
 - proposed source reliability weights：样本不足时保持 `1.0`，样本足够后才建议轻微上调或下调。
-- weak spots：缺少盘后评价、缺少概率 JSON、缺少 evidence IDs、fallback quote、high Brier。
+- weak spots：缺少盘后评价、缺少概率 JSON、缺少 evidence IDs、fallback quote、high Brier。`horizon_probabilities` 会被视为有效概率 JSON，但不会生成同日评价分数。
 - recommendations：下一轮该收紧 prompt、等待数据、还是优先补 primary close data。
 
 `market-intel` 运行时会读取 calibration config，并把 rules 注入 payload；provider_score 的机械概率会按配置调整，`llm_report` 权重和 prompt rules 交给 Forecast Editor 执行。原则仍然是先让弱点可见，再根据真实样本调整 scoring weights 和 prompt rules。

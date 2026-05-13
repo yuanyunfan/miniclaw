@@ -201,6 +201,36 @@ describe("runMarketForecastEvaluationProvider", () => {
       }),
     }));
   });
+
+  it("tracks horizon-only forecasts without same-day hit/miss scoring", async () => {
+    const recordEvaluation = vi.fn(() => "evaluation-1");
+    const result = await runMarketForecastEvaluationProvider({
+      configName: "us-post-market",
+      jobName: "us-stock-post-market",
+      channelId: "channel-1",
+      runAt: new Date("2026-05-08T20:30:00.000Z"),
+    }, {
+      loadProviderConfig: () => ({ ...config(), portfolio_provider_config: undefined }),
+      quoteClient,
+      findForecast: () => forecast(),
+      listItems: () => [
+        forecastItem({ id: "provider-index", item_type: "index_direction", source: "provider_score", target: "US broad market" }),
+        forecastItem({ id: "horizon-up", item_type: "horizon_probability", target: "1m | SPY", direction: "up", probability: 0.45 }),
+        forecastItem({ id: "horizon-range", item_type: "horizon_probability", target: "1m | SPY", direction: "range_bound", probability: 0.35 }),
+        forecastItem({ id: "horizon-down", item_type: "horizon_probability", target: "1m | SPY", direction: "down", probability: 0.2 }),
+      ],
+      recordEvaluation,
+    });
+
+    const parsed = JSON.parse(result.text);
+    expect(parsed.status).toBe("horizon_only");
+    expect(parsed.scores).toEqual([]);
+    expect(parsed.calibration_note).toContain("medium/long horizon only");
+    expect(parsed.data_quality.warnings).toContain("matching forecast contains only medium/long horizon items; same-day calibration is skipped by design.");
+
+    await result.commit?.();
+    expect(recordEvaluation).not.toHaveBeenCalled();
+  });
 });
 
 describe("market forecast evaluation helpers", () => {

@@ -158,6 +158,63 @@ Base case...
     expect(llmItems.find((item) => item.item_type === "risk_alert")?.target).toBe("VIX reversal");
   });
 
+  it("stores medium and long horizon forecast JSON without forcing same-day item types", () => {
+    const id = recordMarketForecastFromPayload({ payload: payload() });
+    const report = `
+<market_forecast_json>
+{
+  "horizon_probabilities": [
+    {
+      "horizon": "1m",
+      "target": "SPY",
+      "up_probability": 45,
+      "range_bound_probability": 35,
+      "down_probability": 20,
+      "confidence": 0.42,
+      "evidence_ids": ["quote.indices.1"],
+      "base_case": "earnings breadth improves",
+      "review_trigger": "monthly close"
+    }
+  ],
+  "horizon_sector_opportunities": [
+    {
+      "horizon": "3m",
+      "theme": "AI infrastructure",
+      "direction": "watchlist",
+      "probability": 0.56,
+      "confidence": 0.35,
+      "evidence_ids": ["quote.sectors.1"],
+      "trigger": "capex revisions"
+    }
+  ],
+  "horizon_risk_alerts": [
+    {
+      "horizon": "6m",
+      "risk": "valuation compression",
+      "severity": "alert",
+      "probability": 0.4,
+      "confidence": 0.34,
+      "evidence_ids": ["quote.macro.1"],
+      "invalidation": "earnings revisions reaccelerate"
+    }
+  ]
+}
+</market_forecast_json>`;
+
+    const result = updateMarketForecastReport(id, report);
+
+    expect(result).toEqual({ hasJson: true, insertedItemCount: 5 });
+    const llmItems = listMarketForecastItems(id).filter((item) => item.source === "llm_report");
+    expect(llmItems.filter((item) => item.item_type === "horizon_probability").map((item) => item.direction)).toEqual([
+      "up",
+      "range_bound",
+      "down",
+    ]);
+    expect(llmItems.find((item) => item.item_type === "horizon_probability")?.target).toBe("1m | SPY");
+    expect(llmItems.find((item) => item.item_type === "horizon_sector_opportunity")?.target).toBe("3m | AI infrastructure");
+    expect(llmItems.find((item) => item.item_type === "horizon_risk_alert")?.target).toBe("6m | valuation compression");
+  });
+
   it("extracts forecast JSON from fenced blocks", () => {
     const parsed = extractMarketForecastJsonFromReport([
       "```forecast_json",

@@ -135,6 +135,18 @@ function probabilityGroups(
     .map(providerProbabilityGroup);
 }
 
+function hasLlmItem(items: MarketForecastItemRow[], itemType: string): boolean {
+  return items.some((item) => item.source === "llm_report" && item.item_type === itemType);
+}
+
+function isHorizonOnlyForecast(items: MarketForecastItemRow[]): boolean {
+  const hasHorizonForecast = ["horizon_probability", "horizon_sector_opportunity", "horizon_risk_alert"]
+    .some((itemType) => hasLlmItem(items, itemType));
+  const hasSameDayForecast = ["index_probability", "sector_opportunity", "risk_alert"]
+    .some((itemType) => hasLlmItem(items, itemType));
+  return hasHorizonForecast && !hasSameDayForecast;
+}
+
 function changePct(latest?: number, previous?: number): number | undefined {
   if (latest === undefined || previous === undefined || previous === 0) return undefined;
   return Math.round(((latest - previous) / previous) * 10000) / 100;
@@ -353,22 +365,27 @@ export async function runMarketForecastEvaluationProvider(
     session: config.forecast_session,
   });
   const items = forecast ? (deps.listItems ?? listMarketForecastItems)(forecast.id) : [];
-  const groups = probabilityGroups(items, "index_probability");
-  const sectorGroups = probabilityGroups(items, "sector_opportunity");
-  const riskGroups = probabilityGroups(items, "risk_alert");
+  const horizonOnly = isHorizonOnlyForecast(items);
+  const groups = horizonOnly ? [] : probabilityGroups(items, "index_probability");
+  const sectorGroups = horizonOnly ? [] : probabilityGroups(items, "sector_opportunity");
+  const riskGroups = horizonOnly ? [] : probabilityGroups(items, "risk_alert");
   const benchmarks = await benchmarkResults({ config, quoteClient });
   const indexScores = indexEvaluationScores(groups, benchmarks);
   const sectorScores = sectorEvaluationScores(sectorGroups, benchmarks);
   const riskScores = riskEvaluationScores(riskGroups, benchmarks);
   const scores = [...indexScores, ...sectorScores, ...riskScores];
-  const note = calibrationNote(scores, benchmarks);
+  const note = horizonOnly
+    ? "Stored pre-market forecast is medium/long horizon only; same-day post-market hit/miss and Brier calibration are intentionally skipped."
+    : calibrationNote(scores, benchmarks);
   const status = !forecast
     ? "no_forecast"
-    : !groups.length
-      ? "no_probability_items"
-      : benchmarks.some((benchmark) => benchmark.outcome === "unknown")
-        ? "partial"
-        : "ok";
+    : horizonOnly
+      ? "horizon_only"
+      : !groups.length
+        ? "no_probability_items"
+        : benchmarks.some((benchmark) => benchmark.outcome === "unknown")
+          ? "partial"
+          : "ok";
   const payload = {
     generated_at: args.runAt.toISOString(),
     source: "market-forecast-evaluation",
@@ -404,17 +421,19 @@ export async function runMarketForecastEvaluationProvider(
           ? "evaluation quotes use a fallback source; treat calibration as provisional until primary close data is available."
           : undefined,
         !forecast ? "no matching pre-market forecast found for this trade date." : undefined,
-        !groups.length && forecast ? "matching forecast has no stored index probability items." : undefined,
-        !sectorGroups.length && forecast ? "matching forecast has no stored sector opportunity items." : undefined,
+        horizonOnly ? "matching forecast contains only medium/long horizon items; same-day calibration is skipped by design." : undefined,
+        !groups.length && forecast && !horizonOnly ? "matching forecast has no stored index probability items." : undefined,
+        !sectorGroups.length && forecast && !horizonOnly ? "matching forecast has no stored sector opportunity items." : undefined,
         sectorScores.some((score) => score.benchmark_symbol === "unmapped_sector_benchmark")
           ? "some sector opportunity items could not be matched to configured benchmark_symbols."
           : undefined,
-        !riskGroups.length && forecast ? "matching forecast has no stored risk alert items." : undefined,
+        !riskGroups.length && forecast && !horizonOnly ? "matching forecast has no stored risk alert items." : undefined,
         ...benchmarks.filter((benchmark) => benchmark.error).map((benchmark) => `${benchmark.symbol}: ${benchmark.error}`),
       ].filter((warning): warning is string => Boolean(warning)),
     },
     usage_notes: [
       "This provider evaluates stored pre-market forecasts against benchmark close/latest snapshots.",
+      "Medium/long horizon forecasts are tracked but not scored against the same-day post-market benchmark.",
       "It is calibration telemetry, not a trading signal.",
       "stock_portfolio is included for the downstream post-market report when configured.",
     ],

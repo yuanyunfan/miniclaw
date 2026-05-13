@@ -128,7 +128,7 @@ describe("market forecast calibration summary", () => {
       missing_evidence_items: 1,
     });
     expect(summary.recommendations.join("\n")).toContain("No evaluated forecasts yet");
-    expect(summary.recommendations.join("\n")).toContain("index probability JSON");
+    expect(summary.recommendations.join("\n")).toContain("index_probabilities or horizon_probabilities JSON");
   });
 
   it("uses the latest evaluation row and counts fallback quote calibration", () => {
@@ -168,6 +168,29 @@ describe("market forecast calibration summary", () => {
     expect(summary.totals.miss_count).toBe(0);
     expect(summary.weak_spots.fallback_source_evaluations).toBe(1);
     expect(summary.weak_spots.high_brier_scores).toBe(0);
+  });
+
+  it("treats horizon probabilities as forecast probabilities, not missing same-day JSON", () => {
+    const summary = summarizeMarketForecastCalibration({
+      records: [{
+        forecast: forecast(),
+        items: [
+          item({
+            id: "horizon-1",
+            item_type: "horizon_probability",
+            target: "1m | SPY",
+            direction: "up",
+            source: "llm_report",
+            evidence_ids_json: JSON.stringify(["quote.indices.1"]),
+          }),
+        ],
+        evaluations: [],
+      }],
+    });
+
+    expect(summary.by_forecast_source[0]?.key).toBe("llm_horizon_report");
+    expect(summary.weak_spots.missing_probability_forecasts).toBe(0);
+    expect(summary.weak_spots.unevaluated_forecasts).toBe(1);
   });
 
   it("builds runtime calibration config only after the sample gate", () => {

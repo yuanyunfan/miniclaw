@@ -57,8 +57,11 @@ export interface ReportForecastExtractionResult {
 
 interface ForecastJsonObject {
   index_probabilities?: unknown;
+  horizon_probabilities?: unknown;
   sector_opportunities?: unknown;
+  horizon_sector_opportunities?: unknown;
   risk_alerts?: unknown;
+  horizon_risk_alerts?: unknown;
   risks?: unknown;
 }
 
@@ -186,7 +189,15 @@ function parseForecastJsonCandidate(candidate: string): ForecastJsonObject | und
     const parsed = JSON.parse(candidate);
     const obj = asRecord(parsed);
     if (!obj) return undefined;
-    if (!("index_probabilities" in obj) && !("sector_opportunities" in obj) && !("risk_alerts" in obj) && !("risks" in obj)) {
+    if (
+      !("index_probabilities" in obj)
+      && !("horizon_probabilities" in obj)
+      && !("sector_opportunities" in obj)
+      && !("horizon_sector_opportunities" in obj)
+      && !("risk_alerts" in obj)
+      && !("horizon_risk_alerts" in obj)
+      && !("risks" in obj)
+    ) {
       return undefined;
     }
     return obj as ForecastJsonObject;
@@ -238,24 +249,47 @@ function probabilityValue(row: Record<string, unknown>, direction: "up" | "range
   return optionalNumber(row[direction] ?? row[`${direction}_probability`]);
 }
 
-function insertIndexProbabilityItems(forecastId: string, value: unknown): number {
+function horizonLabel(row: Record<string, unknown>): string | undefined {
+  return optionalString(row.horizon) ?? optionalString(row.time_horizon) ?? optionalString(row.period);
+}
+
+function withHorizonTarget(target: string, horizon?: string): string {
+  if (!horizon) return target;
+  return target.includes(horizon) ? target : `${horizon} | ${target}`;
+}
+
+function horizonRationale(row: Record<string, unknown>, horizon?: string): string | undefined {
+  const parts = [
+    horizon ? `horizon=${horizon}` : undefined,
+    optionalString(row.rationale) ?? optionalString(row.reason),
+    optionalString(row.base_case) ? `base_case=${optionalString(row.base_case)}` : undefined,
+    optionalString(row.trigger) ? `trigger=${optionalString(row.trigger)}` : undefined,
+    optionalString(row.review_trigger) ? `review_trigger=${optionalString(row.review_trigger)}` : undefined,
+  ].filter((part): part is string => Boolean(part));
+  return parts.length ? parts.join("; ") : undefined;
+}
+
+function insertProbabilityItems(forecastId: string, value: unknown, itemType: "index_probability" | "horizon_probability"): number {
   const rows = Array.isArray(value) ? value : value ? [value] : [];
   let count = 0;
   for (const item of rows) {
     const row = asRecord(item);
     if (!row) continue;
     const target = optionalString(row.target) ?? optionalString(row.index) ?? "broad market";
+    const horizon = itemType === "horizon_probability" ? horizonLabel(row) : undefined;
     const confidence = optionalNumber(row.confidence);
     const evidenceIds = stringArray(row.evidence_ids);
     const invalidation = optionalString(row.invalidation) ?? optionalString(row.invalidation_trigger);
-    const rationale = optionalString(row.rationale) ?? optionalString(row.reason);
+    const rationale = itemType === "horizon_probability"
+      ? horizonRationale(row, horizon)
+      : optionalString(row.rationale) ?? optionalString(row.reason);
     for (const direction of ["up", "range_bound", "down"] as const) {
       const probability = probabilityValue(row, direction);
       if (probability === undefined) continue;
       insertForecastItem({
         forecast_id: forecastId,
-        item_type: "index_probability",
-        target,
+        item_type: itemType,
+        target: withHorizonTarget(target, horizon),
         direction,
         probability,
         confidence,
@@ -270,12 +304,17 @@ function insertIndexProbabilityItems(forecastId: string, value: unknown): number
   return count;
 }
 
-function insertReportListItems(forecastId: string, value: unknown, itemType: "sector_opportunity" | "risk_alert"): number {
+function insertReportListItems(
+  forecastId: string,
+  value: unknown,
+  itemType: "sector_opportunity" | "risk_alert" | "horizon_sector_opportunity" | "horizon_risk_alert",
+): number {
   if (!Array.isArray(value)) return 0;
   let count = 0;
   for (const item of value) {
     const row = asRecord(item);
     if (!row) continue;
+    const horizon = itemType.startsWith("horizon_") ? horizonLabel(row) : undefined;
     const target = optionalString(row.target)
       ?? optionalString(row.theme)
       ?? optionalString(row.sector)
@@ -284,13 +323,15 @@ function insertReportListItems(forecastId: string, value: unknown, itemType: "se
     insertForecastItem({
       forecast_id: forecastId,
       item_type: itemType,
-      target,
-      direction: optionalString(row.direction) ?? optionalString(row.severity) ?? (itemType === "risk_alert" ? "risk" : "watchlist"),
+      target: withHorizonTarget(target, horizon),
+      direction: optionalString(row.direction) ?? optionalString(row.severity) ?? (itemType.endsWith("risk_alert") ? "risk" : "watchlist"),
       probability: optionalNumber(row.probability),
       confidence: optionalNumber(row.confidence),
       evidence_ids: stringArray(row.evidence_ids),
       invalidation: optionalString(row.invalidation) ?? optionalString(row.invalidation_trigger),
-      rationale: optionalString(row.rationale) ?? optionalString(row.reason) ?? optionalString(row.trigger),
+      rationale: itemType.startsWith("horizon_")
+        ? horizonRationale(row, horizon)
+        : optionalString(row.rationale) ?? optionalString(row.reason) ?? optionalString(row.trigger),
       source: "llm_report",
     });
     count++;
@@ -299,9 +340,12 @@ function insertReportListItems(forecastId: string, value: unknown, itemType: "se
 }
 
 function insertReportForecastItems(forecastId: string, reportJson: ForecastJsonObject): number {
-  return insertIndexProbabilityItems(forecastId, reportJson.index_probabilities)
+  return insertProbabilityItems(forecastId, reportJson.index_probabilities, "index_probability")
+    + insertProbabilityItems(forecastId, reportJson.horizon_probabilities, "horizon_probability")
     + insertReportListItems(forecastId, reportJson.sector_opportunities, "sector_opportunity")
-    + insertReportListItems(forecastId, reportJson.risk_alerts ?? reportJson.risks, "risk_alert");
+    + insertReportListItems(forecastId, reportJson.horizon_sector_opportunities, "horizon_sector_opportunity")
+    + insertReportListItems(forecastId, reportJson.risk_alerts ?? reportJson.risks, "risk_alert")
+    + insertReportListItems(forecastId, reportJson.horizon_risk_alerts, "horizon_risk_alert");
 }
 
 export function updateMarketForecastReport(forecastId: string, reportText: string): ReportForecastExtractionResult {

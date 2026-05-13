@@ -155,6 +155,7 @@ function parseEvidenceIds(item: MarketForecastItemRow): string[] {
 
 function forecastProbabilitySource(items: MarketForecastItemRow[]): string {
   if (items.some((item) => item.source === "llm_report" && item.item_type === "index_probability")) return "llm_report";
+  if (items.some((item) => item.source === "llm_report" && item.item_type === "horizon_probability")) return "llm_horizon_report";
   if (items.some((item) => item.source === "provider_score" && item.item_type === "index_direction")) return "provider_score";
   return "none";
 }
@@ -162,6 +163,7 @@ function forecastProbabilitySource(items: MarketForecastItemRow[]): string {
 function hasProbabilityItems(items: MarketForecastItemRow[]): boolean {
   return items.some((item) => (
     (item.source === "llm_report" && item.item_type === "index_probability")
+    || (item.source === "llm_report" && item.item_type === "horizon_probability")
     || (item.source === "provider_score" && item.item_type === "index_direction")
   ));
 }
@@ -277,7 +279,7 @@ function recommendations(summary: {
     out.push(`Backfill or wait for post-market evaluation on ${summary.weakSpots.unevaluated_forecasts} forecast(s) before judging accuracy.`);
   }
   if (summary.weakSpots.missing_probability_forecasts) {
-    out.push("Tighten the Forecast Editor prompt: every pre-market report must emit index probability JSON for each benchmark target.");
+    out.push("Tighten the Forecast Editor prompt: every pre-market report must emit index_probabilities or horizon_probabilities JSON for each benchmark target.");
   }
   if (summary.weakSpots.missing_evidence_items) {
     out.push("Tighten analyst role rules: forecast items without evidence IDs should be treated as hypotheses and excluded from high-conviction calls.");
@@ -312,7 +314,7 @@ export function buildMarketIntelScoringCalibrationConfig(
     }));
   const promptRules: string[] = [];
   if (summary.weak_spots.missing_probability_forecasts > 0) {
-    promptRules.push("Prompt rule: Forecast Editor must output index_probabilities with up/range_bound/down probabilities for every benchmark target.");
+    promptRules.push("Prompt rule: Forecast Editor must output index_probabilities or horizon_probabilities with up/range_bound/down probabilities for every benchmark target.");
   }
   if (summary.weak_spots.missing_evidence_items > 0) {
     promptRules.push("Prompt rule: Any sector_opportunity or risk_alert without evidence_ids must be downgraded to a hypothesis/watchlist item.");
@@ -370,7 +372,16 @@ export function summarizeMarketForecastCalibration(params: {
     if (!evaluation?.scores.length) weakSpots.unevaluated_forecasts++;
     if (!hasProbabilityItems(record.items)) weakSpots.missing_probability_forecasts++;
     weakSpots.missing_evidence_items += record.items.filter((item) => (
-      ["index_probability", "index_direction", "sector_opportunity", "risk_alert", "risk_level"].includes(item.item_type)
+      [
+        "index_probability",
+        "horizon_probability",
+        "index_direction",
+        "sector_opportunity",
+        "horizon_sector_opportunity",
+        "risk_alert",
+        "horizon_risk_alert",
+        "risk_level",
+      ].includes(item.item_type)
       && parseEvidenceIds(item).length === 0
     )).length;
     if (evaluation?.fallbackSource) weakSpots.fallback_source_evaluations++;
