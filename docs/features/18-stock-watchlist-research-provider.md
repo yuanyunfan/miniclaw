@@ -1,6 +1,6 @@
 # MiniClaw Stock Watchlist Research Provider
 
-> 结论：`stock-watchlist-research` 是券商自选股的深度研究 provider。它只读取 `stock-pulse.universe.sources` 中启用的 Futu / Eastmoney MyFavor 自选股源，不读取账户持仓，也不输出到原有持仓频道；对应 cron 应推送到独立的 `#daily-watchlist-stock`。
+> 结论：`stock-watchlist-research` 是券商自选股的深度研究 provider。它读取 `stock-pulse.universe.sources` 中启用的 Futu / Eastmoney MyFavor 自选股源，并用关联的 `stock-portfolio` 配置排除已持仓标的；对应 cron 应推送到独立的 `#daily-watchlist-stock`。
 
 ## 目标
 
@@ -9,7 +9,7 @@
 本 provider 的目标：
 
 - 从 `stock-pulse` 的 broker watchlist universe source 读取观察池。
-- 只采集 watchlist 观察标的，不混入 `stock-portfolio` 持仓。
+- 使用 `stock-pulse` 关联的 `stock-portfolio` 配置做持仓排除，只保留“自选但未买入”的观察标的。
 - 为每只股票补充 quote、profile、financials、news evidence。
 - 嵌入 `market-intel` 的大盘、宏观、公告和新闻上下文，但强制移除 `portfolio_provider_config`。
 - 下游 prompt 使用固定买入时点标签：`worth_small_starter`、`wait_for_pullback`、`not_buyable_now`、`watch_only`。
@@ -20,6 +20,7 @@
 - 不调用交易 endpoint，不自动下单。
 - 不把 watchlist 接到 `stock-portfolio`。
 - 不把 Eastmoney MyFavor 和 `jywg.18.cn` 持仓 provider 混用。
+- 不把已排除的持仓代码输出给下游报告；持仓集合只用于过滤。
 
 ## 运行链路
 
@@ -30,6 +31,7 @@ cron task
     -> load stock-pulse config
     -> only enabled futu_watchlist / eastmoney_myfavor_watchlist sources
     -> build watchlist-only scan universe
+    -> load linked stock-portfolio config and exclude held symbols
     -> Yahoo chart quote snapshot
     -> Yahoo search profile/news
     -> Yahoo fundamentals timeseries
@@ -51,6 +53,7 @@ provider 输出 JSON 的核心字段：
 
 - `run_context.watchlist_only=true`：提示下游报告这是观察池，不是持仓。
 - `watchlist_source`：列出启用 broker source 数、拉取数量、扫描数量和 warning。
+- `watchlist_source.portfolio_filter`：列出持仓过滤状态、关联 `stock-portfolio` 配置名、持仓符号数和排除数量；不包含被排除的持仓代码。
 - `symbols[]`：每只 watchlist 股票的 quote/profile/financials/news。
 - `market_context`：来自 `market-intel` 的大盘、宏观、官方新闻、财报/公告上下文。
 - `evidence[]`：每只股票 quote/profile/financials/news 的 evidence id。

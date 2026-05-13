@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toYahooSymbol } from "../symbols.js";
+import { extractPortfolioSymbols, toYahooSymbol } from "../symbols.js";
 
 describe("stock-pulse symbol mapping", () => {
   it("maps US class-share dots to Yahoo hyphen symbols", () => {
@@ -18,5 +18,41 @@ describe("stock-pulse symbol mapping", () => {
     expect(toYahooSymbol("01810.HK", "hk")).toBe("1810.HK");
     expect(toYahooSymbol("HK.00700", "hk")).toBe("0700.HK");
     expect(toYahooSymbol("HK.00005", "hk")).toBe("0005.HK");
+  });
+
+  it("extracts Eastmoney position premium rows as held portfolio symbols", () => {
+    const symbols = extractPortfolioSymbols({
+      sources: [
+        {
+          provider: "eastmoney-jywg-readonly",
+          config: "cn-stock",
+          label: "Eastmoney CN",
+          status: "ok",
+          payload: {
+            positions_summary: {
+              positions_count: 1,
+              top_positions: [],
+              top_gainers: [],
+              top_losers: [],
+              position_premiums: [{ code: "513500", name: "标普500ETF", currency: "CNY" }],
+            },
+          },
+        },
+      ],
+    }, "cn");
+
+    expect(symbols.map((symbol) => ({
+      symbol: symbol.symbol,
+      yahoo_symbol: symbol.yahoo_symbol,
+      market: symbol.market,
+      sources: symbol.sources,
+    }))).toEqual([
+      {
+        symbol: "513500",
+        yahoo_symbol: "513500.SS",
+        market: "cn-a",
+        sources: ["portfolio:Eastmoney CN"],
+      },
+    ]);
   });
 });

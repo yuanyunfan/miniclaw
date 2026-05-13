@@ -151,6 +151,7 @@ export function extractPortfolioSymbols(portfolioPayload: unknown, scope: StockP
       ...collectPositionsArray(source.payload, "top_positions"),
       ...collectPositionsArray(source.payload, "top_gainers"),
       ...collectPositionsArray(source.payload, "top_losers"),
+      ...collectPositionsArray(source.payload, "position_premiums"),
     ];
     for (const row of rows) {
       const code = str(row.code);

@@ -85,11 +85,27 @@ export interface StockWatchlistResearchSymbol {
   news_error?: string;
 }
 
+export type StockWatchlistPortfolioFilterStatus =
+  | "applied"
+  | "not_run"
+  | "not_configured"
+  | "failed"
+  | "incomplete";
+
+export interface StockWatchlistPortfolioFilterSummary {
+  status: StockWatchlistPortfolioFilterStatus;
+  stock_portfolio_config?: string;
+  held_symbols: number;
+  excluded_symbols: number;
+}
+
 export interface StockWatchlistResearchSourceSummary {
   stock_pulse_config: string;
   enabled_broker_sources: number;
   fetched_symbols: number;
   scanned_symbols: number;
+  raw_watchlist_symbols: number;
+  portfolio_filter: StockWatchlistPortfolioFilterSummary;
   warnings: string[];
 }
 

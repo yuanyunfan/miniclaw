@@ -37,6 +37,7 @@ function providerConfig(): StockWatchlistResearchConfig {
 function stockPulseConfig(): StockPulseProviderConfig {
   return {
     market_scope: "us",
+    portfolio_provider_config: "us-stock",
     active_window: { timezone: "Asia/Shanghai", start: "09:30", end: "01:00" },
     markets: { us: marketConfig() },
     universe: {
@@ -114,6 +115,27 @@ describe("runStockWatchlistResearchProvider", () => {
     }, {
       loadProviderConfig: () => providerConfig(),
       loadStockPulseConfig: () => stockPulseConfig(),
+      portfolioRunner: async () => ({
+        text: JSON.stringify({
+          source: "stock-portfolio",
+          sources: [
+            {
+              provider: "futu-stock",
+              config: "us-stock",
+              label: "Futu US",
+              status: "ok",
+              payload: {
+                positions_summary: {
+                  positions_count: 1,
+                  top_positions: [{ code: "MSFT", name: "Microsoft", currency: "USD" }],
+                  top_gainers: [],
+                  top_losers: [],
+                },
+              },
+            },
+          ],
+        }),
+      }),
       quoteClient,
       researchClient,
     });
@@ -124,7 +146,15 @@ describe("runStockWatchlistResearchProvider", () => {
     expect(parsed.run_context.watchlist_only).toBe(true);
     expect(parsed.watchlist_source.enabled_broker_sources).toBe(1);
     expect(parsed.watchlist_source.fetched_symbols).toBe(2);
-    expect(parsed.symbols.map((item: { symbol: string }) => item.symbol)).toEqual(["AAPL", "MSFT"]);
+    expect(parsed.watchlist_source.raw_watchlist_symbols).toBe(2);
+    expect(parsed.watchlist_source.scanned_symbols).toBe(1);
+    expect(parsed.watchlist_source.portfolio_filter).toMatchObject({
+      status: "applied",
+      stock_portfolio_config: "us-stock",
+      held_symbols: 1,
+      excluded_symbols: 1,
+    });
+    expect(parsed.symbols.map((item: { symbol: string }) => item.symbol)).toEqual(["AAPL"]);
     expect(parsed.symbols[0].sources).toEqual(["universe:futu-us-watchlist:US"]);
     expect(parsed.symbols[0].portfolio).toBeUndefined();
     expect(parsed.evidence.map((item: { id: string }) => item.id)).toEqual(expect.arrayContaining([
@@ -134,6 +164,74 @@ describe("runStockWatchlistResearchProvider", () => {
       "watchlist.news.1.1",
     ]));
     expect(parsed.usage_notes.join("\n")).toContain("watchlist-only");
+    expect(parsed.usage_notes.join("\n")).toContain("unowned watchlist symbols");
+  });
+
+  it("skips when every broker watchlist symbol is already held", async () => {
+    const quoteClient: StockPulseQuoteClient = {
+      async getBars(): Promise<StockPulseQuoteSeries> {
+        throw new Error("quotes should not be requested");
+      },
+      async getUniverseSymbols(source: StockPulseUniverseSourceConfig): Promise<StockPulseUniverseSymbol[]> {
+        return [
+          { symbol: "AAPL", name: "Apple", market: "us", source: `universe:${source.name}:US` },
+          { symbol: "MSFT", name: "Microsoft", market: "us", source: `universe:${source.name}:US` },
+        ];
+      },
+    };
+    const result = await runStockWatchlistResearchProvider({
+      configName: "us-pre-market",
+      jobName: "us-watchlist-stock-pre-market",
+      channelId: "channel",
+      runAt: new Date("2026-05-12T12:45:00.000Z"),
+    }, {
+      loadProviderConfig: () => providerConfig(),
+      loadStockPulseConfig: () => stockPulseConfig(),
+      portfolioRunner: async () => ({
+        text: JSON.stringify({
+          source: "stock-portfolio",
+          sources: [
+            {
+              provider: "futu-stock",
+              config: "us-stock",
+              label: "Futu US",
+              status: "ok",
+              payload: {
+                positions_summary: {
+                  positions_count: 2,
+                  top_positions: [
+                    { code: "AAPL", name: "Apple", currency: "USD" },
+                    { code: "MSFT", name: "Microsoft", currency: "USD" },
+                  ],
+                  top_gainers: [],
+                  top_losers: [],
+                },
+              },
+            },
+          ],
+        }),
+      }),
+      quoteClient,
+      researchClient: {
+        async getProfile() {
+          throw new Error("research should not be requested");
+        },
+        async getFinancials() {
+          throw new Error("research should not be requested");
+        },
+        async getNews() {
+          throw new Error("research should not be requested");
+        },
+      },
+    });
+
+    const parsed = JSON.parse(result.text);
+    expect(parsed.run_context.skipped).toBe(true);
+    expect(parsed.run_context.skip_reason).toBe("empty_unowned_broker_watchlist");
+    expect(parsed.watchlist_source.raw_watchlist_symbols).toBe(2);
+    expect(parsed.watchlist_source.scanned_symbols).toBe(0);
+    expect(parsed.watchlist_source.portfolio_filter.excluded_symbols).toBe(2);
+    expect(parsed.symbols).toEqual([]);
   });
 
   it("strips portfolio config when embedding market-intel context", () => {
