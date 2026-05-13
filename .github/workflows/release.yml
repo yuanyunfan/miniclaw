@@ -1,6 +1,9 @@
 name: Release
 
 on:
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
     inputs:
       version:
@@ -20,7 +23,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: github.ref == 'refs/heads/main'
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
 
     steps:
       - name: Checkout
@@ -42,9 +45,36 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      - name: Resolve release version
+        id: release
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            TAG_EXISTS=true
+            if [[ "$VERSION" == *-* ]]; then
+              PRERELEASE=true
+            else
+              PRERELEASE=false
+            fi
+          else
+            VERSION="$INPUT_VERSION"
+            TAG_EXISTS=false
+            PRERELEASE="${INPUT_PRERELEASE:-false}"
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag_exists=$TAG_EXISTS" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+          echo "Resolved release v$VERSION prerelease=$PRERELEASE tag_exists=$TAG_EXISTS"
+
       - name: Validate release inputs
         env:
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ steps.release.outputs.version }}
+          TAG_EXISTS: ${{ steps.release.outputs.tag_exists }}
         run: |
           set -euo pipefail
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
@@ -60,7 +90,7 @@ jobs:
             echo "CHANGELOG.md does not contain a section for [$VERSION]" >&2
             exit 1
           fi
-          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null 2>&1; then
+          if [ "$TAG_EXISTS" != "true" ] && git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null 2>&1; then
             echo "Tag v$VERSION already exists" >&2
             exit 1
           fi
@@ -70,7 +100,7 @@ jobs:
 
       - name: Prepare release notes
         env:
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
           awk -v version="$VERSION" '
@@ -82,7 +112,7 @@ jobs:
 
       - name: Build source artifact
         env:
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
           TAG="v$VERSION"
@@ -97,13 +127,17 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ inputs.version }}
-          PRERELEASE: ${{ inputs.prerelease }}
+          VERSION: ${{ steps.release.outputs.version }}
+          PRERELEASE: ${{ steps.release.outputs.prerelease }}
+          TAG_EXISTS: ${{ steps.release.outputs.tag_exists }}
         run: |
           set -euo pipefail
           ARGS=()
           if [ "$PRERELEASE" = "true" ]; then
             ARGS+=(--prerelease)
+          fi
+          if [ "$TAG_EXISTS" = "true" ]; then
+            ARGS+=(--verify-tag)
           fi
           gh release create "v$VERSION" "miniclaw-v$VERSION.tar.gz" \
             --target "$GITHUB_SHA" \
@@ -114,5 +148,5 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: miniclaw-v${{ inputs.version }}
-          path: miniclaw-v${{ inputs.version }}.tar.gz
+          name: miniclaw-v${{ steps.release.outputs.version }}
+          path: miniclaw-v${{ steps.release.outputs.version }}.tar.gz
