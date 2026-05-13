@@ -30,6 +30,7 @@
 - [`features/14-market-intel-provider.md`](features/14-market-intel-provider.md): CN/US 盘前市场情报、forecast persistence、盘后评价与 calibration loop。
 - [`features/15-ralph-controller.md`](features/15-ralph-controller.md): plan-based fresh-context Codex execution controller。
 - [`features/16-provider-framework.md`](features/16-provider-framework.md): provider manifest、health check、dry-run、structured output 和兼容 adapter。
+- [`features/17-eastmoney-myfavor-watchlist.md`](features/17-eastmoney-myfavor-watchlist.md): 东方财富 MyFavor 自选股只读源，接入 stock-pulse universe。
 
 ## Plans
 

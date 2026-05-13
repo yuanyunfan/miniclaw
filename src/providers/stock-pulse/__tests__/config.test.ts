@@ -71,6 +71,51 @@ thresholds:
     expect(config.thresholds.etf.hour_abs_pct).toBe(1);
   });
 
+  it("parses broker watchlist universe sources", () => {
+    writeConfig("cn-hourly", `
+market_scope: cn
+universe:
+  include_sources: true
+  sources:
+    - type: futu_watchlist
+      name: futu-cn-watchlist
+      market: cn-a
+      profile: default
+      groups:
+        - A股
+        - ETF
+      limit: 30
+    - type: eastmoney_myfavor_watchlist
+      name: eastmoney-hk-watchlist
+      market: hk
+      config: myfavor
+      group: 港股
+      limit: 20
+`);
+
+    const config = loadStockPulseProviderConfig("cn-hourly");
+
+    expect(config.universe.include_sources).toBe(true);
+    expect(config.universe.sources).toEqual([
+      expect.objectContaining({
+        type: "futu_watchlist",
+        name: "futu-cn-watchlist",
+        market: "cn-a",
+        profile: "default",
+        groups: ["A股", "ETF"],
+        limit: 30,
+      }),
+      expect.objectContaining({
+        type: "eastmoney_myfavor_watchlist",
+        name: "eastmoney-hk-watchlist",
+        market: "hk",
+        config: "myfavor",
+        groups: ["港股"],
+        limit: 20,
+      }),
+    ]);
+  });
+
   it("rejects unsafe config names and invalid universe sources", () => {
     expect(() => getStockPulseProviderConfigPath("../secret")).toThrow(/path separators/);
     expect(() => getStockPulseProviderConfigPath("config")).toThrow(/reserved/);

@@ -7,6 +7,10 @@ import type {
   StockPulseUniverseSourceConfig,
   StockPulseUniverseSymbol,
 } from "./types.js";
+import {
+  getEastmoneyMyfavorUniverseSymbols,
+  getFutuWatchlistUniverseSymbols,
+} from "./watchlist-sources.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -125,6 +129,12 @@ export class YahooStockPulseQuoteClient implements StockPulseQuoteClient {
       url.searchParams.set("scrIds", source.scr_id ?? "");
       url.searchParams.set("count", String(source.limit));
       return parseYahooScreener(await fetchJson(url, 8000), source);
+    }
+    if (source.type === "futu_watchlist") {
+      return getFutuWatchlistUniverseSymbols(source);
+    }
+    if (source.type === "eastmoney_myfavor_watchlist") {
+      return getEastmoneyMyfavorUniverseSymbols(source);
     }
     const url = new URL("https://push2.eastmoney.com/api/qt/clist/get");
     url.searchParams.set("pn", "1");

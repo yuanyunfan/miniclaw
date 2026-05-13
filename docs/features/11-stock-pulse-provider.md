@@ -9,7 +9,7 @@
 - P0：扫描我的持仓和 watchlist。
 - P1：只在市场交易时段和北京时间个人活动窗口内执行有效扫描。
 - P2：用历史 intraday baseline 判断“涨跌频率超过预期”，不是只看固定涨跌幅。
-- P3：可选支持 universe source，先从市场 top movers 拉候选，再对候选跑同一套 bar 级异常检测；默认关闭，避免把非持仓股票混入个人持仓异动报告。
+- P3：可选支持 universe source，先从市场 top movers 或券商自选股拉候选，再对候选跑同一套 bar 级异常检测；默认按用户配置开启或关闭，避免把非持仓股票误当作账户持仓。
 
 ## 运行链路
 
@@ -18,7 +18,7 @@ cron task
   -> pre_provider: stock-pulse
     -> 判断 active_window + market sessions
     -> 调 stock-portfolio 采集持仓候选
-    -> 合并 watchlist；仅在 include_sources=true 时合并 universe sources
+    -> 合并手工 watchlist；仅在 include_sources=true 时合并 universe sources
     -> Yahoo chart 5m/60d bars
     -> deterministic anomaly scoring
     -> positions[] 当前盘中持仓快照
@@ -66,7 +66,7 @@ schedule:
 - `universe.include_portfolio`: 是否扫描持仓候选。
 - `universe.symbols`: 手动 watchlist。
 - `universe.include_sources`: 是否启用 P3 市场候选源，默认 `false`。
-- `universe.sources`: P3 市场候选源，例如 Yahoo predefined screener 或 Eastmoney clist；只有 `include_sources=true` 才会生效。
+- `universe.sources`: P3 候选源，例如 Yahoo predefined screener、Eastmoney clist、Futu 自选股或 Eastmoney myfavor 自选股；只有 `include_sources=true` 才会生效。
 - `quote`: 当前实现使用 Yahoo chart API 拉 5m bars。
 - `thresholds`: 按 `stock`、`etf`、`leveraged_etf` 分开设置阈值。
 
@@ -106,12 +106,57 @@ schedule:
 
 ## P3 Universe Scan
 
-P3 不是直接让 LLM 全市场搜索。开启 `universe.include_sources=true` 后，provider 会先用市场 top movers 生成候选，再对候选拉 5m bar 进行同一套异常检测：
+P3 不是直接让 LLM 全市场搜索。开启 `universe.include_sources=true` 后，provider 会先用受控源生成候选，再对候选拉 5m bar 进行同一套异常检测：
 
 - US：Yahoo predefined `day_gainers` / `day_losers`。
 - CN/HK：Eastmoney `clist` 候选。
+- Futu：`futu_watchlist` 通过本机 OpenD + 官方 SDK 读取自选股分组。
+- Eastmoney：`eastmoney_myfavor_watchlist` 通过 `myfavor.eastmoney.com` 只读 endpoint 读取东方财富自选股分组。
 
-这适合做“市场异动雷达”，但不适合默认混入个人持仓报告。`universe.max_symbols` 限制每次最多扫描的 symbol 数。
+这适合做“市场异动雷达”和“我的观察池异动”，但不能混入 `stock-portfolio`，也不能被 prompt 解释成真实持仓。`universe.max_symbols` 限制每次最多扫描的 symbol 数。
+
+Universe source 类型：
+
+```yaml
+universe:
+  include_sources: true
+  sources:
+    - type: futu_watchlist
+      name: futu-us-watchlist
+      market: us
+      profile: us
+      groups: ["Favorites"]
+      limit: 80
+    - type: eastmoney_myfavor_watchlist
+      name: eastmoney-cn-watchlist
+      market: cn-a
+      profile: default
+      groups: ["自选股"]
+      limit: 80
+    - type: yahoo_screener
+      name: us-day-gainers
+      market: us
+      scr_id: day_gainers
+      limit: 50
+    - type: eastmoney_clist
+      name: cn-top-movers
+      market: cn-a
+      fs: m:0+t:6,m:1+t:2
+      limit: 50
+```
+
+`futu_watchlist` 和 `eastmoney_myfavor_watchlist` 的共同规则：
+
+- `market` 决定本 source 只接收哪个市场的证券。
+- `groups` 可选；未配置时读取所有分组。
+- `limit` 限制该 source 返回的最大证券数量。
+- 返回值统一写入 `universe_source_symbols`，只作为观察池候选，不带账户资产、盈亏或持仓数量。
+
+Eastmoney myfavor 的特殊规则：
+
+- 它使用 `myfavor.eastmoney.com`，不使用 `jywg.18.cn` 交易后台。
+- session vault、endpoint allowlist 和配置文件均独立于 `eastmoney-jywg-readonly`。
+- 只读 group/list securities，不实现新增、删除、移动自选股等写操作。
 
 ## 输出约束
 

@@ -60,6 +60,7 @@ pnpm mcp:futu-stock
 - `futu_get_positions_summary` 可返回脱敏持仓贡献摘要。
 - `futu_get_daily_pnl_report` 可返回面向 Discord 日报的脱敏文本。
 - `futu-stock` cron `pre_provider` 可在 LLM 任务前采集脱敏账户上下文，并把 JSON 拼到 prompt 顶部。
+- `stock-pulse` 可通过 `futu_watchlist` universe source 读取 Futu OpenD 自选股分组，作为盘中异动观察池。
 
 运行前置：
 
@@ -138,6 +139,8 @@ OpenD 的作用：
 - `deal_list_query` / `GetOrderFillList`: 查询当日成交。
 - `history_deal_list_query` / `GetHistoryOrderFillList`: 查询历史成交。
 - `Get Cash Flow Summary`: 查询现金流摘要。
+- `OpenQuoteContext.get_user_security_group`: 查询用户自选股分组。
+- `OpenQuoteContext.get_user_security`: 查询指定自选股分组里的证券。
 
 账户资金可用字段：
 
@@ -218,6 +221,32 @@ futu_get_daily_pnl_report
 - 解锁交易工具。
 - 原始账号查询工具。
 - 原始 token/session/cookie 查询工具。
+
+## Stock Pulse 自选股源
+
+`futu_watchlist` 是 `stock-pulse.universe.sources` 的候选源，不属于 `stock-portfolio` 持仓聚合。它的用途是把 Futu 自选股作为观察池参与盘中异动扫描，不能被解释成真实持仓。
+
+配置示例：
+
+```yaml
+universe:
+  include_sources: true
+  sources:
+    - type: futu_watchlist
+      name: futu-us-watchlist
+      market: us
+      profile: us
+      groups:
+        - Favorites
+      limit: 80
+```
+
+实现边界：
+
+- 只通过 `OpenQuoteContext` 读取自选股分组和证券列表。
+- 不调用交易上下文，不需要 `unlock_trade`。
+- `US.*` 映射到 `market=us`，`HK.*` 映射到 `market=hk`，`SH.*` / `SZ.*` 映射到 `market=cn-a`。
+- `groups` 可选；未配置时读取所有可见自选股分组，再按 source 的 `market` 过滤。
 
 ### 输入参数
 

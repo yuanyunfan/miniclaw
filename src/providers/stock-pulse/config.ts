@@ -23,6 +23,12 @@ const RESERVED_PROVIDER_CONFIG_NAMES = new Set(["config"]);
 const MARKETS = new Set<StockPulseMarket>(["us", "cn-a", "hk"]);
 const MARKET_SCOPES = new Set<StockPulseMarketScope>(["us", "cn"]);
 const INSTRUMENT_TYPES = new Set<StockPulseInstrumentType>(["stock", "etf", "leveraged_etf"]);
+const UNIVERSE_SOURCE_TYPES = new Set<StockPulseUniverseSourceConfig["type"]>([
+  "yahoo_screener",
+  "eastmoney_clist",
+  "futu_watchlist",
+  "eastmoney_myfavor_watchlist",
+]);
 
 const DEFAULT_THRESHOLD_STOCK: StockPulseThresholdRule = {
   hour_abs_pct: 2,
@@ -180,21 +186,29 @@ function parseSymbol(raw: unknown): StockPulseSymbolConfig {
 function parseUniverseSource(raw: unknown): StockPulseUniverseSourceConfig {
   if (!isPlainObject(raw)) throw new Error("stock-pulse universe.sources[] must be an object");
   const type = optionalString(raw.type);
-  if (type !== "yahoo_screener" && type !== "eastmoney_clist") {
-    throw new Error("stock-pulse universe.sources[].type must be yahoo_screener or eastmoney_clist");
+  if (!UNIVERSE_SOURCE_TYPES.has(type as StockPulseUniverseSourceConfig["type"])) {
+    throw new Error(`stock-pulse universe.sources[].type must be one of: ${[...UNIVERSE_SOURCE_TYPES].join(", ")}`);
   }
+  const groups = Array.isArray(raw.groups)
+    ? raw.groups.map(optionalString).filter((item): item is string => item !== undefined)
+    : optionalString(raw.group) || optionalString(raw.group_name)
+      ? [optionalString(raw.group) ?? optionalString(raw.group_name) ?? ""].filter(Boolean)
+      : undefined;
   const name = optionalString(raw.name) ?? `${type}-${optionalString(raw.scr_id) ?? optionalString(raw.fs) ?? "source"}`;
   const parsed: StockPulseUniverseSourceConfig = {
-    type,
+    type: type as StockPulseUniverseSourceConfig["type"],
     name,
     market: market(raw.market, "universe.sources[].market"),
     enabled: boolValue(raw.enabled, true),
     limit: nonNegativeInt(raw.limit, 50, 200, "universe.sources[].limit"),
     scr_id: optionalString(raw.scr_id),
     fs: optionalString(raw.fs),
+    profile: optionalString(raw.profile),
+    config: optionalString(raw.config),
+    groups,
   };
-  if (type === "yahoo_screener" && !parsed.scr_id) throw new Error("stock-pulse yahoo_screener source requires scr_id");
-  if (type === "eastmoney_clist" && !parsed.fs) throw new Error("stock-pulse eastmoney_clist source requires fs");
+  if (parsed.type === "yahoo_screener" && !parsed.scr_id) throw new Error("stock-pulse yahoo_screener source requires scr_id");
+  if (parsed.type === "eastmoney_clist" && !parsed.fs) throw new Error("stock-pulse eastmoney_clist source requires fs");
   return parsed;
 }
 

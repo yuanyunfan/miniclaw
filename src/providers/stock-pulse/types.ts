@@ -33,13 +33,16 @@ export interface StockPulseSymbolConfig {
 }
 
 export interface StockPulseUniverseSourceConfig {
-  type: "yahoo_screener" | "eastmoney_clist";
+  type: "yahoo_screener" | "eastmoney_clist" | "futu_watchlist" | "eastmoney_myfavor_watchlist";
   name: string;
   market: StockPulseMarket;
   enabled: boolean;
   limit: number;
   scr_id?: string;
   fs?: string;
+  profile?: string;
+  config?: string;
+  groups?: string[];
 }
 
 export interface StockPulseUniverseConfig {

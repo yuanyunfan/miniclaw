@@ -1,7 +1,13 @@
 import { spawn } from "node:child_process";
 import { Socket } from "node:net";
 import { assertSafeOpendHost, sanitizeError } from "./safety.js";
-import type { FutuHealthCheck, FutuRawBrokerData, FutuStockClient, FutuStockProfileConfig } from "./types.js";
+import type {
+  FutuHealthCheck,
+  FutuRawBrokerData,
+  FutuStockClient,
+  FutuStockProfileConfig,
+  FutuWatchlistSecurity,
+} from "./types.js";
 
 const PYTHON_TIMEOUT_MS = 45_000;
 
@@ -104,6 +110,103 @@ finally:
 `;
 
 const FUTU_IMPORT_CHECK = "import importlib.util, json; print(json.dumps({'ok': bool(importlib.util.find_spec('futu') or importlib.util.find_spec('moomoo'))}))";
+
+const FUTU_WATCHLIST_BRIDGE = String.raw`
+import json
+import sys
+from datetime import datetime, timezone
+
+def emit(payload):
+    print(json.dumps(payload, ensure_ascii=False, allow_nan=False))
+
+def fail(message):
+    emit({"ok": False, "error": str(message)})
+    sys.exit(0)
+
+try:
+    req = json.loads(sys.stdin.read() or "{}")
+except Exception as exc:
+    fail(f"invalid request json: {exc}")
+
+try:
+    try:
+        from futu import *  # noqa: F403
+    except Exception:
+        from moomoo import *  # noqa: F403
+except Exception as exc:
+    fail(f"Python package futu-api/moomoo is not installed or not importable: {exc}")
+
+profile = req.get("profile", {})
+host = profile.get("opend_host", "127.0.0.1")
+port = int(profile.get("opend_port", 11111))
+selected_groups = [str(g).strip() for g in req.get("groups", []) if str(g).strip()]
+limit = int(req.get("limit", 200))
+
+def df_to_records(data):
+    if data is None:
+        return []
+    if hasattr(data, "to_json"):
+        return json.loads(data.to_json(orient="records", force_ascii=False))
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        return [data]
+    return [{"value": str(data)}]
+
+def group_name(row):
+    for key in ("group_name", "name", "group", "gname"):
+        value = row.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+ctx = None
+try:
+    ctx = OpenQuoteContext(host=host, port=port)
+    ret, groups_data = ctx.get_user_security_group()
+    if ret != RET_OK:
+        fail(f"get_user_security_group failed: {groups_data}")
+    groups = [group_name(row) for row in df_to_records(groups_data)]
+    groups = [g for g in groups if g]
+    if selected_groups:
+        groups = [g for g in groups if g in selected_groups]
+
+    securities = []
+    for group in groups:
+        ret, security_data = ctx.get_user_security(group)
+        if ret != RET_OK:
+            continue
+        for row in df_to_records(security_data):
+            code = str(row.get("code") or "").strip()
+            if not code:
+                continue
+            securities.append({
+                "group_name": group,
+                "code": code,
+                "name": row.get("name"),
+                "stock_type": row.get("stock_type"),
+                "stock_child_type": row.get("stock_child_type"),
+            })
+            if len(securities) >= limit:
+                break
+        if len(securities) >= limit:
+            break
+
+    emit({
+        "ok": True,
+        "captured_at": datetime.now(timezone.utc).isoformat(),
+        "group_count": len(groups),
+        "securities": securities,
+    })
+except Exception as exc:
+    fail(exc)
+finally:
+    try:
+        if ctx is not None:
+            ctx.close()
+    except Exception:
+        pass
+`;
 
 export function parseLastJsonPayload<T = unknown>(stdout: string): T {
   const lines = stdout.trim().split(/\r?\n/).filter(Boolean).reverse();
@@ -223,4 +326,31 @@ export class PythonFutuStockClient implements FutuStockClient {
       cash_flows: Array.isArray(parsed.cash_flows) ? parsed.cash_flows : [],
     };
   }
+}
+
+export async function getFutuWatchlistSecurities(
+  profile: FutuStockProfileConfig,
+  options: { groups?: string[]; limit?: number } = {},
+): Promise<FutuWatchlistSecurity[]> {
+  assertSafeOpendHost(profile);
+  const payload = JSON.stringify({
+    profile,
+    groups: options.groups ?? [],
+    limit: options.limit ?? 200,
+  });
+  const result = await runPython(profile.python_bin, ["-c", FUTU_WATCHLIST_BRIDGE], payload);
+  if (result.timedOut) throw new Error(`futu watchlist bridge timed out after ${PYTHON_TIMEOUT_MS}ms: ${sanitizeError(result.stderr || result.stdout)}`);
+  if (result.code !== 0) throw new Error(`futu watchlist bridge exited with ${result.code ?? result.signal}: ${sanitizeError(result.stderr || result.stdout)}`);
+  const parsed = parseLastJsonPayload<{ ok?: boolean; error?: string; securities?: unknown[] }>(result.stdout);
+  if (!parsed.ok) throw new Error(sanitizeError(parsed.error ?? "futu watchlist bridge failed"));
+  return (Array.isArray(parsed.securities) ? parsed.securities : [])
+    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object" && !Array.isArray(item)))
+    .map((item) => ({
+      group_name: typeof item.group_name === "string" ? item.group_name : "",
+      code: typeof item.code === "string" ? item.code : "",
+      name: typeof item.name === "string" ? item.name : undefined,
+      stock_type: typeof item.stock_type === "string" ? item.stock_type : undefined,
+      stock_child_type: typeof item.stock_child_type === "string" ? item.stock_child_type : undefined,
+    }))
+    .filter((item) => item.code);
 }

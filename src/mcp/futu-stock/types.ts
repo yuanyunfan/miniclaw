@@ -52,6 +52,14 @@ export interface FutuRawBrokerData {
   cash_flows?: Array<Record<string, unknown>>;
 }
 
+export interface FutuWatchlistSecurity {
+  group_name: string;
+  code: string;
+  name?: string;
+  stock_type?: string;
+  stock_child_type?: string;
+}
+
 export interface FutuPositionSummary {
   code: string;
   name: string;
