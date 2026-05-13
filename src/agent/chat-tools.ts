@@ -32,7 +32,7 @@ export const CHAT_TOOLS: ToolUnion[] = [
     input_schema: {
       type: "object" as const,
       properties: {
-        path: { type: "string", description: "绝对路径，例如 /Users/yuan/.miniclaw/cron/foo.yaml" },
+        path: { type: "string", description: "绝对路径，例如 /path/to/.miniclaw/cron/foo.yaml" },
       },
       required: ["path"],
     },

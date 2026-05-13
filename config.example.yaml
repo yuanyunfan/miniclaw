@@ -17,8 +17,8 @@ routing:
   task_channels: []
   # Optional per-channel task cwd. Explicit /task cwd still wins.
   channel_defaults:
-    # "1501826352028975125":
-    #   cwd: "/Users/you/ProjectRepo/miniclaw"
+    # "DISCORD_TASK_CHANNEL_ID":
+    #   cwd: "~/ProjectRepo/miniclaw"
   smart_router:
     # Disabled by default to preserve existing chat behavior until you opt in.
     enabled: false

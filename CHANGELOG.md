@@ -6,6 +6,10 @@
 
 ## [Unreleased]
 
+### Security
+- 收窄 npm publish 打包边界，避免 `.claude/`、`.github/`、测试 fixtures、`docs/plans/` 和本机 review copy 被意外发布。
+- 公开 docs/config 示例改用占位 channel ID 和通用路径，并让 G0 阻止 raw Discord snowflake 或本机用户目录路径进入公开文档。
+
 ---
 
 ## [1.0.0] — 2026-05-13

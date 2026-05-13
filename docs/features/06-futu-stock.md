@@ -359,7 +359,7 @@ MiniClaw 当前支持加载 MCP server。实现 `futu-stock` MCP 后，需要把
       "type": "stdio",
       "command": "node",
       "args": [
-        "/Users/yuan/ProjectRepo/miniclaw/dist/mcp/futu-stock/server.js"
+        "/path/to/miniclaw/dist/mcp/futu-stock/server.js"
       ]
     }
   }
@@ -376,7 +376,7 @@ MiniClaw 当前支持加载 MCP server。实现 `futu-stock` MCP 后，需要把
       "command": "pnpm",
       "args": [
         "--dir",
-        "/Users/yuan/ProjectRepo/miniclaw",
+        "/path/to/miniclaw",
         "mcp:futu-stock"
       ]
     }

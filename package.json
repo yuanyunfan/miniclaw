@@ -3,6 +3,19 @@
   "version": "1.0.0",
   "description": "极简 AI 助手 — Discord → Claude Code / Codex",
   "type": "module",
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "!dist/**/__tests__/**",
+    "!dist/**/*.test.js",
+    "!dist/**/*.test.d.ts",
+    "README.md",
+    "README.en.md",
+    "CHANGELOG.md",
+    "config.example.yaml",
+    ".env.example",
+    "install.sh"
+  ],
   "packageManager": "pnpm@10.33.0",
   "engines": {
     "node": ">=22.0.0"

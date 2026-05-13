@@ -198,7 +198,7 @@ MiniClaw 1.0 使用 GitHub Release 作为稳定安装和回滚边界，不把当
 原因：
 
 - MiniClaw 当前是 repo-first local runtime，不是稳定 CLI package。
-- 项目没有 `bin`、`exports`、`files`、postinstall、安全沙箱等 npm 包边界。
+- 项目现在有最小 `files` whitelist 作为防误发布边界，但还没有稳定 `bin`、`exports`、postinstall、安全沙箱和 npm CLI UX。
 - `miniclaw` npm 包名已经存在，直接发布会遇到命名和用户预期问题。
 - GitHub Release 更适合附带源码、lockfile、config example、PM2 config 和迁移说明。
 

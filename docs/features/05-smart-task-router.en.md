@@ -273,12 +273,12 @@ Then it should reply with the created task thread link.
 ```yaml
 routing:
   auto_reply_channels:
-    - "1497911682402619473"
+    - "DISCORD_CHAT_CHANNEL_ID"
   task_channels:
-    - "1501826352028975125"
+    - "DISCORD_TASK_CHANNEL_ID"
   channel_defaults:
-    "1501826352028975125":
-      cwd: "/Users/yuan/ProjectRepo/miniclaw"
+    "DISCORD_TASK_CHANNEL_ID":
+      cwd: "~/ProjectRepo/miniclaw"
   smart_router:
     enabled: true
     default_mode: confirm       # suggest | confirm | auto
@@ -286,9 +286,9 @@ routing:
     min_auto_confidence: 0.90
     # [] or ["*"] allows every eligible auto-reply / @mention channel to confirm.
     confirm_channels:
-      - "1497911682402619473"
+      - "DISCORD_CHAT_CHANNEL_ID"
     auto_task_channels:
-      - "1501826352028975125"
+      - "DISCORD_TASK_CHANNEL_ID"
     llm_classifier:
       enabled: true
       only_when_ambiguous: true
@@ -555,10 +555,10 @@ Example:
 ```yaml
 routing:
   channel_defaults:
-    "1501826352028975125":
-      cwd: "/Users/yuan/ProjectRepo/miniclaw"
-    "1502000000000000000":
-      cwd: "/Users/yuan/ProjectRepo/openclaw"
+    "DISCORD_MINICLAW_CHANNEL_ID":
+      cwd: "~/ProjectRepo/miniclaw"
+    "DISCORD_OPENCLAW_CHANNEL_ID":
+      cwd: "~/ProjectRepo/openclaw"
 ```
 
 Benefits:

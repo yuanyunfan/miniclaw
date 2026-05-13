@@ -103,7 +103,7 @@ Worker responsibilities:
 3. Create or reuse an isolated repair worktree under a path such as:
 
 ```text
-/Users/yuan/ProjectRepo/miniclaw-repairs/<incident-id>
+~/ProjectRepo/miniclaw-repairs/<incident-id>
 ```
 
 4. Ask the coding agent to implement a narrow fix using the incident report as input.
@@ -521,7 +521,7 @@ Worker responsibilities:
 3. Create an isolated worktree under:
 
 ```text
-/Users/yuan/ProjectRepo/miniclaw-repairs/<incident-id>
+~/ProjectRepo/miniclaw-repairs/<incident-id>
 ```
 
 4. Create a repair branch such as:

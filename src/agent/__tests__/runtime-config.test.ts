@@ -35,9 +35,9 @@ describe("formatAgentRuntimeSummary", () => {
     const { formatAgentRuntimeSummary } = await import("../runtime-config.js");
     const summary: AgentRuntimeSummary = {
       config: {
-        filePath: "/Users/yuan/.miniclaw/config.yaml",
+        filePath: "/home/miniclaw/.miniclaw/config.yaml",
         fileLoaded: true,
-        mcpConfigPath: "/Users/yuan/.claude.json",
+        mcpConfigPath: "/home/miniclaw/.claude.json",
         mcpAllowlist: ["exa", "context7"],
       },
       provider: "codex",
@@ -56,7 +56,7 @@ describe("formatAgentRuntimeSummary", () => {
       dataProviders: {
         preProviders: ["email-query", "wechat-mp"],
       },
-      defaultCwd: "/Users/yuan/ProjectRepo",
+      defaultCwd: "/home/miniclaw/ProjectRepo",
       codex: {
         model: "inherit",
         reasoningEffort: "inherit",
@@ -87,8 +87,8 @@ describe("formatAgentRuntimeSummary", () => {
     expect(text).toContain("ModelClient: default=`openai` smart-router=`openai_compatible`");
     expect(text).toContain("IMTransport: default=`discord` implemented=`discord`");
     expect(text).toContain("Data providers: `email-query`, `wechat-mp`");
-    expect(text).toContain("Config: `/Users/yuan/.miniclaw/config.yaml` (loaded)");
-    expect(text).toContain("MCP config=`/Users/yuan/.claude.json` allowlist=`exa,context7`");
+    expect(text).toContain("Config: `/home/miniclaw/.miniclaw/config.yaml` (loaded)");
+    expect(text).toContain("MCP config=`/home/miniclaw/.claude.json` allowlist=`exa,context7`");
     expect(text).toContain("MCP: `github`, `kusto`");
     expect(text).toContain("MCP loaded by MiniClaw: `exa`, `context7`");
     expect(text).not.toContain("url");

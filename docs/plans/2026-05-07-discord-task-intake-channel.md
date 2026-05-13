@@ -86,8 +86,8 @@ This means simply adding a channel to `MINICLAW_AUTO_REPLY_CHANNELS` would route
 ## Execution Notes
 
 - Added `MINICLAW_TASK_CHANNELS` and routed matching `MessageCreate` events to task thread creation before chat auto-reply routing.
-- Created Discord channel `#task` with ID `1501826352028975125` under the existing `🤖 AI` category.
-- Added `MINICLAW_TASK_CHANNELS=1501826352028975125` to local `.env` and restarted PM2 with `--update-env`.
-- Smoke test message in `#task` created task `a3721c68-8ed5-4f86-938d-e15e3504200a` and thread `1501827834090619042`.
+- Created Discord channel `#task` under the existing AI category.
+- Added the task channel ID to local `MINICLAW_TASK_CHANNELS` and restarted PM2 with `--update-env`.
+- Smoke test message in `#task` created a task and a task thread.
 - Smoke test completed through Codex with `tools=0`, duration `26.8s`, and final Discord output: `MiniClaw 确认：任务通道工作正常。`
 - Verification commands passed: `pnpm build`, targeted vitest for attachments/formatter/task helpers, and `git diff --check`.

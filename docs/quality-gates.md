@@ -52,7 +52,9 @@ MiniClaw 不是普通 TypeScript library。它同时包含：
 
 - Node 版本符合 `package.json` engines。
 - `package.json` 和 `pnpm-lock.yaml` 一致。
-- staged 文件不包含 `.env`、SQLite DB、coverage HTML、大 binary、token dump。
+- staged / tree 文件不包含 `.env`、SQLite DB、coverage HTML、大 binary、token dump。
+- `docs/private/` 和 `docs/zh/` 都是本机 review / 私有目录，不能进入 commit；`.miniclaw/`、`.playwright-mcp/`、`.miniclaw-attachments/`、`scripts/.channel-map.json` 也必须留在 git 外。
+- 公开 docs/examples（`docs/**`，不含 `docs/private/**`，以及 `README*.md`、`config.example.yaml`）不能包含本机用户目录路径或 raw Discord snowflake ID；示例必须使用 `DISCORD_*_CHANNEL_ID`、`~/ProjectRepo/...`、`/path/to/...` 这类占位符。
 - 如果依赖文件变更，运行 `pnpm install --frozen-lockfile`。
 - 禁止 `git add .` 式误提交的常见产物进入 staged set。
 

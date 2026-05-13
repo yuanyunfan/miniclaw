@@ -60,7 +60,7 @@ describe("execReadFile", () => {
   });
 
   it("拒绝读取 SSH key 路径，即使文件不存在", async () => {
-    const r = await execReadFile("/Users/yuan/.ssh/id_ed25519");
+    const r = await execReadFile("/home/miniclaw/.ssh/id_ed25519");
     expect(r.is_error).toBe(true);
     expect(r.content).toMatch(/敏感路径/);
   });

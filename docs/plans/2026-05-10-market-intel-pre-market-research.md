@@ -843,7 +843,7 @@ schedule: "45 8 * * 1-5"
 timezone: America/New_York
 enabled: true
 type: task
-channel: "1502184539915681823"
+channel: "DISCORD_US_STOCK_CHANNEL_ID"
 pre_provider: market-intel
 pre_provider_config: us-pre-market
 prompt: |
@@ -861,7 +861,7 @@ schedule: "45 8 * * 1-5"
 timezone: Asia/Shanghai
 enabled: true
 type: task
-channel: "1502184541807181906"
+channel: "DISCORD_CN_STOCK_CHANNEL_ID"
 pre_provider: market-intel
 pre_provider_config: cn-pre-market
 prompt: |

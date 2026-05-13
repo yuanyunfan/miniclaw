@@ -267,7 +267,7 @@ doctor:
   enabled: true
   auto_diagnose_enabled: true
   scan_interval_ms: 60000
-  summary_channel_id: "1498885395025494086"
+  summary_channel_id: "1000000000000000000"
   auto_repair_enabled: false
   auto_commit_enabled: true
   auto_push_enabled: false
@@ -366,7 +366,7 @@ notifications:
       enabled: true,
       autoDiagnoseEnabled: true,
       scanIntervalMs: 60000,
-      summaryChannelId: "1498885395025494086",
+      summaryChannelId: "1000000000000000000",
       summaryChannelName: "miniclaw-auto-improve",
       autoRepairEnabled: false,
       autoCommitEnabled: true,

@@ -31,7 +31,7 @@ export function buildWechatMpLoginRequiredMessage(args: PreProviderRunArgs, err:
     "需要在 MiniClaw 机器上重新登录后再采集：",
     "",
     "```bash",
-    "cd /Users/yuan/ProjectRepo/miniclaw",
+    "# 在 MiniClaw 项目目录运行",
     `pnpm wechat-mp:login -- --config ${name}`,
     `pnpm wechat-mp:check -- --config ${name}`,
     "```",

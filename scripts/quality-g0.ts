@@ -65,6 +65,7 @@ function blockedPathReason(path: string): string | undefined {
   const ext = extname(name).toLowerCase();
 
   if (normalized.startsWith("docs/private/")) return "docs/private is intentionally ignored and must not be committed";
+  if (normalized.startsWith("docs/zh/")) return "docs/zh is a local review-copy directory and must not be committed";
   if (normalized.startsWith(".miniclaw/") || normalized.includes("/.miniclaw/")) return "local .miniclaw runtime data must stay outside git";
   if (normalized.startsWith(".playwright-mcp/")) return "Playwright MCP runtime snapshots must not be committed";
   if (normalized.startsWith(".miniclaw-attachments/")) return "MiniClaw attachment cache must not be committed";
@@ -111,6 +112,23 @@ function secretFinding(path: string, buffer: Buffer): string | undefined {
     const preview = linePreview(text, match.index);
     if (/\[redacted]|placeholder|example|dummy|fake|test-token|your_/i.test(preview)) continue;
     return `${item.name}: ${preview}`;
+  }
+  return undefined;
+}
+
+function publicExampleFinding(path: string, buffer: Buffer): string | undefined {
+  const normalized = path.replaceAll("\\", "/");
+  const isPublicDoc = normalized.startsWith("docs/") && !normalized.startsWith("docs/private/");
+  const isPublicExample = ["README.md", "README.en.md", "config.example.yaml"].includes(normalized);
+  if (!isPublicDoc && !isPublicExample) return undefined;
+  if (isBinary(buffer)) return undefined;
+
+  const text = buffer.toString("utf8");
+  if (text.includes("/Users/" + "yuan")) {
+    return "public docs/examples must not contain machine-local user home paths";
+  }
+  if (/\b[1-9]\d{16,21}\b/.test(text)) {
+    return "public docs/examples must not contain raw Discord snowflake IDs; use placeholders";
   }
   return undefined;
 }
@@ -176,6 +194,11 @@ for (const path of paths) {
     continue;
   }
   const content = fileContent(path);
+  const publicExampleReason = publicExampleFinding(path, content);
+  if (publicExampleReason) {
+    findings.push({ path, reason: publicExampleReason });
+    continue;
+  }
   const reason = secretFinding(path, content);
   if (reason) findings.push({ path, reason });
 }
