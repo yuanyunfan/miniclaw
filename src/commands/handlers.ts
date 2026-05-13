@@ -40,12 +40,16 @@ import {
   type IncidentSeverity,
   type IncidentStatus,
 } from "../store/incidents.js";
-import { formatIncidentDetail, formatIncidentResolution } from "./incident-detail.js";
+import {
+  formatIncidentDetail,
+  formatIncidentResolution,
+  type IncidentTaskTraceContext,
+} from "./incident-detail.js";
 import { buildIncidentListReply, normalizeIncidentFilterValue, normalizeIncidentListLimit } from "./incidents.js";
 import { buildTaskLogReply, formatTaskTraceError } from "./task-log.js";
 import { buildCronRunDetailReply, buildCronRunsReply } from "./cron-runs.js";
 import { buildTaskTraceModel, resolveTaskForTrace } from "../store/task-trace-export.js";
-import { listCronRunsForIncident } from "../store/cron-runs.js";
+import { listCronRunsForIncident, type CronRunRow } from "../store/cron-runs.js";
 
 const log = createLogger("handlers");
 
@@ -255,6 +259,66 @@ function resolveIncident(input: string): { incident?: IncidentRow; error?: strin
   return { error: `找不到 incident \`${id}\`` };
 }
 
+function parseJsonObject(value: string | null): Record<string, unknown> {
+  if (!value) return {};
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function stringValue(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
+function incidentTaskTraceCandidate(
+  incident: IncidentRow,
+  cronRuns: CronRunRow[]
+): Pick<IncidentTaskTraceContext, "taskId" | "source"> | undefined {
+  if (incident.subject_type === "task" && incident.subject_id) {
+    return { taskId: incident.subject_id, source: "incident_subject" };
+  }
+
+  const cronTaskId = cronRuns.find((row) => row.task_id)?.task_id;
+  if (cronTaskId) {
+    return { taskId: cronTaskId, source: "linked_cron_run" };
+  }
+
+  const source = parseJsonObject(incident.source_json);
+  const sourceTaskId = stringValue(source.task_id);
+  if (sourceTaskId) {
+    return { taskId: sourceTaskId, source: "source_metadata" };
+  }
+
+  return undefined;
+}
+
+function buildIncidentTaskTraceContext(
+  incident: IncidentRow,
+  cronRuns: CronRunRow[]
+): IncidentTaskTraceContext | undefined {
+  const candidate = incidentTaskTraceCandidate(incident, cronRuns);
+  if (!candidate) return undefined;
+
+  const resolved = resolveTaskForTrace(candidate.taskId);
+  if (!resolved.ok) {
+    return { ...candidate, error: resolved.error };
+  }
+
+  const model = buildTaskTraceModel(resolved.value.id, { maxEvents: 6 });
+  if (!model.ok) {
+    return { taskId: resolved.value.id, source: candidate.source, error: model.error };
+  }
+
+  return { taskId: resolved.value.id, source: candidate.source, model: model.value };
+}
+
 async function sendIncidentOperationSummary(interaction: ChatInputCommandInteraction, content: string): Promise<void> {
   try {
     const channel = await resolveDoctorSummaryChannel(interaction.client);
@@ -283,8 +347,9 @@ export async function handleIncident(interaction: ChatInputCommandInteraction): 
     const events = listIncidentEvents(incident.id, 8);
     const repairRuns = listRepairRunsForIncident(incident.id, 5);
     const cronRuns = incident.subject_type === "cron" ? listCronRunsForIncident(incident.id, 3) : [];
+    const taskTrace = buildIncidentTaskTraceContext(incident, cronRuns);
     await interaction.reply({
-      content: formatIncidentDetail({ incident, events, repairRuns, cronRuns }),
+      content: formatIncidentDetail({ incident, events, repairRuns, cronRuns, taskTrace }),
       ephemeral: true,
     });
     return;

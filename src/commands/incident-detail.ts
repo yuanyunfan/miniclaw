@@ -1,8 +1,21 @@
 import type { IncidentEventRow, IncidentRow, RepairRunRow } from "../store/incidents.js";
 import type { CronRunRow } from "../store/cron-runs.js";
+import {
+  formatTaskTraceCompactEvents,
+  formatTaskTraceSummary,
+  type TaskTraceError,
+  type TaskTraceModel,
+} from "../store/task-trace-export.js";
 import { formatDiagnosticValue, redactDiagnosticText } from "../privacy/diagnostic-redaction.js";
 
 const DISCORD_CONTENT_LIMIT = 1900;
+
+export interface IncidentTaskTraceContext {
+  taskId: string;
+  source: "incident_subject" | "linked_cron_run" | "source_metadata";
+  model?: TaskTraceModel;
+  error?: TaskTraceError;
+}
 
 function parseJsonObject(value: string | null): Record<string, unknown> {
   if (!value) return {};
@@ -136,6 +149,36 @@ function cronRunLines(cronRuns: CronRunRow[]): string[] {
   });
 }
 
+function taskTraceSourceLabel(source: IncidentTaskTraceContext["source"]): string {
+  if (source === "incident_subject") return "incident subject";
+  if (source === "linked_cron_run") return "linked cron run";
+  return "source metadata";
+}
+
+function taskTraceLines(traceLines: string[], taskTrace?: IncidentTaskTraceContext): string[] {
+  const lines: string[] = [];
+
+  if (taskTrace) {
+    const prefix = taskTrace.taskId.slice(0, 8);
+    lines.push(`- source: ${taskTraceSourceLabel(taskTrace.source)} task=${prefix}`);
+    if (taskTrace.model) {
+      lines.push(`- export: ${formatTaskTraceSummary(taskTrace.model)}`);
+      const compactEvents = formatTaskTraceCompactEvents(taskTrace.model, 3);
+      if (compactEvents.length) lines.push("- recent exported events:", ...compactEvents);
+    } else if (taskTrace.error) {
+      lines.push(`- export: unavailable (${formatDiagnosticValue(taskTrace.error.message, { maxChars: 160 })})`);
+    }
+    lines.push(`- full trace: /task-log id:${prefix}`);
+  }
+
+  if (traceLines.length) {
+    lines.push(taskTrace ? "- incident evidence slice:" : "- incident evidence trace:");
+    lines.push(...traceLines);
+  }
+
+  return lines.length ? lines : ["- (none)"];
+}
+
 function shipRestartLines(params: {
   incident: IncidentRow;
   latestRepair?: RepairRunRow;
@@ -210,14 +253,23 @@ function nextActionLine(params: {
   return field(diagnosis, "recommendedAction") ?? "Review the incident and choose the next operator command.";
 }
 
-function formatCommandLines(incident: IncidentRow, cronRuns: CronRunRow[], latestRepair?: RepairRunRow): string[] {
+function formatCommandLines(
+  incident: IncidentRow,
+  cronRuns: CronRunRow[],
+  latestRepair?: RepairRunRow,
+  taskTrace?: IncidentTaskTraceContext
+): string[] {
   const id = incident.id;
   const status = incident.status;
   const lines = [
     `- Resolve/ignore: /incident resolve id:${id.slice(0, 8)} or /incident ignore id:${id.slice(0, 8)}`,
   ];
-  if (incident.subject_type === "task" && incident.subject_id) {
-    lines.push(`- Task trace: /task-log id:${incident.subject_id.slice(0, 8)}`);
+  const taskTraceId = taskTrace?.taskId
+    ?? (incident.subject_type === "task" ? incident.subject_id : undefined)
+    ?? cronRuns.find((row) => row.task_id)?.task_id
+    ?? undefined;
+  if (taskTraceId) {
+    lines.push(`- Task trace: /task-log id:${taskTraceId.slice(0, 8)}`);
   }
   if (incident.subject_type === "cron" && cronRuns.length) {
     lines.push(`- Cron run: /cron-run id:${cronRuns[0]!.id.slice(0, 8)}`);
@@ -245,8 +297,9 @@ export function formatIncidentDetail(params: {
   events: IncidentEventRow[];
   repairRuns: RepairRunRow[];
   cronRuns?: CronRunRow[];
+  taskTrace?: IncidentTaskTraceContext;
 }): string {
-  const { incident, events, repairRuns, cronRuns = [] } = params;
+  const { incident, events, repairRuns, cronRuns = [], taskTrace } = params;
   const source = parseJsonObject(incident.source_json);
   const evidence = parseJsonObject(incident.evidence_json);
   const diagnosis = parseJsonObject(incident.diagnosis_json);
@@ -277,7 +330,7 @@ export function formatIncidentDetail(params: {
     `- channel_id: ${field(source, "channel_id") ?? "-"} message_url: ${field(source, "message_url") ?? "-"}`,
     "",
     "Task Trace",
-    ...(traceLines.length ? traceLines : ["- (none)"]),
+    ...taskTraceLines(traceLines, taskTrace),
     ...(showCronRuns ? [
       "",
       "Cron Runs",
@@ -297,7 +350,7 @@ export function formatIncidentDetail(params: {
     `- ${nextActionLine({ incident, diagnosis, latestRepair, events })}`,
     "",
     "Operator Commands",
-    ...formatCommandLines(incident, cronRuns, latestRepair),
+    ...formatCommandLines(incident, cronRuns, latestRepair, taskTrace),
     "",
     "Recent Events",
     ...(events.length

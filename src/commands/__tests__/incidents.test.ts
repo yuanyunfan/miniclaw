@@ -3,6 +3,8 @@ import type { ChatInputCommandInteraction } from "discord.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setDb } from "../../store/connection.js";
 import { ensureBaseSchema, runMigrations } from "../../store/schema.js";
+import { createTask, updateTask } from "../../store/db.js";
+import { appendTaskEvent } from "../../store/task-events.js";
 import { createOrUpdateIncident, createRepairRun } from "../../store/incidents.js";
 import { createCronRun, markCronRunFailed } from "../../store/cron-runs.js";
 import { buildIncidentListReply, normalizeIncidentListLimit } from "../incidents.js";
@@ -162,8 +164,30 @@ describe("incident list slash handler", () => {
       jobType: "task",
       startedAt: "2026-05-13T03:00:00.000Z",
     });
+    createTask({
+      id: "task-cron-view-123456",
+      discord_thread_id: "thread-cron-view",
+      discord_user_id: "cron",
+      prompt: "raw prompt must not render",
+      cwd: "/tmp/cron-view",
+      source_route_type: "cron_task",
+      source_channel_id: "channel-1",
+    });
+    updateTask("task-cron-view-123456", {
+      status: "failed",
+      completed_at: "2026-05-13T03:00:03.000Z",
+      duration_ms: 3000,
+    });
+    appendTaskEvent({
+      taskId: "task-cron-view-123456",
+      eventType: "provider_error",
+      severity: "error",
+      message: "Authorization: Bearer secret-token-123456",
+      payload: { provider: "codex", token: "secret-token-123456" },
+    });
     markCronRunFailed("cron-view-run-123456", {
       completedAt: "2026-05-13T03:00:03.000Z",
+      taskId: "task-cron-view-123456",
       incidentId: incident.id,
       errorCategory: "provider_auth",
       errorMessage: "session expired",
@@ -182,6 +206,11 @@ describe("incident list slash handler", () => {
     });
     const payload = interaction.reply.mock.calls[0]?.[0] as { content: string };
     expect(payload.content).toContain("id=cron-vie");
+    expect(payload.content).toContain("source: linked cron run task=task-cro");
+    expect(payload.content).toContain("Task trace task-cro (failed)");
+    expect(payload.content).toContain("error/provider_error Authorization: [REDACTED]");
+    expect(payload.content).toContain("/task-log id:task-cro");
+    expect(payload.content).not.toContain("secret-token-123456");
     expect(payload.content).toContain("/cron-run id:cron-vie");
   });
 

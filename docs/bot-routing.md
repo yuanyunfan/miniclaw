@@ -242,7 +242,7 @@ chunkMessage 切 2000 字  ← Discord 单消息上限
 - `/health`
 - `/doctor`
 - `/incidents`（默认 open status set，可选 `status/type/severity/category/provider/route/repair_status/limit` 过滤）
-- `/incident`（`view` 展示 incident core facts、task/cron links、latest repair review fields、ship/restart state、rollback hint 和 next action；`ship-preview` 返回与 `doctor:ship` dry-run 共用的 repair review report）
+- `/incident`（`view` 展示 incident core facts、task/cron links、safe task trace exporter summary、latest repair review fields、ship/restart state、rollback hint 和 next action；`ship-preview` 返回与 `doctor:ship` dry-run 共用的 repair review report）
 - `/agent-config`
 - `/cancel`
 - `/resume`

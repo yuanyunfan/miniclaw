@@ -1,6 +1,6 @@
 # Incident Center Operator View
 
-Status: draft
+Status: done
 Date: 2026-05-11
 
 ## Background
@@ -240,3 +240,19 @@ Record new filters, formatter behavior, command output examples, and verificatio
 - Ralph doctor profile passed:
   - `pnpm run ralph:verify -- --task incident-center-ops-view --profile doctor` - passed; included doctor scheduler/repair/ship tests, incident detail tests, typecheck, lint, and docs drift.
 - Remaining plan item: future trace exporter deep links beyond the command hints already shown in `/incident view`.
+
+### 2026-05-13 - Ralph incident task trace continuity
+
+- Implemented the final reviewable phase: `/incident view` now resolves a task trace context from the incident subject, linked `cron_runs.task_id`, or source metadata `task_id`, then shows the safe task trace exporter summary and latest compact redacted event lines when available.
+- Added `formatTaskTraceCompactEvents` in `src/store/task-trace-export.ts` so incident detail reuses the existing trace projection/redaction boundary instead of rendering raw task event payloads.
+- Kept the Discord detail compact: the `Task Trace` section now shows the resolved source, exporter availability, full `/task-log` command, and the incident evidence trace slice when present; full Markdown export stays behind `/task-log` / `pnpm run task:trace`.
+- Wired `handleIncident(view)` to build and pass the trace context for both direct task incidents and cron incidents with linked task runs. No schema fields were added.
+- Updated docs in `docs/features/13-auto-doctor.md`, `docs/bot-routing.md`, and `docs/architecture.md` for the shared trace-exporter summary behavior.
+- Focused verification passed:
+  - `pnpm vitest run src/commands/__tests__/incident-detail.test.ts src/commands/__tests__/incidents.test.ts src/store/__tests__/task-trace-export.test.ts` - 16 tests passed.
+  - `pnpm run typecheck` - passed.
+  - `pnpm run lint` - passed.
+  - `pnpm run quality:docs` - passed.
+- Ralph doctor profile passed:
+  - `pnpm run ralph:verify -- --task incident-center-ops-view --profile doctor` - passed; included doctor scheduler/repair/ship tests, incident detail tests, typecheck, lint, and docs drift.
+- All implementation plan items are now complete and verified; plan status is `done`.

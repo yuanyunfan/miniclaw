@@ -385,6 +385,14 @@ export function formatTaskTraceSummary(model: TaskTraceModel): string {
   ].join(" | ");
 }
 
+export function formatTaskTraceCompactEvents(model: TaskTraceModel, limit = 3): string[] {
+  const maxEvents = positiveIntOption(limit, 3);
+  return model.events.slice(-maxEvents).map((event) => {
+    const message = event.message ? ` ${redactTaskTraceText(event.message, 120)}` : "";
+    return `- ${event.createdAt} ${event.severity}/${event.eventType}${message}`;
+  });
+}
+
 function truncateUtf8(value: string, maxBytes: number): string {
   if (Buffer.byteLength(value, "utf8") <= maxBytes) return value;
   const notice = "\n\n_Trace truncated by max_bytes limit._\n";

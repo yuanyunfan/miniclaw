@@ -140,9 +140,10 @@ The list output shows the active filters, severity/type groups, compact rows wit
 - diagnosis category, repair-allowed flag, and recommended action
 - source metadata such as task id, cron name, channel id, and Discord message URL when present
 - linked cron run rows when a cron failure has durable `cron_runs.incident_id` history
+- safe task trace exporter summaries for direct task incidents and cron incidents with linked `cron_runs.task_id`, plus `/task-log` for the full sanitized Markdown trace
 - latest repair run branch, base/commit SHA, workspace, changed files, blockers, verification commands, and completion state
 - ship preview state, main update event, restart event, rollback/revert hint, and one next recommended operator action
-- recent structured task trace events when the incident came from a Discord or cron task
+- recent structured task trace events from the incident evidence slice when available
 - recent incident events
 - suggested follow-up operator commands
 
@@ -169,7 +170,7 @@ The `TaskReporter` boundary records task lifecycle and runtime signals:
 - Discord progress, status, and final-message delivery failures
 - cancellation, shutdown interruption, completion, failure, and recovery-relevant finish events
 
-Auto Doctor reads these events for selected or recent task candidates. Classification uses structured trace signals before falling back to raw process logs, so Discord delivery failures, provider auth/data/network failures, and MiniClaw runtime bugs can be separated more reliably. Persisted task incidents include the relevant trace slice in `evidence_json.trace`, and `/incident view` renders it under `Task Trace`.
+Auto Doctor reads these events for selected or recent task candidates. Classification uses structured trace signals before falling back to raw process logs, so Discord delivery failures, provider auth/data/network failures, and MiniClaw runtime bugs can be separated more reliably. Persisted task incidents include the relevant trace slice in `evidence_json.trace`. `/incident view` now also resolves the incident subject task, linked cron-run task, or source metadata task id through the same safe trace exporter used by `/task-log`, then shows a compact export summary and the latest redacted event lines under `Task Trace`.
 
 Incident detail rendering is a diagnostic export boundary, so it must not print raw evidence JSON directly. `src/privacy/diagnostic-redaction.ts` is the shared policy for incident detail and task trace Markdown: authorization headers, cookies, tokens, prompt/body fields and provider payloads are removed or redacted; session/account identifiers are replaced with short hashes for correlation without disclosure.
 

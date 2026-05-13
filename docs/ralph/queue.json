@@ -102,7 +102,7 @@
       "id": "incident-center-ops-view",
       "title": "Incident Center Operator View",
       "priority": "P2",
-      "status": "pending",
+      "status": "done",
       "plan": "docs/plans/2026-05-11-incident-center-ops-view.md",
       "branch": "ralph/incident-center-ops-view",
       "verify_profile": "doctor",

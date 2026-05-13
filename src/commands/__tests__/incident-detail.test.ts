@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { formatIncidentDetail, formatIncidentResolution } from "../incident-detail.js";
 import type { IncidentEventRow, IncidentRow, RepairRunRow } from "../../store/incidents.js";
 import type { CronRunRow } from "../../store/cron-runs.js";
+import type { TaskTraceModel } from "../../store/task-trace-export.js";
 
 function incident(overrides: Partial<IncidentRow> = {}): IncidentRow {
   return {
@@ -93,6 +94,55 @@ function cronRun(overrides: Partial<CronRunRow> = {}): CronRunRow {
   };
 }
 
+function taskTraceModel(overrides: Partial<TaskTraceModel> = {}): TaskTraceModel {
+  return {
+    task: {
+      id: "task-abc",
+      status: "failed",
+      cwd: "/tmp/miniclaw",
+      sessionId: "[redacted-session:abcdef123456]",
+      durationMs: 2500,
+      costUsd: 0.01,
+      createdAt: "2026-05-10T01:00:00.000Z",
+      completedAt: "2026-05-10T01:08:00.000Z",
+      sourceRouteType: "task_channel",
+      sourceChannelId: "channel-1",
+      sourceThreadId: "thread-1",
+      sourceMessageId: "message-1",
+      sourceMessageUrl: "https://discord.com/channels/g/c/m",
+    },
+    events: [
+      {
+        id: 1,
+        eventType: "task_started",
+        severity: "info",
+        payload: { provider: "codex" },
+        redactedPayloadKeys: 0,
+        payloadParseError: false,
+        createdAt: "2026-05-10T01:00:00.000Z",
+        elapsedMs: null,
+      },
+      {
+        id: 2,
+        eventType: "provider_error",
+        severity: "error",
+        message: "Authorization: [REDACTED]",
+        payload: { provider: "codex", event_type: "turn.failed" },
+        redactedPayloadKeys: 2,
+        payloadParseError: false,
+        createdAt: "2026-05-10T01:08:00.000Z",
+        elapsedMs: 480000,
+      },
+    ],
+    totalEventCount: 5,
+    renderedEventCount: 2,
+    omittedEventCount: 3,
+    generatedAt: "2026-05-10T01:09:00.000Z",
+    redactionPolicy: "allowlist",
+    ...overrides,
+  };
+}
+
 describe("incident detail formatting", () => {
   it("renders core incident, source, repair, event, and operator command fields", () => {
     const text = formatIncidentDetail({
@@ -112,6 +162,26 @@ describe("incident detail formatting", () => {
     expect(text).toContain("/task-log id:task-abc");
     expect(text).toContain("/incident ship-preview id:incident");
     expect(text).toContain("/incident approve-ship id:incident");
+  });
+
+  it("renders task trace exporter summaries and full-trace commands when provided", () => {
+    const text = formatIncidentDetail({
+      incident: incident(),
+      events: [event()],
+      repairRuns: [repair()],
+      taskTrace: {
+        taskId: "task-abc",
+        source: "incident_subject",
+        model: taskTraceModel(),
+      },
+    });
+
+    expect(text).toContain("source: incident subject task=task-abc");
+    expect(text).toContain("export: Task trace task-abc (failed) | events=2/5 | cwd=/tmp/miniclaw");
+    expect(text).toContain("recent exported events:");
+    expect(text).toContain("error/provider_error Authorization: [REDACTED]");
+    expect(text).toContain("full trace: /task-log id:task-abc");
+    expect(text).toContain("incident evidence slice:");
   });
 
   it("renders cron links, repair review fields, ship state, restart state, and rollback hints", () => {
@@ -160,11 +230,19 @@ describe("incident detail formatting", () => {
           { command: "pnpm run lint", ok: false, durationMs: 800 },
         ]),
       })],
+      taskTrace: {
+        taskId: "task-cron-123456",
+        source: "linked_cron_run",
+        error: { code: "no_events", message: "task `task-cr` 没有 trace events" },
+      },
     });
 
     expect(text).toContain("Cron Runs");
     expect(text).toContain("id=cron-run");
     expect(text).toContain("/cron-run id:cron-run");
+    expect(text).toContain("source: linked cron run task=task-cro");
+    expect(text).toContain("export: unavailable");
+    expect(text).toContain("/task-log id:task-cro");
     expect(text).toContain("changed_files: src/commands/incident-detail.ts");
     expect(text).toContain("blockers: .env: blocked path");
     expect(text).toContain("ok: pnpm run typecheck");
