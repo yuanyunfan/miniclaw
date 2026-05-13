@@ -68,6 +68,19 @@ export function buildOperationalRuntimeConfig(reader: ConfigReader, e2eMode: boo
         "~/.miniclaw/runtime/connectivity.json"
       )),
     },
+    startupWatchdog: {
+      enabled: reader.boolValue(["startup_watchdog", "enabled"], "MINICLAW_STARTUP_WATCHDOG_ENABLED", !e2eMode),
+      clientReadyTimeoutMs: reader.positiveNumber(
+        ["startup_watchdog", "client_ready_timeout_ms"],
+        "MINICLAW_STARTUP_WATCHDOG_CLIENT_READY_TIMEOUT_MS",
+        60_000
+      ),
+      macosNotificationEnabled: reader.boolValue(
+        ["startup_watchdog", "macos_notification_enabled"],
+        "MINICLAW_STARTUP_WATCHDOG_MACOS_NOTIFICATION_ENABLED",
+        true
+      ),
+    },
     doctor: {
       enabled: reader.boolValue(["doctor", "enabled"], "MINICLAW_DOCTOR_ENABLED", true),
       autoDiagnoseEnabled: reader.boolValue(

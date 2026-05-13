@@ -78,6 +78,13 @@ agent:
   shutdown_drain_timeout_ms: 1800000 # 30 minutes
   register_commands_on_start: false
 
+startup_watchdog:
+  # Runs before Discord clientReady. If bot.login hangs or fails, MiniClaw can
+  # still raise a local macOS notification instead of silently relying on PM2.
+  enabled: true
+  client_ready_timeout_ms: 60000
+  macos_notification_enabled: true
+
 tasks:
   trace_auto_attach:
     # Conservative default: keep automatic trace uploads off unless explicitly enabled.
@@ -88,6 +95,14 @@ tasks:
     min_duration_ms: 0
     min_event_count: 0
     max_bytes: 120000
+
+connectivity:
+  enabled: true
+  interval_ms: 60000
+  failure_threshold: 3
+  request_timeout_ms: 10000
+  general_test_url: "https://www.qq.com"
+  state_path: "~/.miniclaw/runtime/connectivity.json"
 
 anthropic:
   # Keep ANTHROPIC_API_KEY in .env.

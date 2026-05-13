@@ -16,6 +16,7 @@ import { getDb, setDb } from "./connection.js";
 export { SCHEMA_VERSION };
 export { getDb } from "./connection.js";
 export * from "./cron-runs.js";
+export * from "./recovery-outbox.js";
 export * from "./repositories/chat-history.js";
 export * from "./repositories/smart-router-decisions.js";
 export * from "./repositories/tasks.js";

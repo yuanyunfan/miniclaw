@@ -175,6 +175,12 @@ describe("schema migrations", () => {
     expect(__testables.columnExists("cron_runs", "task_id")).toBe(true);
     expect(__testables.columnExists("cron_runs", "metadata_json")).toBe(true);
   });
+
+  it("ensures recovery outbox table exists", () => {
+    expect(__testables.columnExists("recovery_outbox", "kind")).toBe(true);
+    expect(__testables.columnExists("recovery_outbox", "channel_id")).toBe(true);
+    expect(__testables.columnExists("recovery_outbox", "payload_json")).toBe(true);
+  });
 });
 
 describe("updateTask", () => {

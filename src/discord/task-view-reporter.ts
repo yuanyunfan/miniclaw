@@ -5,6 +5,7 @@ import { chunkMessage } from "./chunks.js";
 import { taskCompleteEmbed, taskErrorEmbed, taskStartEmbed } from "./formatter.js";
 import { ProgressReporter } from "./progress.js";
 import { sendChunkedTextWithDeferredLinkPreviews } from "./text.js";
+import { enqueueTaskResultDelivery } from "../monitoring/recovery-outbox.js";
 import {
   sendTaskTraceAutoAttachment,
   type TaskTraceAutoAttachConfig,
@@ -25,6 +26,11 @@ export interface DiscordTaskViewReporterOptions {
   statusMessage?: Message;
   rawOutputTextTransform?: (text: string) => string;
   traceAutoAttach?: TaskTraceAutoAttachConfig;
+  deliveryChannelId?: string;
+  deliveryContext?: {
+    route?: string;
+    jobName?: string;
+  };
   onDeliveryError?: (operation: string, err: unknown) => void;
 }
 
@@ -231,7 +237,22 @@ export class DiscordTaskViewReporter {
         await sendRawTaskResult(this.options.channel, this.options.taskId, displayResult);
       } catch (err) {
         this.options.onDeliveryError?.("final_raw_send", err);
-        throw err;
+        try {
+          const channelId = this.options.deliveryChannelId ?? (this.options.channel as { id?: string }).id;
+          enqueueTaskResultDelivery({
+            channelId: channelId ?? "",
+            taskId: this.options.taskId,
+            messages: rawTaskMessages(this.options.taskId, displayResult),
+            success: displayResult.success,
+            durationMs: displayResult.durationMs,
+            route: this.options.deliveryContext?.route,
+            jobName: this.options.deliveryContext?.jobName,
+            deliveryError: err instanceof Error ? err.message : String(err),
+          });
+        } catch (queueErr) {
+          this.options.onDeliveryError?.("final_raw_delivery_enqueue", queueErr);
+        }
+        return;
       }
       return;
     }

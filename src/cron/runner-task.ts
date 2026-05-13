@@ -461,6 +461,8 @@ export async function runTask(job: CronJobTask, client: Client, context: CronJob
       channel,
       outputMode: "raw",
       signal: context.signal,
+      deliveryChannelId: job.channel,
+      deliveryContext: { route: "cron_task", jobName: job.name },
       ...(marketForecastId ? { rawOutputTextTransform: stripMarketForecastJsonForDisplay } : {}),
     });
   } catch (err) {
@@ -535,7 +537,16 @@ export async function runSkill(job: CronJobSkill, client: Client, context: CronJ
   });
   let result: TaskResult;
   try {
-    result = await executeTask({ taskId, prompt, cwd, channel, outputMode: "raw", signal: context.signal });
+    result = await executeTask({
+      taskId,
+      prompt,
+      cwd,
+      channel,
+      outputMode: "raw",
+      signal: context.signal,
+      deliveryChannelId: job.channel,
+      deliveryContext: { route: "cron_skill", jobName: job.name },
+    });
   } catch (err) {
     throw attachCronTaskRunMetadata(err, { taskId });
   }

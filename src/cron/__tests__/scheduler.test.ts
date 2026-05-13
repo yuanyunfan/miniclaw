@@ -9,6 +9,7 @@ import { getJobState, resetStateCache } from "../state.js";
 import type { CronJobMessage, CronJobTask } from "../types.js";
 import { setDb } from "../../store/connection.js";
 import { createCronRun, listCronRuns, markCronRunFailed } from "../../store/cron-runs.js";
+import { listRecoveryOutbox } from "../../store/recovery-outbox.js";
 import { getIncident } from "../../store/incidents.js";
 import { ensureBaseSchema, runMigrations } from "../../store/schema.js";
 
@@ -478,6 +479,32 @@ describe("cron scheduler dispatch", () => {
     expect(state?.last_status).toBe("error");
     expect(state?.failure_run_id).toBeTruthy();
     expect(state?.failure_alert_message_id).toBe("alert-1");
+  });
+
+  it("failure alert delivery failures are queued for recovery flush", async () => {
+    const client = {
+      channels: {
+        fetch: async () => ({
+          isSendable: () => true,
+          send: async () => {
+            throw new Error("getaddrinfo ENOTFOUND discord.com");
+          },
+        }),
+      },
+    } as unknown as Client;
+    const policy = {
+      ...__testables.DEFAULT_RETRY_POLICY,
+      maxAttempts: 1,
+    };
+
+    await __testables.dispatch(messageJob(), client, policy, { notifyFailures: true });
+
+    const rows = listCronRuns({ jobName: "slow-message", limit: 1 });
+    expect(rows[0]).toMatchObject({ status: "failed", alert_message_id: null });
+    const outbox = listRecoveryOutbox({ kind: "cron_failure_alert", status: "pending" });
+    expect(outbox).toHaveLength(1);
+    expect(outbox[0]?.cron_run_id).toBe(rows[0]?.id);
+    expect(outbox[0]?.payload_json).toContain("slow-message");
   });
 
   it("同一次失败重试链路中后续失败会 edit 同一条失败通知", async () => {

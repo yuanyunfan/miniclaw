@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { DiscordTaskViewReporter, __testables } from "../task-view-reporter.js";
 import { shouldAutoAttachTaskTrace } from "../task-trace-attachment.js";
 import { createTask, initDb, updateTask } from "../../store/db.js";
+import { listRecoveryOutbox } from "../../store/recovery-outbox.js";
 import { appendTaskEvent } from "../../store/task-events.js";
 
 const {
@@ -303,5 +304,50 @@ describe("DiscordTaskViewReporter", () => {
     const traceSend = actions.find((action) => action.type === "send" && action.fileCount === 1);
     expect(traceSend?.content).toContain("auto-attach: terminal status is not completed");
     expect(traceSend?.content).toContain("Task trace");
+  });
+
+  it("queues raw task results when final Discord delivery fails instead of throwing", async () => {
+    const taskId = randomUUID();
+    createTask({
+      id: taskId,
+      discord_thread_id: "",
+      discord_user_id: "cron",
+      prompt: "cron raw output",
+      cwd: "/tmp/raw-delivery",
+    });
+    const reporter = new DiscordTaskViewReporter({
+      taskId,
+      prompt: "cron raw output",
+      cwd: "/tmp/raw-delivery",
+      channel: {
+        id: "channel-raw",
+        send: async () => {
+          throw new Error("getaddrinfo ENOTFOUND discord.com");
+        },
+      } as never,
+      provider: "codex",
+      outputMode: "raw",
+      deliveryChannelId: "channel-raw",
+      deliveryContext: { route: "cron_task", jobName: "daily-job" },
+    });
+
+    await expect(reporter.finish({
+      success: true,
+      sessionId: "codex:thread",
+      costUsd: 0,
+      durationMs: 1000,
+      turns: 1,
+      result: "final raw report",
+    }, "completed")).resolves.toBeUndefined();
+
+    const rows = listRecoveryOutbox({ kind: "task_result_delivery", status: "pending" })
+      .filter((row) => row.task_id === taskId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      channel_id: "channel-raw",
+      task_id: taskId,
+      job_name: "daily-job",
+    });
+    expect(rows[0]?.payload_json).toContain("final raw report");
   });
 });

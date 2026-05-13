@@ -13,7 +13,10 @@ import {
   updateCronRecoveredAlert,
   type CronFailureAlertRef,
 } from "./failure-notifier.js";
+import { config } from "../config.js";
 import { createLogger } from "../lib/log.js";
+import { loadConnectivityState } from "../monitoring/connectivity-core.js";
+import { enqueueCronFailureRecovery } from "../monitoring/recovery-outbox.js";
 import { DRAINING_MESSAGE, isDraining } from "../runtime/shutdown.js";
 import {
   createCronRun,
@@ -246,6 +249,51 @@ function errorCategory(err: unknown): string {
 
 function errorMessage(err: unknown): string {
   return sanitizeCronError(err instanceof Error ? err.message : String(err), 1500);
+}
+
+function safeConnectivitySnapshot() {
+  try {
+    return loadConnectivityState(config.connectivity.statePath);
+  } catch {
+    return undefined;
+  }
+}
+
+function queueMissedCronFailureAlert(input: {
+  job: CronJob;
+  cronRunId: string;
+  taskId?: string;
+  incidentId?: string;
+  attempt: number;
+  maxAttempts: number;
+  durationMs: number;
+  err: unknown;
+  recordedError: string;
+  alertError?: string;
+  status: "failed" | "retry_scheduled";
+}): void {
+  try {
+    const snapshot = safeConnectivitySnapshot();
+    enqueueCronFailureRecovery({
+      channelId: input.job.channel,
+      cronRunId: input.cronRunId,
+      jobName: input.job.name,
+      jobType: input.job.type,
+      status: input.status,
+      attempt: input.attempt,
+      maxAttempts: input.maxAttempts,
+      failedAt: new Date(),
+      taskId: input.taskId,
+      incidentId: input.incidentId,
+      errorCategory: errorCategory(input.err),
+      errorMessage: input.recordedError,
+      alertError: input.alertError,
+      connectivityStatus: snapshot?.status,
+      outageStartedAt: snapshot?.outage_started_at ?? snapshot?.last_outage_started_at,
+    });
+  } catch (err) {
+    log.error(`${input.job.name} failed to enqueue missed cron failure alert:`, err);
+  }
 }
 
 function errorMetadata(err: unknown): Partial<Pick<CronJobRunOutcome, "taskId" | "providerName" | "providerStatus" | "providerCategory" | "errorCategory">> {
@@ -563,9 +611,36 @@ async function dispatch(
             }, failureAlert);
             if (failureAlert) {
               updateJobState(job.name, alertMetadata(failureAlert));
+            } else {
+              queueMissedCronFailureAlert({
+                job,
+                cronRunId: cronRun.id,
+                taskId: metadata.taskId,
+                incidentId,
+                attempt,
+                maxAttempts: policy.maxAttempts,
+                durationMs,
+                err,
+                recordedError,
+                status: willRetry ? "retry_scheduled" : "failed",
+                alertError: "cron failure alert was not delivered",
+              });
             }
           } catch (notifyErr) {
             log.error(`${job.name} failed to send cron failure alert:`, notifyErr);
+            queueMissedCronFailureAlert({
+              job,
+              cronRunId: cronRun.id,
+              taskId: metadata.taskId,
+              incidentId,
+              attempt,
+              maxAttempts: policy.maxAttempts,
+              durationMs,
+              err,
+              recordedError,
+              status: willRetry ? "retry_scheduled" : "failed",
+              alertError: errorMessage(notifyErr),
+            });
           }
         }
 

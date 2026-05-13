@@ -325,6 +325,20 @@ export function markCronRunFailed(id: string, input: FailCronRunInput = {}): Cro
   return finishCronRun(id, { ...input, status: input.status ?? "failed" });
 }
 
+export function markCronRunAlertDelivered(id: string, input: { messageId: string; channelId: string }): CronRunRow | undefined {
+  getDb().prepare(
+    `UPDATE cron_runs SET
+      alert_message_id = @alert_message_id,
+      alert_channel_id = @alert_channel_id
+     WHERE id = @id`
+  ).run({
+    id,
+    alert_message_id: input.messageId,
+    alert_channel_id: input.channelId,
+  });
+  return getCronRun(id);
+}
+
 export function listCronRuns(options: ListCronRunsOptions = {}): CronRunRow[] {
   const limit = normalizePositiveInteger(options.limit, 20, 500);
   const offset = Math.max(0, Math.floor(options.offset ?? 0));
@@ -335,6 +349,30 @@ export function listCronRuns(options: ListCronRunsOptions = {}): CronRunRow[] {
      ORDER BY datetime(started_at) DESC, id DESC
      LIMIT @limit OFFSET @offset`
   ).all({ ...where.params, limit, offset }).map(assertCronRunRow);
+}
+
+export function listCronRunsMissingAlerts(options: { since?: Date | string; until?: Date | string; limit?: number } = {}): CronRunRow[] {
+  const filters = [
+    "status IN ('failed', 'retry_scheduled')",
+    "alert_message_id IS NULL",
+  ];
+  const params: Record<string, unknown> = {
+    limit: normalizePositiveInteger(options.limit, 100, 500),
+  };
+  if (options.since) {
+    filters.push("datetime(COALESCE(completed_at, started_at)) >= datetime(@since)");
+    params.since = toIso(options.since);
+  }
+  if (options.until) {
+    filters.push("datetime(COALESCE(completed_at, started_at)) <= datetime(@until)");
+    params.until = toIso(options.until);
+  }
+  return getDb().prepare(
+    `SELECT * FROM cron_runs
+     WHERE ${filters.join(" AND ")}
+     ORDER BY datetime(COALESCE(completed_at, started_at)) ASC, id ASC
+     LIMIT @limit`
+  ).all(params).map(assertCronRunRow);
 }
 
 export function listCronRunsForIncident(incidentId: string, limit = 5): CronRunRow[] {

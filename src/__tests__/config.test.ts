@@ -97,6 +97,9 @@ const ENV_KEYS = [
   "MINICLAW_CONNECTIVITY_REQUEST_TIMEOUT_MS",
   "MINICLAW_CONNECTIVITY_GENERAL_TEST_URL",
   "MINICLAW_CONNECTIVITY_STATE_PATH",
+  "MINICLAW_STARTUP_WATCHDOG_ENABLED",
+  "MINICLAW_STARTUP_WATCHDOG_CLIENT_READY_TIMEOUT_MS",
+  "MINICLAW_STARTUP_WATCHDOG_MACOS_NOTIFICATION_ENABLED",
   "MINICLAW_DOCTOR_ENABLED",
   "MINICLAW_DOCTOR_AUTO_DIAGNOSE_ENABLED",
   "MINICLAW_DOCTOR_SCAN_INTERVAL_MS",
@@ -263,6 +266,10 @@ connectivity:
   request_timeout_ms: 5000
   general_test_url: "https://example.com/health"
   state_path: "${join(tmpDir, "connectivity.json")}"
+startup_watchdog:
+  enabled: true
+  client_ready_timeout_ms: 45000
+  macos_notification_enabled: false
 doctor:
   enabled: true
   auto_diagnose_enabled: true
@@ -361,6 +368,11 @@ notifications:
       requestTimeoutMs: 5000,
       generalTestUrl: "https://example.com/health",
       statePath: join(tmpDir, "connectivity.json"),
+    });
+    expect(config.startupWatchdog).toEqual({
+      enabled: true,
+      clientReadyTimeoutMs: 45000,
+      macosNotificationEnabled: false,
     });
     expect(config.doctor).toEqual({
       enabled: true,

@@ -3,6 +3,7 @@ import { config } from "../config.js";
 import { createLogger } from "../lib/log.js";
 import { sendSmtpEmail, verifySmtpReachability } from "../notifications/smtp-email.js";
 import { runConnectivityTick, type ProbeResult } from "./connectivity-core.js";
+import { flushRecoveryOutbox } from "./recovery-outbox.js";
 
 const log = createLogger("connectivity");
 
@@ -95,6 +96,11 @@ export function startConnectivityMonitor(client: Client): ConnectivityMonitorHan
       if (snapshot.status !== lastStatus) {
         log.info(`connectivity status=${snapshot.status} consecutive=${snapshot.consecutive_failures}`);
         lastStatus = snapshot.status;
+      }
+      if (snapshot.status === "discord_ok" || snapshot.status === "recovered") {
+        await flushRecoveryOutbox(client, { snapshot }).catch((err) => {
+          log.warn("recovery outbox flush failed:", err);
+        });
       }
     } catch (err) {
       log.error("connectivity monitor tick failed:", err);

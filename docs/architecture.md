@@ -56,7 +56,7 @@ flowchart LR
             UC10["providers/wechat-mp/*.yaml<br/>公众号采集配置 + state"]
             UC11["secrets/wechat-mp-session.json<br/>公众号后台登录态"]
             UC12["runtime/connectivity.json<br/>链路探测状态"]
-            DB[("data.db<br/>SQLite WAL<br/>tasks · task_events · incidents · repair_runs · market_forecasts · cron_runs")]
+            DB[("data.db<br/>SQLite WAL<br/>tasks · task_events · incidents · repair_runs · market_forecasts · cron_runs · recovery_outbox")]
         end
 
         subgraph Raven["raven 反代 (:7024)<br/>Claude provider 可选"]
@@ -173,6 +173,7 @@ flowchart LR
 - **pre-provider / provider framework 扩展点**：cron `task` 可先运行 provider 采集结构化数据，再把 JSON 注入 prompt；`src/providers/framework.ts` 提供 manifest、health check、dry-run、structured output、failure taxonomy 和 `PreProviderResult` 兼容 adapter。当前 cron runner 默认仍通过 `runPreProvider()` 调用，`commit()` 只在 downstream task 成功后执行；job 显式配置 `pre_provider_preflight: health | dry_run` 时，会在真实 provider 采集和 task 创建前先运行 framework health/dry-run gate，dry-run preview 不注入 prompt。`stock-pulse` 是首个 framework pilot，`eastmoney-jywg-readonly` 覆盖 sensitive account provider 的 session health、redacted dry-run 和 delayed session persistence。微信公众号日报通过 `wechat-mp` provider 落地，邮件类任务通过通用 `email` capability + `email-query` / `cmb-credit-card-email` provider 复用同一只读邮箱基础能力
 - **Market Intel official evidence 边界**：`src/providers/market-intel/collectors/official.ts` 只保留 public facade 和 market-scope fan-out；`collectors/macro.ts`、`news.ts`、`events.ts` 负责官方 source-family endpoint orchestration，`collectors/scoring-input.ts` 负责 evidence section assembly / derived risk，`collectors/official-http.ts` 和 `official-shared.ts` 分别承载 HTTP client 与 source status/warning helpers；source-specific parsing、freshness、HTML/JSON/XML fixture parsing 拆到 `src/providers/market-intel/collectors/parsers/*`
 - **Market Forecast item contract**：`market_forecast_items` 是 forecast item 事件表，不把每种预测周期新增为 schema column。短线/同日概率继续用 `item_type=index_probability`，中长期概率用 `horizon_probability`、`horizon_sector_opportunity`、`horizon_risk_alert`，horizon 前缀保存在 `target` / `rationale`。`market-forecast-evaluation` 只对 same-day item 做 hit/miss 和 Brier score；遇到 horizon-only forecast 时返回 `status=horizon_only` 并跳过当天校准
+- **Recovery Outbox contract**：`recovery_outbox` 把本地执行结果和 Discord delivery 分开。`cron_failure_alert` 保存 outage 期间没发出去的 cron failure alert，用于恢复后按频道汇总补发；`task_result_delivery` 保存 raw task 结果分片，用于恢复后补投递。flush 成功后会把 Discord message id 写回 outbox，并同步写回对应 `cron_runs.alert_message_id`
 - **Auto Doctor / guarded repair**：`/doctor` 和 scheduled scan 聚合 DB、cron state、connectivity、PM2、日志与 Git 证据；自动修复只允许隔离 worktree/repair branch，ship 到 `main` 必须走显式 operator approval 和 safe-restart guard
 - **白名单两道闸**：`discord.allowed_user_id` 限制谁能用，`routing.auto_reply_channels` 决定哪些频道无需 @mention 进入 chat；1.0 安装模板默认 `[]`，即普通频道需要显式 @mention，用户可改成 `["*"]` 开放全部 guild channel；`routing.task_channels` 决定哪些频道无需 @mention 直接创建 task；旧 `MINICLAW_*` env 仍可覆盖
 - **Smart Task Router 是 chat/task 边界上的升级层**：启用后只在本来会响应的 chat 入口运行，先提取 URL/附件/空消息等客观事实，再用 LLM capability classifier 判断自然语言 prompt，必要时用按钮确认后复用 `/task` 的线程、DB、progress 和 final output 链路；决策默认以 hash + capped preview 写入 SQLite
@@ -578,7 +579,7 @@ classify by mime + ext
 
 ## 9. 数据库 schema
 
-`~/.miniclaw/data.db`（SQLite WAL 模式）。schema 版本使用 SQLite `PRAGMA user_version` 管理，当前版本由 `src/store/schema.ts` 的 `SCHEMA_VERSION = 11` 定义。`src/store/db.ts` 仍是 public facade，初始化时调用 `ensureBaseSchema()` 和 `runMigrations()`；live connection 由 `src/store/connection.ts` 持有，`tasks`、`chat_history`、`smart_router_decisions` 的 table-specific helper 位于 `src/store/repositories/*`，`cron_runs` 的 helper 位于 `src/store/cron-runs.ts`，并继续通过 facade re-export 兼容既有 imports。版本迁移函数位于 `src/store/migrations/*`，每次成功升级会写入 `schema_version_history`。
+`~/.miniclaw/data.db`（SQLite WAL 模式）。schema 版本使用 SQLite `PRAGMA user_version` 管理，当前版本由 `src/store/schema.ts` 的 `SCHEMA_VERSION = 12` 定义。`src/store/db.ts` 仍是 public facade，初始化时调用 `ensureBaseSchema()` 和 `runMigrations()`；live connection 由 `src/store/connection.ts` 持有，`tasks`、`chat_history`、`smart_router_decisions` 的 table-specific helper 位于 `src/store/repositories/*`，`cron_runs` 的 helper 位于 `src/store/cron-runs.ts`，并继续通过 facade re-export 兼容既有 imports。版本迁移函数位于 `src/store/migrations/*`，每次成功升级会写入 `schema_version_history`。
 
 state lifecycle 由 `state.retention.*` 配置控制，默认保留 `chat_history`/`task_events` 90 天、`smart_router_decisions` 180 天、incidents/repair runs 365 天、market forecasts 730 天。`pnpm run state:cleanup -- --dry-run` 会按配置列出候选删除行并使用 SQLite savepoint 回滚模拟结果；`--execute` 才会在事务中删除。`--table task_events --older-than-days 30` 可做单 scope 临时清理，market forecast scope 会先删 item/evaluation 子表再删 parent forecast，incident cleanup 只会清 closed/orphan child rows，并且只删除 child rows 已清空的 closed incident parent。
 
