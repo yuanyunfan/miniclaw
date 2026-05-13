@@ -24,6 +24,7 @@ MiniClaw 不是普通 TypeScript library。它同时包含：
 - `scripts/git-hooks/pre-push` 调用 `pnpm run quality:push`；实际顺序是 build、coverage、coverage ratchet、D1 docs drift、lint、cron E2E、full-tree G0、full-tree secret scan、dependency scan，并可用 `MINICLAW_RUN_DISCORD_E2E=1` 显式开启真实 Discord E2E。
 - `.github/workflows/quality.yml` 在 push / pull request 上运行 Node 22、frozen install、G0、gitleaks、typecheck、lint、coverage、coverage ratchet、D1 docs drift、cron E2E、dependency scan 和 build。
 - `.github/workflows/discord-e2e.yml` 是独立 manual/nightly workflow；默认 fake agent，可通过 input/nightly 配置扩展 cases 或跑真实 agent。
+- `.github/workflows/release.yml` 是手动 Release workflow；只允许从 `main` 发版，要求输入 SemVer、`package.json` version 和 `CHANGELOG.md` 版本段一致，先跑 `quality:push`，再创建 `vX.Y.Z` tag、GitHub Release 和源码/dist artifact。
 - `eslint.config.js` 对 `src/**/*.ts` 强制 `no-console` 和 `@typescript-eslint/no-floating-promises`，CLI/stdio 入口按例外处理。
 - `scripts/quality-coverage-ratchet.ts` 已设置分模块 coverage ratchet，不设置全局 80%。
 
@@ -207,7 +208,7 @@ MiniClaw 特有 lint 规则：
 
 - manual。
 - nightly。
-- release 前。
+- release 前，尤其是手动触发 `.github/workflows/release.yml` 前。
 - 不进入日常 pre-commit/pre-push。
 
 ## G2：安全与供应链门禁

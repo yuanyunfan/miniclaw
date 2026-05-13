@@ -9,9 +9,9 @@ discord:
 
 routing:
   # Plain messages in these channels become lightweight chat replies.
-  # Default is ["*"], meaning every allowed guild channel can chat without @mention.
-  # Use [] or env MINICLAW_AUTO_REPLY_CHANNELS=none to require @mention outside task threads/channels.
-  auto_reply_channels: ["*"]
+  # Keep [] for the conservative install profile: users mention @MiniClaw explicitly.
+  # Use ["*"] only when every allowed guild channel can chat without @mention.
+  auto_reply_channels: []
   # Plain messages in these channels create /task-style task threads.
   # Task channels take precedence over auto-reply channels.
   task_channels: []
@@ -59,7 +59,7 @@ routing:
 
 runtime:
   # Preferred task runtime selector. Keep values aligned with implemented AgentRuntime ids.
-  default_agent: claude # claude | codex
+  default_agent: codex # claude | codex
 
 model:
   # Preferred short-call ModelClient default for router/doctor-style calls.
@@ -68,9 +68,9 @@ model:
 
 agent:
   # Legacy compatibility alias. Keep it during transition; new task execution uses runtime.default_agent.
-  provider: claude # claude | codex
-  default_cwd: "~/Code"
-  max_concurrent_tasks: 3
+  provider: codex # claude | codex
+  default_cwd: "~"
+  max_concurrent_tasks: 1
   budget_usd: 1.0 # use unlimited for no cap
   max_turns: 30 # use unlimited for no cap
   chat_timeout_ms: 180000
@@ -104,15 +104,15 @@ claude:
 
 codex:
   # Set any field to inherit to let Codex CLI use ~/.codex/config.toml.
-  model: gpt-5.5
-  reasoning_effort: medium
+  model: inherit
+  reasoning_effort: inherit
   sandbox:
-    task: workspace-write
+    task: inherit
     chat: read-only
-  approval_policy: never
-  web_search: live
+  approval_policy: inherit
+  web_search: inherit
   timeout_ms: 1800000
-  network_access: true
+  network_access: inherit
 
 mcp:
   # Claude provider task mode can reuse MCP servers from Claude Code config.

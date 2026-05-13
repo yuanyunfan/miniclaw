@@ -69,29 +69,38 @@ SQLite persistence (task state + chat history)
 
 ## Quick Start
 
-### 1. Install dependencies
+### 1. Five-minute minimal run
 
 ```bash
-pnpm install
+git clone https://github.com/yuanyunfan/miniclaw.git
+cd miniclaw
+./install.sh
+pnpm run setup
+pnpm run doctor:setup
+pnpm register
+pnpm dev
 ```
 
-### 2. Configure MiniClaw
+The installer initializes dependencies and missing templates only. It does not write real tokens or overwrite an existing `~/.miniclaw/config.yaml`. `pnpm run setup` writes `.env` and `~/.miniclaw/config.yaml`, backing up old files before replacement.
 
-```bash
-cp .env.example .env
-mkdir -p ~/.miniclaw
-cp config.example.yaml ~/.miniclaw/config.yaml
+Verify in Discord after startup:
+
+```text
+/health
+@MiniClaw hello
 ```
 
-Edit `.env` for secrets and bootstrap values only:
+### 2. Minimal config model
+
+`.env` stores secrets and bootstrap values only:
 
 - `DISCORD_TOKEN`: Discord bot token.
+- `MINICLAW_CONFIG`: recommended path is `~/.miniclaw/config.yaml`.
 - `ANTHROPIC_API_KEY`: required when the Claude provider is active.
 - `OPENAI_API_KEY`: optional for Codex when local `codex login` is not used.
-- `MINICLAW_CONFIG`: recommended path is `~/.miniclaw/config.yaml`.
 - `MINICLAW_PROXY`: optional HTTP proxy. It remains env-based because it must be applied before the YAML config loader initializes.
 
-Edit `~/.miniclaw/config.yaml` for structured settings:
+`~/.miniclaw/config.yaml` stores structured settings. The default install profile is conservative: Codex, local home cwd, explicit @mention, and Smart Router disabled.
 
 ```yaml
 discord:
@@ -104,12 +113,13 @@ routing:
   task_channels: []
   smart_router:
     enabled: false
-    default_mode: confirm
 
+runtime:
+  default_agent: codex
 agent:
   provider: codex
-  default_cwd: "~/Code"
-  max_concurrent_tasks: 3
+  default_cwd: "~"
+  max_concurrent_tasks: 1
   budget_usd: 1.0
   max_turns: 30
 ```
@@ -164,28 +174,24 @@ codex:
 
 Use `/agent-config` in Discord to inspect the active config file path, provider/model, Codex MCP/skills, and Claude settings/MCP/skills summary.
 
-### 3. Register slash commands
-
-```bash
-pnpm register
-```
-
-### 4. Start MiniClaw
-
-Development mode:
-
-```bash
-pnpm dev
-```
-
-Run under pm2:
+### 3. Production local run
 
 ```bash
 pnpm build
 pm2 start ecosystem.config.cjs
+pm2 status miniclaw
 ```
 
-### 5. Optional channel and cron setup
+Use the safe restart boundary for runtime updates:
+
+```bash
+pnpm safe-restart
+pnpm run doctor
+```
+
+See [docs/runbooks/install.md](docs/runbooks/install.md) and [docs/runbooks/local-deploy.md](docs/runbooks/local-deploy.md) for install and deploy details. Release versions are the stable install and rollback boundary; the recommended distribution path is GitHub Release plus installer, not npm publishing the main runtime.
+
+### 4. Optional advanced capabilities
 
 To create a baseline "hermes-style" Discord channel layout and enable the built-in cron jobs:
 

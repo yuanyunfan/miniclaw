@@ -65,29 +65,38 @@ SQLite 持久化（任务状态 + 对话历史）
 
 ## 快速开始
 
-### 1. 安装依赖
+### 1. 5 分钟最小可运行
 
 ```bash
-pnpm install
+git clone https://github.com/yuanyunfan/miniclaw.git
+cd miniclaw
+./install.sh
+pnpm run setup
+pnpm run doctor:setup
+pnpm register
+pnpm dev
 ```
 
-### 2. 配置
+安装器只初始化依赖和缺失模板，不写入真实 token，不覆盖已有 `~/.miniclaw/config.yaml`。交互式 `pnpm run setup` 会写入 `.env` 和 `~/.miniclaw/config.yaml`，并在覆盖前备份旧文件。
 
-```bash
-cp .env.example .env
-mkdir -p ~/.miniclaw
-cp config.example.yaml ~/.miniclaw/config.yaml
+启动后在 Discord 中验证：
+
+```text
+/health
+@MiniClaw hello
 ```
 
-编辑 `.env`，只填 secrets 和启动前必须生效的值：
+### 2. 最小配置含义
+
+`.env` 只放 secrets 和启动前必须生效的值：
 
 - `DISCORD_TOKEN`: Discord Bot Token。
+- `MINICLAW_CONFIG`: 配置文件路径，默认推荐 `~/.miniclaw/config.yaml`。
 - `ANTHROPIC_API_KEY`: Claude provider 使用时必填。
 - `OPENAI_API_KEY`: Codex 可选；如果本机已经 `codex login`，通常可以不填。
-- `MINICLAW_CONFIG`: 配置文件路径，默认推荐 `~/.miniclaw/config.yaml`。
 - `MINICLAW_PROXY`: 可选 HTTP 代理。它仍是 env，因为代理必须在 YAML loader 初始化前注入。
 
-编辑 `~/.miniclaw/config.yaml`，放结构化配置：
+`~/.miniclaw/config.yaml` 放结构化配置。默认安装 profile 保守使用 Codex、本机 cwd、显式 @mention 和关闭 Smart Router：
 
 ```yaml
 discord:
@@ -100,12 +109,13 @@ routing:
   task_channels: []
   smart_router:
     enabled: false
-    default_mode: confirm
 
+runtime:
+  default_agent: codex
 agent:
   provider: codex
-  default_cwd: "~/Code"
-  max_concurrent_tasks: 3
+  default_cwd: "~"
+  max_concurrent_tasks: 1
   budget_usd: 1.0
   max_turns: 30
 ```
@@ -160,28 +170,24 @@ codex:
 
 运行 `/agent-config` 可在 Discord 中检查当前配置文件路径、provider/model、Codex MCP/skills、Claude settings/MCP/skills 的继承摘要。
 
-### 3. 注册 Slash Commands
-
-```bash
-pnpm register
-```
-
-### 4. 启动
-
-开发模式（热重载）：
-
-```bash
-pnpm dev
-```
-
-pm2 常驻运行：
+### 3. 本机常驻运行
 
 ```bash
 pnpm build
 pm2 start ecosystem.config.cjs
+pm2 status miniclaw
 ```
 
-### 5. （可选）批量配置 Discord 频道与 Cron 任务
+运行中更新必须优先走安全重启，避免打断正在执行的 task/chat：
+
+```bash
+pnpm safe-restart
+pnpm run doctor
+```
+
+安装和部署细节见 [`docs/runbooks/install.md`](docs/runbooks/install.md) 与 [`docs/runbooks/local-deploy.md`](docs/runbooks/local-deploy.md)。Release 版本用于稳定安装和回滚边界；当前推荐 GitHub Release + installer，而不是直接 npm publish 主 runtime。
+
+### 4. 高级能力按需开启
 
 如果你想快速创建一套基础 "hermes-style" 频道结构（4 分类 + 13 个核心频道，对应一批通用定时简报任务），跑下面 2 个**可选模板**脚本：
 

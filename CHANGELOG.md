@@ -6,6 +6,10 @@
 
 ## [Unreleased]
 
+---
+
+## [1.0.0] — 2026-05-13
+
 ### Added
 - 新增 `~/.miniclaw/config.yaml` 分层配置支持和 `config.example.yaml` 模板，推荐把结构化 MiniClaw 设置从扁平 `.env` 迁移到 YAML。
 - `MINICLAW_TASK_CHANNELS` 支持专用 Discord task intake 频道：频道内普通消息无需 `@MiniClaw`，会自动创建 task thread 并走 `/task` 同一套执行和输出链路。

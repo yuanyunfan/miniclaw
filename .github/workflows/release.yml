@@ -1,0 +1,118 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "SemVer version without v prefix, for example 1.0.0"
+        required: true
+        default: "1.0.0"
+      prerelease:
+        description: "Mark the GitHub Release as prerelease"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+          pnpm --version
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate release inputs
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid SemVer version: $VERSION" >&2
+            exit 1
+          fi
+          PACKAGE_VERSION="$(node -p 'require("./package.json").version')"
+          if [ "$PACKAGE_VERSION" != "$VERSION" ]; then
+            echo "package.json version ($PACKAGE_VERSION) does not match release input ($VERSION)" >&2
+            exit 1
+          fi
+          if ! grep -q "^## \\[$VERSION\\]" CHANGELOG.md; then
+            echo "CHANGELOG.md does not contain a section for [$VERSION]" >&2
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null 2>&1; then
+            echo "Tag v$VERSION already exists" >&2
+            exit 1
+          fi
+
+      - name: Quality push gate
+        run: pnpm run quality:push
+
+      - name: Prepare release notes
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          awk -v version="$VERSION" '
+            index($0, "## [" version "]") == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md | sed '/^$/N;/^\n$/D' > release-notes.md
+          test -s release-notes.md
+
+      - name: Build source artifact
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          TAG="v$VERSION"
+          ROOT="miniclaw-$TAG"
+          rm -rf release-work "$ROOT.tar.gz"
+          mkdir -p release-work
+          git archive --format=tar --prefix="$ROOT/" HEAD | tar -x -C release-work
+          mkdir -p "release-work/$ROOT/dist"
+          cp -R dist/. "release-work/$ROOT/dist/"
+          tar -czf "$ROOT.tar.gz" -C release-work "$ROOT"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          set -euo pipefail
+          ARGS=()
+          if [ "$PRERELEASE" = "true" ]; then
+            ARGS+=(--prerelease)
+          fi
+          gh release create "v$VERSION" "miniclaw-v$VERSION.tar.gz" \
+            --target "$GITHUB_SHA" \
+            --title "MiniClaw v$VERSION" \
+            --notes-file release-notes.md \
+            "${ARGS[@]}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: miniclaw-v${{ inputs.version }}
+          path: miniclaw-v${{ inputs.version }}.tar.gz
