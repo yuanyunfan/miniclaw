@@ -154,7 +154,7 @@ export function mapEastmoneyJywgRawBrokerData(
   if (!positionRows.length) warnings.push("未查询到东方财富持仓数据，可能是账户无持仓或登录态权限不足。");
   if (!hasPositionDailyPnl) warnings.push("未拿到持仓当日盈亏，日报会回退到账户级盈亏字段，口径可能不同。");
   if (unclassifiedMarketValue !== undefined && Math.abs(unclassifiedMarketValue) > 1) {
-    warnings.push("东方财富账户参考市值与可展开逐仓市值不完全一致，差额会作为未展开证券市值单独列示。");
+    warnings.push("东方财富账户参考市值与可展开逐仓市值不完全一致，差额会按 provider 资产缺口策略处理。");
   }
 
   return {

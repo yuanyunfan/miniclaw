@@ -64,8 +64,15 @@ interface EastmoneyJywgRuntime {
   client: EastmoneyJywgClient;
 }
 
+function normalizeProviderConfig(config: EastmoneyJywgProviderConfig): EastmoneyJywgProviderConfig {
+  return {
+    ...config,
+    asset_gap_policy: config.asset_gap_policy ?? { positive_market_value_gap: "unclassified" },
+  };
+}
+
 function resolveRuntime(context: ProviderContext, deps: EastmoneyJywgProviderDeps): EastmoneyJywgRuntime {
-  const providerConfig = (deps.loadProviderConfig ?? loadEastmoneyJywgProviderConfig)(context.configName);
+  const providerConfig = normalizeProviderConfig((deps.loadProviderConfig ?? loadEastmoneyJywgProviderConfig)(context.configName));
   const eastmoneyConfig = (deps.loadEastmoneyConfig ?? loadEastmoneyJywgConfig)();
   const profile = resolveEastmoneyJywgProfile(eastmoneyConfig, providerConfig.profile, {
     account_alias: providerConfig.account_alias,
@@ -91,6 +98,10 @@ function safeRuntimeDetails(runtime: EastmoneyJywgRuntime, session?: EastmoneyJy
     include_daily_report: runtime.providerConfig.include_daily_report,
     include_positions_summary: runtime.providerConfig.include_positions_summary,
     include_asset_allocation: runtime.providerConfig.include_asset_allocation,
+    asset_gap_policy: {
+      positive_market_value_gap: runtime.providerConfig.asset_gap_policy.positive_market_value_gap,
+      label_present: Boolean(runtime.providerConfig.asset_gap_policy.label),
+    },
     host: new URL(runtime.profile.base_url).hostname,
     session: session
       ? {
@@ -142,6 +153,7 @@ async function runEastmoneyJywgStructured(
       includeDailyReport: runtime.providerConfig.include_daily_report,
       includePositionsSummary: runtime.providerConfig.include_positions_summary,
       includeAssetAllocation: runtime.providerConfig.include_asset_allocation,
+      assetGapPolicy: runtime.providerConfig.asset_gap_policy,
     });
     return {
       payload,

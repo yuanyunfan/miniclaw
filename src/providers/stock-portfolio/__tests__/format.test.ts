@@ -290,7 +290,7 @@ describe("stock-portfolio formatter", () => {
       instructions: expect.arrayContaining([
         "After final classification, aggregate category totals and sort categories by market_value_cny descending.",
         "Within each category, list every ETF or stock holding on its own line sorted by market_value_cny descending.",
-        "Holdings with instrument_type=unclassified_asset_gap are reconciliation rows for broker market value that was not expanded into position details; show them separately and do not force them into the four investment categories.",
+        "Holdings with instrument_type=unclassified_asset_gap are reconciliation rows for broker market value that was not expanded into position details; show them separately and do not force them into the four investment categories unless the source provider has already reclassified the gap as cash-like before this payload was built.",
       ]),
     });
     expect(payload.asset_summary?.by_account[0]).not.toHaveProperty("total_assets");
@@ -394,5 +394,56 @@ describe("stock-portfolio formatter", () => {
       expect.objectContaining({ code: "US.BRK.B", source_label: "Futu", market_value_cny: 720 }),
     ]));
     expect(payload.asset_summary?.holdings_for_classification.filter((holding) => holding.code === "US.BRK.B")).toHaveLength(1);
+  });
+
+  it("keeps provider-classified cash-like Eastmoney gaps inside cash", () => {
+    const payload = buildStockPortfolioPayload({
+      generatedAt: new Date("2026-05-12T09:00:00.000Z"),
+      profile: "daily-stock-summary",
+      config: { ...config, include_asset_summary: true },
+      sources: [
+        {
+          provider: "eastmoney-jywg-readonly",
+          config: "daily-stock-summary",
+          label: "Eastmoney A",
+          include_asset_totals: true,
+          status: "ok",
+          payload: {
+            snapshot: { account_alias: "Eastmoney A" },
+            asset_summary: {
+              currency: "CNY",
+              total_assets: 20000,
+              market_value: 2500,
+              cash: 17500,
+              buckets: [
+                { category: "cash", label: "现金", currency: "CNY", market_value: 17500, positions_count: 0, holdings: [
+                  { code: "CASH", name: "Cash", currency: "CNY", category: "cash", label: "现金", market_value: 17500 },
+                ] },
+                { category: "foreign_index", label: "国外指数", currency: "CNY", market_value: 2500, positions_count: 1, holdings: [
+                  { code: "159632", name: "纳斯达克", currency: "CNY", category: "foreign_index", label: "国外指数", market_value: 2500 },
+                ] },
+              ],
+            },
+          },
+        },
+      ],
+    });
+
+    expect(payload.asset_summary?.by_account).toEqual([
+      expect.objectContaining({
+        label: "Eastmoney A",
+        total_assets_cny: 20000,
+        market_value_cny: 2500,
+        cash_cny: 17500,
+      }),
+    ]);
+    expect(payload.asset_summary?.by_category).toEqual(expect.arrayContaining([
+      expect.objectContaining({ category: "cash", market_value_cny: 17500 }),
+      expect.objectContaining({ category: "foreign_index", market_value_cny: 2500 }),
+    ]));
+    expect(payload.asset_summary?.holdings_for_classification).toEqual([
+      expect.objectContaining({ code: "159632", market_value_cny: 2500 }),
+    ]);
+    expect(JSON.stringify(payload.asset_summary)).not.toContain("UNCLASSIFIED");
   });
 });

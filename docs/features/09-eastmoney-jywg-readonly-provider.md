@@ -92,6 +92,21 @@ market_session_by_job:
   cn-stock-post-market: cn_a_postmarket_1640
 ```
 
+`asset_gap_policy` 用于处理东方财富账户参考市值和可展开逐仓市值之间的正向差额：
+
+```yaml
+# 默认：保留为未展开证券市值对账行
+asset_gap_policy:
+  positive_market_value_gap: unclassified
+
+# daily-stock-summary 可按本机账户口径把该差额并入现金
+asset_gap_policy:
+  positive_market_value_gap: cash_like
+  label: Eastmoney A 现金资产
+```
+
+默认值是 `unclassified`，适合无法判断底层资产的普通股票报告。`daily-stock-summary` 这类可信 private 资产汇总任务如果确认正向差额来自现金/资金余额，可以设置为 `cash_like`；provider 会把该差额并入 `asset_summary.cash`，同时从 `asset_summary.market_value` 扣除，不再输出 `UNCLASSIFIED` / `unclassified_asset_gap` 行。
+
 cron 接入：
 
 ```yaml

@@ -6,6 +6,13 @@ import type {
 } from "../../mcp/eastmoney-jywg/types.js";
 import type { AssetAllocationSummary } from "../asset-allocation.js";
 
+export type EastmoneyJywgPositiveMarketValueGapPolicy = "unclassified" | "cash_like";
+
+export interface EastmoneyJywgAssetGapPolicyConfig {
+  positive_market_value_gap: EastmoneyJywgPositiveMarketValueGapPolicy;
+  label?: string;
+}
+
 export interface EastmoneyJywgProviderConfig {
   profile: string;
   account_alias?: string;
@@ -17,6 +24,7 @@ export interface EastmoneyJywgProviderConfig {
   include_daily_report: boolean;
   include_positions_summary: boolean;
   include_asset_allocation: boolean;
+  asset_gap_policy: EastmoneyJywgAssetGapPolicyConfig;
 }
 
 export interface EastmoneyJywgProviderTopPosition {
@@ -52,6 +60,7 @@ export interface EastmoneyJywgProviderFormatOptions {
   includeDailyReport: boolean;
   includePositionsSummary: boolean;
   includeAssetAllocation: boolean;
+  assetGapPolicy: EastmoneyJywgAssetGapPolicyConfig;
 }
 
 export interface EastmoneyJywgProviderPayload {

@@ -45,6 +45,15 @@ function positionDailyPnl(position: EastmoneyJywgProviderPositionInput): number 
   return value !== undefined && Number.isFinite(value) ? value : undefined;
 }
 
+function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function positiveMarketValueGap(snapshot: EastmoneyJywgProviderSnapshotInput): number | undefined {
+  const value = snapshot.unclassified_market_value;
+  return value !== undefined && Number.isFinite(value) && value > 0.01 ? value : undefined;
+}
+
 function compactTopGainers(
   snapshot: EastmoneyJywgProviderSnapshotInput,
   limit: number,
@@ -174,12 +183,26 @@ export function buildEastmoneyJywgProviderPayload(
   }
 
   if (options.includeAssetAllocation) {
+    const cashLikeGap = options.assetGapPolicy.positive_market_value_gap === "cash_like"
+      ? positiveMarketValueGap(snapshot)
+      : undefined;
+    const cash = cashLikeGap === undefined
+      ? snapshot.cash_available
+      : roundMoney((snapshot.cash_available ?? 0) + cashLikeGap);
+    const marketValue = cashLikeGap === undefined || snapshot.market_value === undefined
+      ? snapshot.market_value
+      : roundMoney(snapshot.market_value - cashLikeGap);
+    if (cashLikeGap !== undefined) {
+      payload.warnings.push(
+        `${options.assetGapPolicy.label ?? "东方财富参考市值差额"} ${roundMoney(cashLikeGap)} CNY is treated as cash-like asset by provider asset_gap_policy.`,
+      );
+    }
     payload.asset_summary = buildAssetAllocationSummary({
       currency: snapshot.currency,
       totalAssets: snapshot.total_assets,
-      marketValue: snapshot.market_value,
-      cash: snapshot.cash_available,
-      unclassifiedMarketValue: snapshot.unclassified_market_value,
+      marketValue,
+      cash,
+      unclassifiedMarketValue: cashLikeGap === undefined ? snapshot.unclassified_market_value : undefined,
       unclassifiedLabel: "东方财富未展开证券市值",
       positions: snapshot.positions.map((position) => ({
         code: position.code,

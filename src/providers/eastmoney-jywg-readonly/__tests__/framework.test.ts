@@ -49,6 +49,7 @@ const providerConfig: EastmoneyJywgProviderConfig = {
   include_daily_report: true,
   include_positions_summary: true,
   include_asset_allocation: false,
+  asset_gap_policy: { positive_market_value_gap: "unclassified" },
 };
 
 const raw: EastmoneyJywgRawBrokerData = {

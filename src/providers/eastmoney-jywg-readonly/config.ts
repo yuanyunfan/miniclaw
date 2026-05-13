@@ -4,7 +4,11 @@ import { join } from "node:path";
 import { load as yamlLoad } from "js-yaml";
 import type { EastmoneyJywgRedactionLevel } from "../../mcp/eastmoney-jywg/types.js";
 import { resolveHome } from "../../mcp/eastmoney-jywg/session-vault.js";
-import type { EastmoneyJywgProviderConfig } from "./types.js";
+import type {
+  EastmoneyJywgAssetGapPolicyConfig,
+  EastmoneyJywgPositiveMarketValueGapPolicy,
+  EastmoneyJywgProviderConfig,
+} from "./types.js";
 
 const CONFIG_DIR_DEFAULT = join(homedir(), ".miniclaw/providers/eastmoney-jywg-readonly");
 const RESERVED_PROVIDER_CONFIG_NAMES = new Set(["config"]);
@@ -32,6 +36,21 @@ function nonNegativeInt(value: unknown, fallback: number, max: number): number {
 
 function redactionValue(value: unknown, fallback: EastmoneyJywgRedactionLevel): EastmoneyJywgRedactionLevel {
   return value === "summary" || value === "exact" ? value : fallback;
+}
+
+function positiveMarketValueGapPolicy(value: unknown, path: string): EastmoneyJywgPositiveMarketValueGapPolicy {
+  if (value === undefined) return "unclassified";
+  if (value === "unclassified" || value === "cash_like") return value;
+  throw new Error(`${path}: asset_gap_policy.positive_market_value_gap must be unclassified or cash_like`);
+}
+
+function assetGapPolicy(value: unknown, path: string): EastmoneyJywgAssetGapPolicyConfig {
+  if (value === undefined) return { positive_market_value_gap: "unclassified" };
+  if (!isPlainObject(value)) throw new Error(`${path}: asset_gap_policy must be a YAML object`);
+  return {
+    positive_market_value_gap: positiveMarketValueGapPolicy(value.positive_market_value_gap, path),
+    ...(optionalString(value.label) ? { label: optionalString(value.label) } : {}),
+  };
 }
 
 function stringMap(value: unknown): Record<string, string> {
@@ -80,6 +99,7 @@ export function loadEastmoneyJywgProviderConfig(name = "default"): EastmoneyJywg
     include_daily_report: boolValue(raw.include_daily_report, true),
     include_positions_summary: boolValue(raw.include_positions_summary, true),
     include_asset_allocation: boolValue(raw.include_asset_allocation, false),
+    asset_gap_policy: assetGapPolicy(raw.asset_gap_policy, path),
   };
 }
 

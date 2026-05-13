@@ -50,6 +50,7 @@ describe("eastmoney-jywg provider formatter", () => {
       includeDailyReport: true,
       includePositionsSummary: true,
       includeAssetAllocation: false,
+      assetGapPolicy: { positive_market_value_gap: "unclassified" },
     });
 
     const text = formatEastmoneyJywgProviderPayload(payload);
@@ -112,6 +113,7 @@ describe("eastmoney-jywg provider formatter", () => {
       includeDailyReport: false,
       includePositionsSummary: true,
       includeAssetAllocation: false,
+      assetGapPolicy: { positive_market_value_gap: "unclassified" },
     });
 
     const parsed = JSON.parse(formatEastmoneyJywgProviderPayload(payload));
@@ -138,6 +140,7 @@ describe("eastmoney-jywg provider formatter", () => {
       includeDailyReport: true,
       includePositionsSummary: true,
       includeAssetAllocation: true,
+      assetGapPolicy: { positive_market_value_gap: "unclassified" },
     });
 
     const parsed = JSON.parse(formatEastmoneyJywgProviderPayload(payload));
@@ -171,5 +174,46 @@ describe("eastmoney-jywg provider formatter", () => {
       code: "510300",
       market_value: 4000,
     });
+  });
+
+  it("can treat a positive market-value gap as cash-like for daily asset summaries", () => {
+    const payload = buildEastmoneyJywgProviderPayload(snapshot, { ...profile, redaction: "exact", show_total_assets: true }, {
+      generatedAt: new Date("2026-05-08T07:16:00.000Z"),
+      profileName: "default",
+      marketSession: "daily_summary_1700_bjt",
+      redaction: "exact",
+      topPositionsLimit: 5,
+      includeAccountSnapshot: true,
+      includeDailyReport: true,
+      includePositionsSummary: true,
+      includeAssetAllocation: true,
+      assetGapPolicy: {
+        positive_market_value_gap: "cash_like",
+        label: "Eastmoney A 现金资产",
+      },
+    });
+
+    const parsed = JSON.parse(formatEastmoneyJywgProviderPayload(payload));
+    const cashBucket = parsed.asset_summary.buckets.find((bucket: { category: string }) => bucket.category === "cash");
+    const otherBucket = parsed.asset_summary.buckets.find((bucket: { category: string }) => bucket.category === "other");
+
+    expect(parsed.asset_summary).toMatchObject({
+      currency: "CNY",
+      total_assets: 123456.78,
+      market_value: 14000,
+      cash: 109456.78,
+    });
+    expect(cashBucket).toMatchObject({
+      category: "cash",
+      market_value: 109456.78,
+    });
+    expect(cashBucket.holdings[0]).toMatchObject({
+      code: "CASH",
+      market_value: 109456.78,
+    });
+    expect(otherBucket).toBeUndefined();
+    expect(parsed.warnings).toEqual(expect.arrayContaining([
+      expect.stringContaining("Eastmoney A 现金资产 86000 CNY is treated as cash-like asset"),
+    ]));
   });
 });

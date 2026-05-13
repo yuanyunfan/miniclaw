@@ -76,6 +76,7 @@ sources:
 - `include_asset_summary`: 仅用于可信 private channel。开启后聚合各券商 provider 的 exact `asset_summary`，生成人民币口径总资产、证券市值、现金和分类持仓金额。
 - `sources[].include_asset_totals`: 默认为 `true`。设为 `false` 时，该 source 只贡献持仓分类和 Top movers，不贡献账户总资产、证券市值或现金，用于避免同一个券商账户被多个市场 profile 重复计入。
 - `sources[].asset_account_label`: 账户汇总行和持仓明细的账户组显示名。用于把 `Futu US` / `Futu HK` 这种市场 profile 展示为 `Futu`，并在同一账户组内按 `provider + asset_account_label + code` 去重。
+- Eastmoney source 可在自己的 `eastmoney-jywg-readonly/<config>.yaml` 中配置 `asset_gap_policy.positive_market_value_gap: cash_like`。当源 provider 已经把正向参考市值差额归并为 cash-like 后，`stock-portfolio` 只接收调整后的 `asset_summary.cash` / `market_value`，不会再把它作为 `UNCLASSIFIED` 对账持仓送入 `holdings_for_classification`。
 
 股票日报 cron 使用：
 
@@ -189,7 +190,7 @@ pre_provider_config: cn-stock
 - 大类必须按重新归类后的持仓金额倒序排列，而不是按固定类别顺序排列。
 - 每个大类内部必须把每个 ETF / 股票作为单独一行展示，并按该持仓的金额倒序排列。
 - 空大类可以省略；现金仍然单独列示，不参与六类投资分类排序。
-- 东方财富 `queryAssetAndPositionV1` 可能存在账户参考市值大于可展开逐仓明细市值的情况。MiniClaw 会把这个差额作为 `instrument_type=unclassified_asset_gap` 的“未展开证券市值”对账行输出；日报应单独列示它，不要强行归入六类投资分类。
+- 东方财富 `queryAssetAndPositionV1` 可能存在账户参考市值大于可展开逐仓明细市值的情况。默认情况下 MiniClaw 会把这个差额作为 `instrument_type=unclassified_asset_gap` 的“未展开证券市值”对账行输出；日报应单独列示它，不要强行归入投资分类。如果源 `eastmoney-jywg-readonly` provider 已经通过 `asset_gap_policy.positive_market_value_gap: cash_like` 把该正向差额并入现金，则日报必须按现金处理，不要重复列示未展开资产。
 
 东方财富字段口径：
 
