@@ -89,4 +89,33 @@ describe("mapEastmoneyJywgRawBrokerData", () => {
       daily_pnl_ratio: 0.003,
     });
   });
+
+  it("maps Eastmoney ETF premium fields when the broker position payload provides them", () => {
+    const snapshot = mapEastmoneyJywgRawBrokerData({
+      ...raw,
+      positions: {
+        Status: 0,
+        Data: [
+          {
+            Zqdm: "159513",
+            Zqmc: "纳指大成",
+            Zqsl: "1000",
+            Zxjg: "1.234",
+            Zyl: "8.88%",
+            Jjjz: "1.133",
+            IOPV: "1.140",
+          },
+        ],
+      },
+    }, profile, "a_share_open");
+
+    expect(snapshot.positions[0]).toMatchObject({
+      code: "159513",
+      name: "纳指大成",
+      last_price: 1.234,
+      premium_rate: 8.88,
+      reference_nav: 1.133,
+      iopv: 1.14,
+    });
+  });
 });

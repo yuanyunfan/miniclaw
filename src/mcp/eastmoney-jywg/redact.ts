@@ -30,6 +30,16 @@ function formatAssetRange(value: number | undefined, currency: string): string {
   return `${millions}m-${millions + 1}m ${currency}`;
 }
 
+const SAFE_LONG_TOKENS = new Set([
+  "missing_from_eastmoney_position",
+]);
+
+function redactLongToken(match: string): string {
+  const keyValueMatch = match.match(/^status=(.+)$/i);
+  if (keyValueMatch && SAFE_LONG_TOKENS.has(keyValueMatch[1] ?? "")) return match;
+  return SAFE_LONG_TOKENS.has(match) ? match : "[redacted]";
+}
+
 export function redactSensitiveText(text: string): string {
   return text
     .replace(/(validatekey=)[^&\s"']+/gi, "$1[redacted]")
@@ -37,7 +47,7 @@ export function redactSensitiveText(text: string): string {
     .replace(/\b1[3-9]\d{9}\b/g, "[redacted-phone]")
     .replace(/(?<![.\d])\b\d{10,20}\b(?![.\d])/g, "[redacted-account]")
     .replace(/(password|token|cookie|secret|session|account|customer|acc_id)\s*[:=]\s*[^,\s}]+/gi, "$1=[redacted]")
-    .replace(/([A-Za-z0-9+/=_-]{24,})/g, "[redacted]");
+    .replace(/([A-Za-z0-9+/=_-]{24,})/g, redactLongToken);
 }
 
 export function redactJsonStringValues(value: unknown): unknown {

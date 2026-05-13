@@ -10,6 +10,7 @@
 - 保留每个 provider 的脱敏 JSON 输出。
 - 基于配置汇率生成 `cny_summary`，包含人民币口径总盈利、总亏损、净盈亏、分币种汇总和 Top gainers/losers。
 - 可选生成 `asset_summary`，用于 private channel 中输出精确总资产、现金、持仓市值和资产分类汇总。
+- 如果 Eastmoney source 提供 `positions_summary.position_premiums`，聚合为顶层 `position_premium_summary`，保留所有 Eastmoney 持仓的溢价字段状态。
 - 保留持仓/ETF 的 `instrument_type`，用于报告里区分个股和 ETF。
 - 如果某个非必需来源失败，保留其他来源并写入 warning。
 - 所有来源都失败时 fail closed。
@@ -123,6 +124,27 @@ pre_provider_config: cn-stock
     "top_losers": [],
     "warnings": []
   },
+  "position_premium_summary": {
+    "source": "eastmoney_position",
+    "items": [
+      {
+        "provider": "eastmoney-jywg-readonly",
+        "config": "cn-stock",
+        "label": "Eastmoney CN",
+        "code": "159513",
+        "name": "纳指大成",
+        "source_currency": "CNY",
+        "data_source": "eastmoney_position",
+        "status": "ok",
+        "captured_at": "2026-05-08T01:15:00.000Z",
+        "premium_rate": 8.5,
+        "reference_nav": 1.12,
+        "iopv": 1.13
+      }
+    ],
+    "warnings": [],
+    "usage_notes": []
+  },
   "sources": [
     {
       "provider": "futu-stock",
@@ -162,6 +184,8 @@ pre_provider_config: cn-stock
 `payload` 是各 provider 输出的结构化上下文。默认 `summary` 配置会隐藏完整总资产和持仓市值；仅 private 汇总任务使用 `exact` 配置采集精确总资产、现金和持仓市值。无论 `summary` 还是 `exact`，聚合层都会再次对 error 和嵌套字符串做 token/cookie/account 类字段脱敏，provider 不应输出完整资金账号、手机号、cookie、validatekey、token、交易密码、客户号或股东号。
 
 `cny_summary` 的盈亏来自各 provider 的 `positions_summary.pnl_summary` 和 `top_gainers/top_losers`，在 LLM 调用前完成折算。该字段只保留可报告的人民币金额字段，例如 `gross_profit_cny`、`gross_loss_cny`、`net_pnl_cny`、`pnl_cny`。`source_currency` 和 `fx_rate_to_cny` 仅用于审计汇率来源，不应作为报告金额单位输出。LLM 报告应优先使用该字段，不应自行编造或重算缺失字段。`pnl_source` 标识盈亏来源：`positions_daily_pnl` 表示可按持仓拆分今日盈亏；`aggregate_pnl_fallback` 表示只拿到账户级今日盈亏，不能生成该账户的持仓级 Top5 今日盈亏。
+
+`position_premium_summary` 来自 Eastmoney 持仓 payload，并覆盖所有 Eastmoney 持仓，不在 provider 层判断海外/跨境 ETF。CN 股票 cron prompt 只能从该字段中筛选海外/跨境 ETF 展示溢价/折价率；若对应行缺失或 `status=missing_from_eastmoney_position`，报告应明确写“Eastmoney 持仓数据未返回溢价率”，不能联网补查或编造。
 
 格式化输出会把顶层 `cny_summary` 和 `asset_summary` 放在 `sources` 明细之前。cron 任务会对过长的 `pre_provider` 上下文做长度保护，但 provider 上下文的上限高于普通 script stdout；汇总字段必须优先进入 LLM prompt，避免尾部 source 明细被截断时影响账户盈亏、Top5 和资产分类口径。
 

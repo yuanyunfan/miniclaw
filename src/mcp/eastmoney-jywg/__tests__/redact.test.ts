@@ -43,6 +43,13 @@ describe("eastmoney-jywg redaction", () => {
     expect(text).toContain("validatekey=[redacted]");
   });
 
+  it("preserves known non-secret status enum values", () => {
+    const text = redactSensitiveText("status=missing_from_eastmoney_position token=abcdefabcdefabcdefabcdef");
+
+    expect(text).toContain("status=missing_from_eastmoney_position");
+    expect(text).toContain("token=[redacted]");
+  });
+
   it("hides exact total assets by default", () => {
     const text = redactedSnapshotJson(snapshot, profile);
 

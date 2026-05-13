@@ -83,6 +83,22 @@ describe("runStockPulseProvider", () => {
           cny_summary: {
             fx_rates: { USD: 7.1 },
           },
+          position_premium_summary: {
+            source: "eastmoney_position",
+            items: [{
+              provider: "eastmoney-jywg-readonly",
+              config: "cn-stock",
+              label: "Eastmoney A",
+              code: "159513",
+              name: "纳指大成",
+              source_currency: "CNY",
+              data_source: "eastmoney_position",
+              status: "ok",
+              premium_rate: 8.5,
+            }],
+            warnings: [],
+            usage_notes: ["test summary"],
+          },
           sources: [
             {
               status: "ok",
@@ -139,6 +155,11 @@ describe("runStockPulseProvider", () => {
     expect(parsed.position_groups.losing[0].portfolio).toMatchObject({ daily_pnl_cny: -142, unrealized_pnl_cny: 710 });
     expect(parsed.position_groups.losing[1].portfolio).toMatchObject({ daily_pnl_cny: -35.5, unrealized_pnl_cny: -1420 });
     expect(parsed.alerts.map((alert: { symbol: string }) => alert.symbol)).toContain("AAPL");
+    expect(parsed.position_premium_summary.items[0]).toMatchObject({
+      code: "159513",
+      premium_rate: 8.5,
+      data_source: "eastmoney_position",
+    });
     await result.commit?.();
     expect(committed).toBe(true);
   });

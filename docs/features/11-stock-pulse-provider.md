@@ -76,6 +76,7 @@ schedule:
 
 - `positions[]`: 所有成功报价的扫描股票，包含 provider 内部分析使用的当前价/价格币种、60m/日内涨跌幅，以及 portfolio 提供的 CNY 盈亏字段；常规持仓快照展示不输出当前价/价格币种。
 - `position_groups`: 按 `portfolio.daily_pnl_cny` 分成 `profitable`、`losing`、`flat_or_unknown`；盈利组按日内盈亏从高到低，亏损组按日内亏损从大到小。
+- `position_premium_summary`: 从嵌套 `stock-portfolio` payload 透传的 Eastmoney 全持仓溢价字段快照。`stock-pulse` 不判断海外/跨境 ETF；盘中 CN prompt 只从这里筛选海外/跨境 ETF 展示溢价/折价率，且不能联网补查缺失值。
 - `hour_return_pct`: 最近约 60 分钟涨跌幅。
 - `day_return_pct`: 当日涨跌幅。
 - `abnormal_bar_count`: 最近 60 分钟内异常 5m bar 数量。

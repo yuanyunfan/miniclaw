@@ -24,6 +24,30 @@ const POSITION_DAILY_PNL = ["Drckyk", "Dryk", "Drljyk", "drckyk", "daily_pnl", "
 const POSITION_DAILY_PNL_RATIO = ["Drykbl", "daily_pnl_ratio", "当日盈亏比例"];
 const POSITION_FLOATING_PNL = ["Ljyk", "Fdyk", "ljyk", "floating_pnl", "浮动盈亏", "累计盈亏"];
 const POSITION_PNL_RATIO = ["Ykbl", "ykbl", "pnl_ratio", "盈亏比例"];
+const POSITION_PREMIUM_RATE = [
+  "Zyl",
+  "zy_rate",
+  "premium_rate",
+  "premiumRate",
+  "PremiumRate",
+  "premium_discount_rate",
+  "premiumDiscountRate",
+  "折溢价率",
+  "溢价率",
+];
+const POSITION_REFERENCE_NAV = [
+  "Jjjz",
+  "jjjz",
+  "nav",
+  "NAV",
+  "net_value",
+  "fund_nav",
+  "reference_nav",
+  "单位净值",
+  "基金净值",
+  "参考净值",
+];
+const POSITION_IOPV = ["IOPV", "iopv", "Iopv", "iopv_price", "参考IOPV", "实时IOPV"];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -105,6 +129,9 @@ export function mapEastmoneyJywgPosition(record: Record<string, unknown>): Eastm
     daily_pnl_ratio: num(record, POSITION_DAILY_PNL_RATIO),
     floating_pnl: num(record, POSITION_FLOATING_PNL),
     pnl_ratio: num(record, POSITION_PNL_RATIO),
+    premium_rate: num(record, POSITION_PREMIUM_RATE),
+    reference_nav: num(record, POSITION_REFERENCE_NAV),
+    iopv: num(record, POSITION_IOPV),
   };
 }
 

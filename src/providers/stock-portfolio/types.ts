@@ -60,6 +60,7 @@ export interface StockPortfolioPayload {
   failed_count: number;
   cny_summary?: StockPortfolioCnySummary;
   asset_summary?: StockPortfolioAssetSummary;
+  position_premium_summary?: StockPortfolioPositionPremiumSummary;
   warnings: string[];
   usage_notes: string[];
   sources: StockPortfolioSourceResult[];
@@ -184,4 +185,28 @@ export interface StockPortfolioAssetSummary {
   holdings_for_classification: StockPortfolioClassifiableHolding[];
   classification_guidance: StockPortfolioClassificationGuidance;
   warnings: string[];
+}
+
+export interface StockPortfolioPositionPremium {
+  provider: StockPortfolioSourceName;
+  config: string;
+  label?: string;
+  code: string;
+  name: string;
+  source_currency: string;
+  data_source: "eastmoney_position";
+  status: "ok" | "missing_from_eastmoney_position";
+  captured_at?: string;
+  premium_rate?: number;
+  reference_nav?: number;
+  iopv?: number;
+  last_price?: number;
+  note?: string;
+}
+
+export interface StockPortfolioPositionPremiumSummary {
+  source: "eastmoney_position";
+  items: StockPortfolioPositionPremium[];
+  warnings: string[];
+  usage_notes: string[];
 }

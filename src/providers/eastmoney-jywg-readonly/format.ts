@@ -10,6 +10,7 @@ import type {
   EastmoneyJywgProviderFormatOptions,
   EastmoneyJywgProviderPayload,
   EastmoneyJywgProviderPnlSummary,
+  EastmoneyJywgProviderPositionPremium,
   EastmoneyJywgProviderPositionInput,
   EastmoneyJywgProviderSnapshotInput,
   EastmoneyJywgProviderTopPosition,
@@ -32,6 +33,9 @@ function compactPosition(position: EastmoneyJywgProviderPositionInput): Eastmone
     daily_pnl_ratio: position.daily_pnl_ratio,
     floating_pnl: position.floating_pnl,
     pnl_ratio: position.pnl_ratio,
+    premium_rate: position.premium_rate,
+    reference_nav: position.reference_nav,
+    iopv: position.iopv,
   };
 }
 
@@ -139,6 +143,27 @@ function compactTopPositions(
   return topEastmoneyJywgPositionsByPnl(snapshot, limit).map(compactPosition);
 }
 
+function compactPositionPremiums(
+  snapshot: EastmoneyJywgProviderSnapshotInput,
+): EastmoneyJywgProviderPositionPremium[] {
+  return snapshot.positions.map((position) => {
+    const hasPremium = position.premium_rate !== undefined && Number.isFinite(position.premium_rate);
+    return {
+      code: position.code,
+      name: position.name,
+      currency: position.currency,
+      data_source: "eastmoney_position" as const,
+      status: hasPremium ? "ok" as const : "missing_from_eastmoney_position" as const,
+      captured_at: snapshot.captured_at,
+      premium_rate: position.premium_rate,
+      reference_nav: position.reference_nav,
+      iopv: position.iopv,
+      last_price: position.last_price,
+      note: hasPremium ? undefined : "Eastmoney position payload did not include a premium_rate field for this held position.",
+    };
+  });
+}
+
 export function buildEastmoneyJywgProviderPayload(
   snapshot: EastmoneyJywgProviderSnapshotInput,
   profile: EastmoneyJywgProfileConfig,
@@ -158,6 +183,7 @@ export function buildEastmoneyJywgProviderPayload(
         ? "Exact account asset and holding market values are intentionally included for trusted private channels; still do not output account id, customer id, shareholder id, cookie, validatekey, password, or trade password."
         : "Do not infer or output account id, customer id, shareholder id, exact total assets, cookie, validatekey, password, or trade password.",
       "Daily P&L is based on a broker web snapshot and may differ from final settlement statements because of cash flows, fees, dividends, and data timing.",
+      "positions_summary.position_premiums exposes Eastmoney premium_rate fields for all held positions; downstream prompts decide which rows are overseas/cross-border ETFs.",
     ],
   };
 
@@ -179,6 +205,7 @@ export function buildEastmoneyJywgProviderPayload(
       top_positions: compactTopPositions(snapshot, options.topPositionsLimit),
       top_gainers: compactTopGainers(snapshot, options.topPositionsLimit),
       top_losers: compactTopLosers(snapshot, options.topPositionsLimit),
+      position_premiums: compactPositionPremiums(snapshot),
     };
   }
 

@@ -100,6 +100,28 @@ describe("stock-portfolio formatter", () => {
               },
               top_gainers: [{ code: "600000", name: "浦发银行", currency: "CNY", daily_pnl: 50 }],
               top_losers: [{ code: "510300", name: "沪深300ETF", currency: "CNY", daily_pnl: -10 }],
+              position_premiums: [
+                {
+                  code: "159513",
+                  name: "纳指大成",
+                  currency: "CNY",
+                  data_source: "eastmoney_position",
+                  status: "ok",
+                  captured_at: "2026-05-08T01:15:00.000Z",
+                  premium_rate: 8.5,
+                  reference_nav: 1.12,
+                  iopv: 1.13,
+                  last_price: 1.22,
+                },
+                {
+                  code: "600000",
+                  name: "浦发银行",
+                  currency: "CNY",
+                  data_source: "eastmoney_position",
+                  status: "missing_from_eastmoney_position",
+                  captured_at: "2026-05-08T01:15:00.000Z",
+                },
+              ],
             },
           },
         },
@@ -133,6 +155,28 @@ describe("stock-portfolio formatter", () => {
       code: "HK.02800",
       pnl_cny: -27.6,
       instrument_type: "etf",
+    });
+    expect(payload.position_premium_summary).toMatchObject({
+      source: "eastmoney_position",
+      items: [
+        expect.objectContaining({
+          provider: "eastmoney-jywg-readonly",
+          config: "daily-stock-market",
+          label: "Eastmoney",
+          code: "159513",
+          name: "纳指大成",
+          premium_rate: 8.5,
+          reference_nav: 1.12,
+          iopv: 1.13,
+          last_price: 1.22,
+          status: "ok",
+        }),
+        expect.objectContaining({
+          code: "600000",
+          name: "浦发银行",
+          status: "missing_from_eastmoney_position",
+        }),
+      ],
     });
   });
 

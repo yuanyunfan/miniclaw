@@ -164,6 +164,14 @@ cron task
 
 如果 session 过期、页面跳回登录、遇到验证码/短信/安全控件或 response 结构异常，provider 会 fail closed，cron 会发送 pre_provider 失败提示，不会尝试自动登录。
 
+## 持仓溢价字段
+
+`mapper.ts` 会从东方财富持仓 payload 中尝试映射 `premium_rate`、`reference_nav` 和 `iopv`。这些字段来自账户持仓数据本身，不通过联网补查填充。
+
+`positions_summary.position_premiums` 是全持仓快照：每个 Eastmoney 持仓都会输出一行 `code`、`name`、`currency`、`captured_at`、`data_source=eastmoney_position`、`status`，以及东方财富返回的 `premium_rate` / `reference_nav` / `iopv` / `last_price`。如果某只持仓没有返回 `premium_rate`，该行标记为 `status=missing_from_eastmoney_position`，并保留为缺失状态。
+
+这一层不判断某只持仓是否为海外/跨境 ETF。CN 股票 prompt 负责从全持仓 `position_premiums` 中筛选 A 股上市海外/跨境 ETF 并决定是否展示溢价/折价率。
+
 ## 验证
 
 实现覆盖了：

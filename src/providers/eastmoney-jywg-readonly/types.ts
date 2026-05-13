@@ -36,6 +36,23 @@ export interface EastmoneyJywgProviderTopPosition {
   daily_pnl_ratio?: number;
   floating_pnl?: number;
   pnl_ratio?: number;
+  premium_rate?: number;
+  reference_nav?: number;
+  iopv?: number;
+}
+
+export interface EastmoneyJywgProviderPositionPremium {
+  code: string;
+  name: string;
+  currency: string;
+  data_source: "eastmoney_position";
+  status: "ok" | "missing_from_eastmoney_position";
+  captured_at: string;
+  premium_rate?: number;
+  reference_nav?: number;
+  iopv?: number;
+  last_price?: number;
+  note?: string;
 }
 
 export interface EastmoneyJywgProviderPnlSummary {
@@ -78,6 +95,7 @@ export interface EastmoneyJywgProviderPayload {
     top_positions: EastmoneyJywgProviderTopPosition[];
     top_gainers: EastmoneyJywgProviderTopPosition[];
     top_losers: EastmoneyJywgProviderTopPosition[];
+    position_premiums: EastmoneyJywgProviderPositionPremium[];
   };
   asset_summary?: AssetAllocationSummary;
   warnings: string[];

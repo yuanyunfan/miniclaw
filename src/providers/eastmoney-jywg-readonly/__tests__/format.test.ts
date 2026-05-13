@@ -129,6 +129,66 @@ describe("eastmoney-jywg provider formatter", () => {
     expect(parsed.positions_summary.top_losers).toEqual([]);
   });
 
+  it("surfaces Eastmoney-held position premium fields without classifying overseas ETFs", () => {
+    const payload = buildEastmoneyJywgProviderPayload({
+      ...snapshot,
+      positions: [
+        {
+          code: "159513",
+          name: "纳指大成",
+          currency: "CNY",
+          market_value: 2500,
+          last_price: 1.25,
+          daily_pnl: 10,
+          premium_rate: 9.12,
+          reference_nav: 1.145,
+          iopv: 1.146,
+        },
+        {
+          code: "510300",
+          name: "沪深300ETF",
+          currency: "CNY",
+          market_value: 4000,
+          last_price: 3.9,
+          daily_pnl: -10,
+        },
+      ],
+    }, profile, {
+      generatedAt: new Date("2026-05-08T07:16:00.000Z"),
+      profileName: "default",
+      marketSession: "a_share_open",
+      redaction: "summary",
+      topPositionsLimit: 5,
+      includeAccountSnapshot: false,
+      includeDailyReport: false,
+      includePositionsSummary: true,
+      includeAssetAllocation: false,
+      assetGapPolicy: { positive_market_value_gap: "unclassified" },
+    });
+
+    const parsed = JSON.parse(formatEastmoneyJywgProviderPayload(payload));
+    expect(parsed.positions_summary.position_premiums).toEqual([
+      expect.objectContaining({
+        code: "159513",
+        name: "纳指大成",
+        data_source: "eastmoney_position",
+        status: "ok",
+        premium_rate: 9.12,
+        reference_nav: 1.145,
+        iopv: 1.146,
+        last_price: 1.25,
+      }),
+      expect.objectContaining({
+        code: "510300",
+        name: "沪深300ETF",
+        data_source: "eastmoney_position",
+        status: "missing_from_eastmoney_position",
+        last_price: 3.9,
+        note: "Eastmoney position payload did not include a premium_rate field for this held position.",
+      }),
+    ]);
+  });
+
   it("includes exact asset allocation only when requested for private reports", () => {
     const payload = buildEastmoneyJywgProviderPayload(snapshot, { ...profile, redaction: "exact", show_total_assets: true }, {
       generatedAt: new Date("2026-05-08T07:16:00.000Z"),

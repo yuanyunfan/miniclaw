@@ -8,6 +8,8 @@ import type {
   StockPortfolioCnySummary,
   StockPortfolioCurrencyPnlSummary,
   StockPortfolioPayload,
+  StockPortfolioPositionPremium,
+  StockPortfolioPositionPremiumSummary,
   StockPortfolioProviderConfig,
   StockPortfolioSourceOk,
   StockPortfolioSourceResult,
@@ -581,6 +583,58 @@ function buildCnySummary(
   };
 }
 
+function sourcePositionPremiums(source: StockPortfolioSourceOk): StockPortfolioPositionPremium[] {
+  const positionsSummary = isRecord(source.payload.positions_summary) ? source.payload.positions_summary : undefined;
+  const rows = Array.isArray(positionsSummary?.position_premiums)
+    ? positionsSummary.position_premiums.filter(isRecord)
+    : [];
+  return rows.map((row) => {
+    const premiumRate = num(row.premium_rate);
+    const status = str(row.status) === "ok" && premiumRate !== undefined
+      ? "ok"
+      : "missing_from_eastmoney_position";
+    return {
+      provider: source.provider,
+      config: source.config,
+      label: source.label,
+      code: str(row.code, "UNKNOWN"),
+      name: str(row.name, "UNKNOWN"),
+      source_currency: str(row.currency, nestedSourceCurrency(source.payload) ?? "CNY").toUpperCase(),
+      data_source: "eastmoney_position",
+      status,
+      captured_at: str(row.captured_at) || undefined,
+      premium_rate: premiumRate,
+      reference_nav: num(row.reference_nav),
+      iopv: num(row.iopv),
+      last_price: num(row.last_price),
+      note: str(row.note) || undefined,
+    };
+  });
+}
+
+function buildPositionPremiumSummary(
+  sources: StockPortfolioSourceResult[],
+): StockPortfolioPositionPremiumSummary | undefined {
+  const okSources = sources.filter((source): source is StockPortfolioSourceOk => source.status === "ok");
+  const items = okSources.flatMap(sourcePositionPremiums)
+    .sort((a, b) => a.code.localeCompare(b.code));
+  if (!items.length) return undefined;
+  const missingCount = items.filter((item) => item.status !== "ok").length;
+  return {
+    source: "eastmoney_position",
+    items,
+    warnings: missingCount > 0
+      ? [`${missingCount} Eastmoney held position(s) did not return premium_rate; use per-item status and do not fill via web search.`]
+      : [],
+    usage_notes: [
+      "Position premium data in this summary comes only from Eastmoney account position payloads for all held positions.",
+      "The provider layer does not classify overseas/cross-border ETFs; cron prompts must decide which rows to display based on code, name, and report context.",
+      "Do not fill missing premium_rate values via web search in cron reports; if status is missing_from_eastmoney_position, say Eastmoney did not return the premium rate.",
+      "premium_rate is a premium/discount percentage signal for trading crowding and creation/redemption risk; do not treat it as ETF price return.",
+    ],
+  };
+}
+
 export function buildStockPortfolioPayload(params: {
   generatedAt: Date;
   profile: string;
@@ -590,6 +644,7 @@ export function buildStockPortfolioPayload(params: {
   const failed = params.sources.filter((source) => source.status === "error");
   const cnySummary = buildCnySummary(params.sources, params.config);
   const assetSummary = buildAssetSummary(params.sources, params.config);
+  const positionPremiumSummary = buildPositionPremiumSummary(params.sources);
   return {
     generated_at: params.generatedAt.toISOString(),
     source: "stock-portfolio",
@@ -599,10 +654,12 @@ export function buildStockPortfolioPayload(params: {
     failed_count: failed.length,
     cny_summary: cnySummary,
     asset_summary: assetSummary,
+    position_premium_summary: positionPremiumSummary,
     warnings: [
       ...failed.map((source) => `${source.provider}/${source.config}: ${source.error}`),
       ...(cnySummary?.warnings ?? []),
       ...(assetSummary?.warnings ?? []),
+      ...(positionPremiumSummary?.warnings ?? []),
     ],
     usage_notes: [
       "This payload aggregates read-only broker providers for MiniClaw stock reports.",
@@ -612,6 +669,7 @@ export function buildStockPortfolioPayload(params: {
       "CNY P&L summary is calculated from configured FX rates before the LLM runs; mention fx_rates_as_of/source when reporting converted numbers.",
       "Asset allocation by_category buckets are deterministic pre-buckets only. For final investment classification, group asset_summary.holdings_for_classification with asset_summary.classification_guidance and keep cash separate.",
       "Use asset_summary.by_account for account totals. Some market-specific sources can be positions-only for asset totals to avoid double counting one broker account queried through multiple market profiles.",
+      "Use position_premium_summary only when it is present; it is derived from Eastmoney held-position data for all held positions, and missing premium rates must not be filled by ad hoc web search.",
       "If one broker source failed, use the remaining source data and explicitly mention the missing source without inventing holdings or P&L.",
     ],
     sources: outputSourcesForConfig(params.sources, params.config),

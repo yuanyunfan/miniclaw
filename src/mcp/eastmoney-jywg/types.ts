@@ -86,6 +86,9 @@ export interface EastmoneyJywgPositionSummary {
   daily_pnl_ratio?: number;
   floating_pnl?: number;
   pnl_ratio?: number;
+  premium_rate?: number;
+  reference_nav?: number;
+  iopv?: number;
 }
 
 export interface EastmoneyJywgAccountSnapshot {

@@ -1,4 +1,5 @@
 import type { PreProviderResult, PreProviderRunArgs } from "../types.js";
+import type { StockPortfolioPositionPremiumSummary } from "../stock-portfolio/types.js";
 
 export type StockPulseMarketScope = "us" | "cn";
 export type StockPulseMarket = "us" | "cn-a" | "hk";
@@ -220,6 +221,7 @@ export interface StockPulsePayload {
   };
   positions: StockPulsePositionSnapshot[];
   position_groups: StockPulsePositionGroups;
+  position_premium_summary?: StockPortfolioPositionPremiumSummary;
   alerts: StockPulseAlert[];
   failures: StockPulseQuoteFailure[];
   warnings: string[];
