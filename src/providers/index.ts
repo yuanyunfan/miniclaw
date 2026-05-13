@@ -8,6 +8,7 @@ import { runFutuStockProvider } from "./futu-stock/index.js";
 import { runMarketForecastEvaluationProvider } from "./market-forecast-evaluation/index.js";
 import { runMarketIntelProvider } from "./market-intel/index.js";
 import { runStockPulseProvider, stockPulseProvider } from "./stock-pulse/index.js";
+import { runStockWatchlistResearchProvider, stockWatchlistResearchProvider } from "./stock-watchlist-research/index.js";
 import { runStockPortfolioProvider } from "./stock-portfolio/index.js";
 import { runWechatMpProvider } from "./wechat-mp/index.js";
 
@@ -19,6 +20,7 @@ const PRE_PROVIDERS = {
   "market-forecast-evaluation": runMarketForecastEvaluationProvider,
   "market-intel": runMarketIntelProvider,
   "stock-pulse": runStockPulseProvider,
+  "stock-watchlist-research": runStockWatchlistResearchProvider,
   "stock-portfolio": runStockPortfolioProvider,
   "wechat-mp": runWechatMpProvider,
 } as const;
@@ -28,6 +30,7 @@ export type PreProviderName = keyof typeof PRE_PROVIDERS;
 const PROVIDER_MODULES: Partial<Record<PreProviderName, ProviderModule<any>>> = {
   "eastmoney-jywg-readonly": eastmoneyJywgProvider,
   "stock-pulse": stockPulseProvider,
+  "stock-watchlist-research": stockWatchlistResearchProvider,
 };
 
 export function listPreProviderNames(): PreProviderName[] {

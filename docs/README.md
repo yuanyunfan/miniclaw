@@ -31,6 +31,7 @@
 - [`features/15-ralph-controller.md`](features/15-ralph-controller.md): plan-based fresh-context Codex execution controller。
 - [`features/16-provider-framework.md`](features/16-provider-framework.md): provider manifest、health check、dry-run、structured output 和兼容 adapter。
 - [`features/17-eastmoney-myfavor-watchlist.md`](features/17-eastmoney-myfavor-watchlist.md): 东方财富 MyFavor 自选股只读源，接入 stock-pulse universe。
+- [`features/18-stock-watchlist-research-provider.md`](features/18-stock-watchlist-research-provider.md): 券商 watchlist stock 盘前/每日深度研究 provider，独立推送到 daily-watchlist-stock。
 
 ## Plans
 

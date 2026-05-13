@@ -22,7 +22,16 @@ describe("provider registry", () => {
     expect(listProviderManifests().map((manifest) => manifest.name)).toEqual([
       "eastmoney-jywg-readonly",
       "stock-pulse",
+      "stock-watchlist-research",
     ]);
+    expect(getProviderManifest("stock-watchlist-research")).toMatchObject({
+      name: "stock-watchlist-research",
+      kind: "stock",
+      privacy: "private",
+      supportsDryRun: true,
+      supportsHealthCheck: true,
+      outputSchemaVersion: "stock-watchlist-research.payload.v1",
+    });
     expect(getProviderManifest("stock-portfolio")).toBeUndefined();
   });
 });

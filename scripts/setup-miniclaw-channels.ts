@@ -5,7 +5,7 @@
 // channel ID 映射写入 ~/.miniclaw/channel-map.json（用户级配置，不进 git repo）
 import { Client, GatewayIntentBits, ChannelType, PermissionFlagsBits, type Guild, type OverwriteResolvable } from "discord.js";
 import { config } from "../src/config.js";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -30,7 +30,7 @@ const STRUCTURE = [
   },
   {
     category: "💹 STOCK",
-    channels: ["daily-us-stock", "daily-cn-stock", { name: "daily-stock-summary", private: true }],
+    channels: ["daily-us-stock", "daily-cn-stock", "daily-watchlist-stock", { name: "daily-stock-summary", private: true }],
   },
   {
     category: "📰 NEWS",
@@ -67,7 +67,7 @@ function privateOverwrites(guild: Guild): OverwriteResolvable[] {
   ];
   return [
     { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
-    { id: config.discord.allowedUserId, allow },
+    { id: config.allowedUserId, allow },
     { id: client.user!.id, allow },
   ];
 }
@@ -115,13 +115,31 @@ async function ensureTextChannel(guild: Guild, spec: ChannelSpec, parentId: stri
   return created.id;
 }
 
+function readExistingChannelMap(path: string): Record<string, string> {
+  if (!existsSync(path)) return {};
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf8")) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const out: Record<string, string> = {};
+    for (const [name, id] of Object.entries(parsed)) {
+      if (typeof name === "string" && typeof id === "string" && /^\d{15,25}$/.test(id)) {
+        out[name] = id;
+      }
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 client.once("ready", async (c) => {
   console.log(`Logged in as ${c.user.tag}`);
   const guild = await c.guilds.fetch(GUILD_ID);
   await guild.channels.fetch();
   console.log(`Setup MiniClaw Hub (${guild.name})...`);
 
-  const channelMap: Record<string, string> = {};
+  const out = process.env.MINICLAW_CHANNEL_MAP ?? join(homedir(), ".miniclaw/channel-map.json");
+  const channelMap: Record<string, string> = readExistingChannelMap(out);
 
   for (const group of STRUCTURE) {
     console.log(`\n[${group.category}]`);
@@ -132,7 +150,6 @@ client.once("ready", async (c) => {
     }
   }
 
-  const out = process.env.MINICLAW_CHANNEL_MAP ?? join(homedir(), ".miniclaw/channel-map.json");
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, JSON.stringify(channelMap, null, 2));
   console.log(`\n✅ 完成。channel 映射已写入: ${out}`);
