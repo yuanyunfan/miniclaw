@@ -18,7 +18,12 @@ export interface CronJobBase {
   timezone?: string;
   enabled: boolean;
   type: CronJobType;
-  channel: string; // Discord channel ID for output (除非 type=script 且 capture_output=false)
+  channel: string; // Primary Discord channel ID for output (除非 type=script 且 capture_output=false)
+  /**
+   * Optional logical IM delivery route. The legacy Discord channel remains the
+   * primary target; route targets are used for extra outbound delivery.
+   */
+  delivery_route?: string;
   /**
    * Optional full-job wall clock timeout. This wraps the complete cron path
    * (pre-script/pre-provider/task/script/message) at scheduler level.

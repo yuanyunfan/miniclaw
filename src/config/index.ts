@@ -17,6 +17,8 @@ export type {
   CodexReasoningEffort,
   CodexSandboxMode,
   CodexWebSearchMode,
+  IMRouteConfig,
+  IMRouteTargetConfig,
   IMTransportId,
   ModelClientId,
   SmartRouterClassifierProvider,

@@ -109,6 +109,16 @@ runtime:
   default_agent: claude
 model:
   default_client: openai_compatible
+im:
+  transports:
+    feishu:
+      enabled: true
+      webhook_url: "https://open.feishu.cn/open-apis/bot/v2/hook/test"
+  routes:
+    ops:
+      targets:
+        - transport: feishu
+          target: default
 codex:
   reasoning_effort: high
 storage:
@@ -133,6 +143,8 @@ attachments:
     expect(runtime.runtime.defaultAgent).toBe("claude");
     expect(runtime.modelClient.defaultClient).toBe("openai_compatible");
     expect(runtime.smartRouter.llmClassifier.provider).toBe("openai_compatible");
+    expect(runtime.im.routes.ops).toEqual({ targets: [{ transport: "feishu", target: "default" }] });
+    expect(runtime.im.transports.feishu.webhookUrl).toBe("https://open.feishu.cn/open-apis/bot/v2/hook/test");
     expect(runtime.codex.reasoningEffort).toBe("high");
     expect(runtime.channelDefaults["chat-runtime"]).toEqual({ cwd: tmpDir });
     expect(runtime.smartRouter.defaultMode).toBe("auto");

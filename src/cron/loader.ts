@@ -43,6 +43,7 @@ enabled: false
 type: message
 channel: "REPLACE_WITH_DISCORD_CHANNEL_ID"
 # timeout_ms: 1800000       # 可选：完整 job wall-clock 超时（毫秒）
+# delivery_route: ""        # 可选：额外投递到 config.yaml 里的 im.routes.<name>
 # max_concurrency: 1        # 可选：同名 job 并发上限，默认 1
 # cooldown:
 #   after_failure_ms: 1800000
@@ -169,12 +170,16 @@ function validateJob(raw: unknown, file: string): CronJob {
   const maxConcurrency = parseOptionalPositiveInteger(r.max_concurrency, file, "max_concurrency", MAX_CONCURRENCY) ?? 1;
   const cooldown = parseCooldownConfig(r.cooldown, file);
   const circuitBreaker = parseCircuitBreakerConfig(r.circuit_breaker, file);
+  const deliveryRoute = typeof r.delivery_route === "string" && r.delivery_route.trim()
+    ? r.delivery_route.trim()
+    : undefined;
   const baseCommon = {
     name: r.name.trim(),
     schedule,
     timezone,
     enabled,
     channel: r.channel,
+    ...(deliveryRoute ? { delivery_route: deliveryRoute } : {}),
     max_concurrency: maxConcurrency,
     ...(timeoutMs !== undefined ? { timeout_ms: timeoutMs } : {}),
     ...(cooldown ? { cooldown } : {}),

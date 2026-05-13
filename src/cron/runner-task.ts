@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
 import { AttachmentBuilder, type Client, type SendableChannels } from "discord.js";
 import { config } from "../config.js";
+import { sendTextFanout } from "../im/delivery.js";
 import { createTask } from "../store/db.js";
 import { recordMarketForecastFromPayload, stripMarketForecastJsonForDisplay, updateMarketForecastReport } from "../store/market-forecasts.js";
 import { executeTask, getActiveTaskCount, type TaskResult } from "../agent/task.js";
@@ -291,6 +292,28 @@ async function sendPreProviderAttachments(
   }
 }
 
+async function sendExtraCronResultDelivery(
+  client: Client,
+  job: CronJobTask | CronJobSkill,
+  text: string,
+): Promise<void> {
+  if (!job.delivery_route) return;
+  const results = await sendTextFanout({
+    client,
+    fallbackDiscordTarget: job.channel,
+    route: job.delivery_route,
+    content: text,
+    extraOnly: true,
+    failOnError: false,
+    metadata: { cron_name: job.name, cron_type: job.type },
+  });
+  for (const result of results) {
+    if (result.error) {
+      log.warn(`${job.name} extra IM delivery to ${result.target.transport}:${result.target.target} failed:`, result.error);
+    }
+  }
+}
+
 async function runPreProviderPreflight(job: CronJobTask, runAt: Date, signal?: AbortSignal): Promise<void> {
   if (!job.pre_provider || !job.pre_provider_preflight || job.pre_provider_preflight === "off") return;
   throwIfAborted(signal);
@@ -484,6 +507,11 @@ export async function runTask(job: CronJobTask, client: Client, context: CronJob
     taskId,
     ...(job.pre_provider ? { providerName: job.pre_provider, providerStatus: "failed" } : {}),
   });
+  await sendExtraCronResultDelivery(
+    client,
+    job,
+    marketForecastId ? stripMarketForecastJsonForDisplay(result.result) : result.result,
+  );
   await sendPreProviderAttachments(channel, job.name, preProviderAttachments);
   if (preProviderCommit) {
     await preProviderCommit();
@@ -551,5 +579,6 @@ export async function runSkill(job: CronJobSkill, client: Client, context: CronJ
     throw attachCronTaskRunMetadata(err, { taskId });
   }
   assertTaskResultOk(job.name, result, { taskId });
+  await sendExtraCronResultDelivery(client, job, result.result);
   return { status: "success", taskId };
 }

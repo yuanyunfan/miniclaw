@@ -7,7 +7,14 @@ export type ClaudeSettingSource = "user" | "project" | "local";
 export type SmartRouterDefaultMode = "suggest" | "confirm" | "auto";
 export type SmartRouterClassifierProvider = "auto" | "raven" | "anthropic" | "openai" | "openai_compatible" | "codex";
 export type ModelClientId = SmartRouterClassifierProvider;
-export type IMTransportId = "discord";
+export type IMTransportId = "discord" | "feishu";
+export interface IMRouteTargetConfig {
+  transport: IMTransportId;
+  target: string;
+}
+export interface IMRouteConfig {
+  targets: IMRouteTargetConfig[];
+}
 export type AudioTranscriptionProvider = "auto" | "openai" | "openai_compatible" | "local_faster_whisper";
 
 export interface SmtpEmailNotificationConfig {

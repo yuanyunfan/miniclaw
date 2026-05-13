@@ -167,6 +167,7 @@ schedule: "0 9 * * *"
 type: message
 channel: "${VALID_CHANNEL}"
 timeout_ms: 1800000
+delivery_route: daily-watchlist-stock
 max_concurrency: 2
 cooldown:
   after_failure_ms: 600000
@@ -181,6 +182,7 @@ content: "早安 {{date}}"
     expect(r.errors).toEqual([]);
     expect(r.jobs[0].enabled).toBe(true);
     expect(r.jobs[0].timeout_ms).toBe(1800000);
+    expect(r.jobs[0].delivery_route).toBe("daily-watchlist-stock");
     expect(r.jobs[0].max_concurrency).toBe(2);
     expect(r.jobs[0].cooldown).toEqual({ after_failure_ms: 600000 });
     expect(r.jobs[0].circuit_breaker).toEqual({

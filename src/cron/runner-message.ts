@@ -1,7 +1,8 @@
-import type { Client, SendableChannels } from "discord.js";
+import type { Client } from "discord.js";
 import { renderTemplate } from "./template.js";
 import type { CronJobMessage, CronJobRunContext, CronJobRunOutcome } from "./types.js";
 import { createLogger } from "../lib/log.js";
+import { sendTextFanout } from "../im/delivery.js";
 
 const log = createLogger("cron");
 
@@ -19,16 +20,20 @@ function throwIfAborted(signal?: AbortSignal): void {
 
 export async function runMessage(job: CronJobMessage, client: Client, context: CronJobRunContext = {}): Promise<CronJobRunOutcome> {
   throwIfAborted(context.signal);
-  const ch = await client.channels.fetch(job.channel);
-  throwIfAborted(context.signal);
-  if (!ch || !("isSendable" in ch) || !ch.isSendable()) {
-    const msg = `${job.name}: channel ${job.channel} not sendable`;
+  const text = renderTemplate(job.content, { "cron.name": job.name });
+  try {
+    await sendTextFanout({
+      client,
+      fallbackDiscordTarget: job.channel,
+      route: job.delivery_route,
+      content: text,
+      metadata: { cron_name: job.name, cron_type: job.type },
+    });
+  } catch (err) {
+    const msg = `${job.name}: IM delivery failed: ${err instanceof Error ? err.message : String(err)}`;
     log.warn(msg);
     throw new CronMessageRunError(msg);
   }
-  const channel = ch as SendableChannels;
-  const text = renderTemplate(job.content, { "cron.name": job.name });
-  await channel.send(text.slice(0, 2000));
   throwIfAborted(context.signal);
   return { status: "success" };
 }

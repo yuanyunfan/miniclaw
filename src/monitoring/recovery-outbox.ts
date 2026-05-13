@@ -1,6 +1,8 @@
-import type { Client, SendableChannels } from "discord.js";
+import type { Client } from "discord.js";
 import { loadCronJobs } from "../cron/loader.js";
 import { createLogger } from "../lib/log.js";
+import { createDiscordTransport } from "../im/adapters/discord/transport.js";
+import type { IMTransport } from "../im/contracts.js";
 import type { CronRunRow } from "../store/cron-runs.js";
 import {
   enqueueRecoveryOutbox,
@@ -208,16 +210,6 @@ export function backfillCronMissedAlertsFromOutage(snapshot?: ConnectivitySnapsh
   return count;
 }
 
-async function fetchSendableChannel(client: Client, channelId: string): Promise<SendableChannels | null> {
-  try {
-    const channel = await client.channels.fetch(channelId);
-    if (channel && "isSendable" in channel && channel.isSendable()) return channel as SendableChannels;
-  } catch (err) {
-    log.warn(`fetch channel ${channelId} failed while flushing recovery outbox:`, err);
-  }
-  return null;
-}
-
 function formatCronMissedAlertSummary(rows: RecoveryOutboxRow[]): string {
   const payloads = rows
     .map((row) => parseJsonObject<CronFailureRecoveryPayload>(row))
@@ -244,7 +236,7 @@ function formatCronMissedAlertSummary(rows: RecoveryOutboxRow[]): string {
   return lines.join("\n").slice(0, 2000);
 }
 
-async function flushCronFailureAlerts(client: Client, rows: RecoveryOutboxRow[]): Promise<{ delivered: number; failed: number }> {
+async function flushCronFailureAlerts(transport: IMTransport, rows: RecoveryOutboxRow[]): Promise<{ delivered: number; failed: number }> {
   let delivered = 0;
   let failed = 0;
   const byChannel = new Map<string, RecoveryOutboxRow[]>();
@@ -255,15 +247,13 @@ async function flushCronFailureAlerts(client: Client, rows: RecoveryOutboxRow[])
   }
 
   for (const [channelId, channelRows] of byChannel) {
-    const channel = await fetchSendableChannel(client, channelId);
-    if (!channel) {
-      for (const row of channelRows) markRecoveryOutboxAttemptFailed(row.id, `channel ${channelId} not sendable`);
-      failed += channelRows.length;
-      continue;
-    }
     try {
-      const message = await channel.send(formatCronMissedAlertSummary(channelRows));
-      const messageId = "id" in message ? String(message.id) : undefined;
+      const message = await transport.send({
+        target: { transport: "discord", target: channelId },
+        content: formatCronMissedAlertSummary(channelRows),
+        metadata: { recovery_outbox_kind: "cron_failure_alert" },
+      });
+      const messageId = message.messageId || undefined;
       for (const row of channelRows) {
         markRecoveryOutboxDelivered(row.id, messageId);
         if (row.cron_run_id && messageId) {
@@ -281,19 +271,13 @@ async function flushCronFailureAlerts(client: Client, rows: RecoveryOutboxRow[])
   return { delivered, failed };
 }
 
-async function flushTaskDeliveries(client: Client, rows: RecoveryOutboxRow[]): Promise<{ delivered: number; failed: number }> {
+async function flushTaskDeliveries(transport: IMTransport, rows: RecoveryOutboxRow[]): Promise<{ delivered: number; failed: number }> {
   let delivered = 0;
   let failed = 0;
   for (const row of rows) {
     const payload = parseJsonObject<TaskResultDeliveryPayload>(row);
     if (!payload?.messages?.length) {
       markRecoveryOutboxAttemptFailed(row.id, "invalid task delivery payload");
-      failed++;
-      continue;
-    }
-    const channel = await fetchSendableChannel(client, row.channel_id);
-    if (!channel) {
-      markRecoveryOutboxAttemptFailed(row.id, `channel ${row.channel_id} not sendable`);
       failed++;
       continue;
     }
@@ -306,14 +290,26 @@ async function flushTaskDeliveries(client: Client, rows: RecoveryOutboxRow[]): P
         `原始状态: ${payload.success ? "success" : "failed"}`,
         `首次投递失败时间: ${payload.created_at}`,
       ].join("\n").slice(0, 2000);
-      let sent = await channel.send(header);
+      let sent = await transport.send({
+        target: { transport: "discord", target: row.channel_id },
+        content: header,
+        metadata: { recovery_outbox_kind: "task_result_delivery", task_id: payload.task_id },
+      });
       for (const message of payload.messages.slice(0, 20)) {
-        sent = await channel.send(message.slice(0, 2000));
+        sent = await transport.send({
+          target: { transport: "discord", target: row.channel_id },
+          content: message.slice(0, 2000),
+          metadata: { recovery_outbox_kind: "task_result_delivery", task_id: payload.task_id },
+        });
       }
       if (payload.messages.length > 20) {
-        sent = await channel.send(`... 另有 ${payload.messages.length - 20} 段输出未自动补发，请查看本地 task 记录。`);
+        sent = await transport.send({
+          target: { transport: "discord", target: row.channel_id },
+          content: `... 另有 ${payload.messages.length - 20} 段输出未自动补发，请查看本地 task 记录。`,
+          metadata: { recovery_outbox_kind: "task_result_delivery", task_id: payload.task_id },
+        });
       }
-      const messageId = "id" in sent ? String(sent.id) : undefined;
+      const messageId = sent.messageId || undefined;
       markRecoveryOutboxDelivered(row.id, messageId);
       delivered++;
     } catch (err) {
@@ -332,9 +328,10 @@ export async function flushRecoveryOutbox(
   const backfilled = backfillCronMissedAlertsFromOutage(options.snapshot, limit);
   const taskRows = listRecoveryOutbox({ kind: "task_result_delivery", status: "pending", limit });
   const cronRows = listRecoveryOutbox({ kind: "cron_failure_alert", status: "pending", limit });
+  const transport = createDiscordTransport(client);
 
-  const task = await flushTaskDeliveries(client, taskRows);
-  const cron = await flushCronFailureAlerts(client, cronRows);
+  const task = await flushTaskDeliveries(transport, taskRows);
+  const cron = await flushCronFailureAlerts(transport, cronRows);
   const result = {
     cronAlertsDelivered: cron.delivered,
     taskDeliveriesDelivered: task.delivered,

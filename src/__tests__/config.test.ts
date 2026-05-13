@@ -15,6 +15,11 @@ const ENV_KEYS = [
   "MINICLAW_AGENT_PROVIDER",
   "MINICLAW_RUNTIME_DEFAULT_AGENT",
   "MINICLAW_MODEL_DEFAULT_CLIENT",
+  "MINICLAW_IM_DEFAULT_TRANSPORT",
+  "MINICLAW_IM_DISCORD_ENABLED",
+  "MINICLAW_IM_FEISHU_ENABLED",
+  "MINICLAW_FEISHU_WEBHOOK_URL",
+  "MINICLAW_FEISHU_SECRET",
   "MINICLAW_ALLOWED_USER_ID",
   "MINICLAW_DEFAULT_CWD",
   "MINICLAW_MAX_CONCURRENT_TASKS",
@@ -209,6 +214,20 @@ runtime:
   default_agent: claude
 model:
   default_client: openai
+im:
+  default_transport: discord
+  transports:
+    feishu:
+      enabled: true
+      webhook_url: "https://open.feishu.cn/open-apis/bot/v2/hook/test"
+      secret: "feishu-secret"
+  routes:
+    daily-watchlist-stock:
+      targets:
+        - transport: discord
+          target: "1000000000000000000"
+        - transport: feishu
+          target: default
 claude:
   model: claude-test
   setting_sources: [user, local]
@@ -311,6 +330,25 @@ notifications:
     expect(config.runtime.defaultAgent).toBe("claude");
     expect(config.model).toBe("claude-test");
     expect(config.modelClient.defaultClient).toBe("openai");
+    expect(config.im).toEqual({
+      defaultTransport: "discord",
+      transports: {
+        discord: { enabled: true },
+        feishu: {
+          enabled: true,
+          webhookUrl: "https://open.feishu.cn/open-apis/bot/v2/hook/test",
+          secret: "feishu-secret",
+        },
+      },
+      routes: {
+        "daily-watchlist-stock": {
+          targets: [
+            { transport: "discord", target: "1000000000000000000" },
+            { transport: "feishu", target: "default" },
+          ],
+        },
+      },
+    });
     expect(config.defaultCwd).toBe(tmpDir);
     expect(config.defaultBudgetUsd).toBeUndefined();
     expect(config.defaultMaxTurns).toBeUndefined();

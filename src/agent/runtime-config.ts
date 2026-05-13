@@ -142,8 +142,11 @@ export function getAgentRuntimeSummary(): AgentRuntimeSummary {
       smartRouterClient: config.smartRouter.llmClassifier.provider,
     },
     transport: {
-      defaultTransport: "discord",
-      implemented: ["discord"],
+      defaultTransport: config.im.defaultTransport,
+      implemented: [
+        ...(config.im.transports.discord.enabled ? ["discord"] : []),
+        ...(config.im.transports.feishu.enabled ? ["feishu"] : []),
+      ],
     },
     dataProviders: {
       preProviders: listPreProviderNames(),

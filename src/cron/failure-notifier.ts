@@ -11,6 +11,7 @@ import {
 } from "discord.js";
 import type { CronJob } from "./types.js";
 import { createLogger } from "../lib/log.js";
+import { sendTextFanout } from "../im/delivery.js";
 
 const log = createLogger("cron-failure");
 
@@ -213,10 +214,28 @@ export async function sendOrUpdateCronFailureAlert(
   previous?: CronFailureAlertRef
 ): Promise<CronFailureAlertRef | undefined> {
   const payload = buildCronFailurePayload(job, details);
+  const sendExtra = async () => {
+    if (!job.delivery_route || typeof payload.content !== "string") return;
+    const results = await sendTextFanout({
+      client,
+      fallbackDiscordTarget: job.channel,
+      route: job.delivery_route,
+      content: payload.content,
+      extraOnly: true,
+      failOnError: false,
+      metadata: { cron_name: job.name, cron_type: job.type, alert_type: "cron_failure" },
+    });
+    for (const result of results) {
+      if (result.error) {
+        log.warn(`${job.name} extra IM cron failure alert to ${result.target.transport}:${result.target.target} failed:`, result.error);
+      }
+    }
+  };
 
   if (previous?.message) {
     try {
       const edited = await previous.message.edit(payload);
+      await sendExtra();
       return {
         channelId: previous.channelId,
         messageId: edited.id,
@@ -230,6 +249,7 @@ export async function sendOrUpdateCronFailureAlert(
   const channel = await fetchSendableChannel(client, job.channel);
   if (!channel) return previous;
   const message = await channel.send(payload);
+  await sendExtra();
   return {
     channelId: job.channel,
     messageId: message.id,

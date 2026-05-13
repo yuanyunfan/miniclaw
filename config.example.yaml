@@ -66,6 +66,28 @@ model:
   # routing.smart_router.llm_classifier.provider overrides this when set.
   default_client: auto # auto | raven | anthropic | openai | openai_compatible | codex
 
+im:
+  # Discord remains the default interactive gateway. Feishu is currently
+  # outbound-only for cron/task result fanout validation.
+  default_transport: discord # discord | feishu
+  transports:
+    discord:
+      enabled: true
+    feishu:
+      enabled: false
+      # Prefer env for webhook secrets:
+      #   MINICLAW_FEISHU_WEBHOOK_URL
+      #   MINICLAW_FEISHU_SECRET
+      # webhook_url: "https://open.feishu.cn/open-apis/bot/v2/hook/..."
+      # secret: ""
+  routes:
+    # Logical route used by cron delivery_route. Existing cron channel stays the
+    # primary Discord target; these targets receive extra outbound delivery.
+    # daily-watchlist-stock:
+    #   targets:
+    #     - transport: feishu
+    #       target: default
+
 agent:
   # Legacy compatibility alias. Keep it during transition; new task execution uses runtime.default_agent.
   provider: codex # claude | codex
