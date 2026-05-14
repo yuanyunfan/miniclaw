@@ -1,9 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { config } from "../config.js";
-import { addMemory, getAllMemories } from "../store/memory.js";
+import { getAllMemories } from "../store/memory.js";
 import { createLogger } from "../lib/log.js";
 import { loadPrompt } from "../agent/prompts.js";
 import { codexInput, codexThreadOptions, getCodexClient } from "../agent/codex.js";
+import { curateAndApplyMemoryCandidates, type RawMemoryCandidate } from "./curation.js";
 
 const log = createLogger("memory-extract");
 
@@ -12,6 +13,18 @@ function buildExtractUserPrompt(userMsg: string, assistantReply: string, existin
 }
 
 const EXTRACT_SYSTEM = loadPrompt("memory-extractor");
+
+function applyExtractedItems(items: unknown): void {
+  if (!Array.isArray(items)) return;
+  const results = curateAndApplyMemoryCandidates(items as RawMemoryCandidate[], {
+    source: "auto_extract",
+  });
+  const rejected = results.filter((r) => r.decision.action === "reject").length;
+  const written = results.filter((r) => r.row).length;
+  if (rejected || written) {
+    log.info(`memory extraction applied written=${written} rejected=${rejected} total=${results.length}`);
+  }
+}
 
 export async function extractMemories(
   userMsg: string,
@@ -24,9 +37,11 @@ export async function extractMemories(
   if (greetings.test(userMsg.trim())) return;
 
   try {
-    const existing = existingMemories ?? getAllMemories().map((m) => ({
-      type: m.type, name: m.name, content: m.content,
-    }));
+    const existing = existingMemories ?? getAllMemories()
+      .filter((m) => m.status !== "archived")
+      .map((m) => ({
+        type: m.type, name: m.name, content: m.content,
+      }));
 
     const existingBlock = existing.length
       ? `\n已有记忆:\n${existing.map((m) => `- [${m.type}] ${m.name}: ${m.content}`).join("\n")}`
@@ -45,6 +60,7 @@ export async function extractMemories(
                 type: { type: "string" },
                 name: { type: "string" },
                 content: { type: "string" },
+                confidence: { type: "number" },
               },
               required: ["type", "name", "content"],
               additionalProperties: false,
@@ -61,13 +77,7 @@ export async function extractMemories(
         { outputSchema: schema },
       );
       const parsed = JSON.parse(turn.finalResponse) as { items?: Array<{ type: string; name: string; content: string }> };
-      const items = parsed.items;
-      if (!Array.isArray(items)) return;
-      for (const item of items) {
-        if (item.type && item.name && item.content) {
-          addMemory(item.type, item.name.slice(0, 30), item.content);
-        }
-      }
+      applyExtractedItems(parsed.items);
       return;
     }
 
@@ -94,17 +104,10 @@ export async function extractMemories(
     const jsonMatch = text.match(/\[[\s\S]*\]/);
     if (!jsonMatch) return;
 
-    const items = JSON.parse(jsonMatch[0]) as Array<{ type: string; name: string; content: string }>;
-    if (!Array.isArray(items)) return;
-
-    for (const item of items) {
-      if (item.type && item.name && item.content) {
-        addMemory(item.type, item.name.slice(0, 30), item.content);
-      }
-    }
+    applyExtractedItems(JSON.parse(jsonMatch[0]));
   } catch (err) {
     log.error("Memory extraction failed:", err);
   }
 }
 
-export const __testables = { EXTRACT_SYSTEM, buildExtractUserPrompt };
+export const __testables = { EXTRACT_SYSTEM, applyExtractedItems, buildExtractUserPrompt };

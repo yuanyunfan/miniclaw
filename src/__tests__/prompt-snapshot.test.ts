@@ -30,7 +30,7 @@ describe("prompt snapshot baseline", () => {
   });
 
   it("memory.extract.system", () => {
-    expect(hash(extractT.EXTRACT_SYSTEM)).toMatchInlineSnapshot(`"5b7a402656cd0cf8"`);
+    expect(hash(extractT.EXTRACT_SYSTEM)).toMatchInlineSnapshot(`"a92ab53cf54ff87b"`);
   });
 
   it("memory.extract.user.fixture", () => {

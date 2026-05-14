@@ -663,7 +663,10 @@ export async function handleRemember(interaction: ChatInputCommandInteraction): 
   const type = interaction.options.getString("type") ?? "user";
   const name = interaction.options.getString("name") ?? content.slice(0, 30).replace(/\n/g, " ");
 
-  const row = addMemory(type, name, content);
+  const row = addMemory(type, name, content, {
+    source: "slash_remember",
+    ttl: type === "reference" ? "reference" : type === "project" ? "project" : "stable",
+  });
   await interaction.reply(`✅ 已记住: **${row.name}** (ID: ${row.id}, 类型: ${TYPE_LABELS[row.type] ?? row.type})`);
 }
 

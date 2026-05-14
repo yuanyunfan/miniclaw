@@ -64,6 +64,8 @@
     "provider:dry-run": "tsx scripts/provider-dry-run.ts",
     "market-forecasts": "tsx scripts/market-forecasts.ts",
     "market-calibration": "tsx scripts/market-forecast-calibration.ts",
+    "memory:maintenance": "tsx scripts/memory-maintenance.ts",
+    "memory:lint": "tsx scripts/memory-maintenance.ts --dry-run",
     "wechat-mp:login": "tsx scripts/wechat-mp-login.ts",
     "wechat-mp:check": "tsx scripts/wechat-mp-check.ts",
     "wechat-mp:collect": "tsx scripts/wechat-mp-collect.ts",

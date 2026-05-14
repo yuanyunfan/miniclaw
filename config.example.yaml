@@ -107,6 +107,14 @@ startup_watchdog:
   client_ready_timeout_ms: 60000
   macos_notification_enabled: true
 
+memory_maintenance:
+  # Background maintenance for ~/.miniclaw/memories/MEMORY.md.
+  # It never injects lifecycle metadata into task/chat prompts; metadata is for cleanup only.
+  enabled: true
+  interval_ms: 86400000 # 24 hours
+  apply: true
+  run_on_start: false
+
 tasks:
   trace_auto_attach:
     # Conservative default: keep automatic trace uploads off unless explicitly enabled.

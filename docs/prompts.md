@@ -7,13 +7,15 @@ miniclaw 的所有"长 system prompt"集中存放在 `prompts/` 目录，由 `sr
 | 文件 | 用途 | 调用方 | vars |
 |---|---|---|---|
 | `prompts/supervisor.md` | /task Supervisor 模式角色编排指南 | `src/agent/task.ts:buildSupervisorBlock` | `subagent_names` |
-| `prompts/memory-extractor.md` | 从对话提取长期记忆的 system prompt | `src/memory/extract.ts` | （空） |
+| `prompts/memory-extractor.md` | 从对话提取长期记忆候选的 system prompt；禁止 JSON/blob/log 直接成为 memory content | `src/memory/extract.ts` | （空） |
 | `prompts/stage-manager.md` | Stage auto 模式的 next_speaker 决策器 | `src/stage/stage-manager.ts` | （空） |
 | `prompts/templates/cron-pre-script-block.md` | cron pre_script stdout 注入包装 | `src/cron/runner-task.ts` | `script_name, output` |
 | `prompts/templates/cron-task-prompt.md` | cron type=task prompt 最外层包装 | `src/cron/runner-task.ts` | `job_name, prepended_context, user_prompt` |
 | `prompts/templates/cron-skill-prompt.md` | cron type=skill prompt | `src/cron/runner-task.ts` | `job_name, skill_name, args_block` |
 
 > 与 `agents/*.md`（subagent 角色定义）、`personas/*.md`（Stage 角色卡）、`~/.miniclaw/memories/MEMORY.md`（长期记忆）的区别：那些是**领域资产**，prompts 是**框架级 system prompt**。
+
+`memory-extractor` 只负责让 LLM 产生候选数组，不负责最终写入。候选会再经过 `src/memory/curation.ts` 的 type/name/content 校验、dirty content 拦截、canonical key 去重和合并决策；因此 prompt 里新增的 `confidence` 也只是候选 metadata，执行 task/chat 时不会被注入给下游 LLM。
 
 ## 文件格式
 

@@ -67,7 +67,10 @@ export async function handleChatMessage(
 
     const explicitMemory = parseExplicitMemory(content);
     if (explicitMemory) {
-      const row = addMemory(explicitMemory.type, explicitMemory.name, explicitMemory.content);
+      const row = addMemory(explicitMemory.type, explicitMemory.name, explicitMemory.content, {
+        source: "explicit_chat",
+        ttl: "stable",
+      });
       await message.reply(`✅ 已记住: **${row.name}** (ID: ${row.id})`);
       return;
     }

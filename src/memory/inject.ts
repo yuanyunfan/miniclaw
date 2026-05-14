@@ -8,7 +8,7 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 export function buildMemoryPrompt(maxChars = 4000): string {
-  const memories = getAllMemories();
+  const memories = getAllMemories().filter((memory) => memory.status !== "archived");
   if (!memories.length) return "";
 
   const grouped = new Map<string, MemoryRow[]>();

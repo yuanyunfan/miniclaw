@@ -4,17 +4,19 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 
 let addMemory: typeof import("../../store/memory-md.js").addMemory;
+let archiveMemory: typeof import("../../store/memory-md.js").archiveMemory;
 let deleteMemory: typeof import("../../store/memory-md.js").deleteMemory;
 let getAllMemories: typeof import("../../store/memory-md.js").getAllMemories;
 let getMemoriesByType: typeof import("../../store/memory-md.js").getMemoriesByType;
 let searchMemories: typeof import("../../store/memory-md.js").searchMemories;
+let upsertMemory: typeof import("../../store/memory-md.js").upsertMemory;
 
 beforeEach(async () => {
   // 每个测试隔离的 MEMORY.md
   const dir = mkdtempSync(join(tmpdir(), "miniclaw-mem-md-"));
   process.env.MINICLAW_MEMORY_PATH = join(dir, "MEMORY.md");
   vi.resetModules();
-  ({ addMemory, deleteMemory, getAllMemories, getMemoriesByType, searchMemories } = await import("../../store/memory-md.js"));
+  ({ addMemory, archiveMemory, deleteMemory, getAllMemories, getMemoriesByType, searchMemories, upsertMemory } = await import("../../store/memory-md.js"));
 });
 
 describe("memory-md (markdown 存储)", () => {
@@ -32,7 +34,25 @@ describe("memory-md (markdown 存储)", () => {
     const md = readFileSync(process.env.MINICLAW_MEMORY_PATH!, "utf8");
     expect(md).toContain("## 🧑 user");
     expect(md).toContain("test content");
-    expect(md).toContain(`id=${r.id}`);
+    expect(md).toContain(`id="${r.id}"`);
+  });
+
+  it("addMemory writes lifecycle metadata when provided", () => {
+    const r = addMemory("feedback", "discord format", "Discord 输出不要使用 markdown pipe table", {
+      source: "auto_extract",
+      ttl: "stable",
+      confidence: 0.91,
+      canonical_key: "feedback:discordformat",
+      now: "2026-05-14T00:00:00.000Z",
+    });
+    expect(r.source).toBe("auto_extract");
+    const md = readFileSync(process.env.MINICLAW_MEMORY_PATH!, "utf8");
+    expect(md).toContain('status="active"');
+    expect(md).toContain('ttl="stable"');
+    expect(md).toContain('source="auto_extract"');
+    expect(md).toContain('confidence="0.91"');
+    expect(md).toContain('canonical_key="feedback:discordformat"');
+    expect(md).toContain('created_at="2026-05-14T00:00:00.000Z"');
   });
 
   it("addMemory 同 (type, name) 更新内容不重复", () => {
@@ -111,6 +131,63 @@ fb item
     expect(rows.find((r) => r.id === "aaaa")?.content).toBe("hand-written user");
     expect(rows.find((r) => r.id === "bbbb")?.type).toBe("user");
     expect(rows.find((r) => r.id === "cccc")?.type).toBe("feedback");
+  });
+
+  it("round-trip：能解析扩展 metadata comment", () => {
+    const path = process.env.MINICLAW_MEMORY_PATH!;
+    const md = `# MiniClaw Memory
+
+## 🧑 user
+prefers Chinese
+<!-- name="语言偏好" id=abcd status="active" ttl="stable" source="auto_extract" confidence="0.9" canonical_key="user:language" created_at="2026-05-14T00:00:00.000Z" updated_at="2026-05-14T00:00:00.000Z" -->
+
+## 📋 project
+（暂无）
+
+## 💬 feedback
+（暂无）
+
+## 📚 reference
+（暂无）
+`;
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, md);
+    const rows = getAllMemories();
+    expect(rows[0]).toMatchObject({
+      id: "abcd",
+      name: "语言偏好",
+      status: "active",
+      ttl: "stable",
+      source: "auto_extract",
+      confidence: 0.9,
+      canonical_key: "user:language",
+      created_at: "2026-05-14T00:00:00.000Z",
+    });
+  });
+
+  it("upsertMemory can update by target id even when name changes", () => {
+    const r1 = addMemory("user", "old", "old content");
+    const r2 = upsertMemory({
+      type: "user",
+      name: "new",
+      content: "new content",
+      source: "maintenance_merge",
+      ttl: "stable",
+    }, { targetId: r1.id, now: "2026-05-14T00:00:00.000Z" });
+    expect(r2.id).toBe(r1.id);
+    expect(getAllMemories()).toHaveLength(1);
+    expect(getAllMemories()[0]).toMatchObject({ name: "new", content: "new content" });
+  });
+
+  it("archiveMemory marks a memory archived without deleting it", () => {
+    const r = addMemory("project", "old status", "当前临时状态", { ttl: "volatile" });
+    expect(archiveMemory(r.id, "stale", "2026-05-14T00:00:00.000Z")).toBe(true);
+    expect(getAllMemories()[0]).toMatchObject({
+      id: r.id,
+      status: "archived",
+      archived_at: "2026-05-14T00:00:00.000Z",
+      archive_reason: "stale",
+    });
   });
 
   it("缺 id 的条目被忽略（容错）", () => {

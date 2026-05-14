@@ -5,6 +5,10 @@ import { registerCommands } from "./commands/register.js";
 import { createBot } from "./bot.js";
 import { startScheduler, stopScheduler } from "./cron/scheduler.js";
 import { startConnectivityMonitor, type ConnectivityMonitorHandle } from "./monitoring/connectivity-monitor.js";
+import {
+  startMemoryMaintenanceScheduler,
+  type MemoryMaintenanceSchedulerHandle,
+} from "./memory/maintenance-scheduler.js";
 import { startPreClientReadyWatchdog, type PreClientReadyWatchdogHandle } from "./monitoring/pre-client-ready-watchdog.js";
 import { startDoctorScheduler, type DoctorSchedulerHandle } from "./ops/doctor-scheduler.js";
 import { createLogger } from "./lib/log.js";
@@ -29,6 +33,7 @@ import {
 const log = createLogger("main");
 let bot: ReturnType<typeof createBot> | null = null;
 let connectivityMonitor: ConnectivityMonitorHandle | null = null;
+let memoryMaintenanceScheduler: MemoryMaintenanceSchedulerHandle | null = null;
 let startupWatchdog: PreClientReadyWatchdogHandle | null = null;
 let doctorScheduler: DoctorSchedulerHandle | null = null;
 let shutdownPromise: Promise<void> | null = null;
@@ -45,6 +50,7 @@ async function beginGracefulShutdown(reason: string, force = false): Promise<voi
       `interrupted_tasks=${ids.join(",") || "none"} interrupted_chats=${chatIds.join(",") || "none"}`
     );
     connectivityMonitor?.stop();
+    memoryMaintenanceScheduler?.stop();
     startupWatchdog?.stop();
     doctorScheduler?.stop();
     stopScheduler();
@@ -61,6 +67,7 @@ async function beginGracefulShutdown(reason: string, force = false): Promise<voi
     beginDraining(reason);
     log.info("Shutting down: stopping connectivity monitor and cron scheduler");
     connectivityMonitor?.stop();
+    memoryMaintenanceScheduler?.stop();
     startupWatchdog?.stop();
     doctorScheduler?.stop();
     stopScheduler();
@@ -96,6 +103,7 @@ async function beginGracefulShutdown(reason: string, force = false): Promise<voi
     interruptActiveTasks(SHUTDOWN_FORCE_SUMMARY);
     interruptActiveChats(SHUTDOWN_FORCE_SUMMARY);
     connectivityMonitor?.stop();
+    memoryMaintenanceScheduler?.stop();
     startupWatchdog?.stop();
     doctorScheduler?.stop();
     stopScheduler();
@@ -117,6 +125,8 @@ async function main(): Promise<void> {
 
   initDb();
   log.info("Database initialized");
+
+  memoryMaintenanceScheduler = startMemoryMaintenanceScheduler(config.memoryMaintenance);
 
   if (config.registerCommandsOnStart) {
     await registerCommands();
@@ -159,6 +169,7 @@ main().catch(async (err) => {
   log.error("Fatal error:", err);
   await startupWatchdog?.notifyFailure("MiniClaw fatal error before Discord clientReady", err);
   connectivityMonitor?.stop();
+  memoryMaintenanceScheduler?.stop();
   startupWatchdog?.stop();
   doctorScheduler?.stop();
   void bot?.destroy();

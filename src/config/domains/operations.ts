@@ -81,6 +81,28 @@ export function buildOperationalRuntimeConfig(reader: ConfigReader, e2eMode: boo
         true
       ),
     },
+    memoryMaintenance: {
+      enabled: reader.boolValue(
+        ["memory_maintenance", "enabled"],
+        "MINICLAW_MEMORY_MAINTENANCE_ENABLED",
+        !e2eMode
+      ),
+      intervalMs: reader.positiveNumber(
+        ["memory_maintenance", "interval_ms"],
+        "MINICLAW_MEMORY_MAINTENANCE_INTERVAL_MS",
+        86_400_000
+      ),
+      apply: reader.boolValue(
+        ["memory_maintenance", "apply"],
+        "MINICLAW_MEMORY_MAINTENANCE_APPLY",
+        true
+      ),
+      runOnStart: reader.boolValue(
+        ["memory_maintenance", "run_on_start"],
+        "MINICLAW_MEMORY_MAINTENANCE_RUN_ON_START",
+        false
+      ),
+    },
     doctor: {
       enabled: reader.boolValue(["doctor", "enabled"], "MINICLAW_DOCTOR_ENABLED", true),
       autoDiagnoseEnabled: reader.boolValue(
