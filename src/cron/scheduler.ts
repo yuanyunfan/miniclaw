@@ -262,6 +262,7 @@ function safeConnectivitySnapshot() {
 function queueMissedCronFailureAlert(input: {
   job: CronJob;
   cronRunId: string;
+  failureRunId: string;
   taskId?: string;
   incidentId?: string;
   attempt: number;
@@ -277,6 +278,7 @@ function queueMissedCronFailureAlert(input: {
     enqueueCronFailureRecovery({
       channelId: input.job.channel,
       cronRunId: input.cronRunId,
+      failureRunId: input.failureRunId,
       jobName: input.job.name,
       jobType: input.job.type,
       status: input.status,
@@ -615,6 +617,7 @@ async function dispatch(
               queueMissedCronFailureAlert({
                 job,
                 cronRunId: cronRun.id,
+                failureRunId,
                 taskId: metadata.taskId,
                 incidentId,
                 attempt,
@@ -631,6 +634,7 @@ async function dispatch(
             queueMissedCronFailureAlert({
               job,
               cronRunId: cronRun.id,
+              failureRunId,
               taskId: metadata.taskId,
               incidentId,
               attempt,

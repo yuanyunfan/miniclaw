@@ -1,4 +1,5 @@
 import type { Client } from "discord.js";
+import { buildCronRetryActionRows, type CronRetryButtonDetails } from "../cron/failure-notifier.js";
 import { loadCronJobs } from "../cron/loader.js";
 import { createLogger } from "../lib/log.js";
 import { createDiscordTransport } from "../im/adapters/discord/transport.js";
@@ -22,6 +23,7 @@ interface CronFailureRecoveryPayload {
   job_type: string;
   status: string;
   cron_run_id: string;
+  failure_run_id?: string | null;
   task_id?: string | null;
   incident_id?: string | null;
   attempt: number;
@@ -48,6 +50,7 @@ interface TaskResultDeliveryPayload {
 export interface EnqueueCronFailureRecoveryInput {
   channelId: string;
   cronRunId: string;
+  failureRunId?: string | null;
   jobName: string;
   jobType: string;
   status: string;
@@ -103,6 +106,22 @@ function parseJsonObject<T>(row: RecoveryOutboxRow): T | undefined {
   }
 }
 
+function parseMetadataObject(row: CronRunRow): Record<string, unknown> | undefined {
+  if (!row.metadata_json) return undefined;
+  try {
+    const parsed = JSON.parse(row.metadata_json) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
+    return parsed as Record<string, unknown>;
+  } catch {
+    return undefined;
+  }
+}
+
+function failureRunIdFromMetadata(row: CronRunRow): string | undefined {
+  const value = parseMetadataObject(row)?.failure_run_id;
+  return typeof value === "string" && value ? value : undefined;
+}
+
 function shortId(id?: string | null): string {
   return id ? id.slice(0, 8) : "";
 }
@@ -118,6 +137,7 @@ function cronPayloadFromRow(row: CronRunRow, channelId: string, snapshot?: Conne
     job_type: row.job_type,
     status: row.status,
     cron_run_id: row.id,
+    failure_run_id: failureRunIdFromMetadata(row),
     task_id: row.task_id,
     incident_id: row.incident_id,
     attempt: row.attempt,
@@ -136,6 +156,7 @@ export function enqueueCronFailureRecovery(input: EnqueueCronFailureRecoveryInpu
     job_type: input.jobType,
     status: input.status,
     cron_run_id: input.cronRunId,
+    failure_run_id: input.failureRunId,
     task_id: input.taskId,
     incident_id: input.incidentId,
     attempt: input.attempt,
@@ -210,7 +231,27 @@ export function backfillCronMissedAlertsFromOutage(snapshot?: ConnectivitySnapsh
   return count;
 }
 
-function formatCronMissedAlertSummary(rows: RecoveryOutboxRow[]): string {
+function retryButtonsForRows(rows: RecoveryOutboxRow[]): CronRetryButtonDetails[] {
+  const seen = new Set<string>();
+  const buttons: CronRetryButtonDetails[] = [];
+  const payloads = rows
+    .map((row) => parseJsonObject<CronFailureRecoveryPayload>(row))
+    .filter((payload): payload is CronFailureRecoveryPayload => Boolean(payload));
+
+  for (let i = payloads.length - 1; i >= 0; i--) {
+    const payload = payloads[i];
+    const runId = payload.failure_run_id;
+    if (!runId || seen.has(runId)) continue;
+    seen.add(runId);
+    buttons.push({
+      runId,
+      label: `重试 ${payload.job_name}`,
+    });
+  }
+  return buttons.slice(0, 25);
+}
+
+function formatCronMissedAlertSummary(rows: RecoveryOutboxRow[], options: { retryButtonCount?: number } = {}): string {
   const payloads = rows
     .map((row) => parseJsonObject<CronFailureRecoveryPayload>(row))
     .filter((payload): payload is CronFailureRecoveryPayload => Boolean(payload));
@@ -232,6 +273,9 @@ function formatCronMissedAlertSummary(rows: RecoveryOutboxRow[]): string {
     }),
   ];
   if (payloads.length > 12) lines.push(`- 另有 ${payloads.length - 12} 条，使用 \`pnpm cron:runs -- --status failed\` 查看`);
+  if (options.retryButtonCount) {
+    lines.push("", `可点击下方 ${options.retryButtonCount} 个按钮立即重新执行对应定时任务。`);
+  }
   lines.push("", "这些失败在发生时没有成功写入 Discord alert_message_id；本消息是网络恢复后的汇总补发。");
   return lines.join("\n").slice(0, 2000);
 }
@@ -248,9 +292,11 @@ async function flushCronFailureAlerts(transport: IMTransport, rows: RecoveryOutb
 
   for (const [channelId, channelRows] of byChannel) {
     try {
+      const retryButtons = retryButtonsForRows(channelRows);
       const message = await transport.send({
         target: { transport: "discord", target: channelId },
-        content: formatCronMissedAlertSummary(channelRows),
+        content: formatCronMissedAlertSummary(channelRows, { retryButtonCount: retryButtons.length }),
+        components: buildCronRetryActionRows(retryButtons),
         metadata: { recovery_outbox_kind: "cron_failure_alert" },
       });
       const messageId = message.messageId || undefined;

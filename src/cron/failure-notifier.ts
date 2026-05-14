@@ -49,6 +49,11 @@ export interface CronRecoveredDetails {
   recoveredAt: Date;
 }
 
+export interface CronRetryButtonDetails {
+  runId: string;
+  label?: string;
+}
+
 function formatDuration(ms: number): string {
   const totalSeconds = Math.max(0, Math.round(ms / 1000));
   const minutes = Math.floor(totalSeconds / 60);
@@ -109,15 +114,36 @@ export function sanitizeCronError(error: string, maxChars = MAX_ERROR_CHARS): st
   return `${text.slice(0, maxChars - 16).trimEnd()} ... (truncated)`;
 }
 
+function validRetryRunId(runId: string): boolean {
+  return Boolean(runId) && runId.length <= 64 && /^[A-Za-z0-9_-]+$/.test(runId);
+}
+
+function retryButtonLabel(label?: string): string {
+  const normalized = label?.replace(/\s+/g, " ").trim();
+  if (!normalized) return "立即重新执行";
+  return normalized.length <= 80 ? normalized : normalized.slice(0, 80);
+}
+
+export function buildCronRetryActionRows(buttons: CronRetryButtonDetails[]): ActionRowBuilder<ButtonBuilder>[] {
+  const rows: ActionRowBuilder<ButtonBuilder>[] = [];
+  const validButtons = buttons.filter((button) => validRetryRunId(button.runId)).slice(0, 25);
+  for (let i = 0; i < validButtons.length; i += 5) {
+    const row = new ActionRowBuilder<ButtonBuilder>();
+    for (const button of validButtons.slice(i, i + 5)) {
+      row.addComponents(
+        new ButtonBuilder()
+          .setCustomId(buildCronRetryCustomId(button.runId))
+          .setLabel(retryButtonLabel(button.label))
+          .setStyle(ButtonStyle.Primary)
+      );
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
 function failureComponents(runId: string): ActionRowBuilder<ButtonBuilder>[] {
-  return [
-    new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId(buildCronRetryCustomId(runId))
-        .setLabel("立即重新执行")
-        .setStyle(ButtonStyle.Primary)
-    ),
-  ];
+  return buildCronRetryActionRows([{ runId }]);
 }
 
 function shortId(id: string): string {

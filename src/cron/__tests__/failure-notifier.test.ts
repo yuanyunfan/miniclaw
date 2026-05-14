@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCronFailurePayload,
+  buildCronRetryActionRows,
   buildCronRetryCustomId,
   parseCronRetryCustomId,
   sanitizeCronError,
@@ -80,5 +81,19 @@ describe("cron failure notifier", () => {
     expect(payload.content).toContain("/task-log id:task-abc");
     expect(payload.content).toContain("/incident view id:incident");
     expect(JSON.stringify(payload.components)).toContain("miniclaw:cron:retry:retry-chain-1");
+  });
+
+  it("builds bounded retry action rows for recovery summaries", () => {
+    const rows = buildCronRetryActionRows([
+      { runId: "chain-1", label: "重试 daily-job" },
+      { runId: "bad/value", label: "invalid" },
+      { runId: "chain-2", label: "x".repeat(120) },
+    ]);
+
+    const serialized = JSON.stringify(rows);
+    expect(rows).toHaveLength(1);
+    expect(serialized).toContain("miniclaw:cron:retry:chain-1");
+    expect(serialized).toContain("miniclaw:cron:retry:chain-2");
+    expect(serialized).not.toContain("bad/value");
   });
 });

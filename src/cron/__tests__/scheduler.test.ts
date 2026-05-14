@@ -505,6 +505,7 @@ describe("cron scheduler dispatch", () => {
     expect(outbox).toHaveLength(1);
     expect(outbox[0]?.cron_run_id).toBe(rows[0]?.id);
     expect(outbox[0]?.payload_json).toContain("slow-message");
+    expect(outbox[0]?.payload_json).toContain("failure_run_id");
   });
 
   it("同一次失败重试链路中后续失败会 edit 同一条失败通知", async () => {

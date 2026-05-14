@@ -68,6 +68,7 @@ describe("recovery outbox flush", () => {
       jobName: "daily-job",
       jobType: "message",
       startedAt: "2026-05-13T10:00:00.000Z",
+      metadata: { failure_run_id: "retry-chain-1" },
     });
     markCronRunFailed("cron-run-1", {
       completedAt: "2026-05-13T10:01:00.000Z",
@@ -91,8 +92,9 @@ describe("recovery outbox flush", () => {
     const result = await flushRecoveryOutbox(clientRecordingSends(sent), { snapshot });
 
     expect(result).toMatchObject({ backfilledCronAlerts: 1, cronAlertsDelivered: 1, failedAttempts: 0 });
-    expect(String(sent[0])).toContain("网络中断期间错过的定时任务失败通知");
-    expect(String(sent[0])).toContain("daily-job");
+    expect(JSON.stringify(sent[0])).toContain("网络中断期间错过的定时任务失败通知");
+    expect(JSON.stringify(sent[0])).toContain("daily-job");
+    expect(JSON.stringify(sent[0])).toContain("miniclaw:cron:retry:retry-chain-1");
     expect(getCronRun("cron-run-1")?.alert_message_id).toBe("msg-1");
     expect(listRecoveryOutbox({ kind: "cron_failure_alert" })[0]?.status).toBe("delivered");
   });

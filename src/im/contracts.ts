@@ -40,6 +40,7 @@ export interface SentMessage extends MessageRef {
 export interface SendMessageInput {
   target: IMDeliveryTarget;
   content: string;
+  components?: unknown[];
   metadata?: Record<string, unknown>;
 }
 
