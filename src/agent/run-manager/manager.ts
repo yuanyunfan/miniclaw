@@ -25,6 +25,7 @@ import {
   type ManagedEnvelopeMessage,
   type ManagedRunVerdict,
 } from "./envelope.js";
+import { resolveAgentRunManagerPolicy, type AgentRunManagerPolicy, type AgentRunManagerPolicyInput } from "./policy.js";
 
 const ALL_MESSAGE_KINDS: AgentMessageKind[] = [
   "finding",
@@ -46,6 +47,7 @@ export interface AgentRunManagerParams {
   channel: SendableChannels;
   statusMessage?: Message;
   deliveryChannelId?: string;
+  policy?: AgentRunManagerPolicyInput;
 }
 
 export interface ManagedFakeRunInput {
@@ -82,7 +84,6 @@ interface ManagedChildTurn {
   artifactIds: string[];
 }
 
-const MAX_FIX_ITERATIONS = 2;
 const MANAGED_ROLE_CAPABILITIES: Record<string, Pick<SpawnInput, "toolPolicyId" | "canWriteWorkspace" | "canSendKinds" | "canReceiveKinds">> = {
   planner: {
     toolPolicyId: "read-only",
@@ -118,9 +119,17 @@ function compactResult(prompt: string): string {
 }
 
 export class AgentRunManager {
-  readonly bus = new AgentBus();
+  readonly bus: AgentBus;
+  readonly policy: AgentRunManagerPolicy;
 
-  constructor(private readonly params: AgentRunManagerParams) {}
+  constructor(private readonly params: AgentRunManagerParams) {
+    this.policy = resolveAgentRunManagerPolicy(params.policy);
+    this.bus = new AgentBus({
+      maxMessages: this.policy.maxMessages,
+      maxArtifactBytes: this.policy.maxArtifactBytes,
+      maxPingPongTurns: this.policy.maxPingPongTurns,
+    });
+  }
 
   createRouteState(): DiscordRouteState {
     const task = getTask(this.params.taskId);
@@ -357,7 +366,7 @@ export class AgentRunManager {
         onViewEvent: input.onViewEvent,
       });
       if (input.signal.aborted) return this.cancelledResult(startedAt, sessionId);
-      if (!plannerTurn.result.success) return this.failedResult(startedAt, sessionId, root.id, "planner failed");
+      if (!plannerTurn.result.success) return this.failedResult(startedAt, sessionId, root.id, `planner failed: ${plannerTurn.result.result}`);
 
       let generatorTurn = await this.runGeneratorTurn({
         root,
@@ -368,11 +377,11 @@ export class AgentRunManager {
         onViewEvent: input.onViewEvent,
       });
       if (input.signal.aborted) return this.cancelledResult(startedAt, sessionId);
-      if (!generatorTurn.result.success) return this.failedResult(startedAt, sessionId, root.id, "generator failed");
+      if (!generatorTurn.result.success) return this.failedResult(startedAt, sessionId, root.id, `generator failed: ${generatorTurn.result.result}`);
 
       let finalVerdict: ManagedRunVerdict = "FAIL";
       let finalSummary = "";
-      const maxFixIterations = Math.max(0, input.maxFixIterations ?? MAX_FIX_ITERATIONS);
+      const maxFixIterations = Math.max(0, input.maxFixIterations ?? this.policy.maxFixIterations);
       for (let iteration = 0; iteration <= maxFixIterations; iteration++) {
         const evaluator = this.spawnManagedRole(root, "evaluator");
         const evaluatorTurn = await this.runProviderChild({
@@ -395,7 +404,7 @@ export class AgentRunManager {
           onViewEvent: input.onViewEvent,
         });
         if (input.signal.aborted) return this.cancelledResult(startedAt, sessionId);
-        if (!evaluatorTurn.result.success) return this.failedResult(startedAt, sessionId, root.id, "evaluator failed");
+        if (!evaluatorTurn.result.success) return this.failedResult(startedAt, sessionId, root.id, `evaluator failed: ${evaluatorTurn.result.result}`);
 
         finalVerdict = evaluatorTurn.envelope.verdict ?? this.inferVerdict(evaluatorTurn);
         finalSummary = evaluatorTurn.envelope.summary ?? evaluatorTurn.result.result;
@@ -437,7 +446,7 @@ export class AgentRunManager {
           onViewEvent: input.onViewEvent,
         });
         if (input.signal.aborted) return this.cancelledResult(startedAt, sessionId);
-        if (!generatorTurn.result.success) return this.failedResult(startedAt, sessionId, root.id, "generator fix failed");
+        if (!generatorTurn.result.success) return this.failedResult(startedAt, sessionId, root.id, `generator fix failed: ${generatorTurn.result.result}`);
       }
 
       updateRunStatus(root.id, "failed", { errorMessage: "evaluator returned FAIL after max fix iterations" });
@@ -456,6 +465,10 @@ export class AgentRunManager {
         progressLines: this.progressLinesForTask(),
         toolCount: 0,
       };
+    } catch (err) {
+      if (input.signal.aborted) return this.cancelledResult(startedAt, sessionId);
+      const message = err instanceof Error ? err.message : String(err);
+      return this.failedResult(startedAt, sessionId, root.id, message);
     } finally {
       input.signal.removeEventListener("abort", abortListener);
     }
@@ -499,6 +512,29 @@ export class AgentRunManager {
   }
 
   private spawnAgent(input: SpawnInput): AgentRun {
+    if (!input.parent.can_spawn) {
+      throw new Error(`Agent run ${input.parent.id} role=${input.parent.role} cannot spawn child runs`);
+    }
+    const spawnDepth = input.parent.spawn_depth + 1;
+    if (spawnDepth > this.policy.maxSpawnDepth) {
+      throw new Error(`Agent Run Manager spawn depth limit exceeded: next_depth=${spawnDepth} max_spawn_depth=${this.policy.maxSpawnDepth}`);
+    }
+    const existingRuns = listRunsForTask(this.params.taskId);
+    const childCount = existingRuns.filter((run) => run.parent_run_id === input.parent.id).length;
+    if (childCount >= this.policy.maxChildrenPerRun) {
+      throw new Error(`Agent Run Manager child fan-out limit exceeded for run ${input.parent.id}: max_children_per_run=${this.policy.maxChildrenPerRun}`);
+    }
+    const totalChildTurns = existingRuns.filter((run) => run.parent_run_id !== null).length;
+    if (totalChildTurns >= this.policy.maxTurns) {
+      throw new Error(`Agent Run Manager turn limit exceeded for task ${this.params.taskId}: max_turns=${this.policy.maxTurns}`);
+    }
+    const activeChildRuns = existingRuns.filter((run) =>
+      run.control_scope !== "root" && (run.status === "queued" || run.status === "running" || run.status === "waiting")
+    ).length;
+    if (activeChildRuns >= this.policy.maxConcurrentRuns) {
+      throw new Error(`Agent Run Manager concurrency limit exceeded for task ${this.params.taskId}: max_concurrent_runs=${this.policy.maxConcurrentRuns}`);
+    }
+
     const run = createRun({
       taskId: this.params.taskId,
       parentRunId: input.parent.id,
@@ -514,7 +550,7 @@ export class AgentRunManager {
       canWriteWorkspace: input.canWriteWorkspace ?? false,
       canSendKinds: input.canSendKinds ?? [],
       canReceiveKinds: input.canReceiveKinds ?? [],
-      spawnDepth: input.parent.spawn_depth + 1,
+      spawnDepth,
       providerSessionId: `${this.params.provider}:${input.role}:${this.params.taskId}`,
     });
     this.params.reporter.event("agent_run_started", {
@@ -580,39 +616,68 @@ export class AgentRunManager {
       title: `${input.run.role}: child run started`,
       countAsTool: false,
     }));
-    const result = await input.runtime.startTask({
-      taskId: this.params.taskId,
-      prompt: input.prompt,
-      cwd: this.params.cwd,
-      signal: input.signal,
-      onViewEvent: async (event) => {
-        if (event.type === "task_completed" || event.type === "task_failed" || event.type === "session_started") return;
-        if (event.type === "tool_progress") {
-          await input.onViewEvent(taskViewEvents.toolProgress({
-            provider: "agent-run-manager",
-            title: `${input.run.role}: ${event.title}`,
-            ...(event.detail ? { detail: event.detail } : {}),
-            ...(event.severity ? { severity: event.severity } : {}),
-            countAsTool: event.countAsTool ?? false,
-          }));
-          return;
-        }
-        await input.onViewEvent(event);
-      },
-      onTraceEvent: (eventType, options) => {
-        this.params.reporter.event(`agent_child_${eventType}`, {
-          ...(options?.severity ? { severity: options.severity } : {}),
-          ...(options?.message ? { message: options.message } : {}),
-          payload: {
-            run_id: input.run.id,
-            role: input.run.role,
-            runtime: input.runtime.id,
-            event_type: eventType,
-            ...(options?.payload !== undefined ? { child_payload: options.payload } : {}),
-          },
-        });
-      },
-    });
+    const childController = new AbortController();
+    let timedOut = false;
+    const forwardAbort = () => childController.abort(input.signal.reason);
+    if (input.signal.aborted) forwardAbort();
+    else input.signal.addEventListener("abort", forwardAbort, { once: true });
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      childController.abort(new Error(`${input.run.role} timed out after ${this.policy.timeoutMs}ms`));
+    }, this.policy.timeoutMs);
+    timeout.unref?.();
+
+    let result: AgentTaskResult;
+    try {
+      result = await input.runtime.startTask({
+        taskId: this.params.taskId,
+        prompt: input.prompt,
+        cwd: this.params.cwd,
+        signal: childController.signal,
+        onViewEvent: async (event) => {
+          if (event.type === "task_completed" || event.type === "task_failed" || event.type === "session_started") return;
+          if (event.type === "tool_progress") {
+            await input.onViewEvent(taskViewEvents.toolProgress({
+              provider: "agent-run-manager",
+              title: `${input.run.role}: ${event.title}`,
+              ...(event.detail ? { detail: event.detail } : {}),
+              ...(event.severity ? { severity: event.severity } : {}),
+              countAsTool: event.countAsTool ?? false,
+            }));
+            return;
+          }
+          await input.onViewEvent(event);
+        },
+        onTraceEvent: (eventType, options) => {
+          this.params.reporter.event(`agent_child_${eventType}`, {
+            ...(options?.severity ? { severity: options.severity } : {}),
+            ...(options?.message ? { message: options.message } : {}),
+            payload: {
+              run_id: input.run.id,
+              role: input.run.role,
+              runtime: input.runtime.id,
+              event_type: eventType,
+              ...(options?.payload !== undefined ? { child_payload: options.payload } : {}),
+            },
+          });
+        },
+      });
+    } catch (err) {
+      if (!timedOut) throw err;
+      result = {
+        success: false,
+        sessionId: `${this.params.provider}:${input.run.role}:timeout`,
+        costUsd: 0,
+        durationMs: this.policy.timeoutMs,
+        turns: 0,
+        result: `${input.run.role} timed out after ${this.policy.timeoutMs}ms`,
+        progressLines: [],
+        toolCount: 0,
+      };
+    } finally {
+      clearTimeout(timeout);
+      input.signal.removeEventListener("abort", forwardAbort);
+    }
 
     if (input.signal.aborted) {
       updateRunStatus(input.run.id, "cancelled", {
@@ -622,6 +687,37 @@ export class AgentRunManager {
       return {
         run: input.run,
         result: { ...result, success: false, result: "任务已被用户取消" },
+        envelope: { messages: [], artifacts: [], blackboard_facts: [] },
+        messages: [],
+        artifactIds: [],
+      };
+    }
+
+    if (timedOut) {
+      result = {
+        ...result,
+        success: false,
+        durationMs: Math.max(result.durationMs, this.policy.timeoutMs),
+        result: `${input.run.role} timed out after ${this.policy.timeoutMs}ms`,
+      };
+      updateRunStatus(input.run.id, "failed", {
+        providerSessionId: result.sessionId,
+        errorMessage: result.result,
+      });
+      this.params.reporter.event("agent_run_completed", {
+        severity: "error",
+        payload: {
+          run_id: input.run.id,
+          role: input.run.role,
+          status: "failed",
+          provider_session_id: result.sessionId,
+          reason: "timeout",
+          timeout_ms: this.policy.timeoutMs,
+        },
+      });
+      return {
+        run: input.run,
+        result,
         envelope: { messages: [], artifacts: [], blackboard_facts: [] },
         messages: [],
         artifactIds: [],

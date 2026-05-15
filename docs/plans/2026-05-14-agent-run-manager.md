@@ -692,6 +692,7 @@ Snapshot date: 2026-05-15.
 - **`executeTask()` feature flag integration**: `agent_run_manager.enabled=false` 时保持 single-agent path；开启后可进入 Agent Run Manager path。默认仍关闭。
 - **Managed turn-end envelope fallback**: Codex / Claude child mode 已能通过 `miniclaw_agent_envelope` JSON 回传 summary/message/artifact/blackboard/verdict，Manager 解析后写入 durable collaboration state。
 - **Bounded evaluator fix loop and cancellation cascade**: evaluator `FAIL` 可触发 bounded generator fix loop；root cancellation 会级联取消 active child runs 并写入 durable store。
+- **Manager guardrails config + enforcement**: `agent_run_manager` 已支持 `max_turns`、`timeout_ms`、`max_messages`、`max_artifact_bytes`、`max_spawn_depth`、`max_children_per_run`、`max_concurrent_runs`、`max_ping_pong_turns`、`cleanup_ttl_ms`、`max_fix_iterations` 配置；Manager/Bus 会在 spawn、message append、artifact write、child runtime timeout 和 evaluator fix loop 上执行对应限制。`cleanup_ttl_ms` 目前只作为 sweeper/recovery 的配置输入，真正 stale run 清理仍在后续切片。
 - **Minimal ACP adapter/server**: 已有 localhost ACP-style manifest、external run、message、artifact reference、blackboard API 和 fake round-trip 测试；默认不做公开 marketplace。
 - **Agent Bus MCP compatibility surface**: `miniclaw-agent-bus` MCP-compatible tool surface 已有 `post_message/read_mailbox/write_artifact/read_artifact/list_blackboard/upsert_blackboard_fact`，并提供 `pnpm run mcp:agent-bus` 入口。
 - **Architecture doc sync**: `docs/architecture.md` 已记录 Agent Run Manager 当前受控插入层、managed envelope fallback、MCP tool surface 和 ACP adapter 状态。
@@ -706,11 +707,62 @@ Snapshot date: 2026-05-15.
 ### Not Yet Implemented
 
 - **Live MCP bus injection into real child runtime**: MCP server 和 tool handlers 已存在，但真实 Codex / Claude child session 启动时还没有自动注入 bus MCP server/env/tool config；真实 child 仍主要依赖 turn-end envelope fallback。
-- **Manager guardrails as config + enforcement**: 还没有系统化实现 `max_turns`、`timeout_ms`、`max_messages`、`max_artifact_bytes`、`max_spawn_depth`、`max_children_per_run`、`max_concurrent_runs`、`max_ping_pong_turns`、`cleanup_ttl_ms`。
 - **Sweeper / restart recovery**: 还没有定期 sweeper 处理 stale active runs、timeout、cancelled parent、orphaned child 和 restart recovery。
 - **ACP production lifecycle and hardening**: 还没有正式挂入 app lifecycle/config，也没有补齐 rate limit、payload size limit、redaction policy 和 trace export。
 - **Complexity classifier routing**: 还没有按 task complexity 自动进入 managed path；当前仍以 `agent_run_manager.enabled` flag 为主。
 - **Full documentation promotion**: 还没有新增正式 `docs/features/21-agent-run-manager.md`，`docs/prompts.md` 也还没有登记 manager/envelope prompt asset，`docs/features/19-agent-prompt-context-audit.md` 还没有更新 Codex Supervisor prompt 修复状态。
+
+## Next Phase Plan
+
+Phase 2 目标是把 first implementation skeleton 推进到可长期运行的 managed task path。每个切片必须能独立验证，且 `agent_run_manager.enabled=false` 时 single-agent path 继续保持不变。
+
+### C0 - Status and Slice Planning
+
+- 在本计划文档中维护 completed / partially implemented / not yet implemented 的单一状态段落。
+- 将下一阶段拆成可 review、可 revert 的 C-slices，避免把 live runtime injection、scheduler、sweeper 和 ACP hardening 混入一个大改动。
+- Verification: `pnpm run quality:docs`。
+
+### C1 - Guardrails and Policy Enforcement
+
+- 增加 `agent_run_manager` policy config 和 env override。
+- 在 Manager spawn path 强制 `max_spawn_depth`、`max_children_per_run`、`max_concurrent_runs`、`max_turns`。
+- 在 Bus path 强制 `max_messages`、`max_artifact_bytes`、`max_ping_pong_turns`。
+- 在 managed child runtime path 强制 `timeout_ms`，并把 `max_fix_iterations` 从硬编码迁入 policy。
+- Verification: config tests、Agent Bus tests、managed runtime tests、`pnpm run build`。
+
+### C2 - Live MCP Bus Injection
+
+- 为真实 Codex / Claude managed child session 增加 managed context contract，让 `AgentRuntime.startTask()` 或 child runner 能接收 bus MCP server/env/tool config。
+- Codex runner 需要把 `miniclaw-agent-bus` 暴露给 child session；Claude runner 需要把已有 `mcpServers` / `allowedTools` 注入点和 role policy 对齐。
+- 保留 turn-end `miniclaw_agent_envelope` fallback，live bus failure 不应破坏 managed run。
+- Verification: fake MCP bus fixture、Codex/Claude runner unit tests、managed runtime fallback regression。
+
+### C3 - Dynamic Scheduler and Yield/Resume
+
+- 将固定 `planner -> generator -> evaluator` 控制流抽象成 Supervisor-owned DAG/FSM scheduler。
+- `yield_until_child_event` / `wait_for_message` 需要能把 Supervisor 置为 waiting，并在 direct child event 到达后恢复 orchestration。
+- 增加 scheduler state persistence，为 restart recovery 做准备。
+- Verification: dynamic spawn fixture、direct wake without polling、cancel during waiting、max depth/fan-out regression。
+
+### C4 - Role Policy Enforcement at Runtime Boundary
+
+- 把 `tool_policy_id`、`can_write_workspace`、`can_send_kinds` 从记录/prompt 约束推进到 runtime 启动层。
+- Codex child 应按角色应用 sandbox、dangerous command policy、workspace write policy；Claude child 应对齐 allowed tools / canUseTool。
+- Generator-only write 和 read-only planner/evaluator 需要有负向测试。
+- Verification: per-role runner config tests、dangerous command denial fixture、generator write positive path。
+
+### C5 - Sweeper and Restart Recovery
+
+- 增加 scheduled sweeper 处理 stale active runs、orphaned child、timeout、cancelled parent 和 restart recovery。
+- 使用 `cleanup_ttl_ms` 控制 durable state cleanup，不删除用户工作区产物，artifact cleanup 只处理 manager-owned artifact path。
+- Verification: stale run fixture、orphan child fixture、restart recovery simulation、state cleanup dry-run。
+
+### C6 - ACP Lifecycle, Classifier Routing, and Docs Promotion
+
+- 将 ACP server 挂入 app lifecycle/config，补 rate limit、payload size limit、redaction policy、trace export。
+- 增加 complexity classifier，让复杂任务可自动选择 managed path；保留显式 flag 作为 override / rollback。
+- 生成正式 `docs/features/21-agent-run-manager.md`，同步 `docs/prompts.md`、`docs/features/19-agent-prompt-context-audit.md`、`docs/README.md`。
+- Verification: ACP lifecycle tests、classifier routing tests、docs quality gate、single-agent regression。
 
 ## Non-Blocking Follow-Ups
 
@@ -738,3 +790,4 @@ Snapshot date: 2026-05-15.
 - 2026-05-15: 明确 MiniClaw 第一阶段不是多 Discord 账号 / multi-account gateway，而是在一个 Discord bot 账号内实现 task-scoped dynamic spawn。新增 single-account route state、OpenClaw 可借鉴边界、Manager `spawn_agent` / `yield_until_child_event` 设计要求。
 - 2026-05-15: 收敛 OpenClaw 调研章节，只保留 Agent Run Manager 相关实现摘要；将可借鉴点下沉到 MiniClaw 的目标执行模型、数据模型、通信契约、执行流程、权限安全和 Discord route state 章节。
 - 2026-05-15: 将文档从设计讨论进一步收敛为执行文档：锁定第一阶段决策、补充 required indexes / repository API、重排 implementation plan、增加 Definition of Done，并把阻塞性未决项改为非阻塞后续项。
+- 2026-05-15: Phase 2 C0/C1 已落地：新增下一阶段 C-slice 计划，并实现 Agent Run Manager policy/guardrails 配置与 Manager/Bus enforcement。

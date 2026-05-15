@@ -62,9 +62,22 @@ runtime:
   default_agent: codex # claude | codex
 
 agent_run_manager:
-  # First-phase managed multi-agent path. Disabled by default; when enabled,
-  # current verified support is the fake runtime skeleton used by E2E tests.
+  # Managed multi-agent path. Disabled by default; enabling it routes /task
+  # through the Agent Run Manager instead of the single-agent runtime.
   enabled: false
+  # Guardrails are enforced by the manager/bus before spawning children,
+  # appending messages, or writing artifacts. Keep these conservative until
+  # live MCP bus injection and restart recovery are fully hardened.
+  max_turns: 12
+  timeout_ms: 1800000 # 30 minutes per managed child run
+  max_messages: 100
+  max_artifact_bytes: 1000000
+  max_spawn_depth: 1
+  max_children_per_run: 8
+  max_concurrent_runs: 3
+  max_ping_pong_turns: 8
+  cleanup_ttl_ms: 86400000 # 24 hours, consumed by future sweeper/recovery
+  max_fix_iterations: 2
 
 model:
   # Preferred short-call ModelClient default for router/doctor-style calls.

@@ -102,4 +102,55 @@ describe("AgentBus", () => {
       timeoutMs: 5,
     })).rejects.toThrow(/Timed out waiting for agent message/);
   });
+
+  it("enforces message and ping-pong guardrails", () => {
+    const planner = makeRun("run-planner", "planner", ["handoff", "question"], ["answer"]);
+    const generator = makeRun("run-generator", "generator", ["answer"], ["handoff", "question"]);
+    const bus = new AgentBus({ maxMessages: 1, maxPingPongTurns: 1 });
+
+    const first = bus.sendMessage({
+      taskId: "task-bus",
+      fromRunId: planner.id,
+      toRunId: generator.id,
+      kind: "handoff",
+      contentText: "first",
+    });
+
+    expect(() =>
+      bus.sendMessage({
+        taskId: "task-bus",
+        fromRunId: planner.id,
+        toRunId: generator.id,
+        kind: "question",
+        contentText: "second",
+      })
+    ).toThrow(/message limit exceeded/);
+
+    const pingPongBus = new AgentBus({ maxMessages: 10, maxPingPongTurns: 1 });
+    expect(() =>
+      pingPongBus.sendMessage({
+        taskId: "task-bus",
+        fromRunId: generator.id,
+        toRunId: planner.id,
+        kind: "answer",
+        contentText: "reply",
+        causalMessageId: first.id,
+      })
+    ).toThrow(/ping-pong limit exceeded/);
+  });
+
+  it("enforces artifact byte guardrails before writing content", () => {
+    const generator = makeRun("run-generator", "generator", ["artifact"], ["handoff"]);
+    const bus = new AgentBus({ maxArtifactBytes: 4 });
+
+    expect(() =>
+      bus.publishArtifact({
+        taskId: "task-bus",
+        runId: generator.id,
+        kind: "markdown",
+        cwd: tmp,
+        content: "12345",
+      })
+    ).toThrow(/artifact limit exceeded/);
+  });
 });

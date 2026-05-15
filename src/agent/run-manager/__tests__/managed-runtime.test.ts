@@ -163,6 +163,63 @@ describe("AgentRunManager managed runtime fallback", () => {
     expect(listRunsForTask("task-managed-runtime").find((run) => run.role === "supervisor")?.status).toBe("failed");
   });
 
+  it("applies policy guardrails before spawning child runs beyond max turns", async () => {
+    const runtime = fakeRuntime([
+      taskResult(envelope({ summary: "planner ready" }), "codex:planner"),
+    ]);
+    const manager = new AgentRunManager({
+      taskId: "task-managed-runtime",
+      cwd: tmp,
+      provider: "codex",
+      reporter: new TaskReporter("task-managed-runtime"),
+      channel: fakeChannel() as never,
+      policy: { maxTurns: 1 },
+    });
+
+    const result = await manager.runManagedRuntime({
+      prompt: "managed runtime task",
+      runtime,
+      signal: new AbortController().signal,
+      onViewEvent: () => undefined,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.result).toContain("max_turns=1");
+    expect(listRunsForTask("task-managed-runtime").map((run) => run.role)).toEqual(["supervisor", "planner"]);
+    expect(listRunsForTask("task-managed-runtime").find((run) => run.role === "supervisor")?.status).toBe("failed");
+  });
+
+  it("times out managed child runs with a controlled failure", async () => {
+    const runtime: AgentRuntime = {
+      id: "codex",
+      kind: "coding_agent",
+      capabilities: { resumeSession: true, cancel: true, toolEvents: true, workspaceWrite: true },
+      startTask: vi.fn(async (input) => {
+        await new Promise<void>((resolve) => input.signal.addEventListener("abort", () => resolve(), { once: true }));
+        return taskResult("aborted", "codex:timeout", false);
+      }),
+    };
+    const manager = new AgentRunManager({
+      taskId: "task-managed-runtime",
+      cwd: tmp,
+      provider: "codex",
+      reporter: new TaskReporter("task-managed-runtime"),
+      channel: fakeChannel() as never,
+      policy: { timeoutMs: 5 },
+    });
+
+    const result = await manager.runManagedRuntime({
+      prompt: "managed runtime task",
+      runtime,
+      signal: new AbortController().signal,
+      onViewEvent: () => undefined,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.result).toContain("planner timed out after 5ms");
+    expect(listRunsForTask("task-managed-runtime").find((run) => run.role === "planner")?.status).toBe("failed");
+  });
+
   it("cascades root cancellation into active child runs", async () => {
     let childInput: AgentTaskInput | undefined;
     let childStarted: (() => void) | undefined;

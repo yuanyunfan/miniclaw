@@ -347,6 +347,7 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
           provider: config.e2e.fakeAgent ? "fake" : selectedRuntime.provider === "claude" ? "claude" : "codex",
           reporter,
           channel: params.channel,
+          policy: config.agentRunManager.policy,
           ...(params.statusMessage ? { statusMessage: params.statusMessage } : {}),
           ...(params.deliveryChannelId ? { deliveryChannelId: params.deliveryChannelId } : {}),
         })

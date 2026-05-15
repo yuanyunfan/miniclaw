@@ -15,6 +15,17 @@ const ENV_KEYS = [
   "MINICLAW_AGENT_PROVIDER",
   "MINICLAW_RUNTIME_DEFAULT_AGENT",
   "MINICLAW_AGENT_RUN_MANAGER_ENABLED",
+  "MINICLAW_AGENT_RUN_MANAGER_MAX_TURNS",
+  "MINICLAW_AGENT_RUN_MANAGER_TIMEOUT_MS",
+  "MINICLAW_AGENT_RUN_MANAGER_CHILD_TIMEOUT_MS",
+  "MINICLAW_AGENT_RUN_MANAGER_MAX_MESSAGES",
+  "MINICLAW_AGENT_RUN_MANAGER_MAX_ARTIFACT_BYTES",
+  "MINICLAW_AGENT_RUN_MANAGER_MAX_SPAWN_DEPTH",
+  "MINICLAW_AGENT_RUN_MANAGER_MAX_CHILDREN_PER_RUN",
+  "MINICLAW_AGENT_RUN_MANAGER_MAX_CONCURRENT_RUNS",
+  "MINICLAW_AGENT_RUN_MANAGER_MAX_PING_PONG_TURNS",
+  "MINICLAW_AGENT_RUN_MANAGER_CLEANUP_TTL_MS",
+  "MINICLAW_AGENT_RUN_MANAGER_MAX_FIX_ITERATIONS",
   "MINICLAW_MODEL_DEFAULT_CLIENT",
   "MINICLAW_IM_DEFAULT_TRANSPORT",
   "MINICLAW_IM_DISCORD_ENABLED",
@@ -215,6 +226,16 @@ runtime:
   default_agent: claude
 agent_run_manager:
   enabled: true
+  max_turns: 9
+  timeout_ms: 12345
+  max_messages: 55
+  max_artifact_bytes: 98765
+  max_spawn_depth: 2
+  max_children_per_run: 4
+  max_concurrent_runs: 3
+  max_ping_pong_turns: 6
+  cleanup_ttl_ms: 54321
+  max_fix_iterations: 1
 model:
   default_client: openai
 im:
@@ -332,6 +353,18 @@ notifications:
     expect(config.agentProvider).toBe("codex");
     expect(config.runtime.defaultAgent).toBe("claude");
     expect(config.agentRunManager.enabled).toBe(true);
+    expect(config.agentRunManager.policy).toEqual({
+      maxTurns: 9,
+      timeoutMs: 12345,
+      maxMessages: 55,
+      maxArtifactBytes: 98765,
+      maxSpawnDepth: 2,
+      maxChildrenPerRun: 4,
+      maxConcurrentRuns: 3,
+      maxPingPongTurns: 6,
+      cleanupTtlMs: 54321,
+      maxFixIterations: 1,
+    });
     expect(config.model).toBe("claude-test");
     expect(config.modelClient.defaultClient).toBe("openai");
     expect(config.im).toEqual({
@@ -493,6 +526,18 @@ storage:
       maxBytes: 120000,
     });
     expect(config.agentRunManager.enabled).toBe(false);
+    expect(config.agentRunManager.policy).toEqual({
+      maxTurns: 12,
+      timeoutMs: 1800000,
+      maxMessages: 100,
+      maxArtifactBytes: 1000000,
+      maxSpawnDepth: 1,
+      maxChildrenPerRun: 8,
+      maxConcurrentRuns: 3,
+      maxPingPongTurns: 8,
+      cleanupTtlMs: 86400000,
+      maxFixIterations: 2,
+    });
     expect(config.state.retention).toEqual({
       chatHistoryDays: 90,
       taskEventsDays: 90,
@@ -635,10 +680,32 @@ storage:
     process.env.MINICLAW_CONFIG = cfg;
     process.env.DISCORD_TOKEN = "token-env";
     process.env.MINICLAW_AGENT_RUN_MANAGER_ENABLED = "true";
+    process.env.MINICLAW_AGENT_RUN_MANAGER_MAX_TURNS = "7";
+    process.env.MINICLAW_AGENT_RUN_MANAGER_CHILD_TIMEOUT_MS = "2222";
+    process.env.MINICLAW_AGENT_RUN_MANAGER_MAX_MESSAGES = "44";
+    process.env.MINICLAW_AGENT_RUN_MANAGER_MAX_ARTIFACT_BYTES = "3333";
+    process.env.MINICLAW_AGENT_RUN_MANAGER_MAX_SPAWN_DEPTH = "0";
+    process.env.MINICLAW_AGENT_RUN_MANAGER_MAX_CHILDREN_PER_RUN = "5";
+    process.env.MINICLAW_AGENT_RUN_MANAGER_MAX_CONCURRENT_RUNS = "2";
+    process.env.MINICLAW_AGENT_RUN_MANAGER_MAX_PING_PONG_TURNS = "1";
+    process.env.MINICLAW_AGENT_RUN_MANAGER_CLEANUP_TTL_MS = "9999";
+    process.env.MINICLAW_AGENT_RUN_MANAGER_MAX_FIX_ITERATIONS = "0";
 
     const { config } = await import("../config.js");
 
     expect(config.agentRunManager.enabled).toBe(true);
+    expect(config.agentRunManager.policy).toEqual({
+      maxTurns: 7,
+      timeoutMs: 2222,
+      maxMessages: 44,
+      maxArtifactBytes: 3333,
+      maxSpawnDepth: 0,
+      maxChildrenPerRun: 5,
+      maxConcurrentRuns: 2,
+      maxPingPongTurns: 1,
+      cleanupTtlMs: 9999,
+      maxFixIterations: 0,
+    });
   });
 
   it("supports state retention env overrides", async () => {

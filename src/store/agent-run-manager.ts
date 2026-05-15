@@ -376,6 +376,13 @@ export function getMessage(id: string): AgentMessage | undefined {
   return row ? toMessage(row) : undefined;
 }
 
+export function countMessagesForTask(taskId: string): number {
+  const row = getDb()
+    .prepare("SELECT COUNT(*) AS count FROM agent_messages WHERE task_id = ?")
+    .get(taskId) as { count: number } | undefined;
+  return row?.count ?? 0;
+}
+
 export function readMailbox(input: { runId: string; afterCursor?: string; includeDelivered?: boolean }): AgentMessage[] {
   const params: Record<string, unknown> = { run_id: input.runId };
   let afterClause = "";
