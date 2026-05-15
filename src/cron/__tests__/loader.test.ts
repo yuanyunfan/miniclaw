@@ -176,6 +176,13 @@ circuit_breaker:
   failure_threshold: 4
   window_ms: 86400000
   open_ms: 3600000
+missed_run:
+  enabled: true
+  grace_ms: 120000
+  lookback_ms: 21600000
+  max_records: 2
+  catch_up: true
+  max_catch_up: 1
 content: "早安 {{date}}"
 `);
     const r = loadCronJobs();
@@ -190,6 +197,14 @@ content: "早安 {{date}}"
       failure_threshold: 4,
       window_ms: 86400000,
       open_ms: 3600000,
+    });
+    expect(r.jobs[0].missed_run).toEqual({
+      enabled: true,
+      grace_ms: 120000,
+      lookback_ms: 21600000,
+      max_records: 2,
+      catch_up: true,
+      max_catch_up: 1,
     });
     if (r.jobs[0].type === "message") {
       expect(r.jobs[0].content).toBe("早安 {{date}}");
@@ -402,6 +417,20 @@ content: hi
 `);
     const r = loadCronJobs();
     expect(r.errors[0].error).toMatch(/circuit_breaker\.enabled/);
+  });
+
+  it("missed_run 字段非法 → 拒绝", () => {
+    write("bad-missed-run.yaml", `
+name: x
+schedule: "0 9 * * *"
+type: message
+channel: "${VALID_CHANNEL}"
+missed_run:
+  catch_up: "yes"
+content: hi
+`);
+    const r = loadCronJobs();
+    expect(r.errors[0].error).toMatch(/missed_run\.catch_up/);
   });
 
   it("重名 job 第二个进 errors", () => {

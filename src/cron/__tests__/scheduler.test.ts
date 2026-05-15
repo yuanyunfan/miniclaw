@@ -81,6 +81,113 @@ describe("cron scheduler dispatch", () => {
     })).toEqual(["30 21-23 * * 1-5", "30 0 * * 2-6"]);
   });
 
+  it("enumerates expected schedules in the configured timezone", () => {
+    const expected = __testables.enumerateExpectedSchedules(
+      "10 8 * * *",
+      "Asia/Shanghai",
+      new Date("2026-05-15T00:00:00.000Z"),
+      new Date("2026-05-15T01:00:00.000Z"),
+    );
+
+    expect(expected?.map((date) => date.toISOString())).toEqual([
+      "2026-05-15T00:10:00.000Z",
+    ]);
+  });
+
+  it("missed-run audit records a missed cron_run and cron_missed incident", async () => {
+    const client = {} as Client;
+    const job: CronJobMessage = {
+      ...messageJob(),
+      name: "daily-github-trending",
+      schedule: "10 8 * * *",
+      timezone: "Asia/Shanghai",
+    };
+
+    const result = await __testables.auditMissedRuns(
+      [job],
+      client,
+      new Date("2026-05-15T03:00:00.000Z"),
+    );
+    const second = await __testables.auditMissedRuns(
+      [job],
+      client,
+      new Date("2026-05-15T03:01:00.000Z"),
+    );
+
+    expect(result.missed).toHaveLength(1);
+    expect(result.catchUpsStarted).toBe(0);
+    expect(second.missed).toHaveLength(0);
+    const rows = listCronRuns({ jobName: job.name, limit: 10 });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      status: "missed",
+      attempt: 0,
+      scheduled_at: "2026-05-15T00:10:00.000Z",
+      started_at: "2026-05-15T03:00:00.000Z",
+      completed_at: "2026-05-15T03:00:00.000Z",
+      error_category: "missed_execution",
+    });
+    expect(rows[0]?.incident_id).toBeTruthy();
+    const incident = getIncident(rows[0]!.incident_id!);
+    expect(incident).toMatchObject({
+      type: "cron_missed",
+      title: "Cron missed scheduled execution: daily-github-trending",
+      subject_id: "daily-github-trending",
+      subject_type: "cron",
+    });
+    expect(JSON.parse(incident?.diagnosis_json ?? "{}")).toMatchObject({
+      category: "cron_missed_execution",
+      repairAllowed: false,
+    });
+  });
+
+  it("missed-run audit can catch up opted-in digest jobs once", async () => {
+    let sends = 0;
+    const client = {
+      channels: {
+        fetch: async () => ({
+          isSendable: () => true,
+          send: async () => {
+            sends++;
+            return {};
+          },
+        }),
+      },
+    } as unknown as Client;
+    const job: CronJobMessage = {
+      ...messageJob(),
+      name: "morning-digest",
+      schedule: "10 8 * * *",
+      timezone: "Asia/Shanghai",
+      missed_run: {
+        catch_up: true,
+        max_catch_up: 1,
+      },
+    };
+
+    const result = await __testables.auditMissedRuns(
+      [job],
+      client,
+      new Date("2026-05-15T03:00:00.000Z"),
+    );
+
+    expect(result.missed).toHaveLength(1);
+    expect(result.catchUpsStarted).toBe(1);
+    expect(sends).toBe(1);
+    const rows = listCronRuns({ jobName: job.name, limit: 10 });
+    expect(rows.map((row) => row.status).sort()).toEqual(["missed", "success"]);
+    expect(rows.every((row) => row.scheduled_at === "2026-05-15T00:10:00.000Z")).toBe(true);
+
+    const second = await __testables.auditMissedRuns(
+      [job],
+      client,
+      new Date("2026-05-15T03:01:00.000Z"),
+    );
+    expect(second.missed).toHaveLength(0);
+    expect(second.catchUpsStarted).toBe(0);
+    expect(sends).toBe(1);
+  });
+
   it("同名 job 上一次未完成时跳过本次触发并记录 error", async () => {
     const gate = deferred();
     let sendStarted = false;

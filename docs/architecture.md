@@ -382,6 +382,9 @@ flowchart LR
     Boot[ClientReady] --> SS[startScheduler]
     SS --> LD[loadCronJobs<br/>scan ~/.miniclaw/cron/*.yaml]
     LD --> Reg[node-cron.schedule<br/>每个 enabled job 可注册一个或多个 ScheduledTask]
+    SS --> Audit[missed-run audit<br/>startup + 60s interval<br/>按 expected schedule 回看]
+    Audit --> Missed[cron_runs.status=missed<br/>cron_missed incident]
+    Audit -->|missed_run.catch_up=true| Disp
 
     subgraph Tick["定时触发 (每分钟检查)"]
         Reg --> Disp[dispatch<br/>按 job name 执行 max_concurrency / cooldown / circuit gate]
@@ -424,12 +427,12 @@ flowchart LR
     classDef runner fill:#f9f0ff,stroke:#722ed1
     classDef state fill:#f6ffed,stroke:#52c41a
     class Boot,SS boot
-    class LD,Reg,Disp,Retry,Guard,Run,Tick,Alert,Btn,Wake,Manual sched
+    class LD,Reg,Audit,Missed,Disp,Retry,Guard,Run,Tick,Alert,Btn,Wake,Manual sched
     class RT,RS,RK,RM,Spawn,PP,Spawn2,Parse,ET1,ET2,RT2 runner
     class State,Send1,Send2 state
 ```
 
-失败重试策略在 `scheduler.ts` 的调度层统一执行：定时触发的 job 首次失败后 10 分钟重试，之后每次间隔翻倍，最多总尝试 5 次；每次 attempt 都会写入 `~/.miniclaw/cron/state.json`。同名 job 的默认并发上限是 1，YAML 可用 `max_concurrency` 放宽；超出上限的触发会写入 `cron_runs.status=skipped`，不会静默丢失。YAML 可选 `timeout_ms` 包裹完整 job 路径；超时会 abort runner signal、写入 `cron_runs.error_category=cron_timeout`，并创建/更新 `cron_failed` incident 供后续 Doctor/repair 流程追踪。YAML 也可配置 `cooldown.after_failure_ms` 和 `circuit_breaker`；两者都从 durable `cron_runs` 计算，而不是只看 JSON state。cooldown 会在最近失败后的窗口内写入 `cron_runs.status=skipped` / `error_category=cooldown`，circuit breaker 会按最近成功之后、滚动窗口内的 `failed` / `retry_scheduled` 次数打开，并写入 `cron_runs.status=circuit_open` / `error_category=circuit_open` 与 open-until metadata。失败 attempt 会通过 `failure-notifier.ts` 向该 cron 的 Discord channel 发送或编辑一条短摘要，并附带 `立即重新执行` 按钮和排查入口：`cron_runs.id` 可用 `pnpm run cron:runs -- --id <prefix>` 查看详情，存在 `task_id` 时提示 `/task-log id:<task-prefix>`，存在 `incident_id` 时提示 `/incident view id:<incident-prefix>`。按钮 custom id 只包含随机 `failure_run_id`，不是 `cron_runs.id`；点击后由 `requestCronRetryNow()` 从本地 cron YAML 重新解析 job。如果原 job 正在 backoff，则唤醒当前 retry sleep，如果已经耗尽且当前同名运行数低于 `max_concurrency`，则启动一次 `NO_RETRY_POLICY` 单次重试。`pnpm cron:test <name>` 保持单次试跑，不进入长时间 retry 等待，也不发送失败重试按钮；`pnpm run cron:runs -- --summary` 可按 job 查看 durable history 汇总。
+失败重试策略在 `scheduler.ts` 的调度层统一执行：定时触发的 job 首次失败后 10 分钟重试，之后每次间隔翻倍，最多总尝试 5 次；每次 attempt 都会写入 `~/.miniclaw/cron/state.json`。同名 job 的默认并发上限是 1，YAML 可用 `max_concurrency` 放宽；超出上限的触发会写入 `cron_runs.status=skipped`，不会静默丢失。Scheduler 还会在启动时和每 60 秒运行 expected schedule audit：对 enabled job 的 cron 表达式按 timezone 回看默认 6 小时、跳过最近 2 分钟 grace window；如果某个应触发时间点在 `cron_runs` 中完全没有对应记录，会写入 `cron_runs.status=missed` / `attempt=0` / `error_category=missed_execution`，并创建 `cron_missed` incident。`missed_run.catch_up` 默认关闭；对 morning digest 类 job 可在 YAML 显式打开，audit 发现 missed 后会用原 scheduled_at 单次补跑，且仍受 `max_concurrency`、cooldown、circuit breaker 和正常失败告警保护。YAML 可选 `timeout_ms` 包裹完整 job 路径；超时会 abort runner signal、写入 `cron_runs.error_category=cron_timeout`，并创建/更新 `cron_failed` incident 供后续 Doctor/repair 流程追踪。YAML 也可配置 `cooldown.after_failure_ms` 和 `circuit_breaker`；两者都从 durable `cron_runs` 计算，而不是只看 JSON state。cooldown 会在最近失败后的窗口内写入 `cron_runs.status=skipped` / `error_category=cooldown`，circuit breaker 会按最近成功之后、滚动窗口内的 `failed` / `retry_scheduled` 次数打开，并写入 `cron_runs.status=circuit_open` / `error_category=circuit_open` 与 open-until metadata。失败 attempt 会通过 `failure-notifier.ts` 向该 cron 的 Discord channel 发送或编辑一条短摘要，并附带 `立即重新执行` 按钮和排查入口：`cron_runs.id` 可用 `pnpm run cron:runs -- --id <prefix>` 查看详情，存在 `task_id` 时提示 `/task-log id:<task-prefix>`，存在 `incident_id` 时提示 `/incident view id:<incident-prefix>`。按钮 custom id 只包含随机 `failure_run_id`，不是 `cron_runs.id`；点击后由 `requestCronRetryNow()` 从本地 cron YAML 重新解析 job。如果原 job 正在 backoff，则唤醒当前 retry sleep，如果已经耗尽且当前同名运行数低于 `max_concurrency`，则启动一次 `NO_RETRY_POLICY` 单次重试。`pnpm cron:test <name>` 保持单次试跑，不进入长时间 retry 等待，也不发送失败重试按钮；`pnpm run cron:runs -- --summary` 可按 job 查看 durable history 汇总。
 
 Discord 侧只读查询面由 `/cron-runs job:<optional> limit:<n>` 和 `/cron-run id:<run-prefix>` 提供：前者展示最近 durable run，后者按完整 id 或唯一前缀展示单条详情，并复用同一组 `cron_runs` formatter 和 task/incident operator hints。
 

@@ -94,7 +94,7 @@ export function formatCronRunSummary(rows: CronRunSummaryRow[]): string {
     ...rows.map((row) => [
       row.job_name,
       `- last: ${row.last_status} at ${row.last_started_at}`,
-      `- counts: total=${row.total_runs} success=${row.success_runs} failed=${row.failed_runs} retry_scheduled=${row.retry_scheduled_runs} skipped=${row.skipped_runs} circuit_open=${row.circuit_open_runs} running=${row.running_runs} cancelled=${row.cancelled_runs}`,
+      `- counts: total=${row.total_runs} success=${row.success_runs} failed=${row.failed_runs} retry_scheduled=${row.retry_scheduled_runs} missed=${row.missed_runs} skipped=${row.skipped_runs} circuit_open=${row.circuit_open_runs} running=${row.running_runs} cancelled=${row.cancelled_runs}`,
       `- avg_duration: ${formatDuration(row.avg_duration_ms)}`,
     ].join("\n")),
   ].join("\n\n");

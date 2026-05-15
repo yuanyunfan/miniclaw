@@ -12,6 +12,33 @@ export interface CronJobCircuitBreakerConfig {
   open_ms: number;
 }
 
+export interface CronJobMissedRunConfig {
+  /**
+   * Detect expected schedules that never reached dispatch. Defaults to true.
+   */
+  enabled?: boolean;
+  /**
+   * Do not audit the most recent schedule until this grace window has elapsed.
+   */
+  grace_ms?: number;
+  /**
+   * Startup/periodic audit lookback window. Defaults are applied by scheduler.
+   */
+  lookback_ms?: number;
+  /**
+   * Maximum missed schedule rows to record per job per audit pass.
+   */
+  max_records?: number;
+  /**
+   * Whether a detected missed schedule should be executed once as catch-up.
+   */
+  catch_up?: boolean;
+  /**
+   * Maximum catch-up dispatches per job per audit pass.
+   */
+  max_catch_up?: number;
+}
+
 export interface CronJobBase {
   name: string;
   schedule: string | string[];
@@ -43,6 +70,11 @@ export interface CronJobBase {
    * Optional rolling-window circuit breaker backed by durable cron_runs history.
    */
   circuit_breaker?: CronJobCircuitBreakerConfig;
+  /**
+   * Optional expected-schedule audit. A missed trigger is recorded as
+   * cron_runs.status=missed; catch_up is opt-in per job.
+   */
+  missed_run?: CronJobMissedRunConfig;
 }
 
 export interface CronJobTask extends CronJobBase {

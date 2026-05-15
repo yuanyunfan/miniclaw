@@ -8,6 +8,7 @@ import type {
   CronJobCircuitBreakerConfig,
   CronJobCooldownConfig,
   CronJobLoadResult,
+  CronJobMissedRunConfig,
   CronJobType,
   PreProviderPreflightMode,
 } from "./types.js";
@@ -22,6 +23,10 @@ const MAX_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_CIRCUIT_FAILURE_THRESHOLD = 100;
 const MAX_CIRCUIT_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_CIRCUIT_OPEN_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_MISSED_RUN_GRACE_MS = 24 * 60 * 60 * 1000;
+const MAX_MISSED_RUN_LOOKBACK_MS = 24 * 60 * 60 * 1000;
+const MAX_MISSED_RUN_RECORDS = 50;
+const MAX_MISSED_RUN_CATCH_UP = 10;
 const DEFAULT_CIRCUIT_FAILURE_THRESHOLD = 3;
 const DEFAULT_CIRCUIT_WINDOW_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_CIRCUIT_OPEN_MS = 60 * 60 * 1000;
@@ -52,6 +57,13 @@ channel: "REPLACE_WITH_DISCORD_CHANNEL_ID"
 #   failure_threshold: 3
 #   window_ms: 86400000
 #   open_ms: 3600000
+# missed_run:
+#   enabled: true
+#   grace_ms: 120000
+#   lookback_ms: 21600000
+#   max_records: 1
+#   catch_up: false
+#   max_catch_up: 1
 content: "早安！今天 {{date}} ({{weekday}})。"
 `;
 
@@ -149,6 +161,49 @@ function parseCircuitBreakerConfig(value: unknown, file: string): CronJobCircuit
   };
 }
 
+function parseMissedRunConfig(value: unknown, file: string): CronJobMissedRunConfig | undefined {
+  if (value === undefined) return undefined;
+  if (!isPlainObject(value)) throw new Error(`${file}: 'missed_run' 必须是对象`);
+  if (value.enabled !== undefined && typeof value.enabled !== "boolean") {
+    throw new Error(`${file}: 'missed_run.enabled' 必须是 boolean`);
+  }
+  if (value.catch_up !== undefined && typeof value.catch_up !== "boolean") {
+    throw new Error(`${file}: 'missed_run.catch_up' 必须是 boolean`);
+  }
+  const graceMs = parseOptionalPositiveInteger(
+    value.grace_ms,
+    file,
+    "missed_run.grace_ms",
+    MAX_MISSED_RUN_GRACE_MS
+  );
+  const lookbackMs = parseOptionalPositiveInteger(
+    value.lookback_ms,
+    file,
+    "missed_run.lookback_ms",
+    MAX_MISSED_RUN_LOOKBACK_MS
+  );
+  const maxRecords = parseOptionalPositiveInteger(
+    value.max_records,
+    file,
+    "missed_run.max_records",
+    MAX_MISSED_RUN_RECORDS
+  );
+  const maxCatchUp = parseOptionalPositiveInteger(
+    value.max_catch_up,
+    file,
+    "missed_run.max_catch_up",
+    MAX_MISSED_RUN_CATCH_UP
+  );
+  return {
+    ...(value.enabled !== undefined ? { enabled: value.enabled } : {}),
+    ...(graceMs !== undefined ? { grace_ms: graceMs } : {}),
+    ...(lookbackMs !== undefined ? { lookback_ms: lookbackMs } : {}),
+    ...(maxRecords !== undefined ? { max_records: maxRecords } : {}),
+    ...(value.catch_up !== undefined ? { catch_up: value.catch_up } : {}),
+    ...(maxCatchUp !== undefined ? { max_catch_up: maxCatchUp } : {}),
+  };
+}
+
 function validateJob(raw: unknown, file: string): CronJob {
   if (!isPlainObject(raw)) throw new Error(`${file}: top-level must be a YAML object`);
   const r = raw as Record<string, unknown>;
@@ -170,6 +225,7 @@ function validateJob(raw: unknown, file: string): CronJob {
   const maxConcurrency = parseOptionalPositiveInteger(r.max_concurrency, file, "max_concurrency", MAX_CONCURRENCY) ?? 1;
   const cooldown = parseCooldownConfig(r.cooldown, file);
   const circuitBreaker = parseCircuitBreakerConfig(r.circuit_breaker, file);
+  const missedRun = parseMissedRunConfig(r.missed_run, file);
   const deliveryRoute = typeof r.delivery_route === "string" && r.delivery_route.trim()
     ? r.delivery_route.trim()
     : undefined;
@@ -184,6 +240,7 @@ function validateJob(raw: unknown, file: string): CronJob {
     ...(timeoutMs !== undefined ? { timeout_ms: timeoutMs } : {}),
     ...(cooldown ? { cooldown } : {}),
     ...(circuitBreaker ? { circuit_breaker: circuitBreaker } : {}),
+    ...(missedRun ? { missed_run: missedRun } : {}),
   };
 
   if (type === "task") {

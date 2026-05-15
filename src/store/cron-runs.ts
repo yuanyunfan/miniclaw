@@ -10,6 +10,7 @@ export const CRON_RUN_STATUSES = [
   "retry_scheduled",
   "cancelled",
   "circuit_open",
+  "missed",
 ] as const;
 
 export type CronRunStatus = typeof CRON_RUN_STATUSES[number];
@@ -46,6 +47,7 @@ export interface CronRunSummaryRow {
   retry_scheduled_runs: number;
   cancelled_runs: number;
   circuit_open_runs: number;
+  missed_runs: number;
   avg_duration_ms: number | null;
   last_started_at: string;
   last_status: CronRunStatus;
@@ -82,7 +84,7 @@ export interface CreateCronRunInput {
 }
 
 export interface CompleteCronRunInput {
-  status?: Extract<CronRunStatus, "success" | "skipped" | "cancelled" | "circuit_open">;
+  status?: Extract<CronRunStatus, "success" | "skipped" | "cancelled" | "circuit_open" | "missed">;
   completedAt?: Date | string;
   durationMs?: number;
   taskId?: string | null;
@@ -126,6 +128,12 @@ export interface SummarizeCronRunsOptions {
   jobName?: string;
   since?: Date | string;
   until?: Date | string;
+  limit?: number;
+}
+
+export interface CronRunScheduleLookupOptions {
+  toleranceMs?: number;
+  excludeStatuses?: CronRunStatus[];
   limit?: number;
 }
 
@@ -210,7 +218,7 @@ export function createCronRun(input: CreateCronRunInput): CronRunRow {
     id,
     job_name: input.jobName,
     job_type: input.jobType,
-    attempt: Math.max(1, Math.floor(input.attempt ?? 1)),
+    attempt: Math.max(0, Math.floor(input.attempt ?? 1)),
     scheduled_at: toIso(input.scheduledAt ?? null),
     started_at: toIso(input.startedAt) ?? new Date().toISOString(),
     task_id: input.taskId ?? null,
@@ -375,6 +383,54 @@ export function listCronRunsMissingAlerts(options: { since?: Date | string; unti
   ).all(params).map(assertCronRunRow);
 }
 
+export function listCronRunsForSchedule(
+  jobName: string,
+  scheduledAt: Date | string,
+  options: CronRunScheduleLookupOptions = {},
+): CronRunRow[] {
+  const center = scheduledAt instanceof Date ? scheduledAt.getTime() : Date.parse(scheduledAt);
+  if (!jobName.trim() || !Number.isFinite(center)) return [];
+  const toleranceMs = Math.max(0, Math.floor(options.toleranceMs ?? 29_000));
+  const from = new Date(center - toleranceMs).toISOString();
+  const until = new Date(center + toleranceMs).toISOString();
+  const params: Record<string, unknown> = {
+    job_name: jobName,
+    scheduled_at: new Date(center).toISOString(),
+    from,
+    until,
+    limit: normalizePositiveInteger(options.limit, 10, 100),
+  };
+  const filters = [
+    "job_name = @job_name",
+    "datetime(COALESCE(scheduled_at, started_at)) >= datetime(@from)",
+    "datetime(COALESCE(scheduled_at, started_at)) <= datetime(@until)",
+  ];
+  if (options.excludeStatuses?.length) {
+    const placeholders = options.excludeStatuses.map((status, index) => {
+      const key = `exclude_status_${index}`;
+      params[key] = status;
+      return `@${key}`;
+    });
+    filters.push(`status NOT IN (${placeholders.join(", ")})`);
+  }
+  return getDb().prepare(
+    `SELECT * FROM cron_runs
+     WHERE ${filters.join(" AND ")}
+     ORDER BY ABS(julianday(COALESCE(scheduled_at, started_at)) - julianday(@scheduled_at)) ASC,
+       datetime(started_at) DESC,
+       id DESC
+     LIMIT @limit`
+  ).all(params).map(assertCronRunRow);
+}
+
+export function hasCronRunForSchedule(
+  jobName: string,
+  scheduledAt: Date | string,
+  options: Omit<CronRunScheduleLookupOptions, "limit"> = {},
+): boolean {
+  return listCronRunsForSchedule(jobName, scheduledAt, { ...options, limit: 1 }).length > 0;
+}
+
 export function listCronRunsForIncident(incidentId: string, limit = 5): CronRunRow[] {
   const normalized = incidentId.trim();
   if (!normalized) return [];
@@ -412,6 +468,7 @@ export function summarizeCronRuns(options: SummarizeCronRunsOptions = {}): CronR
        SUM(CASE WHEN status = 'retry_scheduled' THEN 1 ELSE 0 END) AS retry_scheduled_runs,
        SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled_runs,
        SUM(CASE WHEN status = 'circuit_open' THEN 1 ELSE 0 END) AS circuit_open_runs,
+       SUM(CASE WHEN status = 'missed' THEN 1 ELSE 0 END) AS missed_runs,
        AVG(duration_ms) AS avg_duration_ms,
        MAX(CASE WHEN recency_rank = 1 THEN started_at ELSE NULL END) AS last_started_at,
        MAX(CASE WHEN recency_rank = 1 THEN status ELSE NULL END) AS last_status

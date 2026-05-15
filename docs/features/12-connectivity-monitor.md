@@ -110,7 +110,7 @@ email:
 - `task_result_delivery`: raw task 已经完成并写入 `tasks.result_summary`，但最终结果投递 Discord 失败。此时 task 仍按 agent 执行结果结算，delivery 失败只进入 outbox。
 - Connectivity Monitor 每次确认 `discord_ok` 或 `recovered` 时都会尝试 flush pending outbox；cron failure 按频道聚合成一条汇总，task result 按原 channel 补发。
 
-这条路径解决的是“MiniClaw 运行中网络断开，恢复后补通知”。如果机器睡眠、进程未运行、或 cron scheduler 尚未启动，则不会凭空生成 cron run。
+这条路径解决的是“MiniClaw 运行中网络断开，恢复后补通知”。如果机器睡眠、进程未运行、或 cron scheduler 尚未启动，Recovery Outbox 不会凭空生成失败 run；这类“到点未触发”的空洞由 cron scheduler 的 missed-run audit 负责在恢复后补写 `cron_runs.status=missed` 和 `cron_missed` incident。需要自动补跑的 morning digest 类任务应在 cron YAML 显式配置 `missed_run.catch_up: true`。
 
 ## Pre-clientReady Watchdog
 

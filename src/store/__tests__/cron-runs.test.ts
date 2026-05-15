@@ -6,7 +6,9 @@ import {
   createCronRun,
   getCronRunFailureWindow,
   getCronRun,
+  hasCronRunForSchedule,
   listCronRuns,
+  listCronRunsForSchedule,
   listCronRunsForIncident,
   listCronRunsByIdPrefix,
   markCronRunCompleted,
@@ -81,6 +83,53 @@ describe("cron run persistence", () => {
       completed_at: "2026-05-12T01:00:05.000Z",
       duration_ms: 5000,
       error_category: null,
+    });
+  });
+
+  it("records missed expected schedules with attempt 0 and supports schedule lookup", () => {
+    createCronRun({
+      id: "run-missed",
+      jobName: "daily-github-trending",
+      jobType: "task",
+      attempt: 0,
+      scheduledAt: "2026-05-15T00:10:00.000Z",
+      startedAt: "2026-05-15T03:00:00.000Z",
+    });
+
+    const row = markCronRunCompleted("run-missed", {
+      status: "missed",
+      completedAt: "2026-05-15T03:00:00.000Z",
+      durationMs: 0,
+      errorCategory: "missed_execution",
+      errorMessage: "node-cron callback did not reach dispatch",
+    });
+
+    expect(row).toMatchObject({
+      status: "missed",
+      attempt: 0,
+      scheduled_at: "2026-05-15T00:10:00.000Z",
+      duration_ms: 0,
+      error_category: "missed_execution",
+    });
+    expect(hasCronRunForSchedule("daily-github-trending", "2026-05-15T00:10:30.000Z", {
+      toleranceMs: 31_000,
+    })).toBe(true);
+    expect(hasCronRunForSchedule("daily-github-trending", "2026-05-15T00:10:30.000Z", {
+      toleranceMs: 31_000,
+      excludeStatuses: ["missed"],
+    })).toBe(false);
+    expect(listCronRunsForSchedule("daily-github-trending", "2026-05-15T00:10:30.000Z", {
+      toleranceMs: 31_000,
+    })).toHaveLength(1);
+
+    const summary = summarizeCronRuns({ jobName: "daily-github-trending", limit: 10 })[0];
+    expect(summary).toMatchObject({
+      total_runs: 1,
+      missed_runs: 1,
+      last_status: "missed",
+    });
+    expect(getCronRunFailureWindow("daily-github-trending", "2026-05-15T00:00:00.000Z")).toMatchObject({
+      failure_count: 0,
     });
   });
 
