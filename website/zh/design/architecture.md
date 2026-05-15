@@ -26,4 +26,4 @@ flowchart LR
   Monitoring --> Delivery
 ```
 
-repo 内 `docs/` 仍是 implementation source of truth。这个网站页面只提供面向人的高层架构摘要。
+repo 内 `docs/` 仍是 implementation source of truth。这个网站页面只提供面向人的高层架构摘要，并回链到 canonical docs 与 current 中文 mirror。

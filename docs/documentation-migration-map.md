@@ -86,7 +86,7 @@ Field meanings:
     "merge_group": null,
     "website_exposure": "public",
     "translation_required": true,
-    "translation_status": "pending"
+    "translation_status": "current"
   },
   {
     "doc_id": "providers-index",
@@ -97,7 +97,7 @@ Field meanings:
     "merge_group": "providers",
     "website_exposure": "public",
     "translation_required": true,
-    "translation_status": "pending"
+    "translation_status": "current"
   },
   {
     "doc_id": "stock-providers-index",
@@ -108,7 +108,7 @@ Field meanings:
     "merge_group": "providers/stock",
     "website_exposure": "public",
     "translation_required": true,
-    "translation_status": "pending"
+    "translation_status": "current"
   },
   {
     "doc_id": "content-provider-family",
@@ -119,7 +119,7 @@ Field meanings:
     "merge_group": "providers/content",
     "website_exposure": "public",
     "translation_required": true,
-    "translation_status": "pending"
+    "translation_status": "current"
   },
   {
     "doc_id": "email-provider-family",
@@ -130,7 +130,7 @@ Field meanings:
     "merge_group": "providers/email",
     "website_exposure": "public",
     "translation_required": true,
-    "translation_status": "pending"
+    "translation_status": "current"
   },
   {
     "doc_id": "stock-research-provider-pipeline",
@@ -141,7 +141,7 @@ Field meanings:
     "merge_group": "providers/stock/research",
     "website_exposure": "public",
     "translation_required": true,
-    "translation_status": "pending"
+    "translation_status": "current"
   },
   {
     "doc_id": "experiments-index",
@@ -152,7 +152,7 @@ Field meanings:
     "merge_group": "experiments",
     "website_exposure": "internal",
     "translation_required": true,
-    "translation_status": "pending"
+    "translation_status": "current"
   },
   {
     "doc_id": "stage-experiment",
@@ -209,7 +209,7 @@ Field meanings:
     "merge_group": null,
     "website_exposure": "public",
     "translation_required": true,
-    "translation_status": "pending"
+    "translation_status": "current"
   },
   {
     "doc_id": "bot-routing",
@@ -338,7 +338,7 @@ Field meanings:
     "merge_group": "providers",
     "website_exposure": "public",
     "translation_required": true,
-    "translation_status": "pending"
+    "translation_status": "current"
   },
   {
     "doc_id": "wechat-mp-provider",
@@ -409,7 +409,7 @@ Field meanings:
     "merge_group": "providers/eastmoney",
     "website_exposure": "public",
     "translation_required": true,
-    "translation_status": "pending"
+    "translation_status": "current"
   },
   {
     "doc_id": "eastmoney-jywg-readonly",
@@ -514,7 +514,7 @@ Field meanings:
     "merge_group": null,
     "website_exposure": "public",
     "translation_required": true,
-    "translation_status": "pending"
+    "translation_status": "current"
   },
   {
     "doc_id": "install-runbook",
@@ -525,7 +525,7 @@ Field meanings:
     "merge_group": null,
     "website_exposure": "public",
     "translation_required": true,
-    "translation_status": "pending"
+    "translation_status": "current"
   },
   {
     "doc_id": "discord-task-intake-channel-plan",

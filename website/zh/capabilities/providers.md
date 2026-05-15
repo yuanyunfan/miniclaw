@@ -23,6 +23,8 @@ source_docs:
 
 Providers 为 cron、task 和 research workflow 准备可信上下文。迁移计划要求 provider contract 保留在 repo docs 中，网站只展示整理后的摘要。
 
+repo 现在维护 current 中文 provider mirror，因此本页把英文和中文 provider docs 作为配对 source material。
+
 ```mermaid
 flowchart TD
   ProviderFramework[Provider Framework] --> Health[Health Check]

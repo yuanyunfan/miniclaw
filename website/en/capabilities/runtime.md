@@ -27,4 +27,4 @@ flowchart LR
   Recovery[Connectivity / Auto Doctor] --> Delivery
 ```
 
-The website keeps this as a readable map. Implementation rules, owner paths, and drift-sensitive contracts live in the repo runtime docs.
+The website keeps this as a readable map. Implementation rules, owner paths, and drift-sensitive contracts live in the repo runtime docs and their current Chinese mirror.

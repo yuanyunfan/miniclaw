@@ -27,4 +27,4 @@ flowchart LR
   Recovery[Connectivity / Auto Doctor] --> Delivery
 ```
 
-网站只保留面向人的运行时地图；实现规则、owner paths 和高 drift contracts 维护在 repo runtime docs 中。
+网站只保留面向人的运行时地图；实现规则、owner paths 和高 drift contracts 维护在 repo runtime docs 及其 current 中文 mirror 中。

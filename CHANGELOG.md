@@ -6,6 +6,10 @@
 
 ## [Unreleased]
 
+### Added
+- 文档策略收尾：`docs/zh/**` required 中文 pair 全部提升为 `translation_status: current`，并让 `quality:docs-i18n` 阻止 missing / pending required translations。
+- `quality:website-docs` 收紧为 blocking gate：canonical docs 变更影响 website page 时，必须同 patch 更新对应 website page、显式标记 unaffected reason，或使用紧急 bypass。
+
 ### Security
 - 收窄 npm publish 打包边界，避免 `.claude/`、`.github/`、测试 fixtures、`docs/plans/` 和本机 review copy 被意外发布。
 - 公开 docs/config 示例改用占位 channel ID 和通用路径，并让 G0 阻止 raw Discord snowflake 或本机用户目录路径进入公开文档。

@@ -63,7 +63,16 @@ function validateEntryShape(entry: DocumentationMigrationEntry, index: number): 
   if (!entry.status) findings.push(finding("error", path, "missing status"));
   if (!entry.website_exposure) findings.push(finding("error", path, "missing website_exposure"));
   if (entry.translation_required && !entry.zh_path) {
-    findings.push(finding("warning", path, "translation_required is true but zh_path is missing"));
+    findings.push(finding("error", path, "translation_required is true but zh_path is missing"));
+  }
+  if (entry.translation_required && entry.translation_status === "pending") {
+    findings.push(
+      finding(
+        "error",
+        path,
+        "translation_status pending is not allowed for translation_required docs",
+      ),
+    );
   }
   return findings;
 }
@@ -80,7 +89,7 @@ function validateChinesePair(
   if (!input.exists(zhPath)) {
     findings.push(
       finding(
-        entry.translation_status === "current" ? "error" : "warning",
+        "error",
         zhPath,
         `missing Chinese documentation pair for ${entry.source_path}`,
       ),
@@ -97,7 +106,7 @@ function validateChinesePair(
 
   const zh = parseFrontmatter(input.readText(zhPath));
   if (!zh.hasFrontmatter) {
-    findings.push(finding("warning", zhPath, "Chinese documentation is missing frontmatter"));
+    findings.push(finding("error", zhPath, "Chinese documentation is missing frontmatter"));
     return findings;
   }
 
@@ -120,7 +129,7 @@ function validateChinesePair(
     const zhShape = headingLevelShape(input.readText(zhPath));
     if (sourceShape !== zhShape) {
       findings.push(
-        finding("warning", zhPath, `heading level shape differs from ${entry.source_path}`),
+        finding("error", zhPath, `heading level shape differs from ${entry.source_path}`),
       );
     }
   }
@@ -132,7 +141,7 @@ export function analyzeDocsI18n(input: DocsI18nInput): DocsI18nFinding[] {
   const findings: DocsI18nFinding[] = [];
   if (!input.entries.length) {
     findings.push(
-      finding("warning", "docs/documentation-migration-map.md", "no migration map entries found"),
+      finding("error", "docs/documentation-migration-map.md", "no migration map entries found"),
     );
     return findings;
   }
@@ -165,7 +174,7 @@ export function analyzeDocsI18nFromRepo(repoRoot: string, ignoredPaths: Set<stri
   const mapPath = "docs/documentation-migration-map.md";
   const mapFullPath = join(repoRoot, mapPath);
   if (!existsSync(mapFullPath)) {
-    return [finding("warning", mapPath, "documentation migration map does not exist")];
+    return [finding("error", mapPath, "documentation migration map does not exist")];
   }
 
   const entries = parseDocumentationMigrationMap(readFileSync(mapFullPath, "utf8"));

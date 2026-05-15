@@ -128,7 +128,7 @@ Phase 3: migrate and leave traceability.
 - Move or merge docs in small docs-only slices.
 - Update `docs/README.md`, `docs/zh/README.md`, docs drift mappings, and all links in the same slice as each move.
 - For merged docs, leave a short moved/merged stub for one release cycle or maintain a redirect index in `docs/README.md`.
-- Update both English and Chinese versions in the same slice. If the Chinese version cannot be completed immediately, mark it `translation_status: pending` and make the i18n gate report it.
+- Update both English and Chinese versions in the same slice. Required Chinese pairs must stay `translation_status: current`; if a source truly does not need Chinese documentation, mark it `translation_status: not_required` in the migration map.
 
 Phase 4: expose only curated material to the website.
 
@@ -274,7 +274,7 @@ The first version of `scripts/quality-website-docs.ts` should check:
 - Website pages must not present implementation facts without a `source_docs` anchor.
 - If a canonical doc changes and a website page declares it in `source_docs`, the command should print the affected website pages.
 
-The first version can warn on affected website pages instead of failing. Once the website becomes public and stable, tighten this rule so canonical doc changes require either:
+The current version fails on affected website pages unless the canonical doc change is handled by one of these explicit actions:
 
 - updating affected website pages,
 - marking the page as unaffected with a short comment in frontmatter,
@@ -302,7 +302,7 @@ The first version of `quality:docs-i18n` should check:
 - Changed English docs report affected Chinese translations.
 - `docs/zh/` is not ignored once it becomes first-class repo documentation.
 
-Missing migration-map inventory is blocking because later docs moves depend on a complete source list. Missing or pending translations can remain warning-only during migration and become blocking after the core bilingual docs inventory is stable.
+Missing migration-map inventory is blocking because later docs moves depend on a complete source list. The bilingual inventory is now stable, so missing required Chinese pairs, missing Chinese frontmatter, heading-shape mismatch, and `translation_status: pending` are blocking errors.
 
 11. Configure GitHub Pages deployment through GitHub Actions.
 
@@ -361,8 +361,8 @@ The Pages workflow should build from `website/` and publish a static site artifa
   - Rollback: remove or disable `website/` publishing while keeping canonical `docs/`.
 
 - Risk: website pages drift because canonical docs change but public pages are not reviewed.
-  - Mitigation: add `quality:website-docs` affected-page reporting, then later make it blocking.
-  - Rollback: keep affected-page reporting as warning-only until the site matures.
+  - Mitigation: `quality:website-docs` blocks affected pages unless the page is changed in the same patch, marked with an explicit unaffected reason, or bypassed with `MINICLAW_WEBSITE_DOCS_DRIFT_ALLOW=1`.
+  - Rollback: temporarily use the explicit emergency bypass while preserving the affected-page report.
 
 - Risk: generated website references become stale or noisy.
   - Mitigation: generate only high-drift reference sections and keep narrative pages hand-authored.
@@ -377,12 +377,12 @@ The Pages workflow should build from `website/` and publish a static site artifa
   - Rollback: restore the previous path from git and keep the migration map entry marked `blocked`.
 
 - Risk: English and Chinese docs diverge.
-  - Mitigation: add `doc_id`, `translation_of`, and `translation_status` metadata plus `quality:docs-i18n`.
-  - Rollback: mark affected Chinese pages `translation_status: pending` and keep the English source as temporarily authoritative until parity is restored.
+  - Mitigation: add `doc_id`, `translation_of`, and `translation_status` metadata plus `quality:docs-i18n`; required docs cannot remain pending.
+  - Rollback: mark the source doc `translation_status: not_required` only when Chinese documentation is intentionally not needed; otherwise fix the Chinese pair in the same patch.
 
 - Risk: LLMs become confused about which language is authoritative.
   - Mitigation: keep one `doc_id` per concept, require explicit language metadata, and state that implementation facts must match code in both languages.
-  - Rollback: temporarily designate the English source doc as authoritative for the affected concept while preserving the Chinese page as pending.
+  - Rollback: temporarily designate the English source doc as authoritative only after marking the affected source as `translation_status: not_required` in the migration map.
 
 ## Documentation Sync
 
@@ -413,6 +413,7 @@ The Pages workflow should build from `website/` and publish a static site artifa
 - 2026-05-15: Completed the migration-map inventory slice on `main`: `docs/documentation-migration-map.md` now covers every tracked canonical `docs/**/*.md` source outside `docs/zh/**`, and `quality:docs-i18n` treats any tracked source doc missing from the map as a blocking error. Focused verification passed with `pnpm exec vitest run src/quality/__tests__/docs-i18n.test.ts` and `pnpm run quality:docs-i18n`, which reported 73 migration map entries.
 - 2026-05-15: Broader verification for the inventory slice passed with `pnpm run typecheck`, `pnpm run lint`, `pnpm run build`, `pnpm test` (185 files / 903 tests), and `MINICLAW_DOCS_DRIFT_ALLOW=1 pnpm run quality:docs`. Raw `pnpm run quality:docs` is currently blocked by concurrent Agent Run Manager runtime/store changes in the same worktree, not by this inventory slice.
 - 2026-05-15: Added the first GitHub Pages deployment path for the human-facing website: `scripts/build-website.ts` builds `website/**/*.md(x)` into `website-dist/**/*.html`, `pnpm run website:build` exposes the local build command, `.github/workflows/pages.yml` validates `quality:website-docs`, builds the artifact, and deploys via GitHub Pages. The workflow also watches the website docs gate implementation and frontmatter parser so validation logic changes exercise the Pages build. `website-dist/` is ignored and remains generated output.
-- 2026-05-15: Completed the first Phase 3 provider merge slice for Eastmoney docs. `docs/providers/stock/eastmoney.md` is now the source-of-truth family doc for JYWG readonly and MyFavor watchlist boundaries, while `docs/features/09-eastmoney-jywg-readonly-provider.md` and `docs/features/17-eastmoney-myfavor-watchlist.md` are compatibility stubs for one migration cycle. `docs/README.md`, the migration map, and the pending Chinese Eastmoney summary were updated in the same slice.
-- 2026-05-15: Completed the second Phase 3 provider merge slice for Email docs. `docs/providers/email.md` is now the source-of-truth family doc for the shared read-only Email capability, `email-query`, and `cmb-credit-card-email`; `docs/features/07-email-capability.md` and `docs/features/08-cmb-credit-card-email-provider.md` are compatibility stubs for one migration cycle. The provider indexes, migration map, pending Chinese Email summary, and website provider `source_docs` were updated in the same slice.
-- 2026-05-15: Completed the remaining Phase 3/4 migration work. `docs/runtime/README.md`, `docs/experiments/README.md`, `docs/providers/content.md`, `docs/providers/provider-framework.md`, `docs/providers/stock/README.md`, and `docs/providers/stock/research.md` now own the current implementation facts for their migrated feature groups; all `docs/features/*.md` files are compatibility stubs for one migration cycle. Added pending Chinese mirror summaries for runtime, experiments, content, stock, and stock research docs; updated docs drift rules so legacy feature stubs no longer satisfy future source-code changes; added the website runtime page and refreshed provider `source_docs`. The English root docs remain the canonical English tree for this completed phase; no `docs/en/**` move is planned without a separate migration.
+- 2026-05-15: Completed the first Phase 3 provider merge slice for Eastmoney docs. `docs/providers/stock/eastmoney.md` is now the source-of-truth family doc for JYWG readonly and MyFavor watchlist boundaries, while `docs/features/09-eastmoney-jywg-readonly-provider.md` and `docs/features/17-eastmoney-myfavor-watchlist.md` are compatibility stubs for one migration cycle. `docs/README.md`, the migration map, and the Chinese Eastmoney summary were updated in the same slice; the later hardening follow-up promoted the Chinese pair to current parity.
+- 2026-05-15: Completed the second Phase 3 provider merge slice for Email docs. `docs/providers/email.md` is now the source-of-truth family doc for the shared read-only Email capability, `email-query`, and `cmb-credit-card-email`; `docs/features/07-email-capability.md` and `docs/features/08-cmb-credit-card-email-provider.md` are compatibility stubs for one migration cycle. The provider indexes, migration map, Chinese Email summary, and website provider `source_docs` were updated in the same slice; the later hardening follow-up promoted the Chinese pair to current parity.
+- 2026-05-15: Completed the remaining Phase 3/4 migration work. `docs/runtime/README.md`, `docs/experiments/README.md`, `docs/providers/content.md`, `docs/providers/provider-framework.md`, `docs/providers/stock/README.md`, and `docs/providers/stock/research.md` now own the current implementation facts for their migrated feature groups; all `docs/features/*.md` files are compatibility stubs for one migration cycle. Added Chinese mirror summaries for runtime, experiments, content, stock, and stock research docs; updated docs drift rules so legacy feature stubs no longer satisfy future source-code changes; added the website runtime page and refreshed provider `source_docs`. The later hardening follow-up promoted required Chinese mirrors to current parity. The English root docs remain the canonical English tree for this completed phase; no `docs/en/**` move is planned without a separate migration.
+- 2026-05-15: Completed the bilingual and website drift hardening follow-up. Required Chinese pairs are now `translation_status: current` and `quality:docs-i18n` blocks missing/pending required translations. `quality:website-docs` now blocks canonical-doc changes that affect website pages unless the website page is changed in the same patch, the page declares an explicit `website_docs_drift: unaffected` reason, or `MINICLAW_WEBSITE_DOCS_DRIFT_ALLOW=1` is used for emergency bypass.

@@ -23,6 +23,8 @@ source_docs:
 
 Providers prepare trusted context for cron jobs, tasks, and research workflows. The migration plan keeps provider implementation contracts in repo docs and exposes only curated summaries here.
 
+The repo now maintains current Chinese provider mirrors, so this page treats English and Chinese provider docs as paired source material.
+
 ```mermaid
 flowchart TD
   ProviderFramework[Provider Framework] --> Health[Health Check]

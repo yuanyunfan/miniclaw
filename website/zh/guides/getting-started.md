@@ -12,4 +12,4 @@ source_docs:
 
 技术安装流程以 install runbook 为准；面向用户的安装器方向以 install distribution strategy 为准。
 
-公开指南应保持简洁，详细 runtime 和 troubleshooting 继续留在 repo docs。
+公开指南应保持简洁，详细 runtime 和 troubleshooting 继续留在 repo docs；中文 install mirror 现在与 canonical runbook 保持 current。

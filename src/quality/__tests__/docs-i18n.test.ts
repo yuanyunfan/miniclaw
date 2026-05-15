@@ -104,7 +104,7 @@ translation_status: current
     );
   });
 
-  it("skips heading shape comparison for pending translations", () => {
+  it("blocks pending translations for required docs", () => {
     const pendingEntry: DocumentationMigrationEntry = {
       ...currentEntry,
       translation_status: "pending",
@@ -124,7 +124,13 @@ translation_status: pending
       [pendingEntry],
     );
 
-    expect(findings).toEqual([]);
+    expect(findings).toEqual([
+      {
+        severity: "error",
+        path: "docs/architecture.md",
+        reason: "translation_status pending is not allowed for translation_required docs",
+      },
+    ]);
   });
 
   it("reports tracked source docs missing from the migration map", () => {

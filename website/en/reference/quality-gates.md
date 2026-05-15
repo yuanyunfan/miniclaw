@@ -13,5 +13,5 @@ source_docs:
 MiniClaw uses executable gates to keep code, docs, website pages, and bilingual docs aligned.
 
 - `quality:docs:drift`: code-to-docs source-of-truth drift.
-- `quality:docs-i18n`: English/Chinese doc pairing and metadata.
-- `quality:website-docs`: website page `source_docs` traceability.
+- `quality:docs-i18n`: English/Chinese doc pairing, metadata, and current translation parity.
+- `quality:website-docs`: website page `source_docs` traceability, blocking affected pages unless they are updated or explicitly marked unaffected.

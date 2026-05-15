@@ -12,4 +12,4 @@ source_docs:
 
 Use the install runbook for technical setup and the distribution strategy for the longer-term user-facing installer direction.
 
-The public guide should stay concise. Detailed runtime and troubleshooting procedures stay in repo docs.
+The public guide should stay concise. Detailed runtime and troubleshooting procedures stay in repo docs, with the Chinese install mirror kept current for bilingual readers.

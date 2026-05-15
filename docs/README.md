@@ -75,7 +75,7 @@ Eastmoney legacy compatibility stubs:
 - [`zh/plans/2026-05-15-documentation-strategy.zh.md`](zh/plans/2026-05-15-documentation-strategy.zh.md): 文档策略计划中文版本。
 - `docs/zh/**`: English source docs 的中文 mirror。每个中文文档应包含 `doc_id`、`lang`、`translation_of` 和 `translation_status` frontmatter。
 
-中文文档不再是本地 review copy；它是 repo docs 的 first-class language layer。未完成翻译必须显式标记 `translation_status: pending`。
+中文文档不再是本地 review copy；它是 repo docs 的 first-class language layer。Required 中文 pair 必须保持 `translation_status: current`，不需要中文 pair 的 source doc 才能在 migration map 中标记为 `not_required`。
 
 ## Website
 

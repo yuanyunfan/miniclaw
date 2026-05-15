@@ -21,6 +21,7 @@ export interface WebsiteDocsInput {
   pages: WebsiteDocsPage[];
   sourceExists: (path: string) => boolean;
   changedPaths?: string[];
+  allowAffectedPages?: boolean;
 }
 
 export interface WebsiteDocsResult {
@@ -84,6 +85,14 @@ function validatePage(page: WebsiteDocsPage, sourceExists: (path: string) => boo
   return findings;
 }
 
+function hasUnaffectedOverride(page: WebsiteDocsPage): boolean {
+  const parsed = parseFrontmatter(page.text);
+  if (!parsed.hasFrontmatter) return false;
+  const status = frontmatterString(parsed.data, "website_docs_drift");
+  const reason = frontmatterString(parsed.data, "website_docs_drift_reason");
+  return status === "unaffected" && Boolean(reason?.trim());
+}
+
 export function analyzeWebsiteDocs(input: WebsiteDocsInput): WebsiteDocsResult {
   const findings = input.pages.flatMap((page) => validatePage(page, input.sourceExists));
   const changed = new Set(input.changedPaths ?? []);
@@ -92,6 +101,20 @@ export function analyzeWebsiteDocs(input: WebsiteDocsInput): WebsiteDocsResult {
       .filter((source) => changed.has(source))
       .map((source) => ({ page: page.path, source })),
   );
+
+  if (!input.allowAffectedPages) {
+    for (const affected of affectedPages) {
+      const page = input.pages.find((candidate) => candidate.path === affected.page);
+      if (changed.has(affected.page) || (page && hasUnaffectedOverride(page))) continue;
+      findings.push(
+        finding(
+          affected.page,
+          `canonical source changed without website update: ${affected.source}`,
+        ),
+      );
+    }
+  }
+
   return { findings, affectedPages };
 }
 
@@ -99,6 +122,7 @@ export function analyzeWebsiteDocsFromRepo(
   repoRoot: string,
   pagePaths: string[],
   changedPaths: string[],
+  allowAffectedPages = false,
 ): WebsiteDocsResult {
   const pages = pagePaths.map((path) => ({
     path,
@@ -107,6 +131,7 @@ export function analyzeWebsiteDocsFromRepo(
   return analyzeWebsiteDocs({
     pages,
     changedPaths,
+    allowAffectedPages,
     sourceExists: (path) => existsSync(join(repoRoot, path)),
   });
 }

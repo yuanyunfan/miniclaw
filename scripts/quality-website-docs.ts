@@ -31,7 +31,8 @@ if (!pagePaths.length) {
   process.exit(0);
 }
 
-const result = analyzeWebsiteDocsFromRepo(repoRoot, pagePaths, changedPaths());
+const allowAffectedPages = process.env.MINICLAW_WEBSITE_DOCS_DRIFT_ALLOW === "1";
+const result = analyzeWebsiteDocsFromRepo(repoRoot, pagePaths, changedPaths(), allowAffectedPages);
 
 if (result.affectedPages.length) {
   console.warn("Website docs affected by canonical docs changes:");
@@ -49,5 +50,5 @@ if (result.findings.length) {
 }
 
 console.log(
-  `Website docs check passed (${pagePaths.length} page(s), ${result.affectedPages.length} affected page warning(s)).`,
+  `Website docs check passed (${pagePaths.length} page(s), ${result.affectedPages.length} affected page(s)).`,
 );
