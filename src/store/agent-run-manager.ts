@@ -344,6 +344,16 @@ export function listRunsForTask(taskId: string): AgentRun[] {
     .all(taskId) as AgentRunRow[]).map(toRun);
 }
 
+export function listActiveAgentRuns(): AgentRun[] {
+  return (getDb()
+    .prepare(
+      `SELECT * FROM agent_runs
+       WHERE status IN ('queued', 'running', 'waiting')
+       ORDER BY started_at ASC, rowid ASC`
+    )
+    .all() as AgentRunRow[]).map(toRun);
+}
+
 export function listActiveChildren(parentRunId: string): AgentRun[] {
   return (getDb()
     .prepare(
@@ -428,6 +438,26 @@ export function getAgentSchedulerState(taskId: string): AgentSchedulerState | un
     .prepare("SELECT * FROM agent_scheduler_state WHERE task_id = ?")
     .get(taskId) as AgentSchedulerStateRow | undefined;
   return row ? toSchedulerState(row) : undefined;
+}
+
+export function listAgentSchedulerStates(statuses: AgentSchedulerStatus[] = []): AgentSchedulerState[] {
+  for (const status of statuses) {
+    assertKnown(AGENT_SCHEDULER_STATUSES, status, "agent scheduler status");
+  }
+  if (!statuses.length) {
+    return (getDb()
+      .prepare("SELECT * FROM agent_scheduler_state ORDER BY updated_at ASC, task_id ASC")
+      .all() as AgentSchedulerStateRow[]).map(toSchedulerState);
+  }
+  const placeholders = statuses.map((_, index) => `@status${index}`).join(", ");
+  const params = Object.fromEntries(statuses.map((status, index) => [`status${index}`, status]));
+  return (getDb()
+    .prepare(
+      `SELECT * FROM agent_scheduler_state
+       WHERE status IN (${placeholders})
+       ORDER BY updated_at ASC, task_id ASC`
+    )
+    .all(params) as AgentSchedulerStateRow[]).map(toSchedulerState);
 }
 
 export interface AppendMessageInput {

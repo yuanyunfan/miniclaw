@@ -9,6 +9,10 @@ import {
   startMemoryMaintenanceScheduler,
   type MemoryMaintenanceSchedulerHandle,
 } from "./memory/maintenance-scheduler.js";
+import {
+  startAgentRunManagerSweeper,
+  type AgentRunManagerSweeperHandle,
+} from "./agent/run-manager/sweeper.js";
 import { startPreClientReadyWatchdog, type PreClientReadyWatchdogHandle } from "./monitoring/pre-client-ready-watchdog.js";
 import { startDoctorScheduler, type DoctorSchedulerHandle } from "./ops/doctor-scheduler.js";
 import { createLogger } from "./lib/log.js";
@@ -34,6 +38,7 @@ const log = createLogger("main");
 let bot: ReturnType<typeof createBot> | null = null;
 let connectivityMonitor: ConnectivityMonitorHandle | null = null;
 let memoryMaintenanceScheduler: MemoryMaintenanceSchedulerHandle | null = null;
+let agentRunManagerSweeper: AgentRunManagerSweeperHandle | null = null;
 let startupWatchdog: PreClientReadyWatchdogHandle | null = null;
 let doctorScheduler: DoctorSchedulerHandle | null = null;
 let shutdownPromise: Promise<void> | null = null;
@@ -51,6 +56,7 @@ async function beginGracefulShutdown(reason: string, force = false): Promise<voi
     );
     connectivityMonitor?.stop();
     memoryMaintenanceScheduler?.stop();
+    agentRunManagerSweeper?.stop();
     startupWatchdog?.stop();
     doctorScheduler?.stop();
     stopScheduler();
@@ -68,6 +74,7 @@ async function beginGracefulShutdown(reason: string, force = false): Promise<voi
     log.info("Shutting down: stopping connectivity monitor and cron scheduler");
     connectivityMonitor?.stop();
     memoryMaintenanceScheduler?.stop();
+    agentRunManagerSweeper?.stop();
     startupWatchdog?.stop();
     doctorScheduler?.stop();
     stopScheduler();
@@ -104,6 +111,7 @@ async function beginGracefulShutdown(reason: string, force = false): Promise<voi
     interruptActiveChats(SHUTDOWN_FORCE_SUMMARY);
     connectivityMonitor?.stop();
     memoryMaintenanceScheduler?.stop();
+    agentRunManagerSweeper?.stop();
     startupWatchdog?.stop();
     doctorScheduler?.stop();
     stopScheduler();
@@ -127,6 +135,10 @@ async function main(): Promise<void> {
   log.info("Database initialized");
 
   memoryMaintenanceScheduler = startMemoryMaintenanceScheduler(config.memoryMaintenance);
+  agentRunManagerSweeper = startAgentRunManagerSweeper({
+    enabled: config.agentRunManager.enabled,
+    policy: config.agentRunManager.policy,
+  });
 
   if (config.registerCommandsOnStart) {
     await registerCommands();
@@ -170,6 +182,7 @@ main().catch(async (err) => {
   await startupWatchdog?.notifyFailure("MiniClaw fatal error before Discord clientReady", err);
   connectivityMonitor?.stop();
   memoryMaintenanceScheduler?.stop();
+  agentRunManagerSweeper?.stop();
   startupWatchdog?.stop();
   doctorScheduler?.stop();
   void bot?.destroy();
