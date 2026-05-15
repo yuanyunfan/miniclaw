@@ -3,8 +3,8 @@ doc_id: eastmoney-provider-family
 lang: zh
 translation_of: docs/providers/stock/eastmoney.md
 translation_status: current
+source_sha256: 398a94395c796e397f3182a91a6daac35c8032ef04a227d943eea600127c3853
 ---
-
 # Eastmoney Provider Family
 
 > 结论：Eastmoney 现在作为一个 provider family 维护，但包含两个独立 runtime boundaries。`eastmoney-jywg-readonly` 从 `jywg.18.cn` 读取 JYWG account evidence；`eastmoney-myfavor` 从 `myfavor.eastmoney.com` 读取 watchlist securities。它们共享文档 family，但不能共享 sessions、endpoints 或 business semantics。

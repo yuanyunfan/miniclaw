@@ -3,8 +3,8 @@ doc_id: install-runbook
 lang: zh
 translation_of: docs/runbooks/install.md
 translation_status: current
+source_sha256: acf53226f9a9e4144544f9ea492cb709e014d2823162c3f3e33a347c7840490b
 ---
-
 # MiniClaw Install Runbook
 
 > 结论：MiniClaw 1.0 的安装路径面向技术用户。先 clone repo，再用 `install.sh` 初始化依赖和本机目录，用 `pnpm run setup` 写入最小 Discord/provider 配置，最后用 `doctor:setup` 验证环境。

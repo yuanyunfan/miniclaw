@@ -3,8 +3,8 @@ doc_id: stock-providers-index
 lang: zh
 translation_of: docs/providers/stock/README.md
 translation_status: current
+source_sha256: a0444d867923616152229a9cc15575d2ed244eabeb4369c0512d525cbcd2e5f9
 ---
-
 # Stock Provider Family
 
 > 结论：stock provider docs 描述只读券商/account source、watchlist source、market evidence 和 research workflow。账户专属 session 和私有券商细节不能出现在 public website pages。

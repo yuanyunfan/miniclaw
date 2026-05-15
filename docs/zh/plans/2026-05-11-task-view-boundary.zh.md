@@ -2,9 +2,9 @@
 doc_id: task-view-boundary-plan
 lang: zh
 translation_of: docs/plans/2026-05-11-task-view-boundary.md
-translation_status: not_required
+translation_status: current
+source_sha256: c44479ddf526d5c72788a88d6627fddeb42f2fd571cb01eee958008f16e23585
 ---
-
 # Task View Boundary 与 Runner 重构
 
 状态：`draft`

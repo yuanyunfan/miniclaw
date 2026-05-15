@@ -2,105 +2,105 @@
 doc_id: market-intel-pre-market-research-plan
 lang: zh
 translation_of: docs/plans/2026-05-10-market-intel-pre-market-research.md
-translation_status: not_required
+translation_status: current
+source_sha256: 6214c0d5ffcc0b29e9b1eee886eb4869ccced16137b5ea4c693884fe528af9f9
 ---
+# 市场情报预市场研究自动化
 
-# 盘前市场情报研究自动化
+现况:草案
+日期:2026-05-10
 
-状态：`draft`
-日期：2026-05-10
+## 背景情况
 
-## 背景
+MiniClaw已经为美国和CN/A/H市场安排了与股票相关的工作,包括上市前、上市后、日内脉冲和日常资产汇总工作。 现在的市场前工作是有用的,但是他们的设计仍然是`stock-portfolio`加上一个巨大的自然语言提示。 这意味着LLM必须在同一步骤中同时收集有关这些事实和理由,这使得报告更难审计,更难复制,更易受到僵化或不一致的网络证据.
 
-MiniClaw 目前已经有一组股票相关定时任务，覆盖美股和 A 股 / 港股的盘前、盘后、盘中异动扫描以及每日资产汇总。现有盘前任务已经能用，但核心形态仍然是 `stock-portfolio` 加一段很大的自然语言 prompt。这样做的问题是：LLM 每天需要同时完成事实采集和市场推理，导致报告更难审计、更难复现，也更容易受到过期网页信息或不一致搜索结果的影响。
-
-目标是把盘前任务升级成一条长期可运行的 market intelligence pipeline：
+目标是将市场前的工作流程升级为持久的市场情报渠道:
 
 ```text
 cron
-  -> 市场日历 guard
-  -> provider 确定性采集数据
-  -> 结构化 evidence JSON
-  -> 多角色 LLM 分析
-  -> Forecast Editor 汇总
-  -> Discord 报告
-  -> 盘后评估与校准
+  -> market calendar guard
+  -> deterministic provider data collection
+  -> structured evidence JSON
+  -> multi-role LLM analysis
+  -> forecast editor synthesis
+  -> Discord report
+  -> post-market evaluation and calibration
 ```
 
-核心原则是：**provider 负责采集和时间戳标注证据，LLM 负责基于证据做推理，并且每个重要结论必须能追溯到 evidence id**。Token 应该花在综合判断、情景分析、风险推演和冲突整合上，而不是每天重复搜索基础市场事实。
+关键原则是:提供者代码收集和时间戳证据;证据的LLM理由,必须说明哪些证据支持每个结论。 预算应当用于综合、情景分析和风险评估,而不是用于反复重新发现基本市场事实。
 
-这条流水线只用于分析和风险监控。它不能下单、不能解锁交易、不能保存交易密码、不能生成自动交易指令，也不能调用任何交易 endpoint。
+这是只分析的自动化。 它不得发布订单,解锁交易,储存交易密码,生成自动交易指令,或调用任何交易端点.
 
 ## 目标
 
-1. 在每个有效交易日中国 / 香港市场开盘前，生成一份深入的 CN/A/H 盘前报告。
-2. 在每个有效交易日美股 regular session 开盘前，生成一份深入的 US 盘前报告。
-3. 新增结构化 `market-intel` pre-provider，让 LLM 收到带时间戳的 evidence，而不是临时网页搜索结果。
-4. 复用现有 `stock-portfolio`，保留用户持仓和 ETF 暴露上下文。
-5. 把市场方向、行业机会、事件催化和风险判断拆成明确的分析角色。
-6. 增加 Forecast Editor 层，把多个角色观点汇总成概率、触发条件和风险监控点。
-7. 持久化 forecast 和盘后 evaluation，长期衡量准确性。
-8. 当关键数据源缺失、过期或互相矛盾时，明确 fail closed 或降级输出。
-9. 除非已有 provider 完成安全脱敏，否则不要把账号、券商、token、cookie、session 等信息暴露给 Discord 或 LLM。
+1. 在中国/香港市场每有效交易日开放之前,制作一份深层CN/A/H市场前报告。
+2. 在每一有效贸易日,在美国常会开幕前,编写一份深入的美国市场前报告。
+3. 采用结构化`market-intel`因此LLM收到时间标记的证据而不是临时的搜索结果。
+4. 通过重用保留用户现有组合上下文`stock-portfolio`数据。
+5. 将市场方向、部门机会、催化剂和风险观点分为明确的分析作用。
+6. 增加最后预测编辑层,将角色输出转换为校准概率和可操作监测点.
+7. 储存预测和市场后评价,以便随着时间的推移衡量准确性。
+8. 当关键数据来源缺失、陈旧或不一致时,显然没有关闭或降级。
+9. 在Discord和LLM可见输出中保留所有账户、经纪人、信使、饼干和会话数据,除非现有提供者已经安全编辑。
 
 ## 非目标
 
-- 不构建自动交易系统。
-- 不向 LLM 暴露买入、卖出、下单、撤单、解锁交易等工具。
-- 不承诺每天市场预测一定准确。
-- 不依赖手动导出券商数据。
-- 不要求用户每天运行前手动复制数据。
-- 如果有官方或稳定只读 API 路径，不优先抓取 authenticated 网站页面。
-- 除非现有边界阻塞本任务，否则不替换 `stock-portfolio`、`stock-pulse`、Futu 或 Eastmoney provider。
-- 不把精确私有资产总额发到公开股票频道。
-- 不做个人财务适当性判断；报告是市场研究和风险监控，不是个性化投资建议。
+- 不要建立自动交易系统。
+- 不向LLMS披露买卖/订购/解锁工具。
+- 不要承诺确定性的每日市场预测准确性。
+- 不依赖人工输出经纪人数据。
+- 不要求用户在每次运行前手动复制数据。
+- 当官方或稳定的只读 API 路径存在时,不要刮掉认证的网站。
+- 不替换现有`stock-portfolio`, `stock-pulse`、 Futu 或 Eastmoney 供应商,除非其目前的边界阻碍这项工作。
+- 不将确切的私人资产总额送交公共股票渠道。
+- 不评估个人财务适宜性;报告是市场研究和风险监测,而不是个性化投资建议。
 
-## 现有架构证据
+## 现有建筑证据
 
-相关 cron / runtime 文件：
+相关的 crunon/运行时间文件 :
 
 - `src/cron/types.ts`
-  - `CronJobTask` 已支持 `pre_provider` 和 `pre_provider_config`。
-  - task 可以在调用 LLM 前注入 provider 输出。
+  - `CronJobTask`支持`pre_provider`和`pre_provider_config`.
+- 一个任务可以在 LLM 提示前注入提供者输出.
 - `src/cron/loader.ts`
-  - 校验 `~/.miniclaw/cron` 下的 cron YAML。
-  - 通过 `isPreProviderName` 拒绝未知 provider。
+- 验证 YAML 文件`~/.miniclaw/cron`.
+- 拒绝未知提供者通过`isPreProviderName`.
 - `src/cron/runner-task.ts`
-  - 运行 `pre_provider`，把 provider 文本 prepend 到 task prompt，再调用 `executeTask`。
-  - 支持 provider attachments 和 provider-side skip。
+- 运行`pre_provider`,然后调用`executeTask`.
+- 支持提供者附件和提供者侧跳语义。
 - `src/cron/scheduler.ts`
-  - 调度 job、防止同名任务重叠运行、记录运行状态、失败重试并发送失败告警。
+- 安排工作,防止重复运行,记录运行状态,重复失败,并发出失败警报。
 - `src/providers/index.ts`
-  - provider 注册中心，后续需要把 `market-intel` 加到这里。
+- 中央供应商登记处。`market-intel`应在此添加。
 
-现有股票 provider：
+现有股票提供者文件 :
 
 - `src/providers/stock-portfolio/*`
-  - 聚合只读券商 / provider 数据。
-  - 计算 CNY 口径 summary、Top gainers 和 Top losers。
-  - 所有 source 都失败时可以 fail closed。
+- 汇总只读经纪人/提供者数据。
+- 计算CNY摘要和最高收益/亏损者。
+- 当所有来源都失败时,就可能关闭。
 - `src/providers/stock-pulse/*`
-  - 基于 5m bars 做确定性盘中异动检测。
-  - 已经采用“provider 负责检测，LLM 负责解释”的正确模式。
+- 从5米栏进行日内异常检测
+- 将提供方-侧异常检测与LLM解释分离.
 - `src/providers/futu-stock/*`
-  - 现有只读 Futu 路径。
+- 现有的只读经纪人路径。
 - `src/providers/eastmoney-jywg-readonly/*`
-  - 现有 Eastmoney 只读路径。
+——现有东钱只读路径.
 
-当前用户级 cron jobs：
+当前用户级 cron 任务 :
 
 - `~/.miniclaw/cron/us-stock-pre-market.yaml`
-  - 工作日 `09:00 America/New_York` 运行。
-  - 当前使用 `pre_provider: stock-portfolio`。
+- 运行在`09:00 America/New_York`工作日时
+- 用途`pre_provider: stock-portfolio`.
 - `~/.miniclaw/cron/cn-stock-pre-market.yaml`
-  - 工作日 `09:00 Asia/Shanghai` 运行。
-  - 当前使用 `pre_provider: stock-portfolio`。
+- 运行在`09:00 Asia/Shanghai`工作日时
+- 用途`pre_provider: stock-portfolio`.
 - `~/.miniclaw/cron/us-stock-hourly-pulse.yaml`
-  - 美股交易时段使用 `stock-pulse`。
+- 用途`stock-pulse`在美国贸易时间。
 - `~/.miniclaw/cron/cn-stock-hourly-pulse.yaml`
-  - A/H 交易时段使用 `stock-pulse`。
+- 用途`stock-pulse`CN/HK交易时间。
 
-相关命令：
+相关命令 :
 
 ```bash
 pnpm cron:list
@@ -112,132 +112,129 @@ pnpm build
 
 ## 市场时间要求
 
-### 美股
+美国市场:
 
-- NYSE / Nasdaq regular session 通常是美东时间 09:30-16:00。
-- 建议盘前报告触发时间：`08:45 America/New_York`。
-- provider 必须处理美股假期、提前收盘和 daylight saving time。
-- 如果当天是休市或提前收盘，报告必须跳过或明确标注特殊交易日。
+- NYSE/纳斯达克定期会议通常为东经09:30-16:00 时间
+- 建议的市场前报告触发:`08:45 America/New_York`.
+- 供应商必须应付美国市场节假日、早关和日间休息时间。
+- 如果当天是市场假日或提早结束,报告应跳过特别会议或明确标明特别会议名称。
 
-参考来源：
+CN/A/H市场:
 
-- NYSE hours and calendars: https://www.nyse.com/markets/hours-calendars
-- Nasdaq market activity and trading hours references: https://www.nasdaq.com/market-activity
+- A股持续交易窗口一般为09:30-11:30和11:00-15:00 亚洲/上海.
+- HKEX证券市场包括9:00-09:30前后的预开业和持续交易9:30-12:00和11:00-16:00 亚洲/香港.
+- 建议的报告触发:`08:45 Asia/Shanghai`.
+- 供应商必须独立支持A股和香港市场假日。 中国和香港的节日日历经常出现分歧.
+如果只有A股或HK股开张,报告仍应运行,但明确标注关闭市场。
 
-### A 股 / 港股
+执行期间核实时间安排和日历的参考来源:
 
-- A 股连续交易通常是北京时间 09:30-11:30、13:00-15:00。
-- 港股 securities market 包含 09:00-09:30 左右的 pre-opening，以及 09:30-12:00、13:00-16:00 的 continuous trading。
-- 建议盘前报告触发时间：`08:45 Asia/Shanghai`。
-- provider 必须分别处理 A 股和港股假期，因为中国内地与香港假期经常不一致。
-- 如果 A 股和港股只有一边开市，报告仍可运行，但必须清楚标注 open / closed market split。
+- NYSE时间和日历:https://www.nyse.com/markets/hours-calendars
+- Nasdaq市场活动和交易时间参考:https://www.nasdaq.com/market-activity
+- HKEX交易时间:https://www.hkex.com.hk/Services/Trading-hours-and-Severe-Weather-Arrangements/Trading-Hours/Securities-Market
+- SSE / SZSE规则和节假日通知在有中国方面的权威参考文献时,应作为中国方面的权威参考.
 
-参考来源：
+## 目标分析员
 
-- HKEX trading hours: https://www.hkex.com.hk/Services/Trading-hours-and-Severe-Weather-Arrangements/Trading-Hours/Securities-Market
-- SSE / SZSE 规则和节假日公告在实现时应作为中国市场侧的 authoritative references。
+每日报告应使用5个分析家观点和1个编辑。 这些应首先发挥迅速的作用。 它们不需要成为MiniClaw子代理文档,除非后来的执行显示出真正的好处.
 
-## 目标分析角色
+### 1. 全球宏观、政策和流动性分析员
 
-日报使用五个分析视角加一个总编。第一阶段先作为 prompt-level roles 实现；只有当后续实现证明有必要时，才拆成 MiniClaw subagent 文件。
+职责:
 
-### 1. Global Macro, Policy & Liquidity Analyst
+- 美国:美联储、财政部、美元、通货膨胀、劳工数据、FOMC日历、财政/地缘政治冲击。
+——中国:PBOC流动性,政策头条,NBS宏观发布,人民币固定和境外人民币移动.
+- 产出宏观条件和流动性条件是否为当前风险、中性或风险。
 
-职责：
+所需证据:
 
-- 美股：Fed、Treasury yields、美元、通胀、就业数据、FOMC calendar、财政和地缘冲击。
-- 中国：PBOC 流动性、政策新闻、NBS 宏观发布、人民币中间价、CNH 波动。
-- 判断当天宏观和流动性环境对风险偏好是 risk-on、neutral 还是 risk-off。
+- 经济活动日历。
+- 率/产率变动。
+- FX运动
+- 中央银行或政策头条证据。
 
-必须引用的证据：
+### 2. 流动、定位和技术分析员
 
-- 经济事件日历。
-- 利率 / 收益率变化。
-- FX 变化。
-- 央行或政策新闻。
+职责:
 
-### 2. Flow, Positioning & Technical Analyst
+- 美国:指数期货,VIX,部门ETF前市场方向,广度,重大ETF差距,波动制度.
+- CN/A/H:A50,杭生期货,杭生TECH,CNH/CNY,现有南北向/南向线索,ADR/H-share映射,索引技术水平.
+- 技术分析必须是流动和定位的次要分析。 仅靠支持/抵抗是不够的。
 
-职责：
+所需证据:
 
-- 美股：指数期货、VIX、sector ETF 盘前方向、breadth、主要 ETF gap、volatility regime。
-- A/H：A50、恒指期货、恒生科技、CNH/CNY、可用时的北向 / 南向线索、ADR/H-share 映射、指数关键技术位。
-- 技术分析必须服务于 flow 和 positioning；单独画支撑阻力不够。
+- 指数/未来/ETF快照。
+- 挥霍性快照
+- 市场宽度或移动器顶部的快照。
+- 如果无法提供实时数据,则中断/丢失数据警告。
 
-必须引用的证据：
+### 3. 跨市场部门和主题战略家
 
-- 指数、期货、ETF 快照。
-- 波动率快照。
-- 可用时的市场宽度或 top mover 快照。
-- 如果没有实时数据，必须输出 stale / missing data warning。
+职责:
 
-### 3. Cross-Market Sector & Theme Strategist
+- 确定风险/奖励最高的部门或主题。
+- 酌情将美国的主题与CN/A/H的接触相映射,如AI半导体、能源、银行、消费者、保健、房地产链、黄金、国防和新能源。
+——将"观察名单机会"与"已经确认的势头"分开.
 
-职责：
+所需证据:
 
-- 识别当天 risk/reward 最好的 sector 或 theme。
-- 把 US theme 映射到 CN/A/H 暴露，例如 AI semiconductors、energy、banks、consumer、healthcare、real estate chain、gold、defense、new energy。
-- 区分“观察型机会”和“已经确认的 momentum”。
+- 部门ETF或行业指数移动。
+- 新闻/分析支持。
+- 如果用户持有相关资产,投资组合暴露影响。
 
-必须引用的证据：
+### 4. 收入、估价和催化分析
 
-- sector ETF 或行业指数变化。
-- 新闻 / catalyst 支持。
-- 如果用户有相关持仓，说明 portfolio exposure impact。
+职责:
 
-### 4. Earnings, Valuation & Catalyst Analyst
+- 跟踪收益、指导、分析员修订、回购、主要公告和高指数加权公司活动。
+- 对中国和香港来说,追踪收入预览、交易公告、监管通知、政策敏感公司新闻以及一夜之间ADR运动。
+- 解释哪些催化剂可以影响指数,而不是只影响单一名称。
 
-职责：
+所需证据:
 
-- 跟踪 earnings、guidance、analyst revisions、buybacks、重大公告、高指数权重公司事件。
-- 对中国 / 香港市场，跟踪业绩预告、交易所公告、监管通知、政策敏感公司新闻和隔夜 ADR。
-- 区分事件会影响指数、行业，还是只影响单一股票。
+- 收入日历或存档/通知数据。
+- 公司新闻或证监会/交换档案链接。
+- 指数权重或部门接触。
 
-必须引用的证据：
+### 5. 风险、假想和魔鬼的代言人领导
 
-- Earnings calendar 或 filing / announcement 数据。
-- 公司新闻或 SEC / 交易所 filing 链接。
-- 可用时引用指数权重或行业暴露。
+职责:
 
-### 5. Risk, Scenario & Devil's Advocate Lead
+- 挑战基案
+- 列出预测最可能失败的方式。
+- 查明拥挤的贸易、隐藏的宏观风险、政策头条风险、流动性事件、数据释放风险和尾巴风险。
+- 要求每个高定罪电话的触发器无效。
 
-职责：
+所需证据:
 
-- 挑战 base case。
-- 列出预测最可能失效的路径。
-- 识别 crowded trades、hidden macro risk、policy headline risk、liquidity event、data-release risk 和 tail risks。
-- 每个高置信度判断都必须有 invalidation trigger。
+- 供应商的冒险旗
+- 数据警告缺失或陈旧。
+- 宏观/活动日历风险。
+- 波动或流动性压力信号。
 
-必须引用的证据：
+### 6. 预测编辑器
 
-- provider 给出的 risk flags。
-- missing / stale data warnings。
-- 宏观 / 事件日历风险。
-- 波动率或流动性 stress signals。
+职责:
 
-### 6. Forecast Editor
+- 合并五个角色视图。
+- 明确解决矛盾。
+- 将报告转换为概率和监测点。
+- 防止无根据的索赔进入最后结论。
 
-职责：
+产出需求:
 
-- 汇总五个角色的观点。
-- 明确处理冲突。
-- 把报告转成概率和监控点。
-- 防止没有证据支持的 claims 进入最终结论。
-
-输出要求：
-
-- 主要指数方向概率：
+- 主要指数的方向概率:
   - `up`
   - `range_bound`
   - `down`
-- 当证据不一致时，开盘方向和全天收盘方向分开判断。
-- 输出 top sector opportunities，并附 confidence 和 triggers。
-- 输出 risk watchlist 和 invalidation points。
-- 输出 data quality summary。
+- 在证据不同时将开放方向和全天近距离分开。
+- 具有信心和触发力的顶级部门机会。
+- 有无效点的风险监视列表。
+- 数据质量摘要。
 
-## 最终报告结构
+## 最后报告合同
 
-每份盘前报告使用以下结构：
+每一份市场前报告应使用这一结构:
 
 ```markdown
 # US/CN Pre-Market Report - YYYY-MM-DD
@@ -298,16 +295,16 @@ For each alert:
 - Provider warnings:
 ```
 
-报告默认不能说“买入”“卖出”“必须交易”，除非用户明确要求交易指令。默认表述应该偏 watchlist 和 risk-control：
+报告不应注明"买","卖",或"必须交易",除非用户明确要求交易指示. 默认措辞应当以监视列表和风险控制为导向:
 
-- “重点观察”
-- “若 X 发生，则 Y 风险上升”
-- “若 X 被证伪，则降低该判断权重”
-- “不建议仅凭该信号行动”
+- 专注于观察。
+- "如果X发生,Y的风险上升。"
+- "如果X是伪证, 降低判断的重量。"
+- "不建议单独对信号采取行动"
 
-## Provider 设计
+## 提供者设计
 
-新增 provider：
+添加新提供者 :
 
 ```text
 src/providers/market-intel/
@@ -333,22 +330,22 @@ src/providers/market-intel/
     index.test.ts
 ```
 
-注册位置：
+登记在:
 
 ```text
 src/providers/index.ts
 ```
 
-用户级配置：
+用户级配置 :
 
 ```text
 ~/.miniclaw/providers/market-intel/us-pre-market.yaml
 ~/.miniclaw/providers/market-intel/cn-pre-market.yaml
 ```
 
-### Provider 输入配置
+### 提供者输入配置
 
-建议配置形态：
+建议配置形状 :
 
 ```yaml
 market_scope: us # us | cn
@@ -412,7 +409,7 @@ quality:
   allow_partial_news: true
 ```
 
-CN/A/H 配置使用市场特定 symbols 和 sources：
+CN/A/H配置应使用特定市场的符号和来源:
 
 ```yaml
 market_scope: cn
@@ -422,8 +419,8 @@ portfolio_provider_config: cn-stock
 
 watchlists:
   indices:
-    - "000001.SS" # SSE Composite，实际 provider symbol 可能不同
-    - "399001.SZ" # SZSE Component，实际 provider symbol 可能不同
+    - "000001.SS" # SSE Composite, exact provider symbol may differ
+    - "399001.SZ" # SZSE Component, exact provider symbol may differ
     - "^HSI"
     - "^HSTECH"
   cross_market:
@@ -440,9 +437,9 @@ watchlists:
     - new_energy
 ```
 
-### Provider 输出 Schema
+### 提供者输出Schema
 
-Provider 应返回带 source IDs 的 JSON。LLM prompt 必须要求每个结论引用 evidence IDs。
+提供者应携带源代码返回JSON。 LLM提示必须需要证据身份证明才能得出结论.
 
 ```ts
 export interface MarketIntelPayload {
@@ -493,7 +490,7 @@ export interface MarketIntelPayload {
 }
 ```
 
-基础类型：
+推荐原始类型 :
 
 ```ts
 export interface MarketDataPoint {
@@ -540,238 +537,238 @@ export interface RiskFlag {
 }
 ```
 
-## 数据源策略
+## 数据源战略
 
-### 验证摘要
+### 审定摘要
 
-本轮验证在 2026-05-10 实施，包含两层：先确认官方文档或官方入口是否支持对应指标，再从本机做最小 endpoint probe。验证结果改变了后续实现策略：
+2026-05-10实施前运行验证. 鉴定将官方文献审查与来自这台机器的活端点探测器相结合. 结果改变了执行政策:
 
-- 默认只使用官方源或本机已认证的只读源。
-- 需要 API key 或付费权限的 source 只作为 optional accelerator，不作为 baseline dependency。
-- 没有官方文档的 public endpoint 即使当前可访问，也只能作为 fallback。
-- Generic web search 不能作为结构化 market-data source，只能用于补充新闻发现，并且必须做 source dedupe。
-- 任何关键结论都不能只依赖未验证、无官方文档或未标注 caveat 的 source。
+- 使用官方或本地认证的只读源作为默认值。
+- 将付费/API键源视为可选加速器,而不是基线依赖。
+- 仅将无证公共终点视为倒计时,即使它们目前工作。
+- 不使用通用的网络搜索作为结构化的市场数据源;只用它来补充从源解调器中发现的新闻。
+- 除非有成功的探测器、官方文件或明确的倒置/掩埋物,否则不得使用重要索赔来源。
 
-本机 live probe 结果：
+这台机器的现场探测器
 
-- SEC EDGAR submissions 和 companyfacts JSON：AAPL probe 可访问，字段有效。
-- BLS Public Data API v2：无需 key 的小规模 CPI 请求可访问。
-- U.S. Treasury daily yield XML：可访问，并包含 10Y yield 字段。
-- FRED 官方 API 无 key：被拒绝。FRED graph CSV 的 `DGS10` 可访问。
-- Federal Reserve press RSS 和 FOMC calendar page：可访问。
-- Cboe VIX history CSV：可访问。它是 daily historical VIX，不是实时 VIX quote source。
-- PBOC 公开市场操作页面：可访问。
-- NBS English latest releases 页面：可访问。
-- SSE English trading calendar：可访问。
-- SZSE English calendar page 在 Node fetch 下不稳定，但官方 `szse.cn/api/report/exchange/onepersistenthour/monthList` JSON endpoint 返回了 2026-05 交易日 flags。
-- HKEX trading-hours page：可访问。
-- Futu OpenD health：`127.0.0.1:11111` 可达；Python `futu-api` / `moomoo` package 可用。
-- Futu quote snapshot probe：US / HK 行情 snapshot 成功；A 股 snapshot 因本机没有 A 股行情权限失败。
-- Yahoo chart endpoint：AAPL probe 可访问，但它是 unofficial / undocumented。
-- Eastmoney `push2` clist endpoint：可访问，但它是 unofficial / undocumented。
-- 本机 `FRED_API_KEY`、`POLYGON_API_KEY`、`TUSHARE_TOKEN`、`FINNHUB_API_KEY`、`ALPHAVANTAGE_API_KEY`：验证时均未配置。
-- 本机 `akshare` 和 `tushare` Python packages：验证时未安装。
+- SEC EDGAR提交材料和公司事实JSON:AAPL可达到和实地验证。
+- BLS Public Data API v2:没有小的CPI请求的密钥可达.
+- 美国财政部每日收益XML:可达到,包含10Y收益场。
+- FRED官方API没有钥匙:被拒绝. FRED 图表 CSV 用于`DGS10`:可达.
+- 联邦储备局按RSS和FOMC日历页:可达。
+- Cboe VIX历史 CSV:可达. 这是每日历史VIX,不是实时VIX引文来源.
+——BBOC开放市场运营页面:可达.
+- NBS英语最新版页:可达.
+- SSE英语交易日历:可达.
+- SZSE的英文日历页不可靠 从节点获取,但官方`szse.cn/api/report/exchange/onepersistenthour/monthList`JSON端点回归2026-05交易日旗.
+- HKEX交易时数页面:可达.
+- 未来开放健康:可实现`127.0.0.1:11111`; 蟒蛇`futu-api` / `moomoo`软件包可用。
+- Futu引文快照探测器:美港快照成功;A-share快照因本机缺少A-share市场数据许可而失败.
+- 雅虎图终点:AAPL可以达到,但无证/非官方。
+- 东钱`push2`clist end point:可达,但无证/非官方.
+- 当地`FRED_API_KEY`, `POLYGON_API_KEY`, `TUSHARE_TOKEN`, `FINNHUB_API_KEY`,以及`ALPHAVANTAGE_API_KEY`: 在验证时未配置 。
+- 当地`akshare`和`tushare`Python 包:在验证时未安装.
 
-### 数据源质量分层
+### 源质量等级
 
-#### Tier A：默认来源
+#### A级:默认来源
 
-这些 source 足够稳定，可以进入第一版 provider 默认实现。
+这些都是足够稳定的一流供应商支持。
 
-- Federal Reserve official pages / RSS：
-  - 指标：FOMC calendar、policy statements、press releases、speeches。
-  - 访问方式：HTML / RSS parsing。
-  - caveat：权威但不是干净 JSON API；需要 parser tests 和页面结构监控。
-- U.S. Treasury official feeds / Fiscal Data：
-  - 指标：Treasury yield curve 和 daily rates。
-  - 访问方式：XML feed 或可用时的 Fiscal Data API endpoint。
-  - 作为 US yields 的主源，优先级高于 FRED。
-- BLS Public Data API：
-  - 指标：CPI、PPI、unemployment rate、payrolls、wages 和其他已知 BLS series IDs。
-  - 访问方式：JSON API。小规模 public requests 无需 key；key 可以提高 limit。
-- SEC EDGAR official APIs：
-  - 指标：recent filings、8-K / 10-Q / 10-K / 20-F / 6-K、tracked companies 的 XBRL company facts。
-  - 访问方式：`data.sec.gov` JSON APIs；必须发送明确 User-Agent。
-- Cboe official VIX history：
-  - 指标：daily historical VIX open / high / low / close。
-  - 访问方式：official CSV。
-  - caveat：不能作为实时盘前 VIX 的唯一来源；当前 VIX-like snapshot 需要配合 Futu / Polygon / Yahoo quote。
-- PBOC official open market operations pages：
-  - 指标：OMO announcements、reverse repo amount / rate、policy / liquidity headlines。
-  - 访问方式：官方 HTML 页面。
-  - caveat：不是 JSON API，parser 必须保守。
-- NBS official latest releases：
-  - 指标：CPI、PPI、PMI、industrial production、retail sales、fixed asset investment headlines / releases。
-  - 访问方式：官方 HTML release pages。
-  - caveat：用于 release monitoring 和最新官方值；不要假设有稳定 English JSON API。
-- SSE official trading calendar：
-  - 指标：上海市场开闭市日期。
-  - 访问方式：official English trading schedule page 加 static override cache。
-- SZSE official trading-day JSON：
-  - 指标：深圳市场按月交易日 flags。
-  - 访问方式：`szse.cn/api/report/exchange/onepersistenthour/monthList?month=YYYY-MM`。
-  - caveat：English page probe 不稳定，因此需要 fixture tests 和 static fallback calendar。
-- HKEX official trading hours / market calendar references：
-  - 指标：香港 securities trading sessions、half-day rules、holiday / session rules。
-  - 访问方式：official pages 加 static override cache。
-- Futu OpenD：
-  - 指标：US / HK quote snapshots、本地 account / portfolio context，以及在本地权限允许时的 candles。
-  - 访问方式：local OpenD + Python API。
-  - 验证结果：US / HK snapshot 可用；本机 A 股行情权限不可用，所以不能把 Futu 作为默认 CN-A quote source。
+- 联邦储备局官方网页/RSS:
+- 计量:FOMC日历、政策声明、新闻稿、演讲。
+- 访问模式: HTML/RSS 解析。
+- Caveat:权威但非干净的JSON API;需要解析器测试和页面形状监测。
+- 美国财政部官方信息/财政数据:
+- 计量:国库收益曲线和日费率。
+- 访问模式:在有数据集终点的地方提供XML种子或财政数据API。
+- 尽可能将美国产量而不是FRED作为主要来源。
+- BLS 公共数据 API:
+- 计量:CPI、PPI、失业率、工资、工资、其他已知的BLS系列身份证。
+- 进入模式:JSON API。 小规模的公众要求没有密钥的工作;密钥可以增加限制.
+- 证交会EDGAR官方APIs:
+- 计量:最近提交的档案,8-K/10-Q/10-K/20-F/6-K,被跟踪公司的XBRL公司事实。
+- 访问模式: JSON APIs under`data.sec.gov`; 总是发送已声明的用户代理.
+- Cboe官方VIX历史:
+- 计量:每日历史VIX关闭/开放/高/低。
+- 访问模式:官方CSV.
+- Caveat:不要作为现场市场前VIX的唯一来源;如果有的话,与Futu/Polygon/Yahoo引文对应。
+- PBOC官方公开市场业务网页:
+- 计量:OMO公告、反向还款金额/利率、政策/流动性头条。
+- 访问模式:正式的HTML页面.
+因为这不是JSON API。
+- NBS官方最新发布:
+——计量:CPI,PPI,PMI,工业生产,零售,固定资产投资头条/发行.
+- 访问模式:正式的HTML发布页面.
+- Caveat:用于释放监测和最新的官方值;不假设稳定的英语JSON API.
+- SSE官方交易日历:
+——计量:上海市场开放/闭市日.
+- 访问模式:正式的英文交易时间表页加上静态覆盖缓存。
+- SZSE官方交易日JSON:
+——计量:深圳交易日旗按月公布.
+- 访问模式:`szse.cn/api/report/exchange/onepersistenthour/monthList?month=YYYY-MM`.
+- Caveat:保持固定测试和倒置的静态日历,因为英文页面探测器不可靠.
+- HKEX官方交易时间/市场日历参考:
+- 计量:香港证券交易会议、半天规则、假日/会期规则。
+- 访问模式:官方网页加上静态覆盖缓存。
+- 未来打开D:
+- 计量:US/HK引证快照,通过现有的只读提供者进行本地账户/组合上下文,如果本地允许,则可能提供蜡烛。
+- 访问模式:本地OpenD + Python API.
+- 校验结果:US/HK快照工作;A-share引号权限在此机上不可用,所以不要让Futu成为默认的CN-A引号源.
 
-#### Tier B：可选高质量来源
+#### B级:可选高品质来源
 
-只有明确配置 credentials 或本地 package 后才使用。
+仅在明确配置证书或本地包时才使用 。
 
-- Polygon：
-  - 指标：US stock / ETF snapshots、aggregates、market status、ticker news。
-  - 质量：API shape 清晰，属于商业 market-data source。
-  - 当前状态：未配置 `POLYGON_API_KEY`，不能作为 baseline dependency。
-- FRED：
-  - 指标：广泛 macro time series。
-  - 质量：Federal Reserve Bank of St. Louis 官方高质量来源。
-  - 当前状态：官方 API 需要 API key；本机缺少 `FRED_API_KEY`。Public graph CSV 可作为少量非关键历史序列 fallback。
-- Tushare Pro：
-  - 指标：CN trading calendar、daily market data、fundamentals、daily basics。
-  - 质量：结构化 API，但 token / points gated。
-  - 当前状态：无 `TUSHARE_TOKEN`，package 未安装。只能 optional。
+- 多边形:
+- 计量:美国股票/ETF快照、汇总、市场状况、滴答新闻。
+- 质量:良好的API形状和商业市场数据来源。
+- 现状:无`POLYGON_API_KEY`已配置 。 不要让它成为基线依赖。
+- 弗莱德:
+——计量:广义宏观时序.
+- 质量:高质量的圣路易斯联邦储备银行官方来源.
+- 当前状态:官方API需要API密钥;`FRED_API_KEY`缺少。 公共图CSV作品,可用作部分非临界系列的倒置.
+- 图沙尔Pro:
+- 计量:CN交易日历、每日市场数据、基本情况、每日基本情况。
+- 质量:结构化的API,但有标记/点。
+- 现状:无`TUSHARE_TOKEN`未安装软件包。 只有选择权。
 
-#### Tier C：仅 fallback 来源
+#### C级: 仅回落源
 
-这些 source 可以补洞，但绝不能作为高置信度结论的唯一依据。
+这些可以填补空白,但绝不能成为得出高度信任结论的唯一基础。
 
-- Yahoo chart endpoint：
-  - 验证结果：AAPL chart endpoint 可用。
-  - 问题：unofficial / undocumented，rate-limit 和 cookie 行为可能变化。
-  - 允许用途：低频 fallback quotes / candles，必须标记为 `unofficial`。
-- Eastmoney public `push2` endpoints：
-  - 验证结果：A-share clist endpoint 可用。
-  - 问题：undocumented public endpoint，没有官方稳定性保证。
-  - 允许用途：在更好 source 配好之前，用作 CN-A quotes / sector / top movers fallback；关键结论尽量交叉验证。
-- AKShare：
-  - 问题：community wrapper，底层是多种异构 public sources；本机 package 未安装。
-  - 允许用途：开发辅助或显式配置 fallback，不作为 production default。
-- Stooq：
-  - 问题：没有官方 API，主要适合 historical / EOD backfill。
-  - 决策：从 pre-market default source list 移除，只用于 backtests 或 fixtures。
-- Generic web search：
-  - 问题：排名不稳定、重复转载多、source quality 变化大。
-  - 允许用途：补充新闻发现；每条新闻必须 source-dedupe，并标注 freshness / importance。
+- 雅虎图终点:
+- 验证结果:AAPL图表终点有效。
+- 问题:非官方/无记录、限制费率和饼干行为可以改变。
+- 允许使用:低请求量的倒数引号/引号,始终标注为`unofficial`.
+- 东钱公众`push2`结束点 :
+- 验证结果:A-Share clist endpoint奏效。
+- 问题:没有官方稳定保障的无证公共终点。
+- 允许使用:CN-A引号/扇区/顶部倒置,直到有更好的配置来源;关键结论要求尽可能与另一个来源交叉核对。
+- AKShare: - 怎么样?
+- 问题:社区包装覆盖许多不同的公共来源;地方包装没有安装。
+- 允许使用:开发助手或明确配置回落,而不是生产默认。
+- 斯图克:
+- 问题:没有正式的API;主要用于历史/爆炸物处理回填。
+- 决定:从市场前默认来源列表中删除。 它只能用于背试或固定装置.
+- 通用网络搜索:
+- 问题:排名不一致,重复合成,来源质量可变。
+- 允许使用:只发现补充新闻;每件物品必须经过源头调整并指定新鲜度/重要性。
 
-### 美股数据源
+### 美国资料来源
 
-默认 source plan：
+默认源计划 :
 
-- Calendar 和 session：
-  - NYSE / Nasdaq 官方页面加 static holiday / early-close cache。
-- Rates：
-  - U.S. Treasury official XML / API 优先。
-  - FRED 只用于额外 historical macro series，或少量 graph CSV fallback。
-- Inflation / labor：
-  - BLS Public Data API，使用已知 CPI / PPI / employment / wage series IDs。
-- Fed policy：
-  - Federal Reserve FOMC calendar、press releases 和 RSS feeds。
-- Filings 和 company catalysts：
-  - 对 tracked tickers 做 CIK mapping 后，使用 SEC EDGAR submissions / companyfacts APIs。
-- Volatility：
-  - Cboe official VIX history 用于 daily context。
-  - 当前 VIX-like snapshot 使用 Futu / Polygon / Yahoo quote source，并带 source quality label。
-- US stock / ETF / index quotes：
-  - 如果本地权限覆盖对应 instrument，Futu OpenD 是 local primary。
-  - 配置 `POLYGON_API_KEY` 后可使用 Polygon。
-  - Yahoo chart 只作为 fallback。
+- 日历和届会:
+- NYSE/纳斯达克官方网页加静态节假日/早期缓存。
+- 比率:
+- 美国财政部官员XML/API先行.
+- FRED只用于配置或选定图 CSV回落时的额外历史宏序列。
+- 通货膨胀/实验室:
+- 已知CPI/PPI/就业/工资系列ID的BLS公共数据API。
+- 联邦政策:
+- 联邦储备局财务监测中心日历、新闻稿和RSS资料。
+- 档案和公司催化剂:
+- SEC EDGAR提交的信息/公司信息,用于向CIKs绘制的跟踪计数器。
+- 波动性:
+——Cboe官方VIX历史为日常背景.
+- Futu/Polygon/Yahoo 引用源用于当前类似VIX的快照,并带有源质量标签.
+- 美国股票/ETF/索引引文:
+- 如果允许的话, Futu OpenD 作为本地主设备。
+- 如果配置了 API 密钥的话, 多边形 。
+- 雅虎图只是回落。
 
-实现优先级：
+执行优先事项:
 
-1. Market calendar 和 quote snapshot。
-2. Volatility、rates、FX、commodities。
-3. Economic calendar 和关键 macro releases。
-4. Earnings 和 company catalyst collector。
-5. Sector ETF 或 industry index movement。
-6. News search fallback，并做 source deduplication。
+1. 市场日历和引文简介。
+2. 波动、费率、FX、商品。
+3. 经济日历和关键宏观发布。
+4. 收益和公司催化剂收集器。
+5. 部门ETF或行业指数变动。
+6. 新闻搜索与源代码的分解相退缩。
 
-### CN/A/H 数据源
+### 氯化萘/A/H源
 
-默认 source plan：
+默认源计划 :
 
-- Calendar 和 session：
-  - SSE official trading schedule 用于上海市场。
-  - SZSE official `monthList` JSON 用于深圳市场。
-  - HKEX official pages 加 static holiday / half-day override cache 用于香港市场。
-- China policy / liquidity：
-  - PBOC official OMO / policy pages。
-- China macro：
-  - NBS official latest releases，用于 CPI / PPI / PMI / industrial production / retail / FAI。
-- HK / US-linked cross-market signals：
-  - 本地权限允许时，用 Futu OpenD 获取 HK 和 US quotes。
-  - HKEX official references 用于 HK trading sessions 和 special-session rules。
-- CN-A quotes 和 sector / top movers：
-  - 本机 Futu A 股 quote permission 不可用。
-  - Eastmoney public endpoints 只能作为 fallback，并标记 `unofficial`。
-  - 如果后续配置 Tushare Pro token / package，可优先使用 Tushare。
-- Account / portfolio context：
-  - 继续使用 `stock-portfolio`，它已经聚合 redacted Futu 和 Eastmoney read-only account data。
+- 日历和届会:
+- 上海SSE官方交易时间表.
+- SZSE官员`monthList`JSON为深圳.
+- HKEX官方网页 加上静态节假日/半天 超载缓存 香港。
+- 中国政策/流动性:
+- PBOC官方OMO/政策页。
+- 中国宏观:
+- NBS关于CPI/PPI/PMI/工业生产/零售/FAI的官方最新发布。
+- 香港/美国连结的跨市场信号:
+- 在允许的情况下,
+- HKEX正式参考香港贸易会议和特别会议规则。
+- CN-A引文和区/顶级移动器:
+- Futu A -share 引用权限不能在这个机器上。
+- 仅将Eastmony公用终点作为倒计时标记`unofficial`.
+- 偏爱图沙尔 只有在后来配置了令牌/包装时才会成功 。
+- 账户/组合背景:
+- 继续使用`stock-portfolio`,它已经汇总了已编辑的Futu和Eastmoney只读账户数据。
 
-实现优先级：
+执行优先事项:
 
-1. CN/HK calendar guard。
-2. A 股 / 港股指数和跨市场快照。
-3. RMB / CNH 和 offshore risk signals。
-4. PBOC / NBS / 政策新闻。
-5. Sector / theme movement。
-6. 公司公告和业绩预告。
+1. CN/HK日历警卫。
+2. A股/HK指数和期货/跨市场快照。
+3.人民币/CNH和境外风险信号.
+4. PBOC/NBS/政策头条。
+5. 部门/主题运动。
+6. 公司公告和收益预览。
 
-### 默认实现中排除的来源
+### 不包括默认执行
 
-以下 source 不进入第一版默认实现：
+这些来源不应是默认的首次执行的一部分:
 
-- Stooq：不用于 pre-market live decisions。
-- AKShare：不作为 production default。
-- Tushare：除非配置 `TUSHARE_TOKEN` 且测试覆盖所需 endpoint。
-- Polygon：除非配置 `POLYGON_API_KEY`。
-- FRED 官方 API：除非配置 `FRED_API_KEY`；少量 graph CSV 可用于非关键 historical context。
-- Nasdaq webpages：不作为结构化数据源，只能作为补充参考。
+- Stooq负责市场前的现场决策
+- AK共享作为生产默认。
+- 图沙雷,除非`TUSHARE_TOKEN`配置并测试证明所需的准确终点。
+- 多边形,除非`POLYGON_API_KEY`已配置。
+- FRED官方API,除非`FRED_API_KEY`被配置; 选中的图 CSV 折返可被非关键历史背景所接受。
+- Nasdaq网页作为结构化数据来源。 它们可以是补充参考文献,而不是提供者的投入。
 
-## Scoring 与 Forecasting
+## 计算和预测
 
-Provider 应计算确定性 scores。LLM 负责解释，不负责凭空创造这些数值。
+提供者应计算确定分数。 LLM应该解释它们,而不是发明它们.
 
-建议 score 范围：`-2` 到 `+2`。
+建议的得分范围:`-2` to `+2`.
 
-市场维度：
+市场层面:
 
 - `macro_score`
-  - rates、FX、policy、economic data surprises。
+——率,FX,政策,经济数据惊喜.
 - `flow_score`
-  - index futures、cross-market leads、ETF movement、breadth、可用时的北向 / 南向线索。
+——指数期货,跨市场线索,ETF运动,广度,若有南北向线索,则采用南北向线索.
 - `volatility_score`
-  - VIX 或本地 volatility proxies。
+- VIX或局部波动代词。
 - `sector_breadth_score`
-  - 正向 / 负向 sector 的数量和强度。
+- 积极/消极部门的数目和实力。
 - `earnings_catalyst_score`
-  - 重大 earnings / catalysts 的净影响。
+- 主要收益/催化剂的净效应。
 - `data_quality_score`
-  - 对关键 source stale 或 missing 做惩罚。
+- 惩罚陈旧或缺失的关键来源。
 
-Forecast Editor 把证据和角色观点转成概率：
+预测编辑器将证据和分析观点转换为概率 :
 
 ```text
 up_probability + range_probability + down_probability = 100%
 ```
 
-规则：
+规则:
 
-- 除非至少三个独立 evidence groups 同向，否则单个 index probability 不应超过 70%。
-- quote data stale 时，confidence 必须 cap。
-- 开盘前或开盘后不久有重大数据发布时，confidence 必须降低。
-- Sector opportunity 至少需要两个 evidence groups，例如 `price/flow + catalyst`、`macro + earnings` 或 `portfolio exposure + sector momentum`。
-- 每个高置信度 sector opportunity 都必须有 invalidation trigger。
+- 指数概率不应超过70%,除非至少有三个独立证据组对齐。
+- 如果引文数据停滞,最大置信度会封顶。
+- 如果在开放之前或之后不久尚未公布主要数据,就必须降低信心。
+- 部门机会至少需要两个证据小组,例如:`price/flow + catalyst`, or `macro + earnings`, or `portfolio exposure + sector momentum`.
+- 每一个高自信部门的机会都需要一个失效触发器。
 
-## Forecast 持久化与评估
+## 持久性和评价
 
-第一版 provider / report 稳定后，再增加 forecast persistence。
+在第一个提供者/报告原型工程之后添加预测持久性。
 
-建议 tables：
+建议的表格:
 
 ```sql
 CREATE TABLE market_forecasts (
@@ -812,25 +809,25 @@ CREATE TABLE market_forecast_evaluations (
 );
 ```
 
-Evaluation metrics：
+评价尺度:
 
-- Direction hit rate：
-  - dominant probability bucket 是否匹配最终指数方向。
-- Open gap hit：
-  - 是否正确预判开盘方向。
-- Full-day close hit：
-  - 是否正确预判收盘方向。
-- Brier score：
-  - 衡量概率校准，而不只是对 / 错。
-- Sector hit rate：
-  - 选出的 sector / theme 是否跑赢相关 benchmark。
-- Risk trigger quality：
-  - 风险提示是否发生。
-  - False positives 是否过多。
-- Data quality correlation：
-  - 对比低 confidence / 数据质量差的报告与实际 miss rate。
+- 方向命中率:
+- 占优势的概率桶是否与最终指数运动相符?
+- 打开缺口:
+- 报告是否正确预测了开放方向?
+- 全天近距离攻击:
+- 报告是否正确地预测了接近的方向?
+-布莱尔得分:
+- 衡量概率校准,而不仅仅是是/否正确。
+- 部门打击率:
+- 选定的部门/主题是否超过了相关基准?
+- 风险触发质量:
+- 冒着危险吗?
+- 假阳性过度了吗?
+- 数据质量相关性:
+- 将低信任度报告与实际误差率相比较。
 
-盘后 job 可以评估早上的 forecast，并在 Discord 盘后报告中附一段简短 calibration note：
+上市后的工作可以评估晨报,
 
 ```text
 Today forecast:
@@ -843,9 +840,9 @@ Today forecast:
 
 ## Cron 配置计划
 
-更新现有 jobs，不重复创建新任务。
+更新现有工作,而不是创建重复。
 
-### 美股
+US:
 
 ```yaml
 name: us-stock-pre-market
@@ -863,7 +860,7 @@ prompt: |
   ...
 ```
 
-### CN/A/H
+CN/A/H:
 
 ```yaml
 name: cn-stock-pre-market
@@ -881,170 +878,170 @@ prompt: |
   ...
 ```
 
-Calendar behavior：
+日历行为 :
 
-- 如果相关市场全部休市，provider 返回 `skipTask`，可选择静默跳过。
-- 如果只有部分市场休市，provider 继续运行并标注 open / closed market split。
-- 如果关键 quote collection 失败，除非配置允许，否则 provider fail closed。
-- 如果 news / earnings collection 失败，provider 可以继续运行，但必须输出 warnings。
+- 如果所有相关市场关闭,供应商将返回`skipTask`可以选择的安静跳过。
+- 如果只关闭部分市场,供应商运行并标注开放/封闭市场拆分。
+- 如果批量引用收藏失败, 除非另作配置, 提供者无法关闭此任务 。
+- 如果新闻/学习收藏失败,提供者可以继续发出警告。
 
-## Prompt Protocol
+## 快速协议
 
-Cron prompt 应强制执行以下协议：
+紧急提示应执行这项协议:
 
-1. 先读取 `data_quality`。
-2. 如果 `run_context.calendar_status=closed`，除非 provider 明确要求继续，否则只输出短状态。
-3. 按顺序输出角色分析：
-   - Macro, Policy & Liquidity
-   - Flow, Positioning & Technical
-   - Cross-Market Sector & Theme
-   - Earnings, Valuation & Catalyst
-   - Risk, Scenario & Devil's Advocate
-4. 每个角色必须列出：
-   - conclusion
-   - evidence IDs
-   - confidence
-   - what would change its view
-5. Forecast Editor 必须输出最终概率。
-6. 没有证据支持的 statement 必须标成 hypothesis，不能当作事实。
-7. 严禁输出 account IDs、raw broker payloads、tokens、cookies、validatekey、phone numbers 或 session data。
-8. 不提供自动交易建议。
+1. 读`data_quality`先说
+2. If `run_context.calendar_status=closed`,只输出一个短暂的封闭市场状态,除非供应商明确表示要继续。
+3. 利用各处的作用,以便:
+- 宏观、政策和流动性
+- 流动、定位和技术
+- 跨市场区主题( T)
+- 收入、估价和催化剂
+- 风险、情景和魔鬼律师
+4. 每个角色必须列出:
+- 结论
+- 证据身份证明
+- 自信吗?
+- 是什么会改变它的观点?
+5. 预测编辑器必须产生最终概率。
+6. 任何无根据的索赔都必须标为假设而非事实。
+7. 不得输出账户ID、原始代理有效载荷、信使、饼干、验证钥匙、电话号码或会话数据。
+8. 不建议自动交易。
 
-## 实施计划
+## 执行计划
 
-### Phase 0：计划与 Fixture 设计
+### 第0阶段:规划和固定设计
 
-1. 增加本计划文档。
-2. 在写 provider 代码前验证 source quality 和 live endpoint availability。
-3. 定义 `MarketIntelPayload` 和 US / CN fixture 示例。
-4. 决定第一版可在本机 zero-touch 运行的数据源列表。
-5. 确认哪些 quote source 可以无人工登录覆盖 US / CN / HK。
+1. 增加本计划文件。
+2. 在写入提供者代码之前验证源质量和现场端点可用性。
+3. 定义`MarketIntelPayload`美国和氯化萘的固定实例。
+4. 决定该机上可运行零触动的初始数据源列表.
+5. 确认美国/CN/HK在无需人工登录的情况下可获得的报价来源。
 
-退出标准：
+退出标准 :
 
-- 计划进入 `docs/plans` 和 `docs/zh`。
-- 初版 schema 已 review。
-- source choice 清楚写在文档里，而不是藏在 prompt 中。
-- 低质量或未配置 source 已从 defaults 排除，或标记为 fallback / optional。
+- 计划是`docs/plans`.
+- 对初步计划进行审查。
+- 源选择是明确的,而不是隐藏在提示中。
+- 低质量或未配置的源被排除在默认或标记倒置/可选性之外。
 
-### Phase 1：Provider Skeleton
+### 第一阶段:提供商Skeleton
 
-1. 创建 `src/providers/market-intel/`。
-2. 增加 config loader 和 validation。
-3. 增加 calendar guard。
-4. 增加 placeholder collectors，返回接近 fixture 的结构化 sections。
-5. 在 `src/providers/index.ts` 注册 provider。
-6. 增加 config、calendar、formatting tests。
+1. 创建`src/providers/market-intel/`.
+2. 增加配置加载器和验证。
+3. 增加日历警卫。
+4. 增加返回固定式结构化部分的占位器收集器。
+5. 登记册提供者`src/providers/index.ts`.
+6. 添加配置、日历和格式化测试。
 
-退出标准：
+退出标准 :
 
-- `pnpm vitest run src/providers/market-intel` 通过。
-- provider 可以通过 cron test fixture 调用。
-- 缺少 config 时输出清晰错误。
+- `pnpm vitest run src/providers/market-intel`通过。
+- 提供商可以通过Cron测试固定装置援引。
+- 缺少配置失败, 有明显的错误 。
 
-### Phase 2：Portfolio Integration
+### 第二阶段:组合整合
 
-1. 当 `portfolio_provider_config` 存在时，在 `market-intel` 内部调用 `stock-portfolio`。
-2. 保留 `stock-portfolio` warnings 和 data quality。
-3. 确保 CNY summary 位于 provider 输出靠前位置，避免上下文截断时丢失关键口径。
-4. 增加 redaction test，防止 broker secrets 或 account identifiers 泄漏。
+1. 打电话`stock-portfolio`内部`market-intel`何时`portfolio_provider_config`已经设定。
+2. 保 留`stock-portfolio`警告和数据质量。
+3. 确保纽约市摘要在供应商产出中较早出现,以避免截断。
+4. 增加编辑测试,防止经纪人秘密或账户识别信息泄露。
 
-退出标准：
+退出标准 :
 
-- US 和 CN market-intel configs 可以包含 portfolio context。
-- 如果 portfolio 部分失败，且配置允许，报告可以继续。
-- 如果所有 required portfolio sources 失败，provider fail closed。
+- 美国和CN市场-英特尔配置可以包括组合上下文。
+- 如果组合部分失败, 可以在配置允许时继续报告 。
+- 如果所有需要的组合源都失败,则提供者失效。
 
-### Phase 3：Market Snapshot Collectors
+### 第三阶段:市场快照收集器
 
-1. 实现 quote snapshot collector。
-2. 增加 US index / futures / ETF / volatility / rate / FX / commodity watchlist 支持。
-3. 增加 CN/A/H index / cross-market / sector watchlist 支持。
-4. 按 collector type 增加 stale data detection。
-5. 增加 deterministic score calculation。
+1. 安装引文快照收集器。
+2. 增加美国指数/未来/ETF/波动/速率/FX/商品监视列表支持。
+3. 增加CN/A/H指数/跨市场/部门观察清单支持。
+4. 增加按采集器类型分类的陈旧数据检测。
+5. 增加确定分数计算。
 
-退出标准：
+退出标准 :
 
-- Provider 输出 `market_snapshot` 和 `scores`。
-- `data_quality` 中能看到 stale / missing data。
-- Tests 覆盖 partial quote failures 和 stale data。
+- 供应商生产`market_snapshot`和`scores`.
+- 存储/缺失数据可见于`data_quality`.
+- 测试涵盖部分引文失败和陈旧数据。
 
-### Phase 4：Macro、Policy、News、Earnings 与 Filings
+### 阶段4:宏观、政策、新闻、收益和档案
 
-1. 增加 US 官方 macro collector：
-   - Federal Reserve / FOMC references。
-   - Treasury rates。
-   - 如果 API key 或 public endpoint 可用，接 FRED / BLS。
-   - 对 tracked symbols 接 SEC EDGAR company / filing collector。
-2. 增加 CN/HK 官方或稳定 collector：
-   - PBOC policy / liquidity headlines。
-   - NBS release headlines / data。
-   - 可行时接 SSE / SZSE / HKEX announcements。
-3. 增加 fallback web/news collector，做 source dedupe 和 max item caps。
-4. 增加 importance scoring 和 evidence IDs。
+1. 在可行的情况下增加美国官方宏观收集器:
+- 联邦储备委员会/联邦渔业监测委员会参考文件。
+- 国库利率
+- FRED/BLS配置了 API 路径,如果有密钥可用或公用端点工作.
+- 证交会EDGAR公司/履带符号的过滤器。
+2. 增加氯化萘/高浓度官方或耐用收集器:
+- PBOC政策/流动性头条。
+- NBS发布头条/数据。
+- 在可行的情况下发布SSE/SZSE/HKEX公告。
+3. 添加回落网络/新闻收集器,并加源代码和最大项目封顶。
+4. 增加重要评分和证据标识。
 
-退出标准：
+退出标准 :
 
-- Provider 可以输出 macro / news / earnings evidence，不依赖 LLM 做第一轮 discovery。
-- 每个 evidence item 都有 `id`、`source`、`captured_at` 和 freshness。
-- Tests 覆盖 source failure 和 dedupe。
+- 提供商可以提供宏观/新闻/学习证据,而无需LLM进行第一通道的发现。
+- 每件证据都有`id`, `source`, `captured_at`和新鲜。
+- 测试涵盖源故障和除尘。
 
-### Phase 5：Cron Prompt Upgrade
+### 第5阶段:快速升级
 
-1. 更新 `~/.miniclaw/cron/us-stock-pre-market.yaml`。
-2. 更新 `~/.miniclaw/cron/cn-stock-pre-market.yaml`。
-3. 用角色协议和 Forecast Editor contract 替换单一分析师 prompt。
-4. 输出聚焦 guidance、triggers、risk 和 data quality。
-5. 本阶段不改 post-market 或 hourly pulse jobs。
+1. 最新情况`~/.miniclaw/cron/us-stock-pre-market.yaml`.
+2. 最新情况`~/.miniclaw/cron/cn-stock-pre-market.yaml`.
+3. 用角色协议和预测编辑合同取代单分析提示。
+4. 使产出侧重于指导、触发因素、风险和数据质量。
+5. 在这一阶段不要改变市场后或小时脉冲工作。
 
-退出标准：
+退出标准 :
 
-- `pnpm cron:list` 能加载两个 jobs。
-- `pnpm cron:test us-stock-pre-market` 在受控测试中成功发到 Discord。
-- `pnpm cron:test cn-stock-pre-market` 在受控测试中成功发到 Discord。
+- `pnpm cron:list`装入两个任务。
+- `pnpm cron:test us-stock-pre-market`运行到控制测试中的 Discord。
+- `pnpm cron:test cn-stock-pre-market`运行到控制测试中的 Discord。
 
-### Phase 6：Forecast Persistence
+### 第6阶段:预测持久性
 
-1. 在 provider 输出稳定后增加 `market_forecasts` tables。
-2. 持久化 provider payload 和最终 report text。
-3. 从 LLM output 提取 structured forecast items，或要求 LLM 在结尾输出 compact JSON block。
-4. 增加只读命令或 script 查看最近 forecasts。
+1. 添加`market_forecasts`表格在提供者输出后稳定。
+2. 持久性供应商有效载荷和最后报告文本。
+3. 从 LLM 输出中提取结构化预测项目,或要求 LLM 在结尾产生一个紧凑的 JSON 块.
+4. 添加只读命令或脚本检查最近的预测.
 
-退出标准：
+退出标准 :
 
-- 每份盘前报告都有 durable forecast record。
-- Stored forecast 包含 index probabilities、sector calls 和 risk calls。
-- 不存储超过现有 redacted provider data 边界的私有 broker secrets。
+- 每份市场前报告都有持久的预测记录。
+- 储存预测包含指数概率和部门/风险呼叫。
+- 除了现有的经编辑的供应商数据外,没有私人经纪人秘密。
 
-### Phase 7：Post-Market Evaluation
+### 第7阶段:市场后评价
 
-1. 扩展 post-market jobs，或增加 evaluation provider。
-2. 获取 close / open benchmark data。
-3. 评估 index direction、sector calls 和 risk triggers。
-4. 写入 evaluation rows。
-5. 在盘后 Discord 输出中加入短 calibration note。
+1. 扩大市场后工作岗位或增加评价提供者。
+2. 获取关闭/开放式基准数据。
+3. 分数指数方向、部门呼吁和风险触发因素。
+4. 写评价行。
+5. 在市场后Discord产出中增加一个简短的校准说明.
 
-退出标准：
+退出标准 :
 
-- 市场收盘后 forecast 能被评分。
-- Weekly review 可以展示 hit rate、Brier score、常见 miss reasons 和 data quality correlation。
+- 预测在市场关闭后得分。
+——每周评论可以显示命中率,布赖尔分数,常见错失原因,以及数据质量相关性.
 
-### Phase 8：Calibration Loop
+### 第8阶段:校准循环
 
-1. 审查一周 forecast / evaluation 数据。
-2. 调整 scoring weights。
-3. 收紧 prompt rules，减少 unsupported claims。
-4. 增加 source-specific reliability weights。
-5. 文档化已知弱点。
+1. 审查一周的预测/评价数据。
+2. 调整积分加权。
+3. 在出现无根据索赔时,加强迅速规则。
+4. 增加特定来源的可靠性权重。
+5. 记录已知弱点。
 
-退出标准：
+退出标准 :
 
-- 报告质量通过可衡量校准提升，而不是靠 prompt 猜测。
-- 常见 false positives / false negatives 可见且可行动。
+- 报告的质量通过测量校准提高,而不是通过快速猜测。
+- 频繁的假阳性/假阴性是可见的和可操作的。
 
-## 验证计划
+## 核查计划
 
-静态检查：
+静态检查 :
 
 ```bash
 pnpm lint
@@ -1052,14 +1049,14 @@ pnpm typecheck
 pnpm build
 ```
 
-Unit tests：
+单位测试 :
 
 ```bash
 pnpm vitest run src/providers/market-intel
 pnpm vitest run src/providers/stock-portfolio src/providers/stock-pulse
 ```
 
-Cron checks：
+硬盘检查 :
 
 ```bash
 pnpm cron:list
@@ -1067,204 +1064,204 @@ pnpm cron:test us-stock-pre-market
 pnpm cron:test cn-stock-pre-market
 ```
 
-Commit / push 前 quality gates：
+承诺/推前的质量门:
 
 ```bash
 pnpm run quality:commit
 pnpm run quality:push
 ```
 
-人工检查：
+手动检查 :
 
-- 确认 Discord 输出进入正确的 US / CN 股票频道。
-- 确认报告开头是 portfolio impact。
-- 确认 analyst sections 引用 evidence IDs。
-- 确认没有 raw account IDs、token、cookie、validatekey、phone number 或 broker session 泄漏。
-- 确认休市日会跳过或明确标注。
-- 确认 stale data warnings 可见。
-- 确认最终 forecast probabilities 合计为 100%。
+- 确认在美国/CN库存渠道正确的Discord输出区。
+- 确认报告从组合影响开始。
+- 确认分析部门引用了证据身份证明
+- 确认没有出现原始账户的ID、令牌、饼干、验证钥匙、电话号码或经纪人会话。
+- 确认关闭日或标签正确。
+- 确认已失效的数据警告是可见的。
+- 确认最后预测概率和100%。
 
-Fixture scenarios：
+固定方案:
 
-- 正常美股交易日。
-- 正常 CN/HK 交易日。
-- 美股假期。
-- 中国内地休市但香港开市。
-- 香港休市但 A 股开市。
-- 美股提前收盘。
-- Daylight saving transition week。
-- Quote source partial outage。
-- News source outage。
-- Portfolio provider partial failure。
-- 所有 required data sources fail。
-- 重大 macro event day。
-- Earnings-heavy day。
+- 正常的美国交易日
+- 普通CN/HK交易日。
+-美国市场节日
+- 中国假日,但香港开放。
+- 香港假期,但A股营业。
+- 我们很早就接近了
+- 白天拯救过渡周。
+引文来源部分断电.
+- 消息源中断了
+- 组合提供者部分故障。
+- 所有所需数据源都失效。
+- 大型大型活动日
+- 主要收入沉重的日子。
 
-## 风险与缓解
+## 风险和缓解
 
-### 风险：LLM 编造市场数据
+### 风险:LLM致幻市场数据
 
-缓解：
+缓解:
 
-- 事实性 claims 必须引用 evidence IDs。
-- 关键 numeric data 放在 provider JSON。
-- Unsupported statements 明确标成 hypothesis。
-- 对编造 symbol、price 或 provider 未给出的 catalyst 的输出进行测试和 prompt 约束。
+- 要求提供事实索赔的证据身份证明。
+- 在提供商JSON中输入关键数字数据。
+- 明确标记无支持的语句作为假设.
+- 惩罚在提供者产出中没有发明符号、价格或催化剂的产出。
 
-### 风险：数据过期或延迟
+### 风险: Stale 或延迟数据
 
-缓解：
+缓解:
 
-- 每个 data point 必须有 `captured_at` 和 `stale`。
-- 关键数据 stale 时 cap confidence。
-- 每份报告必须显示 data quality summary。
+- 每个数据点都需要`captured_at`和`stale`.
+- 当关键数据停滞时,信任就会被封杀。
+- 数据质量摘要必须载入每份报告。
 
-### 风险：数据源故障
+### 风险:来源外流
 
-缓解：
+缓解:
 
-- Tiered source fallback。
-- Critical quote / calendar failure 时 fail closed。
-- Non-critical news / earnings failure 时继续运行并输出 warnings。
+- 层层源回落。
+- 关键引号/日历故障未关闭。
+- 继续对非关键新闻/学习失败发出警告。
 
-### 风险：假期日历错误
+### 风险:假日日历错误
 
-缓解：
+缓解:
 
-- 使用明确 calendar fixtures。
-- 市场特定 calendar config 放在用户级 provider config。
-- 增加 CN/HK 假期差异和 US early close tests。
+- 使用明确的日历固定装置。
+- 在用户级提供者配置中保持市场专用日历配置。
+- 增加氯化萘/六氯环己烷差和美国早期关闭的测试。
 
-### 风险：私有数据泄漏
+### 风险:私人数据泄露
 
-缓解：
+缓解:
 
-- 复用现有 redacted stock providers。
-- 给 `market-intel` 增加 redaction tests。
-- 不直接输出 raw source payloads。
-- exact asset summary 只允许 private channel。
+- 重新使用现有经编辑的股票供应商。
+- 添加编辑测试`market-intel`.
+- 绝不直接输出原始源有效载荷。
+- 准确的资产汇总仅限于私人渠道。
 
-### 风险：预测过度自信
+### 风险:过度自信的预测
 
-缓解：
+缓解:
 
-- 根据 evidence alignment 设置 probability caps。
-- Forecast Editor 必须包含 downside case 和 invalidation triggers。
-- 盘后用 Brier score 跟踪 calibration。
+- 基于证据一致性的概率上限。
+- 预测编辑器必须包括下方和无效触发器。
+——市场后布赖尔分数轨迹校准.
 
-### 风险：开盘前运行太慢
+### 风险:市场开放前太慢
 
-缓解：
+缓解:
 
-- 触发时间从 09:00 提前到 08:45。
-- Collectors 并发运行，并为每个 source 设置 timeout。
-- 限制 news 和 filings item 数量。
-- 对慢速官方引用做合理 cache。
+- 触发器在08: 45而不是09: 00。
+- 运行收集器与每个来源的超时。
+- 新闻和档案记录
+- 缓存在适当的时候会延缓官方查询。
 
 ## 回滚计划
 
-1. 保持当前 `stock-portfolio` provider 不变。
-2. 保留旧 cron prompt 文本在 git history 或 backup note 中。
-3. 如果 `market-intel` 生产运行失败：
-   - 把 `pre_provider` 改回 `stock-portfolio`。
-   - 把 `pre_provider_config` 改回 `us-stock` 或 `cn-stock`。
-   - 恢复较简单的 prompt。
-4. 如果 runtime 受影响：
-   - 只禁用两个 pre-market cron jobs。
-   - 保持 hourly pulse 和 post-market jobs 运行。
-5. 如果某个 source 泄漏敏感数据：
-   - 立即禁用该 collector。
-   - 增加 redaction fixture。
-   - 重新运行 provider tests 后再启用。
+1. 保持现状`stock-portfolio`提供者不变。
+2. 在git历史或备份注释中保留旧的cron快速文本。
+3. If `market-intel`生产失败 :
+- 变化`pre_provider`返回到`stock-portfolio`.
+- 变化`pre_provider_config`返回到`us-stock` or `cn-stock`.
+- 恢复更简单的提示
+4. 如果运行时间受到影响:
+- 仅禁用两个市场前工作。
+- 保持小时脉冲和市场后的工作。
+5. 如果数据来源泄露敏感数据:
+- 马上把收集器关掉
+- 添加编辑固定。
+- 在重新启用前重新进行供应商测试。
 
 ## 文档同步
 
-实现过程中需要更新：
+执行期间需要更新的文件:
 
 - `docs/archive/features/10-stock-portfolio-provider.md`
-  - 只有 `stock-portfolio` contract 变化时才更新。
+- 只有当`stock-portfolio`合同变更。
 - `docs/archive/features/11-stock-pulse-provider.md`
-  - 除非抽出共享 market utilities，否则预计无需修改。
-- 新增文档：
+- 除非抽取共享市场公用事业,否则没有预期的变化。
+- 新医生:
   - `docs/archive/features/14-market-intel-provider.md`
 - `docs/README.md`
-  - 实现后增加 feature index entry。
+- 实施后增加特征索引条目。
 - `CHANGELOG.md`
-  - provider 和 cron upgrade 验证完成后增加 entry。
+- 在验证供应商和克龙升级后添加条目。
 
-用户级配置文档应包含：
+用户级配置文件应包括:
 
-- `~/.miniclaw/providers/market-intel/us-pre-market.yaml` 示例。
-- `~/.miniclaw/providers/market-intel/cn-pre-market.yaml` 示例。
-- 数据源 setup notes。
-- 哪些 source 需要 API keys。
-- 哪些 source 只是 public fallback。
+- 实例`~/.miniclaw/providers/market-intel/us-pre-market.yaml`.
+- 实例`~/.miniclaw/providers/market-intel/cn-pre-market.yaml`.
+- 数据源设置说明。
+- 哪些来源需要API密钥.
+- 哪个来源是公开的反弹
 
-## Definition Of Done
+## 完成的定义
 
-只有满足以下条件才算完成：
+只有在以下情况下工作才能完成:
 
-1. `market-intel` provider 已实现并注册。
-2. 本地存在 US 和 CN/A/H configs；如果包含私有配置，不提交到 git。
-3. 两个 pre-market cron jobs 都使用 `market-intel`。
-4. Provider 输出包含 structured evidence、scores、data quality 和 portfolio context。
-5. Discord 最终报告使用 5-role + Forecast Editor protocol。
-6. 关键 claims 引用 evidence IDs。
-7. Closed-market 和 stale-data 路径有测试。
-8. 没有 broker / account / session secrets 泄漏。
-9. `pnpm cron:list`、provider tests、typecheck 和 build 通过。
-10. 至少一次受控 `pnpm cron:test` 对每个市场成功。
-11. Forecast persistence 和 post-market evaluation 已实现，或作为明确 follow-up plan 跟踪。
+1. `market-intel`供应商得到实施和登记。
+2. 美国和CN/A/H配置在当地存在,如果包含私人配置,则不承诺。
+3. 两种市场前工作`market-intel`.
+4. 供应商产出包含结构化证据、分数、数据质量和组合背景。
+5. 最终Discord报告采用5-作用加预测编辑器协议.
+6. 关键索赔引用了证据身份证。
+7. 对封闭市场和陈旧数据路径进行测试。
+8. 没有经纪人/账户/会议秘密泄露。
+9. `pnpm cron:list`, 提供者测试, 排字检查, 和建立通行证 。
+10. 至少一个受控`pnpm cron:test`每个市场运行成功。
+11. 预测持久性和市场后评价要么作为具有明确地位的后续计划加以实施,要么加以跟踪。
 
-## 执行备注
+## 执行笔记
 
-2026-05-10 初始规划证据：
+2026-05-10采集的初步规划证据:
 
-- 现有 cron 系统已经支持 `pre_provider`。
-- 现有股票 jobs 已覆盖 US/CN pre-market、post-market、intraday pulse 和 daily summary。
-- 现有 `stock-portfolio` 是合适的 portfolio context base。
-- 现有 `stock-pulse` 是“provider 确定性分析 + LLM 解释”的正确范式。
-- 当前 pre-market reports 应该升级，而不是重复创建。
-- Provider 实现前已完成数据源验证：
-  - SEC、BLS、Treasury、Federal Reserve、Cboe history、PBOC、NBS、SSE、SZSE、HKEX 和 Futu OpenD 在指标覆盖匹配时可作为 primary / default sources。
-  - 本机 Futu OpenD 可用于 US / HK quotes；在 A 股 quote permission 可用前，不作为默认 CN-A quote source。
-  - FRED API、Polygon、Tushare 因本机未配置必要 credentials，只能 optional。
-  - Yahoo chart 和 Eastmoney public endpoints 因 unofficial / undocumented，只能 fallback。
-  - Stooq 和 AKShare 已从默认 pre-market source plan 中移除。
+- 现有cron系统已经支持`pre_provider`.
+- 现有股票工作已经涵盖美国/CN市场前、市场后、日内脉冲和每日摘要。
+- 现有`stock-portfolio`是正确的组合上下文基础。
+- 现有`stock-pulse`是确定提供方-侧分析的正确模式,然后是LLM解释。
+现行市场前报告应升级而不是重复。
+- 在提供者实施前完成数据源验证:
+- 使用SEC、BLS、财政部、联邦储备局、Cboe历史、PBOC、NBS、SSE、SZSE、HKEX,以及Futu OpenD等原始/默认来源,其衡量覆盖范围与之相符。
+- 在本机上使用Futu OpenD作为 US/HK 引文;在 A 共享引文权限可用之前,不要将其作为 CN-A 引文的默认.
+- 将FRED API、Polygon和Tushare视为可选的,因为所需证书不是本地配置的。
+- 将Yahoo图表和Eastmony公共端点视为只回落点,因为它们是非官方的/无记录的。
+- 从默认的市场前源计划中删除Stooq和AKShare。
 
-实现过程中如果发生偏离，应把 material deviations 和最终验证证据追加到这里。
+在执行期间,应在此附上与本计划和最后核查证据的重大偏差。
 
-实施备注：
+执行说明:
 
-- Phase 6 已交付 forecast persistence：
-  - DB schema v7 增加 `market_forecasts`、`market_forecast_items` 和 `market_forecast_evaluations`。
-  - `src/cron/runner-task.ts` 会持久化 `market-intel` payload，并从最终报告提取 compact `<market_forecast_json>`。
-  - `pnpm market-forecasts` 提供只读查看。
-- Phase 7 已交付 `market-forecast-evaluation`：
-  - 盘后 jobs 可以把当天盘前 forecast 和 benchmark snapshot 做方向评分。
-  - provider 在 `commit()` 中写入 evaluation rows，并把 calibration note 注入盘后报告上下文。
-  - 当前 benchmark close data 使用 fallback quote path；当 fallback 被使用时，报告必须标注 calibration 是 provisional。
-- Phase 8 第一版已交付只读 calibration loop：
-  - `pnpm market-calibration` 汇总最近 hit rate、Brier score、data-quality correlation、source-level reliability weights、weak spots 和 recommendations。
-  - 第一版不自动改 prompt 或 source weights；样本量足够前只做可观测和保守建议。
+- 第6阶段在DB chema v7中运出预测持久性:
+  - `market_forecasts`, `market_forecast_items`,以及`market_forecast_evaluations`.
+  - `src/cron/runner-task.ts`持续`market-intel`有效载荷和提取物`<market_forecast_json>`与最后报告的块。
+  - `pnpm market-forecasts`提供只读检查。
+- 第7阶段装运`market-forecast-evaluation`:
+- 市场后的工作可以参照基准快照评价储存的市场前预测。
+- 提供者写评价行`commit()`并将校准说明输入市场后报告。
+- 当前的基准近距离数据在使用回落数据时使用回落引号路径和标记校准作为临时数据。
+- 第8阶段第一次切片运出只读校准循环:
+  - `pnpm market-calibration`总结近期的命中率,布赖尔得分,数据质量相关性,源级可靠性权重,弱点,以及建议.
+- 第一个切片不自动重写即时规则或源重;它等待足够的评价样品后,才建议减重或升重。
 
-2026-05-10 追加实现备注：
+2026-05-10的后续执行说明:
 
-- Phase 4 缺口补齐：
-  - CN official filings 现在包含 SSE、SZSE 和 HKEX public announcement search，前提是对应公开 endpoint 可访问。
-  - Generic 低质量 web/news search 仍然不进入默认路径；news 路径使用 official RSS / pages，并在 `data_quality` 中标注 source failure。
-  - Risk evidence 现在从 official macro / news / filing evidence 和 source failure signals 中确定性派生，不再返回占位 section。
-- Phase 7 缺口补齐：
-  - `market-forecast-evaluation` 现在同时评分 index direction、sector opportunities 和 risk alerts。
-  - Sector calls 会匹配配置里的 benchmark / proxy label；无法匹配的 sector calls 会记录为 `unknown`，并给出 unmapped warning。
-  - Risk alerts 通过 configured benchmarks 是否触发 downside threshold 的 market-risk proxy 做自动评分。
-- Phase 8 缺口补齐：
-  - `pnpm market-calibration -- --write-config --min-samples 5` 可以把 runtime calibration rules 写入 `~/.miniclaw/providers/market-intel/calibration.yaml`。
-  - Runtime `market-intel` 会读取该配置，并对 provider-score 应用 weight / confidence cap；面向 LLM 的 source weights 和 prompt rules 会注入 payload。
-  - 如果没有足够 evaluation 样本，命令会有意跳过写入权重变更，不会硬调。
-- Runtime prompt / config 更新：
-  - 盘前 prompts 现在要求 Forecast Editor 遵守 `calibration.prompt_rules` 和 `calibration.source_weights`。
-  - 盘后 prompts 现在要求按 `score_groups` 分别解释 index / sector / risk calibration。
-  - US post-market evaluation config 已加入 US sector ETF benchmarks；CN config 已加入可用 CN theme 的 ETF / proxy labels。
-- 受控 cron 验收：
-  - `pnpm cron:test` 可以通过 `MINICLAW_CRON_TEST_RUN_AT` 指定一个已知交易时段时间戳；这样即使当前是周末或假日，也能跑完整 Discord 验收链路，同时不影响正常 scheduler。
+- 第四阶段:
+- CN正式备案包括SSE、SZSE和HKEX的公告搜索,这些搜索的终点可以到达。
+- 通用的低质量网络/新闻搜索仍然被故意排除在默认之外;新闻路径使用正式的RSS/页面,并标记源失败`data_quality`.
+- 风险证据现在由官方宏观/新闻/档案证据和源故障信号确定,而不是返回占位符部分。
+- 第七阶段:
+  - `market-forecast-evaluation`现在给指数方向、部门机会和风险警报打分。
+- 区呼叫与配置的基准/代理标签匹配;未配置区呼叫记录为`unknown`并用一个明显的未标记的警告。
+- 根据配置的基准下限-门槛结果,通过市场风险代用对风险警报进行评分。
+- 第8阶段缺口关闭:
+  - `pnpm market-calibration -- --write-config --min-samples 5`可将运行时间校准规则写入`~/.miniclaw/providers/market-intel/calibration.yaml`.
+- 运行时间`market-intel`装入此配置并应用提供者-分数权重/信心盖; LLM- facing 源重和即时规则注入有效载荷.
+- 在零或评估样本不足的情况下,命令故意跳过书写重量变化。
+- 运行时间即时/配置更新:
+- 市场前的提示 现在需要预测编辑来纪念`calibration.prompt_rules`和`calibration.source_weights`.
+- 市场后提示现在要求将指数/部门/风险校准评注与`score_groups`.
+- 美国市场后评价配置现在包括美国部门ETF基准;CN配置包括针对现有CN主题的明确的ETF/代理标签。
+- 控制式圆柱验证:
+  - `MINICLAW_CRON_TEST_RUN_AT`可设置为`pnpm cron:test`因此,周末或假日验证可以运行在已知的交易会话时间戳上而不改变调度器.

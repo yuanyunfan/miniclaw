@@ -290,10 +290,10 @@ For each alert:
 
 The report should not say "buy", "sell", or "must trade" unless the user explicitly asks for trading instructions. Default wording should be watchlist and risk-control oriented:
 
-- "重点观察"
-- "若 X 发生，则 Y 风险上升"
-- "若 X 被证伪，则降低该判断权重"
-- "不建议仅凭该信号行动"
+- Focus on observation.
+- "If X happens, Y risks rise."
+- "If X is perjured, lower the weight of judgment."
+- "Not to advise action on the signal alone."
 
 ## Provider Design
 

@@ -3,8 +3,8 @@ doc_id: content-provider-family
 lang: zh
 translation_of: docs/providers/content.md
 translation_status: current
+source_sha256: 6befa522d8cae1cf79a9a877e10e595c687c866222ec6c7f2afe4787e9cb6825
 ---
-
 # Content Provider Family
 
 > 结论：content providers 采集外部文章/内容 metadata、做 dedupe，并把可进入 prompt 的 context 格式化给 cron tasks。当前 content provider 是 `wechat-mp`；它通过用户控制的 web session 读取微信公众号后台文章 metadata，并且必须把 session file 当作敏感凭据。

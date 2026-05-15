@@ -2,9 +2,9 @@
 doc_id: continuous-improvement-index-plan
 lang: zh
 translation_of: docs/plans/2026-05-11-continuous-improvement-index.md
-translation_status: not_required
+translation_status: current
+source_sha256: edef43fa70207b10f689a55e9f8d80b950cdaba1b2303db171a0f861b8f57f18
 ---
-
 # 持续改进计划索引
 
 状态：`draft`

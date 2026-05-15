@@ -1,79 +1,61 @@
-# MiniClaw 测试与质量门禁方案
+# MiniClaw Quality Gates
 
-> 结论：MiniClaw 采用 `G0/G1/G2 + L1/L2/L3/L4 + D1` 的分层体系。`L*` 负责验证行为，`G*` 负责阻止坏改动进入 commit/push/CI，`D1` 负责阻止架构文档漂移。真实 Discord E2E 已有 harness 和 workflow，但日常 gate 默认只跑 deterministic fake/fixture；真实 Claude/Codex 仍只放在 manual/nightly。
+> MiniClaw uses layered gates: `L*` verifies behavior, `G*` blocks unsafe commits and pushes, and `D*` prevents documentation drift. Real Discord E2E exists, but routine gates prefer deterministic fake/fixture paths. Real network and real LLM paths remain manual or scheduled.
 
-## 背景
+## Current Baseline
 
-MiniClaw 不是普通 TypeScript library。它同时包含：
+`package.json` exposes the main gate entrypoints:
 
-- Discord Gateway / slash command / message routing / thread continuation
-- Claude 与 Codex provider
-- cron scheduler / retry / provider pre-context
-- SQLite task、chat history、scene state
-- 本机 `~/.miniclaw/` 用户配置、secrets、memory、scripts、providers
-- 长期运行进程和 PM2 日志
+- `quality:g0`
+- `quality:g0:staged`
+- `quality:secrets`
+- `quality:secrets:staged`
+- `quality:changelog`
+- `quality:docs`
+- `quality:docs:drift`
+- `quality:docs-i18n`
+- `quality:website-docs`
+- `quality:deps`
+- `quality:coverage`
+- `quality:commit`
+- `quality:push`
+- `e2e:cron`
+- `e2e:discord`
 
-所以测试体系不能只看 coverage，也不能把真实 Discord、真实 LLM、真实 cron 全塞进每次 commit。正确策略是分层：越靠近 commit 越快、越确定；越接近真实生产链路越慢、越隔离、越适合 manual/nightly。
+`scripts/git-hooks/pre-commit` calls `pnpm run quality:commit`. `scripts/git-hooks/pre-push` calls `pnpm run quality:push`. CI runs the same families through `.github/workflows/quality.yml`.
 
-## 当前基线
+## Naming Rules
 
-当前已经具备的基础：
+- `L*` means test layer: does behavior work?
+- `G*` means quality gate: may this commit, push, or CI job pass?
+- `D*` means docs gate: do long-lived docs still match implementation reality?
 
-- `package.json` 已有 `build`、`website:build`、`lint`、`typecheck`、`test`、`test:cov`、`quality:commit`、`quality:push`、`quality:g0`、`quality:docs`、`quality:docs:drift`、`quality:docs-i18n`、`quality:website-docs`、`quality:secrets`、`quality:deps`、`quality:coverage`、`e2e:cron` 和 `e2e:discord`。
-- `scripts/git-hooks/pre-commit` 调用 `pnpm run quality:commit`；实际顺序是 staged G0、staged secret scan、D1 docs drift + i18n + website docs、lint、typecheck、Vitest。
-- `scripts/git-hooks/pre-push` 调用 `pnpm run quality:push`；实际顺序是 build、coverage、coverage ratchet、D1 docs drift + i18n + website docs、lint、cron E2E、full-tree G0、full-tree secret scan、dependency scan，并可用 `MINICLAW_RUN_DISCORD_E2E=1` 显式开启真实 Discord E2E。
-- `.github/workflows/quality.yml` 在 push / pull request 上运行 Node 22、frozen install、G0、gitleaks、typecheck、lint、coverage、coverage ratchet、D1 docs drift、cron E2E、dependency scan 和 build；website/docs-i18n gate 进入 `quality:docs` 后由同一入口覆盖。
-- `.github/workflows/pages.yml` 是 GitHub Pages workflow；它只从 `website/` presentation layer 构建发布 artifact，并在 website source、website build script、website docs gate、frontmatter parser、package metadata 或自身 workflow 变化时触发；发布前先跑 `quality:website-docs`，再跑 `pnpm run website:build` 输出 `website-dist/`，最后通过 Pages artifact 部署。它不把 repo 的 canonical `docs/` 目录直接发布。
-- `.github/workflows/discord-e2e.yml` 是独立 manual/nightly workflow；默认 fake agent，可通过 input/nightly 配置扩展 cases 或跑真实 agent。
-- `.github/workflows/release.yml` 是 Release workflow；推荐通过 push `vX.Y.Z` tag 自动发版，也保留从 `main` 手动输入 SemVer 的入口。它要求 `package.json` version 和 `CHANGELOG.md` 版本段一致，先跑 `quality:push`，再创建 GitHub Release 和源码/dist artifact。
-- `eslint.config.js` 对 `src/**/*.ts` 强制 `no-console` 和 `@typescript-eslint/no-floating-promises`，CLI/stdio 入口按例外处理。
-- `scripts/quality-coverage-ratchet.ts` 已设置分模块 coverage ratchet，不设置全局 80%。
+Do not mix the concepts. For example, `pnpm test` is an `L1` test suite; it becomes part of a `G1` gate only when a commit/push/CI entrypoint invokes it.
 
-当前仍需注意：
+## G0: Repository Safety
 
-- D1 文档漂移已有脚本化 changed-path 映射；语义是否写对仍需要人工 review。
-- 真实 Discord E2E 依赖 test Discord secrets 和网络稳定性，不进入普通 pre-commit / pre-push / CI 默认路径。
-- coverage ratchet 只覆盖第一批纯逻辑/formatter/provider 模块；I/O-heavy 入口仍以 targeted tests + E2E fixture 保护。
+Purpose: block high-damage mistakes before they enter Git.
 
-## 命名原则
+Checks include:
 
-`L*` 是测试层级，回答“行为是否正确”。
+- Node version compatibility with `package.json#engines`
+- package and lockfile consistency
+- staged or tree files do not include `.env`, SQLite DBs, coverage HTML, large binaries, token dumps, or local runtime artifacts
+- public docs/examples do not include local absolute paths or raw Discord snowflake IDs
+- `docs/private/` stays outside public docs and public website exposure
+- `docs/zh/` is allowed as public docs, but it is still scanned for local paths, raw Discord IDs, and secrets
 
-`G*` 是质量门禁，回答“这次 commit/push/CI 是否允许通过”。
+Run locations:
 
-`D*` 是文档门禁，回答“代码和长期文档是否还一致”。
+- pre-commit
+- CI
+- local tree verification through `pnpm run quality:g0`
 
-不要把三者混在一起。比如 `pnpm test` 是 L1 测试；pre-commit 调用它时，它才成为 G1/G0 gate 的一部分。
+## G1: Static Correctness
 
-## G0：环境与提交安全门禁
+Purpose: verify the code compiles, builds, and follows static rules without contacting real external systems.
 
-目标：挡住最基础但高破坏性的错误。
-
-应该检查：
-
-- Node 版本符合 `package.json` engines。
-- `package.json` 和 `pnpm-lock.yaml` 一致。
-- staged / tree 文件不包含 `.env`、SQLite DB、coverage HTML、大 binary、token dump。
-- `docs/private/` 是本机私有目录，不能进入 commit；`.miniclaw/`、`.playwright-mcp/`、`.miniclaw-attachments/`、`scripts/.channel-map.json` 也必须留在 git 外。`docs/zh/` 是可提交中文文档镜像，但仍按公开 docs 规则扫描本机路径、raw Discord ID 和 secrets。
-- 公开 docs/examples（`docs/**`，不含 `docs/private/**`，以及 `README*.md`、`config.example.yaml`）不能包含本机用户目录路径或 raw Discord snowflake ID；示例必须使用 `DISCORD_*_CHANNEL_ID`、`~/ProjectRepo/...`、`/path/to/...` 这类占位符。
-- 如果依赖文件变更，运行 `pnpm install --frozen-lockfile`。
-- 禁止 `git add .` 式误提交的常见产物进入 staged set。
-
-MiniClaw 为什么需要：
-
-- MiniClaw 持有 Discord token、LLM API key、邮箱/微信/股票等本机配置。
-- 很多用户级文件在 `~/.miniclaw/`，AI 很容易误把本地配置或输出复制进 repo。
-
-建议执行位置：
-
-- pre-commit 必跑。
-- CI 必跑。
-
-## G1：静态正确性门禁
-
-目标：不运行真实业务，只验证代码能编译、能构建、符合静态规则。
-
-应该包含：
+Commands:
 
 ```bash
 pnpm run typecheck
@@ -81,442 +63,182 @@ pnpm run build
 pnpm run lint
 ```
 
-其中：
+Project-specific lint expectations:
 
-- `typecheck` 应等价于 `tsc --noEmit`。
-- `build` 应等价于 `tsc`，验证实际 emit、module resolution、dist 输出。
-- `lint` 应覆盖 TypeScript 质量规则和项目约束。
+- runtime source should use `src/lib/log.ts` instead of direct `console.*`
+- floating promises must be explicit and justified
+- logs must not contain secrets, full prompts, raw email bodies, or token-like fields
 
-MiniClaw 特有 lint 规则：
+Run locations:
 
-- 源码禁止直接 `console.*`，只能通过 `src/lib/log.ts`。
-- 禁止 floating promise，除非显式 `void` 且是可解释的 fire-and-forget。
-- 禁止把 secrets、full prompt、raw email、token-like 字段写入日志。
-- 对测试文件可以放宽部分规则，但不能放宽 secret 规则。
+- pre-commit: lint and typecheck
+- pre-push: build and lint
+- CI: typecheck, lint, and build
 
-实际执行位置：
+## L1: Fast Unit And Component Tests
 
-- pre-commit 跑 `lint + typecheck`。
-- pre-push 跑 `build + lint`。
-- CI 跑 `typecheck + lint + build`。
+Purpose: deterministic, local, no network, no real Discord, no real LLM.
 
-## L1：快速单元测试
+Coverage focus:
 
-目标：纯逻辑、无网络、无真实 Discord、无真实 LLM、可重复、快速。
+- cron loader, state, template, retry, and scheduler pure logic
+- routing intent, confirmation token, and context handling
+- Discord formatter, chunking, embeds, and attachment conversion
+- provider parser, formatter, redaction, health, dry run, and fixtures
+- prompt snapshot behavior
+- task helper, session, usage, and status summary logic
 
-应该覆盖：
+Command:
 
-- cron 纯逻辑：`loader`、`state`、`template`、retry 算法。
-- routing 纯逻辑：intent、context、confirmation token。
-- Discord formatter/chunking：embed 字段、2000 字限制、代码块切分。
-- provider parser/formatter/redaction：微信、email、futu、stock 等。迁移到 provider framework 的 provider 还要覆盖 manifest、health check、dry-run redaction、structured output adapter、`commit()` 延迟提交语义，以及 replay/no-data/format-drift fixture（例如 `src/providers/*/fixtures/*.json` + 对应 `fixtures.test.ts`）。
-- prompt snapshot：prompt 模板变更必须可见。
-- task helper/session/usage：session id、token summary、status summary。
+```bash
+pnpm test
+```
 
-作用：
+Run locations:
 
-- 挡住 AI 最常见的局部误改。
-- 为 refactor 提供快速反馈。
-- 适合每次 commit 前运行。
+- pre-commit
+- CI
 
-建议执行位置：
+## L2: Internal Integration Tests
 
-- pre-commit 必跑 `pnpm test`。
-- CI 必跑。
+Purpose: connect MiniClaw modules while replacing external systems with fakes or fixtures.
 
-## L2：内部集成测试
+Examples:
 
-目标：多个 MiniClaw 模块连起来测，但外部系统用 fake。
+- fake Discord channel/thread for task intake
+- temporary SQLite DB for task state transitions
+- fixture cron directory for scheduler and retry behavior
+- fake slash interactions for command handlers
+- fake pre-provider output injected into task prompts
+- fake logger sink for start/end/error assertions
 
-典型测试：
+Run locations:
 
-- fake Discord channel/thread：测试 task intake 是否创建 task、发送 start embed、调用 fake executeTask。
-- temp SQLite DB：测试 task 状态从 `running` 到 `completed/failed/cancelled`。
-- fixture cron directory：测试 scheduler、runner、retry、state 文件。
-- fake slash interaction：测试 `/task`、`/status`、`/health`、`/resume` handler 输出。
-- fake pre-provider：测试 cron `pre_provider` 输出如何注入 prompt。
-- fake logger sink：验证关键路径有开始/结束日志和错误日志。
+- pre-push
+- CI
 
-作用：
+## L3: Real Discord E2E With Fake Agent
 
-- L1 只能证明单个函数正确；L2 证明 MiniClaw 内部链路没断。
-- 对 MiniClaw 来说，L2 比单纯提高全局 coverage 更有价值，因为实际风险经常发生在路由、DB、Discord 输出、cron 状态的交界处。
+Purpose: verify real Discord Gateway, real channels, real threads, and real message output without calling Claude or Codex.
 
-建议执行位置：
+Rules:
 
-- pre-push 必跑。
-- CI 必跑。
-- pre-commit 默认不跑，除非 L2 后续足够快且稳定。
+- use a dedicated Discord test application
+- use a dedicated test guild/channel
+- never use production bot secrets
+- keep fake agent deterministic
+- run manually or on a schedule, not in every commit
 
-## L3：真实 Discord E2E，fake agent
+Command:
 
-目标：真实 Discord Gateway、真实 channel、真实 thread、真实 message output，但不调用 Claude/Codex。
+```bash
+pnpm run e2e:discord
+```
 
-这是 MiniClaw 最需要新增的一层。
+## L4: Real Provider Or Real LLM Smoke
 
-推荐设计：
+Purpose: prove selected external integrations still work.
 
-- 使用 dedicated Discord test application，不复用生产 bot token。
-- 使用 dedicated Discord test guild/channel。
-- 测试 harness 用第二个 Discord bot 作为 sender。
-- MiniClaw 在 `MINICLAW_E2E_MODE=true` 下允许指定 sender bot ID 通过 message author guard。
-- MiniClaw 使用 `MINICLAW_E2E_FAKE_AGENT=true`，chat/task 固定返回可匹配文本。
-- 使用临时 `MINICLAW_CONFIG`、临时 `MINICLAW_DB_PATH`、临时 memory path、临时 cwd。
-- 设置 `MINICLAW_DISABLE_SCHEDULER=true`，避免 E2E 启动真实 cron。
-- 设置 `MINICLAW_LOG_FORMAT=json`，harness 从 stdout/stderr 解析结构化日志。
+Examples:
 
-必须覆盖的 case：
+- real Claude/Codex task smoke
+- provider login/session refresh smoke
+- real email/stock/content provider health check
+- real Discord plus real LLM route
 
-- mention chat：发送 `<@MiniClawTestBot> e2e chat <runId>`，验证回复包含 `E2E_CHAT_OK <runId>`。
-- task channel intake：在 task channel 发 `e2e task <runId>`，验证创建 thread。
-- task completion：验证 thread 中有 start embed、progress/final message、complete embed。
-- DB 状态：验证临时 DB 中 task 变为 `completed`。
-- thread continuation：在 task thread 发送 follow-up，验证 resume 路径触发。
-- logs：验证 JSON logs 中出现 `main`、`bot`、`task`、`chat` 或 fake agent 的关键事件。
+Rules:
 
-不能这么做：
+- manual or scheduled only
+- use dedicated test channels/accounts
+- redact traces
+- never block normal local pre-commit work on volatile networks
 
-- 不能用生产 Discord bot token 跑测试。
-- 不能让 E2E 读真实 `~/.miniclaw/cron`。
-- 不能让 E2E 写真实 `~/.miniclaw/data.db`。
-- 不能默认调用真实 Claude/Codex。
+## D1: Docs Drift
 
-建议执行位置：
+Purpose: prevent source changes from landing without updating durable docs.
 
-- 本地手动：`pnpm e2e:discord`。
-- CI manual workflow：`workflow_dispatch`，需要 test Discord secrets。
-- 不放进普通 pre-commit。
-- pre-push 可以通过环境变量开启，例如 `MINICLAW_RUN_DISCORD_E2E=1`。
+`pnpm run quality:docs:drift` checks:
 
-## L4：真实 Agent E2E
+- DB schema version in code equals the version documented in `docs/architecture.md`
+- `smart_router_decisions` documented fields include `TEXT reason`, `TEXT matched_signals`, `TEXT risk_flags`, `TEXT capabilities_json`, `INTEGER classifier_elapsed_ms`, `TEXT classifier_error_type`, `TEXT classifier_error_message`, `TEXT user_choice`, `TEXT final_route`, `TEXT task_final_status`, `TEXT correction_type`, `TEXT correction_note`, and `TEXT resolved_at`
+- source docs under `docs/runtime/`, `docs/providers/`, and `docs/experiments/` are indexed from `docs/README.md`
+- changed source paths map to required docs through `src/quality/docs-drift.ts`
 
-目标：真实 Discord + 真实 Claude/Codex + 真实 SDK streaming。
+The changed-path map is intentionally conservative. If source behavior changes, the patch must include the relevant docs update.
 
-适合验证：
+## D2: Bilingual Docs Parity
 
-- provider 初始化。
-- Codex/Claude SDK streaming event schema。
-- sandbox / cwd / tool 调用。
-- task progress message 是否能在真实长链路下更新。
-- token/cost summary 是否能正常出现。
+Purpose: keep `docs/` and `docs/zh/` aligned with English as canonical source.
 
-限制：
+`pnpm run quality:docs-i18n` checks:
 
-- 慢。
-- 花钱。
-- 依赖网络和模型稳定性。
-- 失败不一定代表代码错误。
+- every tracked canonical doc outside `docs/zh/**`, `docs/archive/**`, and `docs/private/**` appears in `docs/documentation-migration-map.md`
+- every required source doc has a tracked Chinese mirror
+- Chinese mirror frontmatter includes `doc_id`, `lang: zh`, `translation_of`, `translation_status`, and `source_sha256`
+- `translation_status: pending` is not allowed for required docs
+- current Chinese mirrors carry a `source_sha256` matching the English source
+- English canonical prose does not contain CJK text outside fenced code blocks
+- Chinese mirror prose contains CJK text outside fenced code blocks
+- tracked Chinese docs are paired in the migration map
+- heading level shape matches the English source
 
-建议执行位置：
+Archive and private docs are intentionally excluded from required bilingual parity unless the migration map marks them otherwise.
 
-- manual。
-- nightly。
-- release 前，尤其是 push `vX.Y.Z` tag 或手动触发 `.github/workflows/release.yml` 前。
-- 不进入日常 pre-commit/pre-push。
+## D3: Website Docs Drift
 
-## G2：安全与供应链门禁
+Purpose: keep GitHub Pages presentation content tied to canonical repo docs.
 
-目标：阻止 secrets、敏感日志、依赖漏洞进入 main。
+`pnpm run quality:website-docs` checks website frontmatter and `source_docs` references. Website pages are presentation-only; they do not replace `docs/` as the implementation source of truth.
 
-应该包含：
+## G2: Secrets And Dependencies
 
-- `gitleaks`：扫描 staged changes 和 CI full tree。
-- GitHub Actions 中 `gitleaks/gitleaks-action` 依赖完整 git history 判断 push range；`actions/checkout` 必须设置 `fetch-depth: 0`，否则 shallow checkout 可能导致 secret scan 在进入 typecheck/lint/test 之前失败。
-- `pnpm audit --prod` 或 OSV scanner：扫描生产依赖。
-- 禁止提交 `.env`、`*.db`、`*.sqlite`、`~/.miniclaw` dump、Discord transcript 中的 token。
-- 对 JSON logs / E2E artifact 做 redaction 检查。
+Purpose: block secrets, unsafe local files, and dependency issues.
 
-实际执行位置：
+Commands:
 
-- pre-commit 跑 staged secret scan。
-- pre-push 跑 full-tree secret scan 和 dependency scan。
-- CI 用 `gitleaks/gitleaks-action@v2` 跑 full secret scan，并跑 `pnpm run quality:deps`。
+```bash
+pnpm run quality:secrets
+pnpm run quality:deps
+```
 
-## D1：文档漂移门禁
+CI also runs gitleaks.
 
-目标：防止 AI 基于过期文档继续改错。
+## Changelog Drift
 
-MiniClaw 是 docs-first 项目，长期维护依赖 `docs/architecture.md`、`docs/bot-routing.md`、`docs/prompts.md`、`docs/runtime/*.md`、`docs/providers/**/*.md`、`docs/experiments/*.md` 和 plan 文档。历史 feature compatibility stubs 已完成迁移并删除，不再作为当前 source index 或新增实现事实的落点。代码改了但 docs 不变，是后续 AI 误判的主要来源。
+Purpose: prevent release-visible changes from landing without `CHANGELOG.md`.
 
-脚本化规则：
+`pnpm run quality:changelog` fails when release-visible paths change without a same-patch `CHANGELOG.md` update. Release-visible paths include `src/**`, `scripts/**`, `.github/workflows/**`, `docs/**`, `website/**`, `prompts/**`, `package.json`, `config.example.yaml`, and public README files. Archive/private docs, tests, fixtures, coverage, and generated website output are ignored.
 
-- 改 `src/bot.ts`、`src/commands/**`、`src/discord/**`、`src/routing/**`：必须同步 `docs/bot-routing.md`、`docs/chat-router-current-logic.md` 或 `docs/runtime/*.md`。
-- 改 `src/agent/**`：必须同步 `docs/architecture.md` 或 `docs/runtime/*.md`；`src/agent/prompts.ts` 走 prompt 规则。
-- 改 `src/cron/**` 或 `scripts/cron-*`：必须同步 `docs/architecture.md`、`docs/runtime/*.md` 或 `docs/providers/**/*.md`。
-- 改 `src/store/db.ts`、`src/store/schema.ts` 或 `src/store/**`：必须同步 `docs/architecture.md`。
-- 改 `src/providers/**`：必须同步 `docs/architecture.md` 或 `docs/providers/**/*.md`。
-- 改 `src/config.ts`、`src/config/**` 或 `config.example.yaml`：必须同步 `docs/architecture.md`、`docs/runtime/*.md` 或 `docs/providers/**/*.md`。
-- 改 `prompts/**` 或 `src/agent/prompts.ts`：必须同步 `docs/prompts.md`，并同步 `src/__tests__/prompt-snapshot.test.ts`。
-- 改 `scripts/quality-*`、`src/quality/**`、`.github/workflows/**` 或 `scripts/git-hooks/**`：必须同步 `docs/quality-gates.md`。
-- 改 `src/ops/doctor*` 或 `scripts/doctor*`：必须同步 `docs/runtime/*.md`。
-- 改 `src/stage/**`：必须同步 `docs/experiments/*.md`。
+This gate does not generate release notes automatically. It makes the missing changelog update blocking so the changelog stays part of the development workflow.
 
-当前执行方式：
+## Default Gate Entry Points
 
-- `pnpm run quality:docs` 依次运行 `quality:docs:drift`、`quality:docs-i18n` 和 `quality:website-docs`。
-- `quality:docs:drift` 运行 `scripts/quality-docs.ts`，从 `src/store/schema.ts` 检查 DB schema version，并检查 Smart Router ER 字段、`docs/runtime/*.md` / `docs/providers/**/*.md` / `docs/experiments/*.md` source index，以及 changed-path 到 source-of-truth docs 的映射；已删除的 feature compatibility stubs 不再满足 source-of-truth docs 要求。
-- `quality:docs-i18n` 读取 `docs/documentation-migration-map.md`，检查每个 tracked canonical `docs/**/*.md` source（排除 `docs/zh/**`）是否已进入 migration map，并检查中文 pairing、`docs/zh/` 是否仍被 git ignore 或通过 `.gitattributes` 禁用 text diff、frontmatter、`translation_of`、`doc_id` 和 heading level shape；migration map 漏收 tracked source doc、required 中文 pair 缺失或 `translation_status: pending` 都是 blocking error。
-- `quality:website-docs` 扫描 `website/**/*.md(x)`，要求非 landing page 声明 language-aware `source_docs`，禁止引用 `docs/private/**`，并在 canonical docs 变更影响 website pages 但对应 page 没有同 patch 更新、也没有 frontmatter unaffected reason 时 blocking fail。紧急绕过必须显式设置 `MINICLAW_WEBSITE_DOCS_DRIFT_ALLOW=1`。
-- `website:build` 运行 `scripts/build-website.ts`，把 `website/**/*.md(x)` 转成 `website-dist/**/*.html`，复制 `website/llms.txt`，保留 Mermaid block 的浏览器渲染入口，并写入 `.nojekyll`；`website-dist/` 是本地/CI 生成物，不进入 git。
-- `.github/workflows/pages.yml` 先运行 website docs gate 和 static build，再用 GitHub REST API 检查 Pages 是否已启用；未启用或未配置 GitHub Actions source 时跳过 Pages deploy 并上传普通 `website-dist` artifact，避免 repo 设置尚未完成时让 CI 红掉。
-- 默认模式先看 staged paths；如果没有 staged paths，则检查 `git diff HEAD` 加 untracked non-ignored files。也可显式使用 `--staged`、`--tree` 或 `--base <ref> [--head <ref>]`。
-- `docs/plans/**`、`docs/archive/**`、`docs/private/**`、tests 和 fixtures 不作为 source trigger；`docs/plans/**` 和 `docs/archive/**` 也不能替代当前 source-of-truth docs。
-- 对紧急本地修复可用 `MINICLAW_DOCS_DRIFT_ALLOW=1 pnpm run quality:docs` 只绕过 changed-path 映射；DB schema、Smart Router ER 和 feature index invariant 仍会失败。
-- 如果确实暂不改文档，必须在 commit body、PR 或后续 plan 中写明原因和补文档路径。
+Pre-commit:
 
-## 推荐执行矩阵
+```bash
+pnpm run quality:commit
+```
 
-pre-commit：
+Pre-push:
 
-- G0 staged safety check
-- G2 staged secret scan
-- D1 docs drift invariants + changed-path mapping
-- G1 `lint + typecheck`
-- L1 `pnpm test`
+```bash
+pnpm run quality:push
+```
 
-pre-push：
+Targeted docs verification:
 
-- G1 `build + lint`
-- `test:cov`
-- coverage ratchet
-- D1 docs drift invariants + changed-path mapping
-- cron E2E fixture
-- G0 full-tree safety check
-- G2 full-tree secret scan / dependency scan
-- 可选 L3 Discord E2E，通过 env 显式开启
+```bash
+pnpm run quality:docs
+```
 
-CI：
+Targeted i18n verification:
 
-- G0 install / lockfile / environment
-- G1 typecheck / lint / build
-- coverage run + coverage ratchet
-- D1 docs drift invariants + changed-path mapping
-- cron E2E fixture
-- G2 full secret scan / dependency scan
-- changed-path docs drift 可通过 `--base <ref>` / `MINICLAW_DOCS_DRIFT_BASE=<ref>` 做 range check
+```bash
+pnpm run quality:docs-i18n
+```
 
-manual/nightly：
+Targeted changelog verification:
 
-- L3 Discord E2E fake agent
-- L4 Discord E2E real agent
-- production smoke
-
-## Coverage 策略
-
-不要立刻设置全局 80% threshold。
-
-原因：
-
-- `bot.ts`、`agent/task.ts`、`agent/chat.ts`、真实 provider client、CLI/e2e entry path 都是 I/O-heavy。
-- 当前总体覆盖率主要反映“入口和外部系统未 mock”，不等于纯逻辑质量差。
-- 直接设全局高阈值会鼓励无意义测试和 coverage gaming。
-
-推荐做法：
-
-- 对纯逻辑模块先设硬阈值。
-- 对 I/O-heavy 模块先拆出可测逻辑，再逐步 ratchet。
-- coverage gate 采用“不得下降 + 关键模块阈值”的组合。
-
-当前已设 ratchet 的模块：
-
-- `src/store/memory-md.ts`
-- `src/discord/chunks.ts`
-- `src/cron/template.ts`
-- `src/lib/markdown.ts`
-- `src/routing/intent.ts`
-- `src/providers/futu-stock/format.ts`
-- `src/providers/stock-portfolio/index.ts`
-
-下一批适合纳入 ratchet 的模块：
-
-- `src/cron/loader.ts`
-- `src/cron/state.ts`
-- `src/routing/context.ts`
-- `src/discord/formatter.ts`
-- `src/store/db.ts`
-- provider parser/formatter/redaction 模块
-
-第一批需要重构后再提高覆盖的模块：
-
-- `src/bot.ts`
-- `src/commands/handlers.ts`
-- `src/agent/task.ts`
-- `src/agent/chat.ts`
-- real provider clients
-
-## 实施任务清单
-
-### P0：建立基本门禁和最小 Discord E2E
-
-`P0-00` 创建质量门禁计划文档 ✅
-
-- 新增或维护 `docs/plans/YYYY-MM-DD-quality-gates-and-discord-e2e.md`。
-- 明确本轮范围、风险、验证计划、文档同步清单。
-
-`P0-01` 标准化 npm scripts ✅
-
-- 增加 `typecheck`。
-- 增加 `quality:commit`。
-- 增加 `quality:push`。
-- 增加 `e2e:discord`。
-
-`P0-02` 强化 pre-commit ✅
-
-- 跑 staged safety check。
-- 跑 `pnpm run typecheck`。
-- 跑 `pnpm test`。
-- 对 prompt 文件变更跑 prompt snapshot。
-
-`P0-03` 新增 pre-push ✅
-
-- 跑 `pnpm run build`。
-- 跑 `pnpm test:cov`。
-- 预留 lint/security hooks。
-- 支持通过 env 开启 Discord E2E。
-
-`P0-04` 新增基础 GitHub Actions ✅
-
-- Node 22。
-- pnpm install frozen。
-- typecheck。
-- test。
-- build。
-
-`P0-05` 新增 E2E 安全配置 ✅
-
-- `MINICLAW_E2E_MODE`。
-- `MINICLAW_E2E_SENDER_USER_IDS`。
-- `MINICLAW_DISABLE_SCHEDULER`。
-- 临时 DB / memory / cwd 强制检查。
-
-`P0-06` 新增 fake agent ✅
-
-- chat fake 固定返回 `E2E_CHAT_OK <runId>`。
-- task fake 固定返回 `E2E_TASK_OK <runId>`。
-- 输出 fake usage、duration、session id，确保 formatter 和 DB 链路可测。
-
-`P0-07` 新增 Discord E2E harness ✅
-
-- `scripts/e2e-discord.ts`。
-- spawn MiniClaw test process。
-- sender bot 发送测试消息。
-- 监听 Discord 输出、thread、embed、logs、DB。
-- 失败时保留 artifact。
-
-`P0-08` 新增最小 E2E cases ✅
-
-- mention chat。
-- task channel 创建 thread。
-- task completed embed。
-- thread follow-up resume。
-
-### P1：补齐 lint、安全和更强集成测试
-
-`P1-01` 引入 ESLint ✅
-
-- TypeScript 基础规则。
-- `no-console`，仅允许 logger 内部。
-- floating promise 规则。
-
-`P1-02` 引入 secret scan ✅
-
-- gitleaks pre-push staged scan。
-- CI full tree scan。
-
-`P1-03` 引入 dependency scan ✅
-
-- `pnpm audit --prod` 或 OSV scanner。
-- CI 中硬 fail。
-- 本地 pre-push 可先 warn，再逐步 hard fail。
-
-`P1-04` bot routing integration tests ✅
-
-- 把 `bot.ts` 路由判断拆成可测函数。
-- 覆盖 bot author guard、allowed user、task channel、mention、thread continuation、smart router 入口。
-
-`P1-05` E2E artifact ✅
-
-- `artifacts/e2e/<runId>/logs.jsonl`。
-- `artifacts/e2e/<runId>/discord-transcript.md`。
-- `artifacts/e2e/<runId>/db-summary.json`。
-
-`P1-06` manual Discord E2E workflow ✅
-
-- GitHub Actions `workflow_dispatch`。
-- 只在配置 test Discord secrets 后启用。
-
-`P1-07` cron E2E fixture ✅
-
-- 使用测试 cron config。
-- 验证 message/script/task runner 输出。
-- 不读真实 `~/.miniclaw/cron`。
-
-### P2：coverage ratchet 和真实 Agent E2E
-
-`P2-01` 分模块 coverage threshold ✅
-
-- 先覆盖纯逻辑模块。
-- 不设全局 80%。
-- 后续按模块 ratchet。
-
-`P2-02` 提高入口模块覆盖 ✅
-
-- `bot.ts`。
-- `commands/handlers.ts`。
-- `agent/task.ts`。
-- `agent/chat.ts`。
-
-`P2-03` 真实 Codex/Claude E2E ✅
-
-- manual/nightly。
-- 限制 budget、turns、timeout。
-- 使用 temp cwd。
-
-`P2-04` 附件 E2E ✅
-
-- 文本附件。
-- 图片/PDF 下载。
-- 过大文件提示。
-- cleanup。
-
-`P2-05` smart router E2E ✅
-
-- 自动 task 路径可自动化。
-- 按钮交互优先 handler integration test，真实按钮点击作为人工 checklist。
-
-`P2-06` flaky 管理 ✅
-
-- 记录 timeout、Discord API error、network error。
-- 区分代码回归和外部系统抖动。
-- 对 L3/L4 失败输出可诊断 artifact。
-
-## 当前实施状态
-
-截至 2026-05-08：
-
-- `P0-00` 到 `P0-08` 已落地：plan 文档、npm quality scripts、G0 safety check、pre-commit/pre-push、基础 GitHub Actions、E2E 安全配置、fake agent、Discord E2E harness、最小 E2E cases。
-- `P1-01` 到 `P1-07` 已落地：ESLint、secret scan、dependency scan、bot routing integration tests、E2E artifact、manual Discord E2E workflow、cron E2E fixture。
-- `P2-01` 到 `P2-06` 已落地：coverage ratchet、入口风险覆盖提升、真实 Agent E2E 开关、附件 E2E、smart router E2E、flaky 分类 artifact。
-
-## 当前实现映射
-
-- fake agent：`src/e2e/fake-agent.ts`，通过 `MINICLAW_E2E_FAKE_AGENT=true` 固定输出 `E2E_CHAT_OK <runId>` / `E2E_TASK_OK <runId>`。
-- Discord E2E：`scripts/e2e-discord.ts`，默认跑 `chat,task,followup`；可通过 `MINICLAW_E2E_CASES=attachment,smart-router` 扩展；`MINICLAW_E2E_FAKE_AGENT=false` 可跑真实 Codex/Claude。
-- E2E artifacts：`artifacts/e2e/<runId>/logs.jsonl`、`discord-transcript.md`、`db-summary.json`、`summary.json`、失败时 `failure.json`。
-- cron E2E fixture：`scripts/e2e-cron-fixture.ts`，使用临时 cron dir / scripts dir / DB / memory，不读取真实 `~/.miniclaw/cron`。
-- lint：`eslint.config.js`，对 `src/**/*.ts` 启用 `no-console` 和 `@typescript-eslint/no-floating-promises`，CLI/stdio 入口按例外处理。
-- secret scan：本地 `scripts/quality-secrets.ts` 优先用 gitleaks，未安装时 fallback 到 G0；CI 使用 `gitleaks/gitleaks-action@v2`。
-- dependency scan：`scripts/quality-deps.ts` 使用 `pnpm audit --prod --audit-level high`。
-- coverage ratchet：`scripts/quality-coverage-ratchet.ts` 对纯逻辑和高覆盖 provider 模块设置分模块阈值，不设置全局 80%。
-- docs drift：`scripts/quality-docs.ts` 检查 DB schema version、Smart Router ER 字段和 feature docs 索引。
-
-## 后续维护 loop
-
-P0、P1、P2 已完成。后续新增 gate、提高 coverage threshold 或扩展 E2E case 时，按这个 loop 执行：
-
-1. 在 plan 文档中记录目标、风险和验证方式。
-2. 做最小代码改动，优先扩展已有 scripts / harness / workflow。
-3. 跑对应验证命令，必要时跑 `pnpm run quality:push`。
-4. 更新本文件的实现映射或新增任务状态。
-5. 如果改了架构入口，同步对应架构文档。
-6. 每个 commit 保持原子，只包含一个独立 gate、测试能力或文档同步。
+```bash
+pnpm run quality:changelog
+```

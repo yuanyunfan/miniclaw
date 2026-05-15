@@ -2,51 +2,51 @@
 doc_id: cron-run-history-control-plan
 lang: zh
 translation_of: docs/plans/2026-05-11-cron-run-history-control.md
-translation_status: not_required
+translation_status: current
+source_sha256: c91fe6c7e5870832a2f5f277c7d285395cc86b483f9c5afaa39d46ea0f669e13
 ---
+# Cron 运行历史和 Per- Job 控制
 
-# Cron Run History 与 Per-Job Control
+现况:已完成
+日期:2026-05-11
 
-状态：`draft`
-日期：2026-05-11
+## 背景情况
 
-## 背景
+MiniClaw cron已经支持任务/标语/技能/信息工作,`pre_script`, `pre_provider`,重试按钮、故障提示和提供者侧`skipTask`。下一个问题是长期操作:诊断成功率、失败类别、运行时间、供应商飞行前状态、工作级SLA、后退、冷却和货币。
 
-MiniClaw cron 已经支持 task/script/skill/message jobs、`pre_script`、`pre_provider`、retry button、failure alerts，以及 provider-side `skipTask`。下一个问题是长期运行：诊断 success rate、failure categories、run duration、provider preflight state、job-level SLA、backoff、cooldown 和 concurrency。
-
-当前状态分散在 scheduler state、logs、task rows 和 incidents 中。一等 `cron_runs` history 可以让用户查看近期 runs，并把 cron failures 关联到 task traces 和 incident details。
+当前状态分布在调度器状态,日志,任务行和事件之间. 头等舱`cron_runs`历史会让用户检查最近的运行,并将cron失败链接到任务跟踪和事件细节.
 
 ## 目标
 
-- 增加持久化 cron run history。
-- 增加 per-job timeout、max concurrency、retry/backoff/cooldown 和 circuit breaker fields。
-- 在支持的 provider 上，在 LLM task execution 前增加 provider health/dry-run preflight。
-- 将 cron failure notification 关联到 run detail、task trace 和 incident detail。
-- 为近期 cron runs 增加本地和 Discord 查询表面。
+- 加上耐久的运行历史。
+- 增加每个工作超时、最大货币、重试/后退/冷却以及断路器字段。
+- 在所支持的 LLM 任务执行之前,增加提供商健康/干燥运行前飞行。
+- 连接cron故障通知以运行细节,任务追踪和事件细节.
+- 为最近的 cron 运行添加本地查询和 Discord 查询表面。
 
 ## 非目标
 
-- 第一阶段不移除现有 `~/.miniclaw/cron/state.json`。
-- provider health preflight 不调用真实 LLM。
-- 不立即让 provider preflight 成为 legacy providers 的必填项。
-- 不允许 Discord users 创建任意 cron jobs。
-- 不针对 production config 运行真实 cron E2E。
+- 不删除已有的`~/.miniclaw/cron/state.json`在第一个片段。
+- 在提供保健服务前飞行时不要拨打真正的LLMS。
+- 不立即规定供应商必须进行飞行前准备。
+- 不要让 Discord 用户创建任意的 cron 工作 。
+- 不要运行真正的cron E2E 针对生产配置。
 
-## 现有架构证据
+## 现有建筑证据
 
-- `src/cron/types.ts`：cron job definitions、task/script/skill/message modes、`pre_provider`、`pre_provider_config`。
-- `src/cron/loader.ts`：加载用户 cron YAML 并验证 providers。
-- `src/cron/runner-task.ts`：运行 pre-provider 和下游 `executeTask`。
-- `src/cron/scheduler.ts`：scheduling、retry、running jobs、failure alerts。
-- `src/cron/state.ts`：JSON state persistence。
-- `src/cron/failure-notifier.ts`：Discord failure/recovered alert behavior。
-- `src/cron/retry-interactions.ts`：retry button behavior。
-- `scripts/cron-list.ts` 和 `scripts/cron-test.ts`：local cron surfaces。
-- `pnpm run e2e:cron`：deterministic cron fixture gate。
+- `src/cron/types.ts`: 工作定义、任务/说明/技能/信息模式,`pre_provider`, `pre_provider_config`.
+- `src/cron/loader.ts`: 加载用户 cron YAML 并验证提供者.
+- `src/cron/runner-task.ts`: 运行预供应商和下游`executeTask`.
+- `src/cron/scheduler.ts`: 排程, 重试, 运行任务, 失败提醒 。
+- `src/cron/state.ts`:JSON状态坚持.
+- `src/cron/failure-notifier.ts`:Discord失败/恢复警报行为.
+- `src/cron/retry-interactions.ts`:重试按钮行为.
+- `scripts/cron-list.ts`和`scripts/cron-test.ts`: 局部凸轮表面.
+- `pnpm run e2e:cron`:定型圆柱形固定门.
 
-## 数据模型提案
+## 数据模型建议
 
-增加 `cron_runs` 表：
+添加一个`cron_runs`表格显示:
 
 ```sql
 CREATE TABLE cron_runs (
@@ -75,7 +75,7 @@ CREATE INDEX idx_cron_runs_job_started ON cron_runs(job_name, started_at);
 CREATE INDEX idx_cron_runs_status_started ON cron_runs(status, started_at);
 ```
 
-Status values：
+状态值 :
 
 - `running`
 - `success`
@@ -85,9 +85,9 @@ Status values：
 - `cancelled`
 - `circuit_open`
 
-## Config 提案
+## 配置建议
 
-Per-job YAML candidates：
+职业YAML候选人:
 
 ```yaml
 timeout_ms: 1800000
@@ -107,93 +107,182 @@ provider_preflight:
   mode: health
 ```
 
-保持 defaults 与当前行为兼容。
+保持默认符合当前行为.
 
-## 实施计划
+## 执行计划
 
-1. 增加 cron run repository。
-   - 候选文件：`src/store/cron-runs.ts`。
-   - Helpers：
+1. 添加 cron 运行仓库。
+- 候选人文件 :`src/store/cron-runs.ts`.
+- 帮手:
      - `createCronRun`
      - `markCronRunCompleted`
      - `markCronRunFailed`
      - `listCronRuns`
      - `summarizeCronRuns`
-   - 增加 schema tests。
-2. Instrument scheduler。
-   - 为每个 scheduled/manual/test run 创建 run id。
-   - 记录 start、attempt、job type 和 scheduled time。
-   - completion/failure/skip 时记录 status 和 duration。
-   - task runner 创建 task 时关联 task id。
-3. 保持 JSON state 兼容。
-   - 为当前 scheduler 行为继续写入 `state.json`。
-   - 在稳定前，不让 `cron_runs` 成为唯一 source of truth。
-4. 增加 provider preflight hook。
-   - 如果 provider framework 已落地，在 LLM task 前调用 `healthCheck` 或 `dryRun`。
-   - 如果尚未落地，先设计 hook 但保持 disabled。
-   - 在 `cron_runs` 中记录 provider status/category。
-   - 对 auth/session failure，跳过 LLM task，并用可行动 category 将 run 标为 `skipped` 或 `failed`。
-5. 增加 per-job timeout 和 concurrency。
-   - 先按 job name 执行 `max_concurrency`。
-   - 围绕 pre-script/pre-provider/task path 增加 full-job timeout wrapper。
-   - 确保 timeout 会标记 run 并创建/更新 incident。
-6. 增加 cooldown 和 circuit breaker。
-   - 从 `cron_runs` 计算，而不只看 last state。
-   - circuit-open runs 应可见，不能静默忽略。
-7. 扩展 failure notifier。
-   - 包含 run id。
-   - 包含 command hints：
-     - 如果新增，`/cron-run id:<run-id>`；
-     - 如果 task 存在，`/task-log id:<task-id>`；
-     - 如果 incident 存在，`/incident view id:<incident-id>`。
-8. 增加 local query script。
-   - 候选：`scripts/cron-runs.ts`。
-   - Package script：`"cron:runs": "tsx scripts/cron-runs.ts"`。
-   - 输出 terminal-friendly grouped summaries。
-9. 可选 Discord command。
+- 加入计划测试。
+2. 仪器调度器。
+- 为每一次预定/人工/测试运行创建运行编号。
+- 记录开始、尝试、工作类型和预定时间。
+- 完成/失败/滑行的记录状况和期限。
+- 当任务执行者创建任务时链接任务 ID。
+3. 保持JSON状态兼容性.
+- 继续写`state.json`用于当前调度器行为。
+- 别做`cron_runs`唯一的真相来源 直到稳定。
+4. 添加供应商飞行前钩。
+- 如果供应商框架已着陆,请拨`healthCheck` or `dryRun`在 LLM 任务之前。
+- 如果不降落,设计车钩但让它失效。
+- 记录提供者状况/类别`cron_runs`.
+- 对于认证/会话失败, 请跳过 LLM 任务并标记运行`skipped` or `failed`可采取行动的类别。
+5. 增加每个工作时间和货币。
+- 执行`max_concurrency`由职称先.
+- 在前方/前方/前方/任务路径上添加全员超时包装。
+- 确保超时标记运行并创建/更新事件。
+6. 增加冷却和断路器。
+- 计算从`cron_runs`不只是最后一个州
+- 电路开通运行应当可见,不能默默忽略.
+7. 延长失效通知。
+- 包括身份证明
+- 包含命令提示:
+     - `/cron-run id:<run-id>`如果添加;
+     - `/task-log id:<task-id>`如果任务存在;
+     - `/incident view id:<incident-id>`如果事件存在。
+8. 添加本地查询脚本。
+- 候选人:`scripts/cron-runs.ts`.
+- 软件包脚本:`"cron:runs": "tsx scripts/cron-runs.ts"`.
+- 易于输出的终端组汇总。
+9. 可选的Discord命令。
    - `/cron-runs job:<optional> limit:<n>`
    - `/cron-run id:<run-id>`
-   - 保持 slash surface 小；CLI 可以先落地。
-10. 增加 tests 和 fixtures。
-    - Scheduler success/failure/skip run rows。
-    - Retry/backoff/cooldown behavior。
-    - Circuit breaker behavior。
-    - Provider preflight categories。
+- 保持斜面小;CLI可以先着陆。
+10. 增加试验和固定装置。
+- 排程成功/失败/滑行。
+- 重试/后退/冷却行为。
+- 断路器行为
+- 供应商飞行前类别。
 
-## 验证计划
+## 核查计划
 
-- Focused：
+- 重点:
   - `pnpm vitest run src/cron/__tests__/scheduler.test.ts src/cron/__tests__/failure-notifier.test.ts src/cron/__tests__/state.test.ts`
-  - 增加 `src/store/__tests__/cron-runs.test.ts`。
-  - 新行为落地时增加 cron control tests。
-- E2E fixture：
+- 添加内容`src/store/__tests__/cron-runs.test.ts`.
+- 加入cron控制测试 作为新的行为。
+- E2E固定装置:
   - `pnpm run e2e:cron`
-- Static：
+- 静态:
   - `pnpm run typecheck`
   - `pnpm run lint`
-- Full：
+- 满:
   - `pnpm test`
   - `pnpm run build`
 
-## 风险与回滚
+## 风险 倒车
 
-- 风险：scheduler 创建重复或 orphaned run rows。
-  - 缓解：每个 attempt 一个 run id；idempotent finalization helper。
-- 风险：timeout 错误取消 task。
-  - 缓解：区分 pre-provider timeout 和 downstream task timeout；依赖现有 cancel/interrupt path。
-- 风险：provider preflight 过度改变 production cron behavior。
-  - 缓解：preflight 用 config gate；必要时先做 record-only mode。
-- 风险：circuit breaker 隐藏重要 failures。
-  - 缓解：circuit-open runs 被记录，并通知 next retry/open-until time。
+- 风险:调度员创建重复或孤行运行。
+- 缓解:每次尝试一次运行id;一手敲定帮助者。
+- 风险:超时错误地取消任务。
+- 缓解:区分提供前超时和下游任务超时;依靠现有的取消/中断路径。
+- 风险: 供应商在飞行前会改变生产行为
+- 缓解:配置门飞行前;如有需要,首先采用只记录模式。
+- 风险:断路器隐藏重大故障。
+- 缓解:录制并通知电路开通运行情况,下次重试/开通时间。
 
 ## 文档同步
 
-- 更新 `docs/architecture.md` cron section 和 ER diagram。
-- 更新相关 cron/provider feature docs。
-- 如果增加 slash commands 或 buttons，更新 `docs/bot-routing.md`。
-- 运行 `pnpm run quality:docs`。
+- 最新情况`docs/architecture.md`中央部分和ER图。
+- 更新相关的目录/提供者功能文件。
+- 最新情况`docs/bot-routing.md`如果添加斜线命令或按钮。
+- 运行`pnpm run quality:docs`.
 
-## 执行记录
+## 执行笔记
 
-实现时在这里记录 schema version、config defaults、query commands 和 verification output。
+记录 schema 版本, 配置默认值, 查询命令, 执行时在此进行校验输出 。
 
+### 2026-05-12 拉尔夫迭代:持久运行历史基础.
+
+- 执行计划v11`cron_runs`加号`idx_cron_runs_job_started`和`idx_cron_runs_status_started`.
+- 已经添加了`src/store/cron-runs.ts`帮助者 :`createCronRun`, `markCronRunCompleted`, `markCronRunFailed`, `getCronRun`, `listCronRuns`,以及`summarizeCronRuns`.
+- 仪器调度器发送以创建一个`cron_runs`每一次尝试,包括排水/汇兑期间的省略发送,`retry_scheduled`重试后退前行, 最终`failed`和成功/滑落的结果。
+- 运行器结果现在包含任务/提供者元数据,因此任务和技能运行可以链接`task_id`预提供方`skipTask`结果作为`skipped`.
+- 让杰森`state.json`作为当前兼容源写入`cron:list`并重试按钮行为。
+- 更新`docs/architecture.md`SQLite schema 注释和 ER 图表用于 schema v11 /`cron_runs`.
+- 核查:
+  - `pnpm exec vitest run src/store/__tests__/cron-runs.test.ts src/store/__tests__/migrations.test.ts src/store/__tests__/db.test.ts src/cron/__tests__/scheduler.test.ts src/cron/__tests__/runner-task.test.ts src/cron/__tests__/runner-script.test.ts src/cron/__tests__/runner-message.test.ts`通过了:7个文件,60个测试。
+  - `pnpm run typecheck`通过。
+  - `pnpm run e2e:cron`通过 :`Cron E2E fixture passed: cron-e2e-1778599767213`.
+  - `pnpm run quality:docs`与计划v11。
+  - `pnpm run lint`通过。
+
+### 2026-05-12 拉尔夫迭代:提供机前运行元数据
+
+- 完成供应商飞行前历史空白:健康和模拟飞行前故障现在将供应商名称、供应商地位、供应商类别和可操作错误类别传播到调度器中。
+- 遗产`pre_provider`收藏失败, 现在在提升前使用提供者错误分类器`CronTaskRunError`, so `cron_runs.provider_*`和`cron_runs.error_category`不再留作提供者故障的通用任务运行错误。
+- 排期失败的定稿工作目前仍在继续`errorCategory`在返回到通用 JavaScript 错误名称之前,由 runder 错误 所携带。
+- 增加了健康飞行前元数据、干燥飞行前元数据以及耐久性测试`cron_runs`不支持的提供者预飞的行 。
+- 更新`docs/archive/features/16-provider-framework.md`与持续的飞行前/供应商故障元数据合同。
+- 核查:
+  - `pnpm exec vitest run src/cron/__tests__/runner-task.test.ts src/cron/__tests__/scheduler.test.ts`通过了:2个文件,22个测试。
+  - `pnpm run typecheck`通过。
+  - `pnpm run lint`通过。
+  - `pnpm run e2e:cron`通过 :`Cron E2E fixture passed: cron-e2e-1778600152507`.
+  - `pnpm run quality:docs`与计划v11。
+
+### 2026-05-12 拉尔夫迭代:每工作超时和货币
+
+- 添加 cron YAML 支持`timeout_ms`和`max_concurrency`; `max_concurrency`默认为 1 以保留先前的同工单跑后卫,同时`timeout_ms`选择进入。
+- 已替换的同名调度器`Set`跟踪每个工作运行的计数,这样配置的工作就可以运行到自己的货币限额,并且跳过溢额的发送被坚持到`cron_runs.status=skipped`与`error_category=max_concurrency`.
+- 添加排程器级全程超时包装。 超时中止信号被传播到任务,技能,脚本,前缀,以及消息执行器中;任务执行现在接受外部中止信号,并在任务输出中保留中止原因.
+- 持续出现超时故障`cron_runs`与`error_category=cron_timeout`,在可用时链接任务编号,以及 a`cron_failed`重试链键定的事件行加事件`failure_run_id`.
+- 更新`docs/architecture.md`运行到文档`max_concurrency`, `timeout_ms`超时历史 超时事件
+- 核查:
+  - `pnpm exec vitest run src/cron/__tests__/loader.test.ts src/cron/__tests__/scheduler.test.ts src/cron/__tests__/runner-script.test.ts src/cron/__tests__/runner-task.test.ts`通过:4个文件,53个测试。
+  - `pnpm exec vitest run src/agent/__tests__/task-helpers.test.ts src/agent/__tests__/e2e-fake-runtime.test.ts src/agent/__tests__/task-runtime-registry.test.ts`通过了:3个文件,23个测试。
+  - `pnpm run typecheck`通过。
+  - `pnpm run lint`通过。
+  - `pnpm run e2e:cron`通过 :`Cron E2E fixture passed: cron-e2e-1778601087271`.
+  - `pnpm run quality:docs`与计划v11。
+
+### 2026-05-12 拉尔夫迭代:冷却和断路闸门
+
+- 添加 cron YAML 支持`cooldown.after_failure_ms`和`circuit_breaker`带有阈值/窗口/开放时间的设定默认值。
+- 已经添加了`getCronRunFailureWindow()`所以冷却和断路器的决定 是从耐久性计算出来的`cron_runs`,忽略了电路开/滑行,并在后来成功运行后重置.
+- 调度器在获得同工的货币插槽后, 在开始重试之前, 现在应用冷却/电路闸; 冷却器写入`cron_runs.status=skipped` / `error_category=cooldown`,当断路器写入时`cron_runs.status=circuit_open` / `error_category=circuit_open`加上打开到元数据。
+- 贾森`state.json`兼容性保持不变: 已封存的调度仍然调用`recordRun()`并揭露`next_retry_at`用于本地状态表面。
+- 更新`docs/architecture.md`用于记录新历史支撑的大门。
+- 核查:
+  - `pnpm exec vitest run src/cron/__tests__/loader.test.ts src/cron/__tests__/scheduler.test.ts src/store/__tests__/cron-runs.test.ts`通过:3个文件,44个测试。
+  - `pnpm run typecheck`通过。
+  - `pnpm run lint`通过。
+  - `pnpm run e2e:cron`通过 :`Cron E2E fixture passed: cron-e2e-1778601660368`.
+  - `pnpm run quality:docs`与计划v11。
+
+### 2026-05-13 拉尔夫迭代:故障警报链接和当地运行查询
+
+- 扩展 cron 失败通知, 所以重试按钮仍然使用重试链`failure_run_id`,而信息正文现在包括持久`cron_runs.id`加运算符提示`pnpm run cron:runs -- --id <prefix>`, `/task-log id:<task-prefix>`,以及`/incident view id:<incident-prefix>`当这些链接的记录存在时。
+- 重新排序调度器故障处理,以便在发送Discord故障提醒之前创建超时事件,允许超时提醒包含事件细节提示,并且仍然持续提醒频道/消息ID返回`cron_runs`排队
+- 添加 cron 运行 id/ prefix 查询助手(`listCronRunsByIdPrefix`, `resolveCronRunByIdPrefix`)用于局部和未来的Discord细节表面.
+- 已经添加了`scripts/cron-runs.ts`和软件包脚本`cron:runs`对于最近运行的列表,每个工作摘要,JSON输出,以及由id/prefix提供的单运行细节;脚本只初始化存储数据库路径,不需要Discord运行时的秘密来帮助或只读查询使用.
+- 更新`docs/architecture.md`和`docs/bot-routing.md`来记录重试链 ids 和 持久运行 ids 之间的区别,加上新的本地查询命令。
+- 核查:
+  - `pnpm exec vitest run src/cron/__tests__/failure-notifier.test.ts src/cron/__tests__/scheduler.test.ts src/store/__tests__/cron-runs.test.ts`通过:3个文件,25个测试。
+  - `pnpm run typecheck`通过。
+  - `pnpm run lint`通过。
+  - `pnpm run quality:docs`与计划v11。
+  - `pnpm run e2e:cron`通过 :`Cron E2E fixture passed: cron-e2e-1778602168982`.
+  - `pnpm run cron:runs -- --help`无需通过`DISCORD_TOKEN`.
+  - `MINICLAW_DB_PATH=/private/tmp/miniclaw-cron-runs-smoke.db pnpm run cron:runs -- --limit 1`从临时数据库中通过并打印出一个空运行列表; 临时 SQLite 文件随后被清理。
+
+### 2026-05-13 拉尔夫迭代:Discord cron运行查询命令
+
+- 添加的Discord斜线命令`/cron-runs job:<optional> limit:<n>`和`/cron-run id:<run-prefix>`.
+- 已经添加了`src/commands/cron-runs.ts`因此 Discord 查询输出重用持久值`cron_runs`formatter 和 id- prefix 解析器已被本地端使用`cron:runs`CLI(英语:CLI).
+- 连接新命令通过`commands/register.ts`, `commands/handlers.ts`,以及`bot/slash-dispatch.ts`;两个命令都是允许用户入门,易读,只读.
+- 更新`docs/architecture.md`和`docs/bot-routing.md`来记录 Discord 运行历史查询表层和与 retry-chain 按钮 ids 的区别。
+- 这完成了剩下的Discord查询表层 从执行计划, 所以计划状态现在`done`.
+- 核查:
+  - `pnpm vitest run src/commands/__tests__/cron-runs.test.ts src/bot/__tests__/slash-dispatch.test.ts src/store/__tests__/cron-runs.test.ts`通过:3个文件,15个测试。
+  - `pnpm vitest run src/cron/__tests__/scheduler.test.ts src/cron/__tests__/failure-notifier.test.ts src/cron/__tests__/state.test.ts`通过了:3个文件,28个测试。
+  - `pnpm run e2e:cron`通过 :`Cron E2E fixture passed: cron-e2e-1778602591151`.
+  - `pnpm run typecheck`通过。
+  - `pnpm run lint`通过。
+  - `pnpm run quality:docs`与计划v11。
+  - `pnpm ralph:verify -- --task cron-run-history-control --profile cron`通过,包括Cron测试,E2E固定`cron-e2e-1778602706778`输入、输入和数据漂移检查

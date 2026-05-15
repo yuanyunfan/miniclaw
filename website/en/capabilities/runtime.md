@@ -11,12 +11,13 @@ source_docs:
 
 # Runtime
 
-The runtime turns an intake event into a bounded chat response, a managed task thread, or a scheduled provider-driven report. The same event model feeds trace storage and recovery.
+The runtime turns an intake event into a bounded chat response, a managed task thread, or a scheduled provider-driven report. A hard Discord route runs first; Smart Router only acts inside the chat-eligible path.
 
 ```mermaid
 flowchart TD
   Intake[Discord / IM Intake] --> Normalize[Normalize Message]
-  Normalize --> Decide[Smart Router]
+  Normalize --> HardRoute[Hard Route]
+  HardRoute --> Decide[Smart Router]
   Decide --> Chat[Chat Runtime]
   Decide --> Confirm[Task Confirmation]
   Confirm --> Task[Task Runtime]
@@ -31,8 +32,8 @@ flowchart TD
 
 ## Runtime Responsibilities
 
-- **Intake normalization**: Discord events become a consistent route input.
-- **Routing semantics**: Smart Router separates chat, suggested task, confirmed task, and trusted auto-task channels.
+- **Intake normalization**: Discord events become a consistent route input before any agent runtime is called.
+- **Routing semantics**: the hard route decides ignore/thread continuation/task channel/chat; Smart Router separates chat, suggested task, confirmed task, and trusted auto-task channels.
 - **Task lifecycle**: task threads, progress cards, tool traces, final Markdown output, cancellation, and resume behavior are runtime concerns.
 - **Cron execution**: cron jobs can collect provider output before creating the agent prompt.
 - **Recovery loop**: connectivity and doctor repair paths reuse stored incidents and trace evidence.
@@ -51,4 +52,4 @@ flowchart LR
   Prompt --> Agent[Claude / Codex]
 ```
 
-Runtime docs carry the implementation details and path ownership. This website page keeps the mental model stable for readers who need to understand how work moves through the system.
+Runtime docs carry the implementation details and path ownership, including button dispatch, slash command dispatch, and thread continuation. This website page keeps the mental model stable for readers who need to understand how work moves through the system.

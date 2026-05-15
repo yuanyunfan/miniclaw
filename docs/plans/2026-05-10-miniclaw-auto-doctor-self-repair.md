@@ -41,7 +41,7 @@ The key design constraint is that the main MiniClaw process must not blindly mod
 - `src/monitoring/connectivity-monitor.ts` and `src/monitoring/connectivity-core.ts` probe Discord, general network, and SMTP reachability, then persist runtime connectivity state.
 - `src/ops/safe-restart.ts` refuses PM2 restart when the MiniClaw SQLite DB contains `status='running'` tasks unless `--force` is explicitly provided.
 - `package.json` exposes `quality:commit` and `quality:push`; Git hooks call these gates before commit and push.
-- `src/routing/intent.ts` already treats runtime diagnostics terms such as "任务失败", "回复出错", "排查", and "why fail" as task-like work rather than lightweight chat.
+- `src/routing/intent.ts`There's a lot of work going on, and there's a lot of work going on.
 
 ## Proposed Architecture
 
@@ -219,7 +219,7 @@ Incident statuses:
 3. Add a Discord slash command or button path:
    - `/doctor`
    - `/doctor task_id:<id>`
-   - cron failure alert button: `诊断`
+   - cron failure alert diagnosis button
 4. Render a concise diagnosis into Discord without making changes.
 
 ### Phase 2: Incident Persistence
@@ -315,9 +315,9 @@ Recommended commands/buttons:
 - `/doctor task_id:<id>`: diagnose a specific task.
 - `/doctor cron:<job-name>`: diagnose a specific cron job.
 - `/incidents`: list open incidents.
-- `诊断`: button on cron/task failure alerts.
-- `尝试修复`: approval button after a diagnosis says repair is safe.
-- `部署修复`: approval button after verification passes.
+- Diagnosis: button on cron/task failure alerts.
+- Try repair: approval button after a diagnosis says repair is safe.
+- Ship repair: approval button after verification passes.
 
 Suggested diagnosis message shape:
 

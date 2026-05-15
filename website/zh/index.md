@@ -17,7 +17,7 @@ source_docs:
 
 # MiniClaw
 
-MiniClaw 是一个 local-first automation runtime，把 Discord 消息、cron 调度、只读 providers 和 Claude/Codex agents 组织成一条可观测的个人自动化工作流。
+MiniClaw 是一个 local-first automation runtime，把 Discord 消息、cron 调度、只读 providers 和 Claude/Codex agents 组织成一条可观测的个人自动化工作流。website 是面向人的门户；实现契约仍维护在 repo docs 中。
 
 ## 系统设计
 
@@ -33,7 +33,7 @@ flowchart LR
   Chat --> Store[(SQLite)]
   Task --> Store
   Agents --> Delivery[Discord Delivery]
-  Store --> Quality[Trace / Quality Gates]
+  Store --> Quality[Trace / Docs / Quality Gates]
 ```
 
 ## 设计边界
@@ -42,8 +42,8 @@ flowchart LR
 - **Runtime boundary**：MiniClaw 负责 routing、context、progress、trace events 和 delivery；Claude/Codex 负责 agent execution。
 - **Provider-first reports**：WeChat、email、stock、market providers 先生成结构化上下文，再交给 LLM 汇总。
 - **Local-first state**：用户配置、secrets、provider sessions、cron state 和 SQLite 数据都留在公开 repo 之外。
-- **Docs-driven governance**：repo docs 是实现记录；website 是面向人的入口，并回链到 current source docs。
-- **Quality as architecture**：docs drift、website drift、i18n parity、coverage、secrets 和 cron E2E 都是可执行 gate。
+- **Docs-driven governance**：英文 repo docs 是 canonical implementation record；中文 docs 通过 source-hash parity 跟随英文。
+- **Quality as architecture**：docs drift、website drift、bilingual parity、changelog drift、coverage、secrets 和 cron E2E 都是可执行 gate。
 
 ## Runtime Loop
 

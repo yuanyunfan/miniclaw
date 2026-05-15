@@ -3,8 +3,8 @@ doc_id: experiments-index
 lang: zh
 translation_of: docs/experiments/README.md
 translation_status: current
+source_sha256: b01d6dfcfdce2f5e7ace638d4f6ea924e417577ae25b93c8b3f90401a7bb63d5
 ---
-
 # MiniClaw Experiments
 
 > 结论：experiments 用来验证未来 runtime pattern，但它们不是默认 MiniClaw product behavior。本目录把实验性 control planes 与稳定 runtime/provider docs 分离。

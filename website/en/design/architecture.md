@@ -11,7 +11,7 @@ source_docs:
 
 # Architecture
 
-MiniClaw is shaped around one boundary: Discord is the control and delivery surface, while the local runtime owns routing, provider context, task execution, storage, recovery, and quality traceability.
+MiniClaw is shaped around one boundary: Discord is the control and delivery surface, while the local runtime owns routing, provider context, task execution, storage, recovery, and quality traceability. User state remains under `~/.miniclaw/`; implementation facts remain in `docs/`.
 
 ```mermaid
 flowchart LR
@@ -24,6 +24,7 @@ flowchart LR
     Router[Smart Router]
     Chat[Chat Runtime]
     Task[Task Runtime]
+    Manager[Agent Run Manager]
     Cron[Cron Scheduler]
   end
   subgraph Context
@@ -44,6 +45,7 @@ flowchart LR
   Intake --> Router
   Router --> Chat
   Router --> Task
+  Task --> Manager
   Cron --> Providers
   Providers --> Task
   Memory --> Chat
@@ -59,10 +61,10 @@ flowchart LR
 ## Boundary Map
 
 - **Interface boundary**: Discord carries user intent, progress, final output, and operator actions.
-- **Runtime boundary**: routing, task lifecycle, cron orchestration, and recovery logic stay in MiniClaw.
+- **Runtime boundary**: routing, task lifecycle, optional Agent Run Manager orchestration, cron, and recovery logic stay in MiniClaw.
 - **Provider boundary**: external accounts are read-only context sources; secrets and sessions stay outside Git.
 - **Execution boundary**: Claude and Codex run work, but MiniClaw normalizes sessions, usage, trace events, and delivery.
-- **Docs boundary**: repo docs remain the source of truth; this website exposes the stable mental model.
+- **Docs boundary**: English repo docs remain canonical; Chinese mirrors and website pages are checked against that source.
 
 ## Data Movement
 

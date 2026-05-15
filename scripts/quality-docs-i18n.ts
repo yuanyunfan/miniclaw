@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 import { execFileSync, spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import {
   analyzeDocsI18n,
   parseDocumentationMigrationMap,
@@ -36,6 +36,16 @@ function trackedSourceDocs(): string[] {
     .sort();
 }
 
+function trackedChineseDocs(): string[] {
+  const output = execFileSync("git", ["ls-files", "docs/zh/*.md", "docs/zh/**/*.md"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+  });
+  return Array.from(new Set(output.split("\n").filter(Boolean)))
+    .filter((path) => existsSync(path))
+    .sort();
+}
+
 const ignoredPaths = new Set(
   entries
     .map((entry) => entry.zh_path)
@@ -54,6 +64,7 @@ const findings = analyzeDocsI18n({
   ignoredPaths,
   diffDisabledPaths,
   trackedSourcePaths: trackedSourceDocs(),
+  trackedChinesePaths: trackedChineseDocs(),
   exists: (path) => {
     try {
       execFileSync("test", ["-e", path], { cwd: repoRoot });

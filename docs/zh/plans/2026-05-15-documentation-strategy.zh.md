@@ -3,8 +3,8 @@ doc_id: documentation-strategy
 lang: zh
 translation_of: docs/plans/2026-05-15-documentation-strategy.md
 translation_status: current
+source_sha256: 33803ba223bc3584953d488a372735c72edcde6f0217ca4689d841396e643dbe
 ---
-
 # MiniClaw 文档策略
 
 Status: completed

@@ -6,11 +6,12 @@ source_docs:
     - docs/install-distribution-strategy.md
   zh:
     - docs/zh/runbooks/install.zh.md
+    - docs/zh/install-distribution-strategy.zh.md
 ---
 
 # Getting Started
 
-MiniClaw is meant to run as a local personal service. The website keeps the path short; the linked runbooks hold the full setup, troubleshooting, and distribution details.
+MiniClaw is meant to run as a local personal service. The website keeps the path short; the linked runbooks hold the full setup, troubleshooting, distribution, and release-boundary details.
 
 ```bash
 git clone https://github.com/yuanyunfan/miniclaw.git
@@ -29,6 +30,7 @@ pnpm dev
 - **Register Discord commands**: `pnpm register` syncs slash commands for the configured guild.
 - **Start the runtime**: `pnpm dev` runs the bot through the TypeScript watcher.
 - **Verify in Discord**: `/health` checks runtime health; `@MiniClaw hello` checks chat intake.
+- **Promote to PM2 later**: use the release/deploy runbooks after the first local bot path is healthy.
 
 ## Configuration Model
 
@@ -42,4 +44,4 @@ flowchart LR
   Runtime --> Providers[Providers]
 ```
 
-Use `~/.miniclaw/` for personal config and state. Keep repo files reusable, reviewable, and free of credentials; deeper provider examples now live in provider docs.
+Use `~/.miniclaw/` for personal config and state. Keep repo files reusable, reviewable, and free of credentials; advanced provider and cron setup belongs after the minimal bot is working.

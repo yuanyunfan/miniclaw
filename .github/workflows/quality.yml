@@ -53,6 +53,14 @@ jobs:
       - name: Coverage ratchet
         run: pnpm run quality:coverage
 
+      - name: Changelog drift
+        if: github.event_name == 'pull_request'
+        run: pnpm run quality:changelog -- --base ${{ github.event.pull_request.base.sha }} --head ${{ github.sha }}
+
+      - name: Changelog drift
+        if: github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000'
+        run: pnpm run quality:changelog -- --base ${{ github.event.before }} --head ${{ github.sha }}
+
       - name: Docs drift
         run: pnpm run quality:docs
 

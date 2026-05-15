@@ -6,7 +6,7 @@ Use a plan document before editing production code when a task changes architect
 
 ## Current Planning Notes
 
-- [`2026-05-15-documentation-strategy.md`](2026-05-15-documentation-strategy.md): completed；分层文档策略，`docs/` 作为 LLM 维护的 docs-driven development source of truth，GitHub Pages 作为 human-facing portal。
+- [`2026-05-15-documentation-strategy.md`](2026-05-15-documentation-strategy.md): completed; layered documentation policy,`docs/`Docs-driving development source of truth, GitHub Pages as human-facing portal.
 
 File naming:
 

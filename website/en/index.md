@@ -17,7 +17,7 @@ source_docs:
 
 # MiniClaw
 
-MiniClaw is a local-first automation runtime that turns Discord messages, cron schedules, read-only providers, and Claude/Codex agents into one observable personal operations loop.
+MiniClaw is a local-first automation runtime that turns Discord messages, cron schedules, read-only providers, and Claude/Codex agents into one observable personal operations loop. The website is a curated portal; the implementation contract stays in the repo docs.
 
 ## System Design
 
@@ -33,7 +33,7 @@ flowchart LR
   Chat --> Store[(SQLite)]
   Task --> Store
   Agents --> Delivery[Discord Delivery]
-  Store --> Quality[Trace / Quality Gates]
+  Store --> Quality[Trace / Docs / Quality Gates]
 ```
 
 ## Design Surface
@@ -42,8 +42,8 @@ flowchart LR
 - **Runtime boundary**: MiniClaw owns routing, context, progress, trace events, and delivery; Claude/Codex own agent execution.
 - **Provider-first reports**: WeChat, email, stock, and market providers produce structured context before the LLM summarizes anything.
 - **Local-first state**: user config, secrets, provider sessions, cron state, and SQLite data live outside the public repo.
-- **Docs-driven governance**: repo docs are the implementation record; this website is a curated human portal linked back to current source docs.
-- **Quality as architecture**: docs drift, website drift, i18n parity, coverage, secrets, and cron E2E are executable gates.
+- **Docs-driven governance**: English repo docs are the canonical implementation record; Chinese docs mirror them with source-hash parity.
+- **Quality as architecture**: docs drift, website drift, bilingual parity, changelog drift, coverage, secrets, and cron E2E are executable gates.
 
 ## Runtime Loop
 

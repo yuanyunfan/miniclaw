@@ -2,9 +2,9 @@
 doc_id: agent-prompt-context-management-plan
 lang: zh
 translation_of: docs/plans/2026-05-13-agent-prompt-context-management.md
-translation_status: not_required
+translation_status: current
+source_sha256: f970786bf436f50b4aafcd97bde03fcf9bd257054d2da451cdad065f73b811c5
 ---
-
 # Agent Prompt 上下文管理
 
 状态：draft

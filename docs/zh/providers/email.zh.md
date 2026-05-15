@@ -3,8 +3,8 @@ doc_id: email-provider-family
 lang: zh
 translation_of: docs/providers/email.md
 translation_status: current
+source_sha256: 3888295aa15c092fc00f213f9f7a043061f6dc3a339b3e90618f1593f3d38a93
 ---
-
 # Email Provider Family
 
 > 结论：Email 是 shared read-only capability 加上若干 provider consumers。`email-query` 暴露受控的通用 mailbox context，`cmb-credit-card-email` 把招商信用卡通知邮件解析成结构化消费记录。它们共享邮箱访问能力，但 parser-specific 行为和业务语义属于 consumer provider。

@@ -2,9 +2,9 @@
 doc_id: provider-framework-sdk-plan
 lang: zh
 translation_of: docs/plans/2026-05-11-provider-framework-sdk.md
-translation_status: not_required
+translation_status: current
+source_sha256: c64b43614e81e962fb4750bbdc1016175e5fa07bf6d174e3842a26c4d0f8e789
 ---
-
 # Provider Framework SDK
 
 状态：`draft`

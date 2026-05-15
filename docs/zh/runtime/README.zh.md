@@ -3,8 +3,8 @@ doc_id: runtime-index
 lang: zh
 translation_of: docs/runtime/README.md
 translation_status: current
+source_sha256: 07d4ed5187a61ca00784eb1e3a785b502304e21eeed57f23f7e522420ec0606c
 ---
-
 # MiniClaw Runtime
 
 > 结论：runtime 文档说明 MiniClaw 如何接收 Discord / IM 输入、路由 chat/task 工作、执行 cron 和 agent task、管理 memory/context，以及处理运行态恢复。Provider 文档负责外部数据采集 contract；runtime 文档负责执行、持久化、投递和修复行为。

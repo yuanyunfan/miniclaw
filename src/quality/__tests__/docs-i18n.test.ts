@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   analyzeDocsI18n,
+  documentationSourceHash,
   parseDocumentationMigrationMap,
   type DocumentationMigrationEntry,
 } from "../docs-i18n.js";
@@ -22,12 +23,14 @@ function analyze(
   ignoredPaths = new Set<string>(),
   diffDisabledPaths = new Set<string>(),
   trackedSourcePaths: string[] = [],
+  trackedChinesePaths: string[] = [],
 ) {
   return analyzeDocsI18n({
     entries,
     ignoredPaths,
     diffDisabledPaths,
     trackedSourcePaths,
+    trackedChinesePaths,
     exists: (path) => files[path] !== undefined,
     readText: (path) => files[path] ?? "",
   });
@@ -58,13 +61,15 @@ describe("documentation i18n checks", () => {
   });
 
   it("passes when the Chinese pair points back to the English source", () => {
+    const source = "# Architecture\n\n## Runtime\n";
     const findings = analyze({
-      "docs/architecture.md": "# Architecture\n\n## Runtime\n",
+      "docs/architecture.md": source,
       "docs/zh/architecture.zh.md": `---
 doc_id: architecture
 lang: zh
 translation_of: docs/architecture.md
 translation_status: current
+source_sha256: ${documentationSourceHash(source)}
 ---
 # 架构
 
@@ -84,6 +89,7 @@ doc_id: wrong
 lang: en
 translation_of: docs/other.md
 translation_status: current
+source_sha256: bad
 ---
 # 架构
 `,
@@ -100,6 +106,7 @@ translation_status: current
         "frontmatter lang must be zh",
         "translation_of must be docs/architecture.md",
         "doc_id must be architecture",
+        `source_sha256 must be ${documentationSourceHash("# Architecture\n")}`,
       ]),
     );
   });
@@ -117,6 +124,7 @@ doc_id: architecture
 lang: zh
 translation_of: docs/architecture.md
 translation_status: pending
+source_sha256: ${documentationSourceHash("# Architecture\n\n## Runtime\n")}
 ---
 # 架构
 `,
@@ -134,15 +142,17 @@ translation_status: pending
   });
 
   it("reports tracked source docs missing from the migration map", () => {
+    const source = "# Architecture\n";
     const findings = analyze(
       {
-        "docs/architecture.md": "# Architecture\n",
+        "docs/architecture.md": source,
         "docs/bot-routing.md": "# Bot Routing\n",
         "docs/zh/architecture.zh.md": `---
 doc_id: architecture
 lang: zh
 translation_of: docs/architecture.md
 translation_status: current
+source_sha256: ${documentationSourceHash(source)}
 ---
 # 架构
 `,
@@ -158,6 +168,93 @@ translation_status: current
         severity: "error",
         path: "docs/bot-routing.md",
         reason: "tracked source doc is missing from documentation migration map",
+      },
+    ]);
+  });
+
+  it("reports English source prose that still contains CJK text", () => {
+    const source = "# Architecture\n\nMiniClaw 架构 should be English here.\n";
+    const findings = analyze({
+      "docs/architecture.md": source,
+      "docs/zh/architecture.zh.md": `---
+doc_id: architecture
+lang: zh
+translation_of: docs/architecture.md
+translation_status: current
+source_sha256: ${documentationSourceHash(source)}
+---
+# 架构
+`,
+    });
+
+    expect(findings).toEqual([
+      {
+        severity: "error",
+        path: "docs/architecture.md",
+        reason: "canonical English documentation contains CJK text or fullwidth punctuation outside fenced code blocks",
+      },
+    ]);
+  });
+
+  it("reports English source prose that uses fullwidth punctuation", () => {
+    const source = "# Architecture\n\nRuntime boundary uses fullwidth punctuation。\n";
+    const findings = analyze({
+      "docs/architecture.md": source,
+      "docs/zh/architecture.zh.md": `---
+doc_id: architecture
+lang: zh
+translation_of: docs/architecture.md
+translation_status: current
+source_sha256: ${documentationSourceHash(source)}
+---
+# 架构
+
+运行时边界。
+`,
+    });
+
+    expect(findings).toEqual([
+      {
+        severity: "error",
+        path: "docs/architecture.md",
+        reason: "canonical English documentation contains CJK text or fullwidth punctuation outside fenced code blocks",
+      },
+    ]);
+  });
+
+  it("reports Chinese docs without Chinese prose and orphan Chinese files", () => {
+    const source = "# Architecture\n";
+    const findings = analyze(
+      {
+        "docs/architecture.md": source,
+        "docs/zh/architecture.zh.md": `---
+doc_id: architecture
+lang: zh
+translation_of: docs/architecture.md
+translation_status: current
+source_sha256: ${documentationSourceHash(source)}
+---
+# Architecture
+`,
+        "docs/zh/orphan.zh.md": "# 孤儿文档\n",
+      },
+      [currentEntry],
+      new Set(),
+      new Set(),
+      [],
+      ["docs/zh/architecture.zh.md", "docs/zh/orphan.zh.md"],
+    );
+
+    expect(findings).toEqual([
+      {
+        severity: "error",
+        path: "docs/zh/architecture.zh.md",
+        reason: "Chinese documentation does not contain enough Chinese prose outside fenced code blocks",
+      },
+      {
+        severity: "error",
+        path: "docs/zh/orphan.zh.md",
+        reason: "tracked Chinese doc is not paired in documentation migration map",
       },
     ]);
   });

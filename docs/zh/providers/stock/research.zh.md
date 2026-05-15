@@ -3,8 +3,8 @@ doc_id: stock-research-provider-pipeline
 lang: zh
 translation_of: docs/providers/stock/research.md
 translation_status: current
+source_sha256: ca4b6c100cc3829c8250756e5342a4383f944841555c28a07f999b5ffd47b1f1
 ---
-
 # Stock Research Provider Pipeline
 
 > 结论：stock research docs 应作为一个 provider pipeline 阅读。`stock-portfolio` 创建 redacted account/asset view，`stock-pulse` 检测盘中异动，`market-intel` 增加 macro/evidence context 和 forecast persistence，`stock-watchlist-research` 产出仅面向 watchlist 的 buy-timing research。

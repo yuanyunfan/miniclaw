@@ -86,8 +86,8 @@ CREATE TABLE smart_router_feedback (
    - Add typed helpers such as `recordSmartRouterUserChoice`, `recordSmartRouterTaskOutcome`, and `listSmartRouterReviewRows`.
    - Add schema tests in `src/store/__tests__/db.test.ts`.
 3. Update button handling.
-   - When user clicks "转为 task", record `user_choice=accepted_task`, `final_route=task`.
-   - When user clicks "继续 chat", record `user_choice=continued_chat`, `final_route=chat`.
+- When user clicks "to task,"`user_choice=accepted_task`, `final_route=task`.
+- When user clicks "continue chat,"`user_choice=continued_chat`, `final_route=chat`.
    - When confirmation expires or is cancelled, record a clear terminal state if possible.
    - Preserve custom id privacy; do not put prompt text in button ids.
 4. Link created task outcomes.

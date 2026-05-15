@@ -1,6 +1,6 @@
 # MiniClaw Install Runbook
 
-> 结论：MiniClaw 1.0 的安装路径面向技术用户。先 clone repo，再用 `install.sh` 初始化依赖和本机目录，用 `pnpm run setup` 写入最小 Discord/provider 配置，最后用 `doctor:setup` 验证环境。
+> Conclusion: MiniClaw 1.0 installation is designed for technical users. Clone the repo first, use `install.sh` to initialize dependencies and local directories, use `pnpm run setup` to write the minimum Discord/provider configuration, then use `pnpm run doctor:setup` to validate the environment.
 
 ## Prerequisites
 

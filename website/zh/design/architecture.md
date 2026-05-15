@@ -11,7 +11,7 @@ source_docs:
 
 # Architecture
 
-MiniClaw 的核心边界是：Discord 是 control 和 delivery surface；本地 runtime 负责 routing、provider context、task execution、storage、recovery 和 quality traceability。
+MiniClaw 的核心边界是：Discord 是 control 和 delivery surface；本地 runtime 负责 routing、provider context、task execution、storage、recovery 和 quality traceability。用户状态留在 `~/.miniclaw/`，实现事实留在 `docs/`。
 
 ```mermaid
 flowchart LR
@@ -24,6 +24,7 @@ flowchart LR
     Router[Smart Router]
     Chat[Chat Runtime]
     Task[Task Runtime]
+    Manager[Agent Run Manager]
     Cron[Cron Scheduler]
   end
   subgraph Context
@@ -44,6 +45,7 @@ flowchart LR
   Intake --> Router
   Router --> Chat
   Router --> Task
+  Task --> Manager
   Cron --> Providers
   Providers --> Task
   Memory --> Chat
@@ -59,10 +61,10 @@ flowchart LR
 ## 边界图
 
 - **Interface boundary**：Discord 承载用户意图、执行进度、最终输出和 operator actions。
-- **Runtime boundary**：routing、task lifecycle、cron orchestration 和 recovery logic 留在 MiniClaw。
+- **Runtime boundary**：routing、task lifecycle、可选 Agent Run Manager orchestration、cron 和 recovery logic 留在 MiniClaw。
 - **Provider boundary**：外部账户只作为 read-only context source；secrets 和 sessions 不进入 Git。
 - **Execution boundary**：Claude/Codex 执行任务，但 session、usage、trace events 和 delivery 由 MiniClaw 统一。
-- **Docs boundary**：repo docs 是 source of truth；website 只暴露稳定的系统心智模型。
+- **Docs boundary**：英文 repo docs 是 canonical source；中文 mirror 和 website pages 都通过 gate 跟随它。
 
 ## 数据流动
 

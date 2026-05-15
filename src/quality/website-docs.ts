@@ -42,6 +42,18 @@ function sourceDocsForPage(page: WebsiteDocsPage): string[] {
   return [...flat, ...Object.values(nested).flat()];
 }
 
+function affectedSourceDocsForPage(page: WebsiteDocsPage): string[] {
+  const parsed = parseFrontmatter(page.text);
+  if (!parsed.hasFrontmatter) return [];
+
+  const lang = websiteLanguage(page.path);
+  const nested = frontmatterStringRecord(parsed.data, "source_docs");
+  if (lang && nested[lang]?.length) return nested[lang];
+
+  const flat = frontmatterStringList(parsed.data, "source_docs");
+  return [...flat, ...Object.values(nested).flat()];
+}
+
 function websiteLanguage(path: string): "en" | "zh" | undefined {
   if (path.startsWith("website/en/")) return "en";
   if (path.startsWith("website/zh/")) return "zh";
@@ -97,7 +109,7 @@ export function analyzeWebsiteDocs(input: WebsiteDocsInput): WebsiteDocsResult {
   const findings = input.pages.flatMap((page) => validatePage(page, input.sourceExists));
   const changed = new Set(input.changedPaths ?? []);
   const affectedPages = input.pages.flatMap((page) =>
-    sourceDocsForPage(page)
+    affectedSourceDocsForPage(page)
       .filter((source) => changed.has(source))
       .map((source) => ({ page: page.path, source })),
   );

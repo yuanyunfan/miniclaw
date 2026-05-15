@@ -3,8 +3,8 @@ doc_id: provider-framework
 lang: zh
 translation_of: docs/providers/provider-framework.md
 translation_status: current
+source_sha256: 739895b2c803a74226d5fdecaf0c339e83f612069ee68a676a5982d8ef6e88ae
 ---
-
 # MiniClaw Provider Framework
 
 > 结论：provider framework docs 负责 manifest metadata、health checks、dry-run previews、structured output、fixture coverage、failure taxonomy，以及安全 state/session commit semantics 的 contract。Provider-specific docs 负责各 provider 的 trusted source 和 business payload。

@@ -10,7 +10,7 @@ source_docs:
 
 # Quality Gates
 
-MiniClaw 把 quality gates 当成架构的一部分，用来保护 runtime behavior、docs、website summaries、bilingual parity、secrets 和 release safety。
+MiniClaw 把 quality gates 当成架构的一部分，用来保护 runtime behavior、docs、website summaries、bilingual parity、changelog hygiene、secrets 和 release safety。
 
 ```mermaid
 flowchart LR
@@ -19,6 +19,7 @@ flowchart LR
   Docs --> Drift[Docs Drift]
   Docs --> I18n[Docs i18n]
   Docs --> Website[Website Docs]
+  Commit --> Changelog[Changelog Drift]
   Commit --> Static[Lint + Typecheck]
   Commit --> Tests[Vitest]
   Push[quality:push] --> Build[Build]
@@ -31,8 +32,9 @@ flowchart LR
 ## Drift Controls
 
 - **`quality:docs:drift`** 检查 implementation-to-docs invariants。
-- **`quality:docs-i18n`** 检查现存 canonical docs 的 bilingual doc pairing、metadata 和 current translation parity。
+- **`quality:docs-i18n`** 检查 bilingual doc pairing、metadata、heading shape、language split 和 source-hash parity。
 - **`quality:website-docs`** 检查 website `source_docs` traceability 和 affected-page updates。
+- **`quality:changelog`** 阻止 release-visible 变更在未更新 `CHANGELOG.md` 时落地。
 - **`quality:commit`** 是本地 commit 前的 staged gate。
 - **`quality:push`** 扩展到 build、coverage、cron E2E、full-tree safety、secrets 和 dependency checks。
 

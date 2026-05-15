@@ -7,6 +7,11 @@
 ## [Unreleased]
 
 ### Added
+- 新增 `quality:changelog` gate，并接入 `quality:commit`、`quality:push` 和 CI；`src/**`、`scripts/**`、`.github/workflows/**`、`docs/**`、`website/**`、`prompts/**` 等 release-visible 变更必须同 patch 更新 `CHANGELOG.md`。
+- 强化 `quality:docs-i18n`：所有非 archive/private 的 canonical docs 必须在 `docs/documentation-migration-map.md` 中声明中文 mirror，中文 mirror 必须带 `source_sha256`，并检查英文 prose 不含 CJK、中文 prose 含 CJK、heading shape parity 和 orphan `docs/zh/**`。
+- 继续收紧 `quality:docs-i18n`：阻止 canonical English prose 中的 CJK/fullwidth punctuation，并要求中文 mirror 具备实质中文正文，避免只靠少量中文标题绕过检查。
+- 补齐 `docs/zh/**` 中文镜像树，以 `docs/` 英文 canonical docs 为准维护当前 source hash 和 frontmatter parity。
+- 清理 `docs/plans/2026-05-14-agent-run-manager.md` 的机器翻译噪音，重写英文 canonical 版本并同步中文 mirror。
 - 文档策略收尾：`docs/zh/**` required 中文 pair 全部提升为 `translation_status: current`，并让 `quality:docs-i18n` 阻止 missing / pending required translations。
 - `quality:website-docs` 收紧为 blocking gate：canonical docs 变更影响 website page 时，必须同 patch 更新对应 website page、显式标记 unaffected reason，或使用紧急 bypass。
 - 文档迁移收尾：`docs/features/*.md` 统一归档到 `docs/archive/features/`，早期平铺中文翻译迁移到 `docs/zh/plans/` 或 `docs/zh/archive/**`，并补齐标准 frontmatter。
@@ -15,6 +20,9 @@
 ### Security
 - 收窄 npm publish 打包边界，避免 `.claude/`、`.github/`、测试 fixtures、`docs/plans/` 和本机 review copy 被意外发布。
 - 公开 docs/config 示例改用占位 channel ID 和通用路径，并让 G0 阻止 raw Discord snowflake 或本机用户目录路径进入公开文档。
+
+### Changed
+- 以 English canonical 重写当前核心 docs：`docs/README.md`、`docs/architecture.md`、`docs/bot-routing.md`、`docs/chat-router-current-logic.md`、`docs/install-distribution-strategy.md`、`docs/prompts.md` 和 `docs/quality-gates.md`；对应中文 mirror 同步为 `docs/zh/**`。
 
 ---
 

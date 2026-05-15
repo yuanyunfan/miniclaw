@@ -71,8 +71,8 @@ Manual Discord E2E is intentionally deferred until after the code builds and tes
 
 - normal chat prompt still answers as chat;
 - task-like prompt in an eligible chat channel shows buttons;
-- `转为 task` creates a task thread;
-- `继续 chat` uses the chat path;
+- The convert-to-task button creates a task thread.
+- The continue-chat button uses the chat path.
 - task channel still bypasses smart-router confirmation.
 
 ## Risks And Rollback

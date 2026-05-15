@@ -1,6 +1,6 @@
 # MiniClaw Local Deploy Runbook
 
-> 结论：MiniClaw deploy 的目标是让本机 PM2 runtime 安全切到一个已验证版本。不要把 GitHub push 直接绑定到自动 restart；deploy 必须经过 build、safe restart 和 health verification。
+> Conclusion: MiniClaw deploys should safely move the local PM2 runtime to a validated version. Do not bind GitHub push directly to automatic restart; deploy must pass through build, safe restart, and health verification.
 
 ## Standard Deploy
 

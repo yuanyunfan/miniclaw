@@ -22,7 +22,29 @@ function changedPaths(): string[] {
   return Array.from(new Set([
     ...splitZero(gitBuffer(["diff", "--name-only", "-z", "--diff-filter=ACMR", "HEAD"])),
     ...splitZero(gitBuffer(["ls-files", "--others", "--exclude-standard", "-z"])),
-  ])).sort();
+  ]))
+    .filter((path) => !isChineseMirrorMetadataOnlyChange(path))
+    .sort();
+}
+
+function isChineseMirrorMetadataOnlyChange(path: string): boolean {
+  if (!path.startsWith("docs/zh/") || !path.endsWith(".md")) return false;
+  try {
+    const diff = execFileSync("git", ["diff", "HEAD", "--unified=0", "--", path], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      maxBuffer: 2 * 1024 * 1024,
+    });
+    if (!diff.trim()) return false;
+    const changedLines = diff
+      .split("\n")
+      .filter((line) => /^[+-]/.test(line))
+      .filter((line) => !line.startsWith("+++") && !line.startsWith("---"));
+    return changedLines.length > 0 &&
+      changedLines.every((line) => /^[+-]source_sha256: /.test(line) || /^[+-]$/.test(line));
+  } catch {
+    return false;
+  }
 }
 
 const pagePaths = trackedAndUntrackedWebsitePages();

@@ -84,6 +84,31 @@ source_docs:
     ]);
   });
 
+  it("uses the website page language when checking affected source_docs", () => {
+    const result = analyzeWebsiteDocs({
+      pages: [
+        {
+          path: "website/en/design/architecture.md",
+          text: `---
+status: public-summary
+source_docs:
+  en:
+    - docs/architecture.md
+  zh:
+    - docs/zh/architecture.zh.md
+---
+# Architecture
+`,
+        },
+      ],
+      changedPaths: ["docs/zh/architecture.zh.md"],
+      sourceExists: (path) => path === "docs/architecture.md" || path === "docs/zh/architecture.zh.md",
+    });
+
+    expect(result.findings).toEqual([]);
+    expect(result.affectedPages).toEqual([]);
+  });
+
   it("passes affected pages with an explicit unaffected override", () => {
     const result = analyzeWebsiteDocs({
       pages: [

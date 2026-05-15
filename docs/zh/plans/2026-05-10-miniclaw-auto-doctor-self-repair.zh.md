@@ -2,9 +2,9 @@
 doc_id: miniclaw-auto-doctor-self-repair-plan
 lang: zh
 translation_of: docs/plans/2026-05-10-miniclaw-auto-doctor-self-repair.md
-translation_status: not_required
+translation_status: current
+source_sha256: 83e5213b93804a2ec7feda4bec458c3c3a3a520558abc395038fb97e2b01bf5b
 ---
-
 # MiniClaw Auto Doctor 与自我修复循环
 
 状态：`in_progress`

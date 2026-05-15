@@ -2,116 +2,70 @@
 doc_id: agent-run-manager-plan
 lang: zh
 translation_of: docs/plans/2026-05-14-agent-run-manager.md
-translation_status: not_required
+translation_status: current
+source_sha256: 52a0120337e4f55b99f9cfcb035d07a741bd40c675df493132cf2be35424dd6a
 ---
-
 # MiniClaw Agent Run Manager 设计
 
-状态：draft
-日期：2026-05-14
+Status: completed-foundation
+Date: 2026-05-14
 
 ## 背景
 
-MiniClaw 当前已经有 `AgentRuntime` 抽象，可以把 Claude / Codex / fake task runner 包成统一的 coding-agent runtime。但现有 `/task` 多 agent 能力并不对称：
+MiniClaw 已经有 `AgentRuntime` 抽象，可以把 Claude、Codex 和 fake task runner 包在同一个 coding-agent runtime 后面。原有 `/task` 的多 agent 能力并不对称：
 
-- Claude runner 通过 Claude Agent SDK 的 `agents` 和 `Agent` tool 接入 repo/user subagents。
-- Codex runner 只把 Supervisor prompt 拼进输入，没有 SDK-level subagent 注册、mailbox、blackboard 或 child run 状态。
-- `task_events` 已经能记录 trace，但它是观测层，不适合作为 agent 之间交换数据的主通道。
+- Claude 可以使用 Claude Agent SDK 的 native `agents` 和 `Agent` tool。
+- Codex 只收到 Supervisor prompt，没有 SDK 级 child-agent registry、mailbox、blackboard 或 child-run state。
+- `task_events` 能记录 trace facts，但它是观测层，不是 agent-to-agent 协作的安全 transport。
 
-目标不是把 MiniClaw 改造成通用 agent marketplace，而是在现有 Discord / cron / task 体系内加入一个可控的 Agent Run Manager，并在第一阶段实现最小可用的 ACP-compatible agent bus/server，让主 agent、subagent 和外部 ACP-style agent 可以通过结构化 message、artifact 和 blackboard 交换数据。
+目标不是把 MiniClaw 做成通用 agent marketplace，而是在现有 Discord、cron 和 task runtime 内增加一个受控的 Agent Run Manager，并提供最小 ACP-compatible bus/server，让 root agent、child agents 和可选的 external ACP-style agents 能通过 structured messages、artifact references 和 blackboard facts 交换信息。
 
 ## 目标
 
-- 让 Supervisor 和 subagents 具备双向数据交换能力，而不是只靠 prompt 手工拼接上一个 agent 的全文输出。
-- 对 Claude / Codex 提供统一的 managed multi-agent 执行模型，避免只依赖 Claude SDK native `Agent` tool。
-- 支持 `finding` / `question` / `answer` / `challenge` / `handoff` / `verdict` 等结构化 agent messages。
-- 支持 artifact 引用，避免大段 diff、调研报告、日志和 provider payload 反复塞进上下文。
-- 支持 per-agent 权限、runtime、sandbox、预算、超时、最大迭代次数和取消。
-- 支持在一个 Discord bot 账号内按需动态 spawn subagent；subagent 是 MiniClaw 内部 run/session，不是额外 Discord 账号。
-- 保持现有 `/task`、cron task、Discord progress 和 `task_events` 输出可观测。
-
-## 讨论总结
-
-这次讨论把 Agent Run Manager 的方向从“给 Codex/Claude prompt 里塞 Supervisor persona”收敛成“MiniClaw 自己管理 agent run、message、artifact、blackboard 和 ACP session”的执行层设计。
-
-关键判断：
-
-- `agent_runs`、`agent_messages`、`blackboard_facts`、`agent_artifacts` 是 task-scoped collaboration state，不是长期 memory。
-- 这些表可以做 durable log、恢复和审计，但不能让 agent 直接通过 SQLite polling 来协作。默认交互体验必须是实时 Agent Bus。
-- Agent Bus 对 agent 暴露的是 JSON tool/API：`send_message`、`wait_for_message`、`read_mailbox`、`publish_artifact`、`read_artifact`、`list_blackboard`、`upsert_blackboard_fact`。
-- 每个 managed run 启动时必须注入 roster：有哪些 peers、每个 peer 的职责、可发送/接收的 message kind、什么时候应该 `wait_for_message` 或 `sessions_yield` 式等待。
-- Supervisor 仍然是 orchestration authority，但 child agents 应该能定向发 `finding` / `question` / `challenge` / `verdict`，而不是所有内容都走“最终输出 -> 拼 prompt -> 下一个 agent”。
-- 第一阶段就实现 ACP-compatible server/adapter 的最小闭环：manifest、session/run、message、artifact reference、blackboard，而不是把 ACP 推到未来。
-- ACP 对外互操作，Agent Run Manager 对内调度；外部 ACP-style agent 进入 MiniClaw 后也要映射为 `agent_runs` 和 structured messages。
-- 上下文管理的上限优化要依靠 artifact reference、active blackboard facts、per-role compact brief、final synthesizer，而不是继续扩大 Supervisor prompt。
-- 当前产品目标不是多账号 multi-agent gateway，而是 **single Discord account, task-scoped dynamic spawn**：Discord 仍只有一个 MiniClaw bot 入口，Supervisor 在一次 chat/task/cron run 内动态创建 researcher/planner/generator/evaluator 等 child runs。
-- 因此 OpenClaw 最值得参考的是 child session lifecycle、push completion、`sessions_yield`、active child context、thread/requester route binding、context mode、depth/fan-out guardrails 和 ACP runtime adapter；不应该把 gateway-wide multi-account routing 当作 MiniClaw 第一阶段主线。
-
-这意味着 `agent_runs` 等数据结构确实是 subagent 间数据交换的 bus state，但 agent-facing transport 应该是 Manager API / MCP tool / ACP endpoint；SQLite 只负责 durable append 和 crash recovery。
+- 让 Supervisor 和 child agents 具备双向结构化通信，而不是把上一个 agent 的完整输出塞进下一个 prompt。
+- 为 Claude 和 Codex 提供统一的 managed multi-agent execution model。
+- 支持 `finding`、`question`、`answer`、`challenge`、`handoff`、`verdict` 等 typed messages。
+- 用 artifact reference 承载大 diff、调研报告、日志和 provider payload。
+- 执行 per-agent runtime、sandbox、写权限、预算、超时、循环和取消策略。
+- 在一个 Discord bot 账号下支持 task-scoped dynamic child runs。
+- 保留现有 `/task`、cron task、Discord progress 和 `task_events` 可观测性。
 
 ## 非目标
 
-- 不默认让所有 task 变成 multi-agent execution。
-- 不在第一阶段实现对外 agent marketplace、完整 agent discovery catalog 或多租户托管平台。
-- 不实现多个 Discord bot 账号、每个 subagent 独立 Discord identity、或 per-agent channel account binding；所有 child runs 都归属于同一个 MiniClaw Discord bot surface。
-- 不追求覆盖 ACP 生态里的所有扩展能力；第一阶段只实现 MiniClaw 需要的 manifest、session/run、message、artifact 和 blackboard 最小闭环。
-- 不让 subagent 直接互相无限对话；所有通信必须经过 MiniClaw manager broker。
-- 不把长期 memory 当作 agent blackboard。Memory 是跨任务长期知识，blackboard 是单 task 临时协作状态。
-- 不把 Stage persona / TUI orchestrator 直接搬进 Discord task path。
+- 不默认把所有 task 都变成 multi-agent。
+- 不构建 public agent marketplace、完整 agent discovery catalog 或多租户托管平台。
+- 不为 child agents 创建多个 Discord bot identity。
+- 不允许 child agents 绕过 MiniClaw Manager 无限互相通信。
+- 不把长期 memory 当作 task blackboard。Memory 是跨任务知识；blackboard 是单任务协作状态。
+- 不把 Stage persona 或 TUI orchestration 移入 Discord task path。
 
 ## 现有架构证据
 
-- `src/runtime/agent-runtime.ts` 定义 `AgentRuntime.startTask()` / `resumeTask()` / `startChat()`，适合作为 manager 调 runtime 的边界。
-- `src/agent/task.ts` 负责 task lifecycle、abort、DB 更新、Discord view reporter 和 trace callback wiring。
-- `src/agent/runners/claude-task-runner.ts` 当前使用 Claude Agent SDK native subagents。
-- `src/agent/runners/codex-task-runner.ts` 当前只注入 Supervisor prompt，没有真实 child-agent orchestration。
-- `src/store/task-events.ts` 提供 task trace 写入，但缺少 agent run、mailbox、artifact、blackboard 等协作状态表。
-- `agents/*.md` 已经是 role definition 来源，可以继续作为 managed subagent 的 prompt/permission manifest 输入。
+- `src/runtime/agent-runtime.ts` 定义 `AgentRuntime.startTask()`、`resumeTask()` 和 `startChat()`。
+- `src/agent/task.ts` 负责 task lifecycle、abort handling、DB state updates、Discord view reporting 和 trace callback wiring。
+- `src/agent/runners/claude-task-runner.ts` 已支持 Claude native subagent behavior。
+- `src/agent/runners/codex-task-runner.ts` 过去只注入 Supervisor prompt。
+- `src/store/task-events.ts` 写入 task trace facts，但不建模 agent runs、mailboxes、artifacts 或 blackboard state。
+- `agents/*.md` 仍是 managed child prompts 和 permissions 的 role definition source。
 
 ## 目标执行模型
 
-MiniClaw 第一阶段的目标是 **single Discord account, task-scoped dynamic spawn**，不是 OpenClaw 那种 gateway-wide multi-account routing。
+MiniClaw 的目标是 **single Discord account, task-scoped dynamic spawn**，不是 gateway-wide multi-account routing。
 
-- Discord 只有一个可见的 MiniClaw bot 账号和一个 operator-facing conversation surface。
-- 一次 chat、`/task` 或 cron-triggered task 创建一个 root `agent_run`，role=`supervisor`。
-- Supervisor 可以在这个 root task 内动态 spawn `researcher`、`planner`、`generator`、`evaluator` 等 child runs。
-- Child runs 是 MiniClaw 内部 runtime sessions，拥有自己的 context、tool profile、budget、timeout、artifacts 和 mailbox；它们不是独立 Discord 用户或 bot 账号。
-- 所有可见 Discord 更新都由 MiniClaw 根据 root route state 生成 compact task progress，不直接暴露 subagent raw transcript。
+- 一次 chat、`/task` 或 cron-triggered task 创建一个 root `agent_run`，`role="supervisor"`。
+- Supervisor 可以 spawn `researcher`、`planner`、`generator`、`evaluator` 等 child runs。
+- Child runs 是 MiniClaw 内部 runtime sessions，有各自的 context、tool profile、budget、timeout、artifacts 和 mailbox。
+- 所有可见 Discord updates 都由 MiniClaw 根据 root route state 发出。Child raw transcripts 不直接发到 Discord。
+- Child completion 和 peer messages 通过 Manager-owned bus state 返回，不靠 polling，也不直接改 prompt。
 
-这个目标模型吸收 OpenClaw 的 run/session lifecycle 思路，但把协作协议改成 MiniClaw 自己的 typed Agent Bus：
+该模型借鉴 OpenClaw 的 run/session lifecycle、push completion、`sessions_yield` 模式、active child context、depth/fan-out guardrails 和 ACP adapter 边界。MiniClaw 保持 typed Manager-routed messages 作为协作契约，而不是采用 gateway-wide persona routing。
 
-- non-blocking spawn：`spawn_agent(...)` 立即返回 `run_id` 和 provider session reference。
-- push completion：child completion 通过 Manager 回到 root task surface，不靠 polling。
-- yield/wait：Supervisor 用 `yield_until_child_event` / `wait_for_message` 暂停并等待 child event。
-- active child context：Supervisor turn 只接收 compact active-run roster，不接收完整 child transcript。
-- context mode：默认 `isolated`，只有明确需要当前 transcript 时才用 `fork`。
-- guardrails：manager 强制 depth、fan-out、concurrency、timeout、cancellation、role tool policy 和 loop prevention。
-
-## OpenClaw 调研发现
-
-调研快照：
-
-- Source URL：`https://github.com/openclaw/openclaw`
-- 通过临时 shallow clone 检查到的当前 remote HEAD：`0de6f938 fix(telegram): reuse sticky IPv4 dispatcher for getMe health check (#76852) (#76856)`。
-- 本地已有 OpenClaw checkout 较旧（`201385548c`）且工作区 dirty，因此本次调研使用临时 shallow clone，避免触碰用户工作。
-
-OpenClaw 在 Agent Run Manager 相关能力上可以概括为：
-
-- **Session-based routing**：一个 agent 是带 workspace、agent state、session store 和 channel/account bindings 的隔离 persona。它适合 gateway-wide 多 persona / 多渠道路由，但不是 MiniClaw 第一阶段的 task-scoped scheduler。
-- **Background child runs**：`sessions_spawn` 非阻塞创建 child session，child completion 通过 announce/push-back 回到 requester；`sessions_yield` 让 parent 结束当前 turn 并等待 child completion。
-- **Run registry and recovery**：subagent run state 先保存在 in-memory registry，再持久化 snapshot；sweeper 负责 stale active runs、orphaned runs、timeout、cleanup TTL 和 restart recovery。
-- **Guardrails**：OpenClaw 已经有 depth、fan-out、concurrency、sandbox inheritance、tool capability 和 cleanup 控制，这些能力应体现在 MiniClaw 的 manager policy。
-- **ACP runtime path**：OpenClaw 把 native subagent 和 ACP harness 分开，ACP sessions 有独立 control plane、actor queue、active-turn tracking、cancellation 和 timeout cleanup。MiniClaw 应该把 ACP 做成接入 Agent Bus 的 adapter/server，而不是让外部 ACP runtime 成为 scheduler。
-- **Prompt/session-based A2A**：`sessions_send` 可以跨 session 发消息并有 bounded ping-pong，但它仍主要依赖 session transcript、announce 和 prompt guidance。MiniClaw 应把 A2A 默认实现为 manager-routed typed messages，并保证 parent-owned child completion 只有一个 primary return path。
-
-这个章节只保留 OpenClaw 的实现摘要。具体借鉴点已经落在下文 MiniClaw 的数据模型、通信契约、执行流程、权限安全、Discord route state 和实施计划中。
-
-## 推荐架构
+## 拟议架构
 
 ```mermaid
 flowchart TD
   A[Discord / Cron / Smart Router] --> B[executeTask]
-  B --> C{multi-agent enabled?}
+  B --> C{Agent Run Manager enabled?}
   C -- no --> S[Single Agent Runtime]
   C -- yes --> M[Agent Run Manager]
 
@@ -145,29 +99,24 @@ flowchart TD
   Route --> UX
 ```
 
-Agent Run Manager 放在 `executeTask()` 和 provider-specific runtime 之间，但不是所有 task 都进入 manager。普通 task 仍然走当前 single-agent runtime；只有任务显式启用 multi-agent 或被 classifier 判定为 medium/high complexity 时才进入 manager。
+Manager 位于 `executeTask()` 内，在 task lifecycle 和 provider-specific runtimes 之间。普通 task 继续走 single-agent path。只有显式启用，或 auto classifier 选中时，task 才进入 managed path。
 
-进入 manager 后，Root Supervisor 只通过 `spawn_agent(...)` 创建 child runs；child runs 不直接写 Discord、不直接写对方 prompt，也不直接轮询 SQLite。它们通过 Agent Bus 发送 typed messages、artifact references 和 completion events；Manager 负责 policy 校验、in-memory mailbox 唤醒、durable append、route state 映射、sweeper/recovery 和 compact Discord progress。Final Synthesizer 只读取 active blackboard、artifact summaries 和 evaluator verdict，生成最终用户可见结果。
+## 锁定的第一阶段决策
 
-## 第一阶段锁定决策
-
-这些决策是第一阶段实现默认值；除非后续发现代码层 blocker，否则实现阶段不再把它们当作开放问题。
-
-- **Manager placement**：Agent Run Manager 是 `executeTask()` 内部 optional orchestration layer，不做成新的 `AgentRuntime`。`AgentRuntime` 继续表示 provider-specific Claude/Codex runtime。
-- **Feature flag**：新增 `agent_run_manager.enabled`，默认关闭。关闭时 `/task`、cron task 和 chat 继续走当前 single-agent path。
-- **Runtime mode**：multi-agent enabled 时统一走 managed mode。Claude native Agent tool 只作为 compatibility/fallback；Codex 必须走 managed child thread。
-- **Bus transport**：优先实现 Manager API / MCP tool 形式的 live Agent Bus；不支持 live bus 的 runtime 只能走 turn-end envelope fallback。禁止把 SQLite polling 当作默认 agent-facing 通信方式。
-- **Context mode**：所有 spawn 默认 `context_mode="isolated"`；只有明确需要当前 transcript 时，Supervisor 才能请求 `fork`。
-- **Route state**：Discord route state 只由 root run / Manager 持有；child runs 不能直接决定 Discord channel/thread/message。
-- **ACP scope**：第一阶段实现 minimal localhost + token auth 的 ACP-compatible adapter/server；不实现公开 agent marketplace、远程 discovery 或多租户托管。
-- **Wait model**：第一阶段实现 Manager-owned in-memory waiters + durable run state。`yield_until_child_event` 唤醒由 Manager 驱动，不依赖 provider transcript polling。
-- **Loop control**：parent-owned child completion 和 peer-to-peer typed message 是两条协议路径；每个 child completion 只有一个 primary return path。
+- **Manager placement**：Agent Run Manager 是 `executeTask()` 内部 orchestration layer，不是新的 `AgentRuntime`。
+- **Feature flag**：`agent_run_manager.enabled` 默认 `false`；关闭时，普通 `/task`、cron task 和 chat 行为保持不变。
+- **Runtime mode**：Claude native `Agent` 继续作为兼容路径；MiniClaw-managed child runs 是真相源。
+- **Bus transport**：Manager API、MCP tools 和 ACP endpoints 是 agent-facing transport。SQLite 是 durable append 和 recovery state，不是 live collaboration transport。
+- **Context mode**：child runs 默认 `context_mode="isolated"`；`fork` 需要显式请求。
+- **Route state**：只有 root run/Manager 拥有 Discord channel、thread 和 message state。
+- **ACP scope**：第一阶段只暴露 minimal local ACP-compatible adapter/server。不做 marketplace、remote discovery 或 multi-tenant hosting。
+- **Loop control**：parent-owned child completion 和 peer-to-peer typed messages 是两条独立路径，并且都有有界返回行为。
 
 ## 数据模型
 
 ### `agent_runs`
 
-记录每一个主 agent / subagent / external agent 的执行实体。
+记录每个 root、child 或 external managed execution entity。
 
 ```ts
 type AgentRunStatus =
@@ -180,14 +129,6 @@ type AgentRunStatus =
 
 type AgentContextMode = "isolated" | "fork";
 type AgentControlScope = "root" | "child" | "peer";
-
-interface DiscordRouteState {
-  discord_channel_id?: string;
-  discord_thread_id?: string;
-  discord_message_id?: string;
-  requester_user_id?: string;
-  root_task_id?: string;
-}
 
 interface AgentRun {
   id: string;
@@ -208,8 +149,6 @@ interface AgentRun {
   can_write_workspace: boolean;
   can_send_kinds: string[];
   can_receive_kinds: string[];
-  route?: DiscordRouteState;
-  prompt_context_hash?: string;
   started_at: string;
   completed_at?: string;
   error_message?: string;
@@ -218,14 +157,13 @@ interface AgentRun {
 
 关键要求：
 
-- Root run 持有 Discord route state；child run 可通过 `root_task_id` 或 `requester_run_id` 反查，避免 child 直接决定 Discord 输出位置。
-- `spawn_depth`、`control_scope` 和 `can_spawn` 用来限制 nested orchestration，防止 subagent 自行无限派生。
-- `context_mode="isolated"` 是默认值；只有需要继承当前 transcript 时才允许 `fork`。
-- `can_send_kinds` / `can_receive_kinds` 是 Agent Bus 的权限契约，不只写进 prompt，也要由 Manager 校验。
+- Root run 拥有 Discord route state。
+- `spawn_depth`、`control_scope` 和 `can_spawn` 防止无限 child creation。
+- `can_send_kinds` 和 `can_receive_kinds` 由 Manager 强制执行，不只是写在 prompts 里。
 
 ### `agent_messages`
 
-Agent 间交换数据的主通道。所有 message 都属于一个 `task_id`，可以定向给某个 run，也可以广播给当前 task blackboard。
+任务范围内结构化通信的主要 durable channel。
 
 ```ts
 type AgentMessageKind =
@@ -255,7 +193,7 @@ interface AgentMessage {
 
 ### `blackboard_facts`
 
-Blackboard 只保存经过 manager 接受的事实、决策和当前状态，不保存所有原始 transcript。
+Blackboard 只保存 Manager 接受的 facts、decisions 和 current state。它不保存每一行 raw transcript。
 
 ```ts
 interface BlackboardFact {
@@ -273,7 +211,7 @@ interface BlackboardFact {
 
 ### `agent_artifacts`
 
-大文本、diff、日志、调研报告、plan、verdict YAML 都用 artifact 引用，message 里只放 `artifact_id`。
+大输出以 artifacts 引用。Messages 应携带 artifact IDs 和 summaries，而不是完整正文。
 
 ```ts
 interface AgentArtifact {
@@ -289,15 +227,27 @@ interface AgentArtifact {
 }
 ```
 
-推荐本地路径：
+### `agent_scheduler_state`
 
-```text
-.miniclaw-task/<taskId>/artifacts/<runId>/<artifactId>.<ext>
+用于 root Supervisor orchestration、wait state 和 recovery 的 durable snapshot。
+
+```ts
+interface AgentSchedulerState {
+  task_id: string;
+  root_run_id: string;
+  scheduler_version: string;
+  status: "initialized" | "running" | "waiting" | "completed" | "failed" | "cancelled";
+  current_step: string;
+  wait_run_id?: string;
+  wait_kinds: AgentMessageKind[];
+  last_message_id?: string;
+  plan_json: unknown;
+  created_at: string;
+  updated_at: string;
+}
 ```
 
-### 必需索引
-
-第一阶段 migration 必须至少包含这些索引，避免 manager 在等待、恢复和 trace 查询时退化成全表扫描：
+### Required Indexes
 
 - `agent_runs(task_id, status, created_at)`
 - `agent_runs(parent_run_id, status)`
@@ -307,42 +257,34 @@ interface AgentArtifact {
 - `agent_messages(from_run_id, created_at)`
 - `blackboard_facts(task_id, key, status)`
 - `agent_artifacts(task_id, run_id, created_at)`
+- `agent_scheduler_state(status, updated_at)`
+- `agent_scheduler_state(root_run_id)`
 
-Store repository 必须提供 typed API，而不是让 manager 直接拼 SQL：
-
-- `createRun` / `updateRunStatus` / `listRunsForTask` / `listActiveChildren`
-- `appendMessage` / `readMailbox` / `markMessageDelivered`
-- `upsertBlackboardFact` / `listActiveFacts`
-- `writeArtifact` / `readArtifact` / `listArtifactsForRun`
+Store repositories 必须提供 typed APIs，例如 `createRun`、`updateRunStatus`、`appendMessage`、`readMailbox`、`upsertBlackboardFact`、`writeArtifact` 和 `upsertAgentSchedulerState`。Manager code 不能 inline 拼 raw SQL。
 
 ## 通信契约
 
-Agent 间通信不能退化成“写 SQLite 后让另一个 agent 自己轮询读取”。第一阶段就应该提供实时 Agent Bus：agent 体感上是通过 JSON tool/API 直接发消息、等待消息和引用 artifact；SQLite 只作为 durable log 和恢复/审计状态源。
+Inter-agent communication 不能退化成“写 SQLite，然后希望另一个 agent 轮询到”。Live path 是通过 Manager API、MCP tools 或 ACP endpoint 暴露的 Agent Bus。SQLite 只保留 durable log 和 recovery/audit source。
 
 推荐 hot path：
 
 ```text
 subagent A
   -> agent_bus.send_message(JSON)
-  -> Agent Run Manager 校验 schema / 权限 / target
-  -> in-memory mailbox 唤醒 subagent B / Supervisor
+  -> Agent Run Manager validates schema, permissions, and target
+  -> in-memory mailbox wakes subagent B or Supervisor
   -> SQLite append-only durable log
-  -> artifact store 只保存大对象引用
+  -> artifact store keeps large object references
 ```
 
-这解决两个问题：
+这保留两个保证：
 
-- **速度**：不做 DB polling；消息先进入 in-memory mailbox 并立即唤醒目标 agent，SQLite 写入只是毫秒级 durable append，真正耗时仍是 LLM turn。
-- **可见性**：每个 agent 启动时收到 roster 和 bus usage contract，知道有哪些 peers、每个 peer 能处理什么 message kind，以及何时调用 `wait_for_message` / `read_mailbox`。
-
-Manager 必须区分两类通信路径：
-
-- **Parent-owned child completion**：child 完成后只通过一个 primary completion path 回到 requester/root run，避免 completion announce 和 A2A reply 双通道重复。
-- **Peer-to-peer typed message**：agent 之间可以定向发送 `finding` / `question` / `challenge` / `verdict`，但必须经过 Manager schema 校验、权限检查、loop budget 和 durable append。
+- **Speed**：live messages 不需要 DB polling 就能唤醒 waiting runs。
+- **Visibility**：每个 run 都收到 roster、allowed message kinds 和 bus usage instructions。
 
 ### Direct JSON Message
 
-Agent Bus 的基础消息是 JSON envelope。每条 message 必须有 `from`、`to`、`kind`、`task_id` 和 typed payload。
+每条 message 必须包含 `from`、`to`、`kind`、`task_id` 和 typed content。
 
 ```json
 {
@@ -351,44 +293,14 @@ Agent Bus 的基础消息是 JSON envelope。每条 message 必须有 `from`、`
   "kind": "finding",
   "task_id": "task-123",
   "content": {
-    "summary": "Codex runner only injects supervisor prompt; it does not register subagents.",
-    "evidence": [
-      "src/agent/runners/codex-task-runner.ts:26"
-    ]
+    "summary": "Codex runner only injects a supervisor prompt; it does not register subagents.",
+    "evidence": ["src/agent/runners/codex-task-runner.ts:26"]
   },
   "artifacts": []
 }
 ```
 
-### Agent Roster
-
-每个 managed run 启动时，Manager 应该注入当前 run 可见的 peers 和通信能力，而不是让 agent 猜。
-
-```json
-{
-  "agent_roster": [
-    {
-      "name": "researcher",
-      "can_send": ["finding", "answer", "artifact"],
-      "can_receive": ["question"]
-    },
-    {
-      "name": "planner",
-      "can_send": ["decision", "handoff", "question"],
-      "can_receive": ["finding", "answer", "challenge"]
-    },
-    {
-      "name": "evaluator",
-      "can_send": ["challenge", "verdict"],
-      "can_receive": ["handoff", "artifact"]
-    }
-  ]
-}
-```
-
 ### Bus Tools / API
-
-第一阶段需要的 bus API：
 
 - `list_agents()`
 - `send_message(to, kind, payload, artifacts?)`
@@ -401,14 +313,14 @@ Agent Bus 的基础消息是 JSON envelope。每条 message 必须有 `from`、`
 
 ### Durable Envelope
 
-所有实时 JSON message 最终仍会被 Manager 转成 durable envelope 写入 `agent_messages` / `agent_artifacts` / `blackboard_facts`。如果某个 runtime 暂时不能在执行中调用 bus tool，可以降级为 turn-end envelope；但这不是目标体验，只是兼容路径。
+没有 live bus access 的 runtime 可以返回 turn-end envelope 作为兼容 fallback。这不是目标体验。
 
 ```json
 {
   "messages": [
     {
       "kind": "finding",
-      "content_text": "codex-task-runner only injects supervisor prompt; it does not register subagents.",
+      "content_text": "Codex child runtime needs managed threads for real child-agent behavior.",
       "payload_json": {
         "evidence": ["src/agent/runners/codex-task-runner.ts:26"]
       }
@@ -417,120 +329,65 @@ Agent Bus 的基础消息是 JSON envelope。每条 message 必须有 `from`、`
   "artifacts": [
     {
       "kind": "markdown",
-      "title": "Codex subagent capability findings",
+      "title": "Codex child-agent capability findings",
       "path": ".miniclaw-task/task-1/artifacts/run-2/findings.md"
     }
   ],
-  "summary": "Codex path needs managed child threads for real subagent behavior."
+  "summary": "Codex path needs managed child threads for real child-agent behavior."
 }
 ```
 
-`miniclaw_agent_bus` MCP server 是一种实现方式，让支持 MCP 的 runtime 在执行过程中主动读写 mailbox：
-
-- `post_message`
-- `read_mailbox`
-- `write_artifact`
-- `read_artifact`
-- `list_blackboard`
-- `upsert_blackboard_fact`
-
 ## 执行流程
 
-1. `executeTask()` 根据 task complexity 和 config 判断是否启用 Agent Run Manager。
-2. Manager 创建 root `agent_run`，role=`supervisor`。
-3. Supervisor 输出结构化 orchestration plan：需要哪些 roles、输入、依赖、验收标准。
-4. Manager 按 DAG 或有限状态机调用 `spawn_agent(...)` 启动 child runs；spawn 是非阻塞的，立即返回 `run_id`、`parent_run_id`、`spawn_depth` 和 provider session reference。
-5. Supervisor 进入 `yield_until_child_event` / `wait_for_message` 状态时，Manager 挂起当前 orchestration turn，等待 child completion 或 typed message 唤醒。
-6. Child run 执行过程中可以通过 Agent Bus 直接发送 JSON message；Manager 将 message 放入 in-memory mailbox 并唤醒目标 run，同时追加 durable log。
-7. 如果 runtime 不支持 live bus，Child run 完成后 Manager 解析 turn-end envelope，写入 `agent_messages`、`agent_artifacts`、`blackboard_facts`。
-8. 如果 message kind 是 `question`，Manager 决定是让 Supervisor 回答、定向问另一个 run，还是升级用户。
-9. 如果 evaluator 输出 `verdict=FAIL`，Manager 可以按 `fix_list` 启动 generator fix run；默认最多 2 轮。
-10. Final Synthesizer 读取 active blackboard + artifact summaries + final verdict，生成用户可读结果。
-11. Manager 把重要状态同步写入 `task_events`，供 `/task-log`、incident view 和 trace export 使用。
-12. Sweeper 定期处理 stale active runs、timeout、cancelled parent、orphaned child 和 restart recovery。
+1. `executeTask()` 检查 `agent_run_manager.enabled` 和 auto-routing policy。
+2. Manager 创建 root `agent_run`，`role="supervisor"`。
+3. Supervisor 输出 structured orchestration plan。
+4. Manager 用 `spawn_agent(...)` 启动 child runs；spawn 是 non-blocking，并立即返回 run metadata。
+5. Supervisor 可以进入 `yield_until_child_event` 或 `wait_for_message`；Manager 暂停 root orchestration turn。
+6. Child runs 通过 Agent Bus 发送 typed JSON messages。
+7. Manager 写入 durable `agent_messages`、`agent_artifacts` 和 `blackboard_facts`。
+8. Evaluator `verdict=FAIL` 可以触发 bounded generator fix loop。
+9. Final Synthesizer 读取 active blackboard facts、artifacts、run status 和 verdict signals，生成 user-facing result。
+10. Manager 把关键状态镜像到 `task_events`、`/task-log`、incident views 和 trace export。
+11. Sweeper 处理 stale active runs、waiting scheduler timeouts、orphan children、terminal cleanup 和 restart recovery。
 
 ## Provider 策略
 
 ### Claude
 
-第一阶段建议使用 managed mode，而不是继续依赖 Claude SDK native `Agent` tool 作为唯一机制。
-
-- Manager 自己启动多个 Claude child sessions。
-- Native Agent tool 可以保留为 compatibility path。
-- 这样才能统一写入 `agent_runs`、`agent_messages`、`blackboard_facts` 和 `agent_artifacts`。
+Claude native `Agent` 继续作为 compatibility path，但 Manager-owned `agent_runs`、`agent_messages`、`blackboard_facts` 和 `agent_artifacts` 是真相源。
 
 ### Codex
 
-Codex 必须优先走 managed mode。
+每个 Codex child 是 managed child thread。Planner/evaluator 默认 read-only policy；generator 可以在明确允许时获得 workspace-write policy。由于 Codex 不提供 Claude SDK 的 per-subagent tool registration，Manager 必须强制 sandbox、prompt、execution policy 和 artifact/message 边界。
 
-- 每个 subagent 是一个 Codex child thread。
-- `researcher` / `planner` / `evaluator` 默认 `read-only` sandbox。
-- `generator` 才允许 `workspace-write`。
-- 当前 Codex SDK 没有 Claude SDK 那种 per-subagent `tools` whitelist，因此必须用 sandbox、prompt、exec policy 和 manager 层约束补齐。
+### ACP Server And External Agents
 
-### ACP Server 与外部 Agent
+ACP 是进入 Agent Bus 的 protocol adapter，不是 scheduler。第一阶段默认 local、bearer-token protected、task-scoped，并且不暴露为 public marketplace。
 
-第一阶段就实现 ACP-compatible adapter/server 的最小闭环，而不是把 ACP 放到未来阶段。ACP 是 MiniClaw 对外暴露 agent 协作能力的协议层，但内部调度权仍归 Agent Run Manager。
+## Context Management
 
-- MiniClaw 内部仍以 `agent_runs` / `agent_messages` / `artifacts` / `blackboard` 为真相源。
-- 外部 ACP agent manifest 映射到 MiniClaw role/runtime/capability。
-- ACP session/run 映射到 `agent_runs`。
-- ACP message parts 映射到 `agent_messages` 和 `agent_artifacts`。
-- ACP artifact/resource reference 映射到本地 artifact store。
-- 第一阶段默认只监听 localhost 或受 token 保护的内网入口，避免把本地 task runtime 直接暴露到公网。
-- 不把外部 ACP runtime 直接变成 MiniClaw 的 scheduler。
+Agent Run Manager 应减少 prompt growth：
 
-## 上下文管理
-
-Agent Run Manager 的主要价值之一是减少 prompt 膨胀。
-
-- Supervisor 不再把 subagent 全文输出复制给下一个 agent。
-- 每个 child run 只收到：
-  - 用户原始目标的 compact task brief。
-  - 与自己 role 相关的 active blackboard facts。
-  - 必要 artifact summaries。
-  - 明确的输出 contract。
-- 大型 artifact 只传路径或摘要，让 agent 按需读取。
-- Final Synthesizer 只读最后的 blackboard、verdict 和 artifact summaries，不读所有子会话 transcript。
+- Supervisor 不把完整 child output 复制到下一个 child prompt。
+- Child runs 接收原始用户目标、compact role brief、active blackboard facts 和必要 artifact references。
+- Large artifacts 只通过 ID、title、kind、summary 和 path/ref 传递。
+- Final synthesis 读取 blackboard facts、artifact metadata、messages 和 verdicts，但不展开所有 artifact bodies。
 
 ## 权限与安全
 
-- `generator` 是唯一默认允许 workspace write 的角色。
-- `researcher` / `planner` / `evaluator` 默认不能写 workspace。
-- `code-investigator` 可以有 Bash，但默认只读；危险命令在 manager policy 里拒绝。
-- 每个 run 必须有：
-  - `max_turns`
-  - `timeout_ms`
-  - `max_messages`
-  - `max_artifact_bytes`
-  - `max_fix_iterations`
-- Manager 级别必须有：
-  - `max_spawn_depth`
-  - `max_children_per_run`
-  - `max_concurrent_runs`
-  - `max_ping_pong_turns`
-  - `cleanup_ttl_ms`
-- Manager 必须支持 task cancellation，取消 root run 时级联取消 child runs。
-- Agent 间通信不能绕过 manager；不允许直接互相写 prompt 或直接操作对方 session。
-- SQLite 是 durable bus state，不是 agent-facing transport；agent-facing transport 必须是 Manager API / MCP tool / ACP endpoint。
-- 不允许用“subagent 自己轮询 SQLite 表”作为默认通信方式；轮询只能作为恢复路径或测试 fixture。
-- 所有 child output 默认视为 evidence，不视为 instruction；Final Synthesizer 只能基于 active blackboard、artifact summaries 和 evaluator verdict 形成用户可见结论。
+- `generator` 是默认唯一允许写 workspace files 的 role。
+- `researcher`、`planner` 和 `evaluator` 默认 read-only。
+- `code-investigator` 可以拥有 Bash，但 dangerous commands 仍由 Manager policy 阻止。
+- 每个 run 都有 `max_turns`、`timeout_ms`、`max_messages`、`max_artifact_bytes` 和 `max_fix_iterations`。
+- Manager 有 `max_spawn_depth`、`max_children_per_run`、`max_concurrent_runs`、`max_ping_pong_turns` 和 `cleanup_ttl_ms`。
+- Root cancellation 会级联到 active child runs。
+- Agents 不能直接写入彼此的 prompts、sessions 或 SQLite state。
+- 只有 redacted、user-facing conclusions 应进入 Discord。
 
-## Discord 与 Trace 体验
+## Discord And Trace UX
 
-第一阶段仍然只使用一个 Discord bot 账号。Subagent 的存在通过 task progress 表达，而不是通过多个 Discord 账号或多个对话身份暴露给用户。
-
-每个 root run 必须记录 Discord route state：
-
-- `discord_channel_id`
-- `discord_thread_id`
-- `discord_message_id`
-- `requester_user_id`
-- `root_task_id`
-
-Child run 不能直接决定发到哪个 Discord surface；它只能向 Agent Bus 发送 completion/finding/verdict，由 Manager 根据 root route state 写 progress 或最终回复。
-
-Discord progress 不应该展示所有 agent 原文。建议输出 compact event：
+只暴露一个 Discord bot account。Child agent presence 以 compact task progress 表达：
 
 - `supervisor: plan created`
 - `researcher: 3 findings`
@@ -538,7 +395,7 @@ Discord progress 不应该展示所有 agent 原文。建议输出 compact event
 - `generator: changed 2 files`
 - `evaluator: verdict PASS`
 
-`task_events` 继续做观测镜像，但新增 event type：
+`task_events` 继续作为 observation mirror，并增加 Agent Run Manager event types：
 
 - `agent_run_started`
 - `agent_run_completed`
@@ -550,203 +407,145 @@ Discord progress 不应该展示所有 agent 原文。建议输出 compact event
 
 ## 实施计划
 
-1. **Schema slice**
-   - 新增 migration：`agent_runs`、`agent_messages`、`agent_artifacts`、`blackboard_facts`。
-   - 增加 required indexes。
-   - 验证旧库迁移、重复 migration、schema history 和 `user_version`。
-
-2. **Store repositories**
-   - 新增 `src/agent/run-manager/store/` 或 `src/store/agent-runs.ts` 等 typed repositories。
-   - 提供 `createRun`、`appendMessage`、`readMailbox`、`upsertBlackboardFact`、`writeArtifact` 等 API。
-   - Manager 禁止直接拼 SQL。
-
-3. **Manager core**
-   - 新增 `src/agent/run-manager/`。
-   - 实现 run registry、in-memory mailbox、artifact store、blackboard store、bounded scheduler。
-   - 实现 `spawn_agent(role, brief, context_mode, tool_policy)`：在同一个 Discord bot 账号下创建 internal child run，返回 `run_id`、`parent_run_id`、`spawn_depth` 和 provider session reference。
-   - 保存 root run 的 Discord route state，并让所有 child completion 通过 Manager push 回 root task surface。
-   - 实现 direct JSON message path：`send_message` 立即唤醒目标 run，并同步追加 durable log。
-   - 实现 `yield_until_child_event` / `wait_for_message`：Supervisor 不通过 sleep/polling 等待，而是让当前 turn 进入 waiting state，收到 child event 后恢复 orchestration。
-   - 保留 turn-end envelope 作为不支持 live bus runtime 的兼容路径。
-
-4. **Agent Bus core API**
-   - 新增 `src/agent/run-manager/bus/`。
-   - 暴露 TypeScript service API：`listAgents`、`sendMessage`、`waitForMessage`、`readMailbox`、`publishArtifact`、`readArtifact`、`listBlackboard`、`upsertBlackboardFact`。
-   - 每个 run 注入 roster 和 bus usage contract，让 agent 知道 peers 和可用 message kinds。
-   - 禁止 agent 直接访问 SQLite；所有读写都经过 Manager policy。
-
-5. **Fake runtime E2E**
-   - 用 fake agent 模拟 `planner -> generator -> evaluator`。
-   - 验证 message、artifact、blackboard 和 task_events 写入。
-   - 验证 direct bus：researcher `send_message(finding)` 后 planner `wait_for_message()` 立即收到。
-   - 验证 `yield_until_child_event` 能唤醒 Supervisor。
-
-6. **`executeTask()` integration**
-   - 增加 `agent_run_manager.enabled` feature flag，默认关闭。
-   - multi-agent disabled 时保持当前 single-agent path 完全不变。
-   - multi-agent enabled 时创建 root supervisor run，并把 compact progress 写入 Discord / `task_events`。
-
-7. **Codex managed child threads**
-   - 为 role 构造 compact prompt。
-   - 每个 role 调 `AgentRuntime.startTask()` 或更低层 child runner。
-   - 记录 `provider_session_id`，支持取消和失败恢复。
-   - 先支持 turn-end envelope；live MCP bus 接入作为后续 hardening。
-
-8. **Claude managed child sessions**
-   - 先复用 Claude task runner 能力，但不依赖 native Agent tool 作为 orchestration 真相源。
-   - 保留 native Agent path 为 compatibility/fallback。
-
-9. **Final Synthesizer**
-   - 只读 blackboard + artifact summaries + verdict。
-   - 生成用户可读中文结果和验证证据。
-
-10. **Minimal ACP-compatible server/adapter**
-   - 新增 `src/agent/run-manager/acp/`。
-   - 暴露最小 manifest、session/run、message、artifact reference 和 blackboard endpoints。
-   - inbound ACP message 写入 `agent_messages`，outbound mailbox 映射为 ACP message parts。
-   - 默认 localhost + token auth；不做公开 marketplace。
-   - 增加 ACP round-trip fixture：external fake ACP agent 读 mailbox、写 finding/verdict、回传 artifact reference。
-
-11. **Agent Bus MCP compatibility**
-   - 暴露 `post_message/read_mailbox/write_artifact/read_artifact/list_blackboard`。
-   - MCP 是本进程内/LLM runtime 友好的 bus 入口；ACP 是对外 agent interoperability 入口，两者共享同一套 `agent_messages` / `agent_artifacts` / `blackboard_facts` 后端。
-
-12. **ACP hardening**
-   - 将 MiniClaw role manifest 映射为 ACP-style agent manifest。
-   - 将 external message 映射进内部 `agent_messages`。
-   - 补齐 auth、rate limit、payload size limit、redaction 和 trace export。
-
-## 第一阶段完成标准
-
-第一阶段完成标准不是“所有 provider 都完美支持 live multi-agent”，而是 MiniClaw 具备可验证、可回滚的 Agent Run Manager 骨架：
-
-- `agent_run_manager.enabled=false` 时，现有 `/task`、cron task 和 single-agent runtime 行为不变。
-- `agent_run_manager.enabled=true` + fake runtime 时，`planner -> generator -> evaluator` 能完整跑通，产生 agent runs、typed messages、artifacts、blackboard facts、task events 和 final synthesis。
-- Manager 能在不依赖 SQLite polling 的情况下唤醒 waiting run；SQLite 只作为 durable append/recovery state。
-- Root run 能持有 Discord route state，并把 child completion 映射为 compact Discord progress / final reply。
-- 取消 root task 会级联取消 active child runs，并把状态写入 durable store。
-- Codex / Claude managed child mode 至少支持 turn-end envelope fallback；live MCP bus 可以在后续 hardening 中增强。
-- Minimal ACP adapter/server 有 fake round-trip 测试，但不对公网开放。
-- 验证命令至少覆盖 `pnpm run build`、store migration tests、manager fake E2E、single-agent regression 和 docs quality gate。
-
-## 验证计划
-
-- 类型检查：`pnpm run build`
-- 单元测试：
-  - migration 能创建所有表和索引。
-  - repository 会拒绝格式错误的 message kind / 缺失的 run id。
-  - blackboard 支持 supersede / reject 生命周期。
-  - artifact 的 hash / path 处理正确。
-- 集成测试：
-  - fake manager 能执行 planner/generator/evaluator，并产出最终 synthesis。
-  - direct bus 能在不依赖 DB polling 的情况下唤醒等待中的 run。
-  - minimal ACP server 支持 manifest、session/run、message、artifact reference 和 blackboard round-trip。
-  - cancellation 能取消活跃 child runs。
-  - evaluator 返回 FAIL 时能触发有边界的 generator fix loop。
-  - 超过最大循环次数或 timeout 时产出受控失败。
-- E2E 检查：
-  - multi-agent disabled 时，`/task` single-agent path 行为不变。
-  - multi-agent enabled 时，`/task` 会写入 agent run trace，并发送 compact Discord progress。
-  - cron `outputMode=raw` 仍然只输出最终用户可见结果。
-
-## 风险与回滚
-
-- **风险：范围膨胀成通用 agent platform**
-  - 缓解：第一版只支持 MiniClaw task roles 和本地 SQLite state。
-  - 回滚：通过 `agent_run_manager.enabled=false` 关闭，并回退到当前 runtime。
-
-## 实现备注
-
-### 2026-05-15 managed fallback and transport slice
-
-已补齐 first implementation skeleton 之后的下一批可验证切片：
-
-- `executeTask()` 在 `agent_run_manager.enabled=true` 时可以进入 managed runtime path；默认 flag 仍为 false，single-agent path 不变。
-- Codex / Claude child mode 先走 turn-end envelope fallback：child run 返回 `miniclaw_agent_envelope` JSON，Manager 解析后写入 `agent_messages`、`agent_artifacts` 和 `blackboard_facts`。
-- Manager 增加 planner -> generator -> evaluator 控制流、evaluator FAIL 后的 bounded generator fix loop、root cancellation cascade、compact progress 和 final synthesis。
-- Store repository 增加运行时 enum 校验，拒绝 malformed message kind、missing run id、未知 artifact owner 和非法 blackboard lifecycle 值。
-- 新增 Minimal ACP adapter / localhost HTTP wrapper，支持 manifest、external run、message、artifact reference 和 blackboard round-trip；默认可用 bearer token 保护，不做公网 marketplace。
-- 新增 `miniclaw-agent-bus` MCP-compatible tool surface：`post_message`、`read_mailbox`、`write_artifact`、`read_artifact`、`list_blackboard`、`upsert_blackboard_fact`，并提供 `pnpm run mcp:agent-bus` 入口。
-
-仍待 hardening：
-
-- live MCP bus 注入到真实 Codex / Claude child runtime 的启动配置中，让 child 在执行中主动调用 bus，而不是只依赖 turn-end envelope。
-- ACP HTTP server 的正式 lifecycle 管理、rate limit、payload size limit、redaction policy 和 trace export。
-- complexity classifier 自动选择 managed path；当前仍以 `agent_run_manager.enabled` flag 为主。
-
-- **风险：context 成本不降反升**
-  - 缓解：强制使用 artifact references、blackboard summaries 和 per-role context budgets。
-  - 回滚：对窄任务关闭 manager，保留 single-agent direct path。
-
-- **风险：Codex role permissions 弱于 Claude native tool whitelist**
-  - 缓解：按 role 设置 sandbox mode、增加 exec policy checks，并坚持 generator-only write policy。
-  - 回滚：在 write policy 验证可靠前，将 Codex managed mode 限制在 researcher/planner/evaluator。
-
-- **风险：agent-to-agent loop**
-  - 缓解：限制 max message count、max fix iterations，并要求显式 manager route decisions。
-  - 回滚：停止 route loop，并请求用户做决策。
+1. 增加 `agent_runs`、`agent_messages`、`agent_artifacts`、`blackboard_facts` 和 `agent_scheduler_state` 的 DB schema。
+2. 增加 typed store repositories；Manager 不能 inline raw SQL。
+3. 增加 `src/agent/run-manager/`，包含 run registry、in-memory mailbox、artifact store、blackboard store、scheduler 和 policy checks。
+4. 增加 Agent Bus service API 和 MCP-compatible tool surface。
+5. 增加 fake runtime E2E，覆盖 planner、generator、evaluator、typed messages、artifacts、blackboard facts 和 final synthesis。
+6. 在 `agent_run_manager.enabled` 后接入 `executeTask()`。
+7. 增加 Codex managed child thread support。
+8. 增加 Claude managed child session support。
+9. 增加 evidence-oriented Final Synthesizer。
+10. 增加 local ACP-compatible server/adapter。
+11. 增加 sweeper 和 restart recovery。
+12. 增加 docs、trace export 和 quality-gate coverage。
 
 ## 当前实现状态
 
-快照日期：2026-05-15。
+Snapshot date: 2026-05-15.
 
-### 已完成
+### Completed
 
-- **Schema slice**：`agent_runs`、`agent_messages`、`agent_artifacts`、`blackboard_facts` 以及 required indexes 已通过 migration 落地。
-- **Typed store repositories**：run/message/mailbox/blackboard/artifact 的 typed API 已落地，并校验 runtime/status/message kind/artifact kind/blackboard lifecycle、sender/receiver task 归属、artifact owner 和 source message。
-- **Agent Bus core**：`listAgents`、`sendMessage`、`waitForMessage`、`readMailbox`、`publishArtifact`、`readArtifact`、`listBlackboard`、`upsertBlackboardFact` 已有 TypeScript service API；direct message 会唤醒 in-memory waiter，并同步写 durable log。
-- **Fake runtime E2E**：`agent_run_manager.enabled=true` + fake runtime 可以跑通 `planner -> generator -> evaluator`，并产生 agent runs、typed messages、artifacts、blackboard facts、task events 和 final synthesis。
-- **`executeTask()` feature flag integration**：`agent_run_manager.enabled=false` 时保持 single-agent path；开启后可进入 Agent Run Manager path。默认仍关闭。
-- **Managed turn-end envelope fallback**：Codex / Claude child mode 已能通过 `miniclaw_agent_envelope` JSON 回传 summary/message/artifact/blackboard/verdict，Manager 解析后写入 durable collaboration state。
-- **Bounded evaluator fix loop and cancellation cascade**：evaluator `FAIL` 可触发 bounded generator fix loop；root cancellation 会级联取消 active child runs 并写入 durable store。
-- **Manager guardrails config + enforcement**：`agent_run_manager` 已支持 `max_turns`、`timeout_ms`、`max_messages`、`max_artifact_bytes`、`max_spawn_depth`、`max_children_per_run`、`max_concurrent_runs`、`max_ping_pong_turns`、`cleanup_ttl_ms`、`max_fix_iterations` 配置；Manager / Bus 会在 spawn、message、artifact、child timeout 和 fix loop 上执行对应限制。
-- **Minimal ACP adapter/server**：已有 localhost ACP-style manifest、external run、message、artifact reference、blackboard API 和 fake round-trip 测试；默认不做公开 marketplace。
-- **Agent Bus MCP compatibility surface**：`miniclaw-agent-bus` MCP-compatible tool surface 已有 `post_message/read_mailbox/write_artifact/read_artifact/list_blackboard/upsert_blackboard_fact`，并提供 `pnpm run mcp:agent-bus` 入口。
-- **Live MCP bus injection into real child runtime**：Manager 为每个真实 Codex / Claude managed child run 创建 `managedContext`，注入 bus MCP server config、task/run env、guardrail env、allowed tool names 和 prompt usage block；turn-end envelope fallback 仍保留。
-- **Dynamic scheduler / `yield_until_child_event` foundation**：固定 managed runtime 控制流已抽成 `AgentRunScheduler` FSM plan；root supervisor 等待 child event 时会持久化 waiting state，并被 Agent Bus message 唤醒恢复。
-- **Role policy enforcement at runtime boundary**：Codex child 按 role policy 覆盖 sandbox / approval，并拒绝危险 command 或 read-only file change；Claude child 按 role 收窄 allowedTools / permissionMode / canUseTool。
-- **Sweeper / restart recovery**：`AgentRunManagerSweeper` 已接入 app lifecycle，处理 stale active runs、waiting scheduler timeout、cancelled/terminal parent child、cross-task orphan child、terminal task reconciliation 和 restart durable wake recovery。
-- **ACP lifecycle and hardening**：ACP server 已升级为 task-scoped lifecycle，并执行 bearer auth、rate limit、payload size limit、diagnostic redaction error response 和可选 `GET /trace`。
-- **Complexity classifier routing**：`agent_run_manager.enabled=true` 强制 managed path；`enabled=false + auto_enabled=true` 时 medium/high complexity task 自动进入 manager；`enabled=false + auto_enabled=false` 保持 single-agent rollback path。
-- **Documentation promotion**：已新增正式 feature doc `docs/archive/features/21-agent-run-manager.md`，并同步 `docs/prompts.md`、`docs/archive/features/19-agent-prompt-context-audit.md`、`docs/README.md` 和 `docs/architecture.md`。
-- **Arbitrary DAG scheduler foundation**：C7 已新增 `managed-runtime-dag-v1` validated plan schema、topological execution batches、cycle / missing dependency / unknown role / `max_nodes` / `max_depth` / `max_parallel` guardrails，并在 Manager 中提供 opt-in `schedulerPlan` path；默认 FSM path 不变。
-- **Evidence-rich Final Synthesizer**：C8 已把 final synthesis 提升为中文证据型输出，读取 child run status、active blackboard、artifact metadata、agent messages 和 verification signal，固定输出 `完成内容`、`关键证据`、`验证结果`、`剩余风险`、`后续建议`。
-- **Dedicated multi-agent trace UX**：C9 已新增 `src/store/agent-run-trace-export.ts`；`/task-log` / task trace Markdown 会追加 Agent Run Manager section，incident detail 会展示 compact agent summary。
+- Schema tables 和 required indexes 已落地。
+- Runs、messages、mailbox、blackboard、artifacts 和 scheduler state 的 typed store APIs 已落地。
+- Agent Bus core 已落地，支持 direct in-memory wake 和 durable append。
+- Fake managed runtime E2E 覆盖 planner -> generator -> evaluator。
+- `executeTask()` feature flag integration 已落地；默认仍是 single-agent path。
+- Claude/Codex child runs 的 turn-end envelope fallback 已落地。
+- Bounded evaluator fix loop 和 root cancellation cascade 已落地。
+- Guardrail config 和 enforcement 已落地。
+- Minimal local ACP adapter/server 已落地。
+- `miniclaw-agent-bus` MCP-compatible tool surface 已落地，并提供 `pnpm run mcp:agent-bus`。
+- Real child runtimes 的 live MCP bus injection 已落地。
+- Dynamic scheduler / `yield_until_child_event` foundation 已落地。
+- Codex 和 Claude child runs 的 runtime role policy enforcement 已落地。
+- Sweeper 和 restart recovery 已落地。
+- `agent_run_manager.auto_enabled=true` 时，complexity classifier 可以把 medium/high complexity tasks 路由到 managed path。
+- C7 arbitrary DAG scheduler foundation 已落地。
+- C8 evidence-rich final synthesizer 已落地。
+- C9 multi-agent trace UX 已为 `/task-log` 和 incident views 落地。
 
-### 部分完成
+### Partially Implemented
 
-- **LLM-generated DAG admission**：C7 第一版支持受控 opt-in DAG plan execution，但还没有让 planner envelope 自动生成并切换真实 runtime DAG。
-- **Per-node durable DAG state / replay**：当前 `agent_scheduler_state.plan_json` 保存整份 DAG plan，run/message/artifact 表能还原执行链；尚未增加独立 node-state 表，也不在 restart 后自动重放未完成 DAG node。
+- LLM-generated DAG admission 仍然 gated。C7 支持 controlled opt-in DAG plans，但 Planner auto-generated plans 不会自动准入。
+- Per-node DAG replay 仍通过 `agent_scheduler_state.plan_json` 做 snapshot-based 恢复；还没有独立 node-state table。
 
-### 尚未实现
+### Not Yet Implemented
 
-- **Visual trace UI**：当前 C9 是 Markdown / Discord operator surface，不是单独的 web timeline / graph UI。
-- **DAG retry policy execution**：schema 保留 `repeat_policy`，但第一版 DAG executor 还没有实现 per-node bounded retry；现有 bounded fix loop 仍属于 default FSM path。
+- Managed traces 的独立 visual timeline UI。
+- DAG executor 中 per-node `repeat_policy` execution。
 
-## 非阻塞后续问题
+## 下一阶段计划
 
-这些问题不阻塞第一阶段实现；不要因为它们延迟 schema、manager core、fake E2E 和 `/task` feature flag 集成。
+### C0 - Status and Slice Planning
 
-- Blackboard fact 是否要在 P2 增加 confidence scoring 和 evaluator challenge 自动降权。
-- Long-lived persona catalog 是否需要独立于 task-scoped roles，例如 `macro-analyst`、`industry-analyst`、`technical-analyst`、`sentiment-analyst`。
-- ACP server 未来是否从 localhost/token auth 扩展到外部访问、agent discovery 或 marketplace。
-- Codex strict no-Bash researcher 是否需要额外 command policy wrapper；第一阶段先以 sandbox + manager policy + role prompt 限制。
-- Bounded peer-to-peer ping-pong 的默认开启条件；第一阶段默认关闭，只允许 parent-owned completion 和 directed typed messages。
-- `/task-log`、incident view 和 trace export 是否需要专门的 multi-agent 可视化视图。
+- 保持本计划作为当前 implementation/status record。
+- 后续工作继续拆 slice，避免把 runtime injection、scheduler changes、sweeper behavior 和 ACP hardening 混在一个 review 单元。
+- Verification: `pnpm run quality:docs`.
+
+### C1 - Guardrails and Policy Enforcement
+
+- 按需扩展 `agent_run_manager` policy config 和 env overrides。
+- 保持 Manager spawn path 和 Bus path 的 guardrails enforcement。
+- Verification: config tests、Agent Bus tests、managed runtime tests 和 `pnpm run build`.
+
+### C2 - Live MCP Bus Injection
+
+- Completed 2026-05-15.
+- live bus 不可用时，继续保留 turn-end envelope fallback。
+- Verification: fake MCP bus fixture、Codex/Claude runner unit tests 和 managed runtime fallback regression。
+
+### C3 - Dynamic Scheduler and Yield/Resume
+
+- Completed 2026-05-15.
+- 当前默认仍是 planner -> generator -> evaluator 加 bounded fix loop。
+- Verification: dynamic spawn fixture、direct wake without polling、cancel during waiting 和 fan-out regression。
+
+### C4 - Role Policy Enforcement at Runtime Boundary
+
+- Completed 2026-05-15.
+- 继续保留 read-only planner/evaluator negative tests 和 generator write positive tests。
+- Verification: per-role runner config tests 和 dangerous-command denial fixtures。
+
+### C5 - Sweeper and Restart Recovery
+
+- Completed 2026-05-15.
+- Sweeper 处理 stale runs、orphan children、waiting scheduler timeout 和 manager-owned artifact cleanup。
+- Verification: stale run fixture、orphan child fixture、restart recovery simulation 和 state cleanup dry run。
+
+### C6 - ACP Lifecycle, Classifier Routing, and Docs Promotion
+
+- Completed 2026-05-15.
+- ACP 默认保持 localhost/token protected。
+- Verification: ACP lifecycle tests、classifier routing tests、docs quality gate 和 single-agent regression。
+
+### C7 - Arbitrary DAG Scheduler
+
+- Completed 2026-05-15.
+- `managed-runtime-dag-v1` 校验 nodes、dependencies、depth、width、parallelism 和 fail policy。
+- 除非显式传入 scheduler plan，默认 managed path 仍保持固定 planner/generator/evaluator flow。
+- Verification: scheduler and managed-runtime tests plus `pnpm run build`.
+
+### C8 - Evidence-Rich Final Synthesizer
+
+- Completed 2026-05-15.
+- Final output 使用 child run status、blackboard facts、artifact metadata、messages、verdicts 和 verification signals。
+- 没有 verification evidence 时，synthesizer 必须明确说明。
+- Verification: managed-runtime and final-synthesizer tests plus `pnpm run build`.
+
+### C9 - Dedicated Multi-Agent Trace UX
+
+- Completed 2026-05-15.
+- `/task-log` 只在 managed tasks 中包含 managed section。
+- Incident detail 可以总结 managed run state，并指向 full trace export。
+- Verification: task trace export tests、task-log tests、incident detail tests、`pnpm run quality:docs` 和 `pnpm run build`.
+
+## 验证计划
+
+- Type/build: `pnpm run build`
+- Unit: run-manager scheduler、managed-runtime、role-policy、bus、final-synthesizer 和 store tests。
+- Integration: fake managed runtime、ACP round trip、cancellation cascade、direct wake without DB polling。
+- Regression: Agent Run Manager disabled 时，single-agent `/task` 行为不变。
+- Docs: `pnpm run quality:docs`
+
+## 风险与回滚
+
+- **范围膨胀成通用 agent platform**：保持 first-party MiniClaw task roles 和 local SQLite state 的产品边界。用 `agent_run_manager.enabled=false` 回滚。
+- **Context cost 不降反升**：强制 artifact references、blackboard summaries 和 per-role context budgets。窄任务回滚到 single-agent direct path。
+- **Codex role permissions 弱于 Claude native tool whitelist**：在 Manager/runtime boundary 强制 sandbox mode、execution policy 和 generator-only writes。
+- **Agent-to-agent loops**：强制 max message count、max fix iterations、explicit route decisions 和 user escalation。
 
 ## 文档同步
 
-- `docs/architecture.md`: 已补充 Agent Run Manager DAG / synthesis / trace 当前实现边界。
-- `docs/archive/features/01-stage.md`: 保持 Stage experimental boundary，不把 Stage orchestrator 直接描述为默认 task path。
-- `docs/archive/features/19-agent-prompt-context-audit.md`: 已更新 Codex Supervisor prompt 误导问题的修复状态。
-- `docs/prompts.md`: 已登记 manager / envelope prompt asset。
-- `docs/README.md`: 已补 `features/21-agent-run-manager.md` 索引，并更新 C7/C8/C9 能力摘要。
+- `docs/architecture.md`：记录 Agent Run Manager controlled insertion layer、auto routing、ACP lifecycle 和 guardrail status。
+- `docs/prompts.md`：记录 `miniclaw_agent_envelope` fallback 和 live Agent Bus MCP usage block。
+- `docs/README.md`：Agent Run Manager plan 已列入 plans。
+- `CHANGELOG.md`：release-visible Agent Run Manager 和 docs governance changes 必须记录。
 
 ## 执行记录
 
-- 2026-05-14: 初版设计文档。当前只记录架构方案，未修改生产代码。
-- 2026-05-15: 补充本次讨论摘要和 OpenClaw 最新远端源码调研结论。OpenClaw 可作为 run/session lifecycle、push completion、yield、depth/fan-out guardrails、ACP control plane 的参考，但 MiniClaw 仍应实现自己的 typed Agent Bus、artifact store、blackboard 和 final synthesizer。
-- 2026-05-15: 明确 MiniClaw 第一阶段不是多 Discord 账号 / multi-account gateway，而是在一个 Discord bot 账号内实现 task-scoped dynamic spawn。新增 single-account route state、OpenClaw 可借鉴边界、Manager `spawn_agent` / `yield_until_child_event` 设计要求。
-- 2026-05-15: 收敛 OpenClaw 调研章节，只保留 Agent Run Manager 相关实现摘要；将可借鉴点下沉到 MiniClaw 的目标执行模型、数据模型、通信契约、执行流程、权限安全和 Discord route state 章节。
-- 2026-05-15: 将文档从设计讨论进一步收敛为执行文档：锁定第一阶段决策、补充 required indexes / repository API、重排 implementation plan、增加 Definition of Done，并把阻塞性未决项改为非阻塞后续项。
-- 2026-05-15: Phase 3 C7/C8/C9 已落地第一版：C7 新增 `managed-runtime-dag-v1` validated DAG plan、topological batches、guardrail validation 和 Manager opt-in DAG path；C8 新增中文 evidence-rich Final Synthesizer；C9 新增 Agent Run Manager trace exporter 并挂入 `/task-log` / incident detail。剩余 follow-up 是 planner envelope 自动 admission、per-node durable DAG state / retry policy、以及独立 visual trace UI。
+- 2026-05-14：创建初始设计文档。
+- 2026-05-15：OpenClaw research 总结为 run/session lifecycle、push communication、typed message、guardrail 和 ACP adapter references。
+- 2026-05-15：MiniClaw 第一阶段明确为 one Discord bot account 下的 task-scoped dynamic spawn。
+- 2026-05-15：Phase 2 C0-C6 落地：policy guardrails、live bus injection、scheduler wait/resume、role policy enforcement、sweeper/recovery、ACP lifecycle 和 classifier routing。
+- 2026-05-15：Phase 3 C7-C9 落地：controlled DAG scheduler foundation、evidence-rich final synthesis 和 dedicated multi-agent trace UX。

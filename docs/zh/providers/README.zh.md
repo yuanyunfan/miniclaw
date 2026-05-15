@@ -3,8 +3,8 @@ doc_id: providers-index
 lang: zh
 translation_of: docs/providers/README.md
 translation_status: current
+source_sha256: 339869269ea5ac85566bb572b6c53bc12ee669703efab684a285673dad2a29eb
 ---
-
 # MiniClaw Providers
 
 > 结论：provider docs 是外部数据采集、pre-provider context、provider safety boundary、health/dry-run 行为和 provider output contract 的 source-of-truth 层。它们和 runtime docs 分离，因为 provider 负责 data trust 和 privacy boundary，不负责 Discord 或 Agent 执行行为。

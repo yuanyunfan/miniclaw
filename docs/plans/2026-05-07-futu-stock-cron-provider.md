@@ -77,7 +77,7 @@ The current stock cron jobs are pure LLM prompts. They do not pass account conte
 - Risk: provider output leaks account identifiers or exact asset totals.
   - Mitigation: reuse `redactedSnapshotJson`, `formatFutuDailyPnlReport`, `redactSensitiveText`, and add provider tests.
 - Risk: prompt overweights snapshot P&L as final settlement.
-  - Mitigation: output and prompts include P&L口径 warnings.
+- Media: output and prompts include P&L warnings.
 - Rollback: remove `futu-stock` from provider registry and remove `pre_provider` lines from the two user cron YAML files.
 
 ## Documentation Sync

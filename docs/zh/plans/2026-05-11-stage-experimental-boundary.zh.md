@@ -2,9 +2,9 @@
 doc_id: stage-experimental-boundary-plan
 lang: zh
 translation_of: docs/plans/2026-05-11-stage-experimental-boundary.md
-translation_status: not_required
+translation_status: current
+source_sha256: ae1e007538c45ef311889cc883ee781769a69919214e05b8d54a82f0d216dee8
 ---
-
 # Stage Experimental Boundary
 
 状态：`draft`
