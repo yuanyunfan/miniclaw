@@ -2,6 +2,8 @@
 
 English | [Simplified Chinese](README.md)
 
+Docs website: https://yuanyunfan.github.io/miniclaw/
+
 Personal Discord-native AI automation hub for chat, tasks, scheduled jobs, provider data collection, and private daily reports. It can run through Claude Code or Codex.
 
 MiniClaw is designed for a single-user local Mac setup. Discord is the interaction and delivery layer; MiniClaw handles routing, task threads, cron scheduling, long-term memory, read-only data providers, private report generation, and a Stage multi-agent console.

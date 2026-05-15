@@ -21,23 +21,42 @@ source_docs:
 
 # Providers
 
-Providers 为 cron、task 和 research workflow 准备可信上下文。迁移计划要求 provider contract 保留在 repo docs 中，网站只展示整理后的摘要。
-
-repo 现在维护 current 中文 provider mirror，因此本页把英文和中文 provider docs 作为配对 source material。
-
-历史 provider feature stub 已统一归档到 `docs/archive/features/`；provider contract 现在由本页 `source_docs` 中列出的 provider family docs 维护。
+Providers 是只读 context collectors。它们在 agent prompt 之前运行，把外部数据转换成结构化文本，并把 account-specific state 留在公开 repo 之外。
 
 ```mermaid
 flowchart TD
-  ProviderFramework[Provider Framework] --> Health[Health Check]
-  ProviderFramework --> DryRun[Dry Run]
-  ProviderFramework --> Output[Structured Output]
-  ProviderFramework --> Fixtures[Replay / No Data / Format Drift Fixtures]
-  Eastmoney[Eastmoney Provider Family] --> JYWG[JYWG Readonly]
-  Eastmoney --> MyFavor[MyFavor Watchlist]
-  Email[Email Provider Family] --> EmailQuery[Generic Email Query]
-  Email --> CMB[CMB Credit-card Parser]
-  Content[Content Provider Family] --> WeChat[WeChat MP Metadata]
-  Stock[Stock Provider Family] --> Futu[Futu Readonly]
-  Stock --> Research[Stock Research Pipeline]
+  Framework[Provider Framework] --> Contract[Contract: health / dry-run / output]
+  Contract --> Content[Content Providers]
+  Contract --> Email[Email Providers]
+  Contract --> Stock[Stock Providers]
+  Content --> WeChat[WeChat MP]
+  Email --> Query[Email Query]
+  Email --> CMB[CMB Credit Card Email]
+  Stock --> Futu[Futu Stock]
+  Stock --> Eastmoney[Eastmoney JYWG / MyFavor]
+  Stock --> Research[Portfolio / Pulse / Market Intel]
+  Research --> Cron[Cron Reports]
+  Query --> Cron
+  WeChat --> Cron
 ```
+
+## Provider 原则
+
+- **Readonly first**：provider docs 和代码必须明确 mutation boundary。
+- **Structured before summarized**：providers 负责采集事实；LLM 负责解释和写报告。
+- **Session isolation**：cookies、app passwords、brokerage sessions 和 account state 留在 `~/.miniclaw/`。
+- **Replayable failures**：no-data、auth-expired、format-drift 场景需要 fixture 或 dry-run 覆盖。
+- **Family docs over legacy stubs**：provider contract 现在维护在 `docs/providers/`，不是 archived feature-stub 目录。
+
+## Context Shape
+
+```mermaid
+flowchart LR
+  Config[Provider Config] --> Collect[Collect]
+  Collect --> Normalize[Normalize]
+  Normalize --> Redact[Redact]
+  Redact --> Render[Render Provider Output]
+  Render --> Prompt[Task / Cron Prompt]
+```
+
+website 展示 provider map；实现 contract、provider-specific setup 和容易漂移的细节继续留在 linked source docs。

@@ -2,6 +2,7 @@
   "name": "miniclaw",
   "version": "1.0.0",
   "description": "极简 AI 助手 — Discord → Claude Code / Codex",
+  "homepage": "https://yuanyunfan.github.io/miniclaw/",
   "type": "module",
   "files": [
     "dist/**/*.js",

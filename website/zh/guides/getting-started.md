@@ -8,10 +8,38 @@ source_docs:
     - docs/zh/runbooks/install.zh.md
 ---
 
-# 开始使用
+# Getting Started
 
-技术安装流程以 install runbook 为准；面向用户的安装器方向以 install distribution strategy 为准。
+MiniClaw 适合作为本地个人服务常驻运行。website 只保留最短路径；完整安装、排障和发行策略继续维护在 linked runbooks 中。
 
-公开指南应保持简洁，详细 runtime 和 troubleshooting 继续留在 repo docs；中文 install mirror 现在与 canonical runbook 保持 current。
+```bash
+git clone https://github.com/yuanyunfan/miniclaw.git
+cd miniclaw
+./install.sh
+pnpm run setup
+pnpm run doctor:setup
+pnpm register
+pnpm dev
+```
 
-高级 provider 示例应指向当前 provider docs，而不是 archived feature-stub 目录。
+## First Run Checklist
+
+- **Install dependencies**：`./install.sh` 准备本地项目，不写入真实 tokens。
+- **Create local config**：`pnpm run setup` 写入 `.env` 和 `~/.miniclaw/config.yaml`，并备份已有文件。
+- **Register Discord commands**：`pnpm register` 同步配置 guild 的 slash commands。
+- **Start the runtime**：`pnpm dev` 通过 TypeScript watcher 运行 bot。
+- **Verify in Discord**：`/health` 检查 runtime health；`@MiniClaw hello` 检查 chat intake。
+
+## Configuration Model
+
+```mermaid
+flowchart LR
+  Env[.env secrets + bootstrap] --> Loader[Config Loader]
+  Yaml[~/.miniclaw/config.yaml] --> Loader
+  Loader --> Runtime[Runtime Config]
+  Runtime --> Discord[Discord]
+  Runtime --> Agent[Claude / Codex]
+  Runtime --> Providers[Providers]
+```
+
+个人配置和运行态放在 `~/.miniclaw/`。repo 文件保持 reusable、reviewable，并且不包含 credentials。

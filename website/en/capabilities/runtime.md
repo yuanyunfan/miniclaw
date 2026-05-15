@@ -11,22 +11,43 @@ source_docs:
 
 # Runtime
 
-MiniClaw runtime connects Discord intake, Smart Router decisions, cron tasks, managed agent execution, memory/context, and recovery operations.
+The runtime turns an intake event into a bounded chat response, a managed task thread, or a scheduled provider-driven report. The same event model feeds trace storage and recovery.
+
+```mermaid
+flowchart TD
+  Intake[Discord / IM Intake] --> Normalize[Normalize Message]
+  Normalize --> Decide[Smart Router]
+  Decide --> Chat[Chat Runtime]
+  Decide --> Confirm[Task Confirmation]
+  Confirm --> Task[Task Runtime]
+  Cron[Cron Trigger] --> Task
+  Task --> Agent[Agent Runtime Registry]
+  Agent --> Events[Task Events]
+  Events --> Store[(SQLite)]
+  Events --> Delivery[Discord Progress + Result]
+  Store --> Recovery[Connectivity / Auto Doctor]
+  Recovery --> Delivery
+```
+
+## Runtime Responsibilities
+
+- **Intake normalization**: Discord events become a consistent route input.
+- **Routing semantics**: Smart Router separates chat, suggested task, confirmed task, and trusted auto-task channels.
+- **Task lifecycle**: task threads, progress cards, tool traces, final Markdown output, cancellation, and resume behavior are runtime concerns.
+- **Cron execution**: cron jobs can collect provider output before creating the agent prompt.
+- **Recovery loop**: connectivity and doctor repair paths reuse stored incidents and trace evidence.
+
+## Context Assembly
 
 ```mermaid
 flowchart LR
-  Intake[Discord / IM Intake] --> Router[Smart Router]
-  Router --> Chat[Chat Runtime]
-  Router --> Task[Task Runtime]
-  Cron[Cron Scheduler] --> Task
-  Task --> Agent[Agent Runtime]
-  Agent --> Events[Task Events]
-  Events --> Delivery[Discord Delivery]
-  Memory[Memory / Context] --> Chat
-  Memory --> Task
-  Recovery[Connectivity / Auto Doctor] --> Delivery
+  Message[Incoming Message] --> Route[Route Context]
+  Memory[Memory Store] --> Prompt[Prompt Context]
+  History[Chat History] --> Prompt
+  Attachments[Attachments] --> Prompt
+  Providers[Provider Output] --> Prompt
+  Route --> Prompt
+  Prompt --> Agent[Claude / Codex]
 ```
 
-The website keeps this as a readable map. Implementation rules, owner paths, and drift-sensitive contracts live in the repo runtime docs and their current Chinese mirror.
-
-The old runtime feature stubs are archived; runtime source-of-truth updates now go through `docs/runtime/` plus routing-specific top-level docs.
+Runtime docs carry the implementation details and path ownership. This website page keeps the mental model stable for readers who need to understand how work moves through the system.

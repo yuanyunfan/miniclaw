@@ -21,23 +21,42 @@ source_docs:
 
 # Providers
 
-Providers prepare trusted context for cron jobs, tasks, and research workflows. The migration plan keeps provider implementation contracts in repo docs and exposes only curated summaries here.
-
-The repo now maintains current Chinese provider mirrors, so this page treats English and Chinese provider docs as paired source material.
-
-Historical provider feature stubs are archived under `docs/archive/features/`; provider contracts now live in the provider family docs listed in this page's `source_docs`.
+Providers are read-only context collectors. They run before an agent prompt, turn external data into structured text, and keep account-specific state outside the public repository.
 
 ```mermaid
 flowchart TD
-  ProviderFramework[Provider Framework] --> Health[Health Check]
-  ProviderFramework --> DryRun[Dry Run]
-  ProviderFramework --> Output[Structured Output]
-  ProviderFramework --> Fixtures[Replay / No Data / Format Drift Fixtures]
-  Eastmoney[Eastmoney Provider Family] --> JYWG[JYWG Readonly]
-  Eastmoney --> MyFavor[MyFavor Watchlist]
-  Email[Email Provider Family] --> EmailQuery[Generic Email Query]
-  Email --> CMB[CMB Credit-card Parser]
-  Content[Content Provider Family] --> WeChat[WeChat MP Metadata]
-  Stock[Stock Provider Family] --> Futu[Futu Readonly]
-  Stock --> Research[Stock Research Pipeline]
+  Framework[Provider Framework] --> Contract[Contract: health / dry-run / output]
+  Contract --> Content[Content Providers]
+  Contract --> Email[Email Providers]
+  Contract --> Stock[Stock Providers]
+  Content --> WeChat[WeChat MP]
+  Email --> Query[Email Query]
+  Email --> CMB[CMB Credit Card Email]
+  Stock --> Futu[Futu Stock]
+  Stock --> Eastmoney[Eastmoney JYWG / MyFavor]
+  Stock --> Research[Portfolio / Pulse / Market Intel]
+  Research --> Cron[Cron Reports]
+  Query --> Cron
+  WeChat --> Cron
 ```
+
+## Provider Principles
+
+- **Readonly first**: provider docs and code should make mutation boundaries explicit.
+- **Structured before summarized**: providers gather facts; the LLM interprets and writes the report.
+- **Session isolation**: cookies, app passwords, brokerage sessions, and account state stay in `~/.miniclaw/`.
+- **Replayable failures**: no-data, auth-expired, and format-drift cases need fixture or dry-run coverage.
+- **Family docs over legacy stubs**: provider contracts now live in `docs/providers/`, not the archived feature-stub directory.
+
+## Context Shape
+
+```mermaid
+flowchart LR
+  Config[Provider Config] --> Collect[Collect]
+  Collect --> Normalize[Normalize]
+  Normalize --> Redact[Redact]
+  Redact --> Render[Render Provider Output]
+  Render --> Prompt[Task / Cron Prompt]
+```
+
+The website exposes the provider map. Implementation contracts, provider-specific setup, and drift-prone details remain in the linked source docs.

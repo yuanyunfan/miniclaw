@@ -3,3 +3,5 @@
 Canonical implementation docs live in `docs/`.
 
 Public website pages are summaries and must declare `source_docs` frontmatter.
+
+Published website target: https://yuanyunfan.github.io/miniclaw/

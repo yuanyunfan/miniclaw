@@ -2,6 +2,8 @@
 
 [English](README.en.md) | 简体中文
 
+Docs website: https://yuanyunfan.github.io/miniclaw/
+
 个人 Discord-native AI 自动化 Hub — 统一 chat、task、cron、provider 数据采集和私有日报，可在 Claude Code / Codex 之间切换执行。
 
 MiniClaw 面向单用户、本地 Mac 常驻运行。Discord 是入口和交付层，MiniClaw 负责消息路由、任务线程、定时调度、长期记忆、只读数据 provider、私有数据日报和 Stage 多 agent 控制台。
