@@ -57,12 +57,12 @@ source code -> canonical docs -> website
 
 1. 保留 `docs/` 作为 canonical docs-driven development layer。
 2. 定义 `en` / `zh` 维护模型：短期保留 root `docs/` 作为 English canonical tree，`docs/zh/` 作为 tracked Chinese mirror。
-3. 增加 `docs/documentation-migration-map.md`，用 `doc_id`、`source_path`、`zh_path`、`category`、`status`、`merge_group`、`website_exposure` 和 `translation_status` 记录迁移状态。
+3. 维护 `docs/documentation-migration-map.md`，用 `doc_id`、`source_path`、`target_path`、`zh_path`、`category`、`status`、`merge_group`、`website_exposure`、`translation_required` 和 `translation_status` 记录迁移状态；所有 tracked canonical `docs/**/*.md` source（排除 `docs/zh/**`）都必须进入 migration map。
 4. 分阶段迁移当前 docs：先 inventory，再建立 i18n parity gate，然后分类/合并 `docs/features/`，最后只把 curated material 暴露给 website。
 5. 对 Eastmoney 相关文档，后续应合并成一个 provider-family entry，用 sections 区分 JYWG readonly 和 MyFavor watchlist。
 6. 新增 `website/en/**` 和 `website/zh/**` 骨架，网站页面必须声明 language-aware `source_docs`。
 7. 新增 `quality:website-docs` 检查 frontmatter、`source_docs`、private/archive source 禁用规则和 affected page reporting。
-8. 新增 `quality:docs-i18n` 检查 translation pairing、heading parity、ignored-path detection 和 missing translation reporting。
+8. 新增 `quality:docs-i18n` 检查 migration map inventory completeness、translation pairing、heading parity、ignored-path detection 和 missing translation reporting；migration map 漏收 tracked source doc 是 blocking error，missing / pending translation 在迁移期可以先作为 warning。
 9. Phase 2 分类迁移先增加 taxonomy entrypoints，不立即删除 legacy `docs/features/*`。当前入口包括 `docs/runtime/README.md`、`docs/providers/README.md`、`docs/providers/provider-framework.md`、`docs/providers/content.md`、`docs/providers/email.md`、`docs/providers/stock/eastmoney.md`、`docs/providers/stock/research.md` 和 `docs/experiments/README.md`。
 
 ```mermaid
@@ -78,7 +78,7 @@ flowchart LR
 
 - plan-only 变更不需要 typecheck。
 - 实现 quality scripts 时需要运行 focused Vitest、`pnpm run typecheck` 和 `pnpm run quality:docs`。
-- `quality:docs-i18n` 初期可以 warning-only，等 inventory 稳定后再 blocking。
+- `quality:docs-i18n` 对 migration map 漏收 tracked canonical source doc 必须 blocking；对 missing / pending translation 初期可以 warning-only，等 bilingual inventory 稳定后再收紧。
 - website scaffolding 存在后运行 `pnpm run quality:website-docs`。
 
 ## Risks And Rollback
@@ -108,3 +108,5 @@ flowchart LR
 - 2026-05-15: 首批实现落地为独立 worktree slice，范围包括 migration map、tracked `docs/zh`、i18n/website docs gates、website skeleton 和 docs index 同步。
 - 2026-05-15: 本 slice 位于 branch `codex/documentation-strategy` 的独立 worktree；大规模 `docs/features/` 分类、移动和合并仍保留为后续 docs-only slices。
 - 2026-05-15: 已在 `main` 开始 Phase 2 分类，不删除 legacy feature docs。新增 runtime/providers/experiments taxonomy 入口、Eastmoney provider family、content/email provider family 和 stock research pipeline，并同步 migration map、website `source_docs` 与 D1 docs drift patterns。
+- 2026-05-15: 在 `main` 完成 migration-map inventory slice：`docs/documentation-migration-map.md` 覆盖所有 tracked canonical `docs/**/*.md` source（排除 `docs/zh/**`），`quality:docs-i18n` 会把 migration map 漏收 tracked source doc 判为 blocking error。Focused verification 已通过：`pnpm exec vitest run src/quality/__tests__/docs-i18n.test.ts` 和 `pnpm run quality:docs-i18n`，后者报告 73 个 migration map entries。
+- 2026-05-15: inventory slice 的 broader verification 已通过：`pnpm run typecheck`、`pnpm run lint`、`pnpm run build`、`pnpm test`（185 files / 903 tests）和 `MINICLAW_DOCS_DRIFT_ALLOW=1 pnpm run quality:docs`。当前 raw `pnpm run quality:docs` 被同一 worktree 中并行的 Agent Run Manager runtime/store 改动挡住，不是本 inventory slice 导致。

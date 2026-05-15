@@ -26,6 +26,16 @@ function diffDisabledByGit(path: string): boolean {
   return result.includes(": diff: unset");
 }
 
+function trackedSourceDocs(): string[] {
+  const output = execFileSync("git", ["ls-files", "docs/*.md", "docs/**/*.md"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+  });
+  return Array.from(new Set(output.split("\n").filter(Boolean)))
+    .filter((path) => !path.startsWith("docs/zh/"))
+    .sort();
+}
+
 const ignoredPaths = new Set(
   entries
     .map((entry) => entry.zh_path)
@@ -43,6 +53,7 @@ const findings = analyzeDocsI18n({
   entries,
   ignoredPaths,
   diffDisabledPaths,
+  trackedSourcePaths: trackedSourceDocs(),
   exists: (path) => {
     try {
       execFileSync("test", ["-e", path], { cwd: repoRoot });

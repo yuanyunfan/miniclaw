@@ -33,6 +33,7 @@ export interface DocsI18nInput {
   readText: (path: string) => string;
   ignoredPaths?: Set<string>;
   diffDisabledPaths?: Set<string>;
+  trackedSourcePaths?: string[];
 }
 
 function finding(
@@ -149,6 +150,12 @@ export function analyzeDocsI18n(input: DocsI18nInput): DocsI18nFinding[] {
       }
     }
     findings.push(...validateChinesePair(entry, input));
+  }
+
+  for (const path of input.trackedSourcePaths ?? []) {
+    if (!seenSourcePaths.has(path)) {
+      findings.push(finding("error", path, "tracked source doc is missing from documentation migration map"));
+    }
   }
 
   return findings;

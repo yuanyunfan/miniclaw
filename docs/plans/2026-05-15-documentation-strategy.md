@@ -98,9 +98,11 @@ translation_status: current
 
 Phase 0: inventory and migration map.
 
-- Add a machine-readable migration map, for example `docs/documentation-migration-map.md`.
-- Record `source_path`, `target_path`, `doc_id`, `lang`, `category`, `status`, `merge_group`, and `website_exposure`.
+- Maintain a machine-readable migration map in `docs/documentation-migration-map.md`.
+- Record `source_path`, `target_path`, `doc_id`, `zh_path`, `category`, `status`, `merge_group`, `website_exposure`, `translation_required`, and `translation_status`.
 - Mark every current doc as one of: `keep`, `move`, `merge`, `archive`, `private`, or `website-source`.
+- Treat every tracked canonical Markdown doc under `docs/` except `docs/zh/**` as required inventory. A doc move or new doc is not complete until the migration map records it.
+- Use `quality:docs-i18n` to fail when a tracked canonical source doc is missing from the migration map.
 
 Phase 1: stabilize the current source-of-truth layer before moving files.
 
@@ -292,6 +294,7 @@ High-drift website sections should be generated or partially generated instead o
 
 The first version of `quality:docs-i18n` should check:
 
+- Every tracked canonical Markdown source doc under `docs/` except `docs/zh/**` appears in `docs/documentation-migration-map.md`.
 - Every tracked English source doc that requires translation has a Chinese pair or an explicit `translation_status: not_required`.
 - Every Chinese doc has a valid `translation_of` path.
 - `doc_id` matches across language pairs.
@@ -299,7 +302,7 @@ The first version of `quality:docs-i18n` should check:
 - Changed English docs report affected Chinese translations.
 - `docs/zh/` is not ignored once it becomes first-class repo documentation.
 
-This gate should start as warning-only during migration and become blocking after the core docs inventory is stable.
+Missing migration-map inventory is blocking because later docs moves depend on a complete source list. Missing or pending translations can remain warning-only during migration and become blocking after the core bilingual docs inventory is stable.
 
 11. Configure GitHub Pages deployment through GitHub Actions.
 
@@ -405,3 +408,5 @@ The Pages workflow should build from `website/` and publish a static site artifa
 - 2026-05-15: Added the current-docs migration plan and the first-class `en` / `zh` documentation maintenance model, including `quality:docs-i18n`, migration map requirements, and the rule that `docs/zh/` should stop being a gitignored local review-copy directory once bilingual docs are adopted.
 - 2026-05-15: First implementation slice is available on branch `codex/documentation-strategy` in a separate worktree. It includes the migration map, tracked `docs/zh`, bilingual website skeleton, `quality:docs-i18n`, `quality:website-docs`, package script wiring, and docs index / quality gate updates. Large-scale `docs/features/` moves remain pending.
 - 2026-05-15: Phase 2 classification started on `main` without deleting legacy feature docs. Added taxonomy entrypoints for runtime, providers, experiments, Eastmoney provider family, content providers, email providers, and stock research pipeline; updated the migration map, website `source_docs`, and D1 docs drift patterns so new taxonomy docs can satisfy source-of-truth requirements while legacy `docs/features/*` remains link-compatible for one migration cycle.
+- 2026-05-15: Completed the migration-map inventory slice on `main`: `docs/documentation-migration-map.md` now covers every tracked canonical `docs/**/*.md` source outside `docs/zh/**`, and `quality:docs-i18n` treats any tracked source doc missing from the map as a blocking error. Focused verification passed with `pnpm exec vitest run src/quality/__tests__/docs-i18n.test.ts` and `pnpm run quality:docs-i18n`, which reported 73 migration map entries.
+- 2026-05-15: Broader verification for the inventory slice passed with `pnpm run typecheck`, `pnpm run lint`, `pnpm run build`, `pnpm test` (185 files / 903 tests), and `MINICLAW_DOCS_DRIFT_ALLOW=1 pnpm run quality:docs`. Raw `pnpm run quality:docs` is currently blocked by concurrent Agent Run Manager runtime/store changes in the same worktree, not by this inventory slice.

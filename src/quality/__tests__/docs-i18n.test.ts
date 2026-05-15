@@ -21,11 +21,13 @@ function analyze(
   entries = [currentEntry],
   ignoredPaths = new Set<string>(),
   diffDisabledPaths = new Set<string>(),
+  trackedSourcePaths: string[] = [],
 ) {
   return analyzeDocsI18n({
     entries,
     ignoredPaths,
     diffDisabledPaths,
+    trackedSourcePaths,
     exists: (path) => files[path] !== undefined,
     readText: (path) => files[path] ?? "",
   });
@@ -123,5 +125,34 @@ translation_status: pending
     );
 
     expect(findings).toEqual([]);
+  });
+
+  it("reports tracked source docs missing from the migration map", () => {
+    const findings = analyze(
+      {
+        "docs/architecture.md": "# Architecture\n",
+        "docs/bot-routing.md": "# Bot Routing\n",
+        "docs/zh/architecture.zh.md": `---
+doc_id: architecture
+lang: zh
+translation_of: docs/architecture.md
+translation_status: current
+---
+# 架构
+`,
+      },
+      [currentEntry],
+      new Set(),
+      new Set(),
+      ["docs/architecture.md", "docs/bot-routing.md"],
+    );
+
+    expect(findings).toEqual([
+      {
+        severity: "error",
+        path: "docs/bot-routing.md",
+        reason: "tracked source doc is missing from documentation migration map",
+      },
+    ]);
   });
 });
