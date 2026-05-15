@@ -39,13 +39,16 @@ Runtime 仍复用部分 legacy feature docs 作为详细实现记录：
 
 - [`features/02-wechat-mp-provider.md`](features/02-wechat-mp-provider.md): 微信公众号文章采集 pre-provider。
 - [`features/06-futu-stock.md`](features/06-futu-stock.md): 富途股票账户只读查询 MCP / provider。
-- [`features/07-email-capability.md`](features/07-email-capability.md): 通用只读 Email capability。
-- [`features/08-cmb-credit-card-email-provider.md`](features/08-cmb-credit-card-email-provider.md): 招商信用卡邮件消费解析 provider。
 - [`features/10-stock-portfolio-provider.md`](features/10-stock-portfolio-provider.md): 多券商股票账户聚合 provider。
 - [`features/11-stock-pulse-provider.md`](features/11-stock-pulse-provider.md): 股票盘中 hourly 异动扫描 provider。
 - [`features/14-market-intel-provider.md`](features/14-market-intel-provider.md): CN/US 盘前市场情报、forecast persistence、盘后评价与 calibration loop。
 - [`features/16-provider-framework.md`](features/16-provider-framework.md): provider manifest、health check、dry-run、structured output 和兼容 adapter。
 - [`features/18-stock-watchlist-research-provider.md`](features/18-stock-watchlist-research-provider.md): 券商 watchlist stock 盘前/每日深度研究 provider，独立推送到 daily-watchlist-stock。
+
+Email legacy compatibility stubs:
+
+- [`features/07-email-capability.md`](features/07-email-capability.md): merged into [`providers/email.md`](providers/email.md#shared-read-only-email-capability).
+- [`features/08-cmb-credit-card-email-provider.md`](features/08-cmb-credit-card-email-provider.md): merged into [`providers/email.md`](providers/email.md#cmb-credit-card-email-provider).
 
 Eastmoney legacy compatibility stubs:
 

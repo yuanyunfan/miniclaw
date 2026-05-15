@@ -124,13 +124,13 @@ Field meanings:
   {
     "doc_id": "email-provider-family",
     "source_path": "docs/providers/email.md",
-    "zh_path": null,
+    "zh_path": "docs/zh/providers/email.zh.md",
     "category": "provider",
-    "status": "keep",
+    "status": "website-source",
     "merge_group": "providers/email",
     "website_exposure": "public",
-    "translation_required": false,
-    "translation_status": "not_required"
+    "translation_required": true,
+    "translation_status": "pending"
   },
   {
     "doc_id": "stock-research-provider-pipeline",

@@ -40,9 +40,12 @@ flowchart LR
 
 ## Email Providers
 
-- [`email.md`](email.md): shared email capability and email-business-consumer boundary.
-- [`../features/07-email-capability.md`](../features/07-email-capability.md): read-only email capability.
-- [`../features/08-cmb-credit-card-email-provider.md`](../features/08-cmb-credit-card-email-provider.md): CMB credit-card email parser/provider.
+- [`email.md`](email.md): Email provider family, merging the shared read-only Email capability, generic `email-query`, and CMB credit-card email parser boundaries.
+
+Email legacy compatibility stubs:
+
+- [`../features/07-email-capability.md`](../features/07-email-capability.md): merged into [`email.md`](email.md#shared-read-only-email-capability).
+- [`../features/08-cmb-credit-card-email-provider.md`](../features/08-cmb-credit-card-email-provider.md): merged into [`email.md`](email.md#cmb-credit-card-email-provider).
 
 ## Maintenance Rules
 
