@@ -2,11 +2,13 @@
 status: public-summary
 source_docs:
   en:
-    - docs/features/16-provider-framework.md
-    - docs/features/09-eastmoney-jywg-readonly-provider.md
-    - docs/features/17-eastmoney-myfavor-watchlist.md
+    - docs/providers/README.md
+    - docs/providers/provider-framework.md
+    - docs/providers/stock/eastmoney.md
+    - docs/providers/stock/research.md
   zh:
-    - docs/zh/features/16-provider-framework.zh.md
+    - docs/zh/providers/provider-framework.zh.md
+    - docs/zh/providers/stock/eastmoney.zh.md
 ---
 
 # Providers

@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 import { execFileSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { evaluateDocsDrift, type DocsDriftFinding } from "../src/quality/docs-drift.js";
 
 interface Finding {
@@ -138,16 +138,31 @@ for (const field of [
 }
 
 const docsIndex = readText("docs/README.md");
-const featureDocs = readdirSync("docs/features")
-  .filter((file) => file.endsWith(".md"))
-  .sort();
 
-for (const file of featureDocs) {
-  const ref = `features/${file}`;
+function markdownFiles(dir: string): string[] {
+  return readdirSync(dir)
+    .flatMap((entry) => {
+      const path = `${dir}/${entry}`;
+      const stat = statSync(path);
+      if (stat.isDirectory()) return markdownFiles(path);
+      return entry.endsWith(".md") ? [path] : [];
+    })
+    .sort();
+}
+
+const indexedSourceDocs = [
+  ...markdownFiles("docs/features"),
+  ...markdownFiles("docs/runtime"),
+  ...markdownFiles("docs/providers"),
+  ...markdownFiles("docs/experiments"),
+];
+
+for (const path of indexedSourceDocs) {
+  const ref = path.replace(/^docs\//, "");
   if (!docsIndex.includes(ref)) {
     findings.push({
       path: "docs/README.md",
-      reason: `missing docs/features index entry for ${ref}`,
+      reason: `missing docs source index entry for ${ref}`,
     });
   }
 }
@@ -192,7 +207,7 @@ if (docsDriftFindings.length && docsDriftBypass) {
 }
 
 console.log(
-  `D1 docs drift check passed (${featureDocs.length} feature doc(s), schema v${codeSchemaVersion}, ` +
+  `D1 docs drift check passed (${indexedSourceDocs.length} indexed source doc(s), schema v${codeSchemaVersion}, ` +
   `${changedPathSelection.paths.length} changed path(s), ${docsDriftEvaluation.matchedRequirements.length} mapped rule(s), ` +
   `mode=${changedPathSelection.mode}).`
 );

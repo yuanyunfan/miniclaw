@@ -1,5 +1,7 @@
 # MiniClaw Provider Framework SDK
 
+> Migration note: provider framework docs now use [`docs/providers/provider-framework.md`](../providers/provider-framework.md) as the taxonomy entrypoint. This legacy feature doc keeps the detailed SDK implementation notes for one migration cycle.
+
 > 结论：provider framework 给 cron pre-provider 增加 manifest、health check、dry-run、structured output 和 failure taxonomy，但保留现有 `PreProviderResult` 兼容层。当前已迁移 `stock-pulse` 和 `eastmoney-jywg-readonly`；cron runner 默认仍只调用 `runPreProvider()`，只有显式配置 `pre_provider_preflight` 才会先运行 health 或 dry-run gate。
 
 ## 范围

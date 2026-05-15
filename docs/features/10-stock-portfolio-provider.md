@@ -1,5 +1,7 @@
 # MiniClaw 股票账户聚合 Provider
 
+> Migration note: stock research and portfolio provider docs are now grouped under [`docs/providers/stock/research.md`](../providers/stock/research.md). This legacy feature doc keeps the detailed stock-portfolio implementation notes for one migration cycle.
+
 > 结论：`stock-portfolio` 是股票日报的聚合 `pre_provider`，用于在 LLM 执行前统一拉取多个只读券商 provider 的脱敏账户上下文，并在 provider 层计算统一人民币口径盈亏。当前支持聚合 `futu-stock` 和 `eastmoney-jywg-readonly`，不会直接接触交易密码，也不会暴露任何交易工具。
 
 ## 目标

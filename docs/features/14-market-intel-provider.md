@@ -1,5 +1,7 @@
 # MiniClaw Market Intel Provider
 
+> Migration note: stock research provider docs are now grouped under [`docs/providers/stock/research.md`](../providers/stock/research.md). This legacy feature doc keeps the detailed market-intel implementation notes for one migration cycle.
+
 > 结论：`market-intel` 把美股和 A/H 盘前报告从“LLM 自己找事实”升级为“provider 先收集结构化证据，LLM 只做多角色推理和 Forecast Editor 综合”。盘前预测当前以 1 个月、3 个月、6 个月和 1 年的中长期 horizon 为主；forecast persistence 会保存这些 horizon items，post-market evaluation 只跟踪它们，不把当天收盘涨跌误当成命中/失败。
 
 ## 目标边界

@@ -1,5 +1,7 @@
 # MiniClaw Email Capability
 
+> Migration note: email provider docs are now grouped under [`docs/providers/email.md`](../providers/email.md). This legacy feature doc keeps the shared read-only Email capability details for one migration cycle.
+
 > 结论：Email 是 MiniClaw 的基础只读数据能力，不属于某个具体日报业务。招商信用卡消费分析、发票归档、账单汇总、订阅邮件摘要都应该复用这一层。
 
 ## 设计边界

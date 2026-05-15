@@ -1,5 +1,7 @@
 # MiniClaw Stock Watchlist Research Provider
 
+> Migration note: stock research provider docs are now grouped under [`docs/providers/stock/research.md`](../providers/stock/research.md). This legacy feature doc keeps the detailed watchlist research implementation notes for one migration cycle.
+
 > 结论：`stock-watchlist-research` 是券商自选股的深度研究 provider。它读取 `stock-pulse.universe.sources` 中启用的 Futu / Eastmoney MyFavor 自选股源，并用关联的 `stock-portfolio` 配置排除已持仓标的；对应 cron 应推送到独立的 `#daily-watchlist-stock`。
 
 ## 目标

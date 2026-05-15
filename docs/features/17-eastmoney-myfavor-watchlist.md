@@ -1,5 +1,7 @@
 # MiniClaw 东方财富 MyFavor 自选股只读源
 
+> Migration note: Eastmoney docs are now grouped under [`docs/providers/stock/eastmoney.md`](../providers/stock/eastmoney.md). This legacy feature doc keeps the detailed MyFavor watchlist implementation notes for one migration cycle.
+
 > 结论：`eastmoney-myfavor` 是东方财富自选股观察池读取层，只服务 `stock-pulse.universe.sources`。它使用 `myfavor.eastmoney.com` 的只读分组和证券列表 endpoint，不和 `jywg.18.cn` 持仓 provider 混用，也不进入 `stock-portfolio`。
 
 ## 目标

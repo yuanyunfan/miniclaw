@@ -12,29 +12,48 @@
 - [`quality-gates.md`](quality-gates.md): 测试分层、质量门禁、Discord E2E 方案。
 - [`documentation-migration-map.md`](documentation-migration-map.md): 当前 docs 迁移、双语 pairing、website exposure 的 machine-readable 初始地图。
 
-## Features
+## Runtime
 
-- [`features/01-stage.md`](features/01-stage.md): Stage 实验性 CLI 多 agent 控制台及 Discord runtime 边界。
-- [`features/02-wechat-mp-provider.md`](features/02-wechat-mp-provider.md): 微信公众号文章采集 pre-provider。
+- [`runtime/README.md`](runtime/README.md): Discord intake、routing、chat/task/cron runtime、memory/context、operations 的当前 source-of-truth 入口。
+
+Runtime 仍复用部分 legacy feature docs 作为详细实现记录：
+
 - [`features/03-discord-task-output.md`](features/03-discord-task-output.md): Discord task 输出、进度和 embed 设计。
 - [`features/04-smart-task-router.md`](features/04-smart-task-router.md): Smart Task Router 中文设计。
 - [`features/05-smart-task-router.en.md`](features/05-smart-task-router.en.md): Smart Task Router English design.
-- [`features/06-futu-stock.md`](features/06-futu-stock.md): 富途股票账户只读查询 MCP / provider。
-- [`features/07-email-capability.md`](features/07-email-capability.md): 通用只读 Email capability。
-- [`features/08-cmb-credit-card-email-provider.md`](features/08-cmb-credit-card-email-provider.md): 招商信用卡邮件消费解析 provider。
-- [`features/09-eastmoney-jywg-readonly-provider.md`](features/09-eastmoney-jywg-readonly-provider.md): 东方财富 JYWG 只读查询 provider。
-- [`features/10-stock-portfolio-provider.md`](features/10-stock-portfolio-provider.md): 多券商股票账户聚合 provider。
-- [`features/11-stock-pulse-provider.md`](features/11-stock-pulse-provider.md): 股票盘中 hourly 异动扫描 provider。
 - [`features/12-connectivity-monitor.md`](features/12-connectivity-monitor.md): Discord / 网络 / SMTP 链路探测与 Email fallback 告警。
 - [`features/13-auto-doctor.md`](features/13-auto-doctor.md): task / cron / PM2 / 日志 / connectivity 的只读运行态诊断。
-- [`features/14-market-intel-provider.md`](features/14-market-intel-provider.md): CN/US 盘前市场情报、forecast persistence、盘后评价与 calibration loop。
-- [`features/15-ralph-controller.md`](features/15-ralph-controller.md): plan-based fresh-context Codex execution controller。
-- [`features/16-provider-framework.md`](features/16-provider-framework.md): provider manifest、health check、dry-run、structured output 和兼容 adapter。
-- [`features/17-eastmoney-myfavor-watchlist.md`](features/17-eastmoney-myfavor-watchlist.md): 东方财富 MyFavor 自选股只读源，接入 stock-pulse universe。
-- [`features/18-stock-watchlist-research-provider.md`](features/18-stock-watchlist-research-provider.md): 券商 watchlist stock 盘前/每日深度研究 provider，独立推送到 daily-watchlist-stock。
 - [`features/19-agent-prompt-context-audit.md`](features/19-agent-prompt-context-audit.md): Codex / Claude Code chat、task、cron prompt 与上下文注入审计。
 - [`features/20-memory-curation-lifecycle.md`](features/20-memory-curation-lifecycle.md): memory 自动抽取候选校验、去重合并、生命周期 metadata 和定期 maintenance。
 - [`features/21-agent-run-manager.md`](features/21-agent-run-manager.md): task-scoped Agent Run Manager、Agent Bus、ACP lifecycle、managed runtime routing 与 guardrails。
+
+## Providers
+
+- [`providers/README.md`](providers/README.md): Provider 文档总入口，描述 provider runtime、trust boundary、privacy boundary 和维护规则。
+- [`providers/provider-framework.md`](providers/provider-framework.md): Provider framework 当前入口，链接到详细实现记录。
+- [`providers/content.md`](providers/content.md): Content provider family，当前覆盖 WeChat MP ingestion 和 dedupe 边界。
+- [`providers/email.md`](providers/email.md): Email provider family，区分通用只读 email capability 与业务 parser。
+- [`providers/stock/README.md`](providers/stock/README.md): Stock provider family 数据流。
+- [`providers/stock/eastmoney.md`](providers/stock/eastmoney.md): Eastmoney provider family，合并 JYWG readonly 和 MyFavor watchlist 两条文档线。
+- [`providers/stock/research.md`](providers/stock/research.md): Stock research provider pipeline，串联 portfolio、pulse、market-intel 和 watchlist research。
+
+- [`features/02-wechat-mp-provider.md`](features/02-wechat-mp-provider.md): 微信公众号文章采集 pre-provider。
+- [`features/06-futu-stock.md`](features/06-futu-stock.md): 富途股票账户只读查询 MCP / provider。
+- [`features/07-email-capability.md`](features/07-email-capability.md): 通用只读 Email capability。
+- [`features/08-cmb-credit-card-email-provider.md`](features/08-cmb-credit-card-email-provider.md): 招商信用卡邮件消费解析 provider。
+- [`features/09-eastmoney-jywg-readonly-provider.md`](features/09-eastmoney-jywg-readonly-provider.md): 东方财富 JYWG 只读查询 provider 的 legacy detailed doc；current family entry 是 [`providers/stock/eastmoney.md`](providers/stock/eastmoney.md)。
+- [`features/10-stock-portfolio-provider.md`](features/10-stock-portfolio-provider.md): 多券商股票账户聚合 provider。
+- [`features/11-stock-pulse-provider.md`](features/11-stock-pulse-provider.md): 股票盘中 hourly 异动扫描 provider。
+- [`features/14-market-intel-provider.md`](features/14-market-intel-provider.md): CN/US 盘前市场情报、forecast persistence、盘后评价与 calibration loop。
+- [`features/16-provider-framework.md`](features/16-provider-framework.md): provider manifest、health check、dry-run、structured output 和兼容 adapter。
+- [`features/17-eastmoney-myfavor-watchlist.md`](features/17-eastmoney-myfavor-watchlist.md): 东方财富 MyFavor 自选股只读源的 legacy detailed doc；current family entry 是 [`providers/stock/eastmoney.md`](providers/stock/eastmoney.md)。
+- [`features/18-stock-watchlist-research-provider.md`](features/18-stock-watchlist-research-provider.md): 券商 watchlist stock 盘前/每日深度研究 provider，独立推送到 daily-watchlist-stock。
+
+## Experiments
+
+- [`experiments/README.md`](experiments/README.md): 实验性控制面总入口。
+- [`features/01-stage.md`](features/01-stage.md): Stage 实验性 CLI 多 agent 控制台及 Discord runtime 边界。
+- [`features/15-ralph-controller.md`](features/15-ralph-controller.md): plan-based fresh-context Codex execution controller。
 
 ## Plans
 
@@ -74,8 +93,8 @@ Website pages must stay presentation-only and declare language-aware `source_doc
 ## Placement Rules
 
 - 全局架构、路由、工程治理和 framework-level prompt 文档放在 `docs/` 顶层。
-- 用户可见子系统、业务能力、capability 和 provider 文档全部放在 `docs/features/`，不再创建子级目录。
-- feature 文件使用两位阿拉伯数字前缀，按实现顺序从 `01-` 开始递增。
+- Runtime 文档放在 `docs/runtime/`，provider 文档放在 `docs/providers/`，实验控制面放在 `docs/experiments/`。
+- `docs/features/` 是迁移期 legacy detailed-doc 目录；旧 feature 文件继续保留一轮以保护历史链接，但新增 source-of-truth 文档优先进入 runtime/providers/experiments 分类目录。
 - 实施计划只放 `docs/plans/`，不要与当前设计文档混放。
 - 过期审计报告、历史复盘和不再维护的全局路线图放在 `docs/archive/`，不能替代当前 source-of-truth 文档。
 - 可执行运维流程放在 `docs/runbooks/`。

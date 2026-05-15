@@ -17,6 +17,7 @@ export interface DocsI18nFinding {
 export interface DocumentationMigrationEntry {
   doc_id: string;
   source_path: string;
+  target_path?: string | null;
   zh_path?: string;
   category: string;
   status: "keep" | "move" | "merge" | "archive" | "private" | "website-source";
@@ -31,6 +32,7 @@ export interface DocsI18nInput {
   exists: (path: string) => boolean;
   readText: (path: string) => string;
   ignoredPaths?: Set<string>;
+  diffDisabledPaths?: Set<string>;
 }
 
 function finding(
@@ -87,6 +89,9 @@ function validateChinesePair(
 
   if (input.ignoredPaths?.has(zhPath)) {
     findings.push(finding("error", zhPath, "Chinese documentation path is ignored by git"));
+  }
+  if (input.diffDisabledPaths?.has(zhPath)) {
+    findings.push(finding("error", zhPath, "Chinese documentation path disables text diff through gitattributes"));
   }
 
   const zh = parseFrontmatter(input.readText(zhPath));
@@ -160,6 +165,7 @@ export function analyzeDocsI18nFromRepo(repoRoot: string, ignoredPaths: Set<stri
   return analyzeDocsI18n({
     entries,
     ignoredPaths,
+    diffDisabledPaths: new Set(),
     exists: (path) => existsSync(join(repoRoot, path)),
     readText: (path) => readFileSync(join(repoRoot, path), "utf8"),
   });

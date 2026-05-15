@@ -16,10 +16,16 @@ const currentEntry: DocumentationMigrationEntry = {
   translation_status: "current",
 };
 
-function analyze(files: Record<string, string>, entries = [currentEntry], ignoredPaths = new Set<string>()) {
+function analyze(
+  files: Record<string, string>,
+  entries = [currentEntry],
+  ignoredPaths = new Set<string>(),
+  diffDisabledPaths = new Set<string>(),
+) {
   return analyzeDocsI18n({
     entries,
     ignoredPaths,
+    diffDisabledPaths,
     exists: (path) => files[path] !== undefined,
     readText: (path) => files[path] ?? "",
   });
@@ -82,11 +88,13 @@ translation_status: current
       },
       [currentEntry],
       new Set(["docs/zh/architecture.zh.md"]),
+      new Set(["docs/zh/architecture.zh.md"]),
     );
 
     expect(findings.map((finding) => finding.reason)).toEqual(
       expect.arrayContaining([
         "Chinese documentation path is ignored by git",
+        "Chinese documentation path disables text diff through gitattributes",
         "frontmatter lang must be zh",
         "translation_of must be docs/architecture.md",
         "doc_id must be architecture",

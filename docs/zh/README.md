@@ -21,6 +21,8 @@ translation_status: not_required
 
 - [`plans/2026-05-15-documentation-strategy.zh.md`](plans/2026-05-15-documentation-strategy.zh.md): 文档策略计划的中文版本。
 - [`architecture.zh.md`](architecture.zh.md): 架构文档中文占位，等待完整翻译。
+- [`providers/provider-framework.zh.md`](providers/provider-framework.zh.md): Provider framework 新 taxonomy 入口中文占位。
+- [`providers/stock/eastmoney.zh.md`](providers/stock/eastmoney.zh.md): Eastmoney provider family 中文占位。
 - [`features/16-provider-framework.zh.md`](features/16-provider-framework.zh.md): Provider framework 中文占位，等待完整翻译。
 - [`quality-gates.zh.md`](quality-gates.zh.md): 质量门禁中文占位，等待完整翻译。
 - [`runbooks/install.zh.md`](runbooks/install.zh.md): 安装 runbook 中文占位，等待完整翻译。

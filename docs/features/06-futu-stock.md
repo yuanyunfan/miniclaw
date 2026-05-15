@@ -1,5 +1,7 @@
 # MiniClaw 富途股票账户只读查询 MCP 方案
 
+> Migration note: stock provider docs are now grouped under [`docs/providers/stock/README.md`](../providers/stock/README.md). This legacy feature doc keeps the detailed Futu readonly implementation notes for one migration cycle.
+
 > 结论：MiniClaw 可以通过富途官方 OpenAPI + OpenD 实现每日股票账户盈亏查询，并推送到 Discord。实现边界应收敛为一个只读 `futu-stock` MCP server：只暴露账户快照、持仓摘要、成交摘要和每日盈亏报告工具，不暴露任何解锁交易、下单、撤单或资金划拨能力。
 
 ## 目标

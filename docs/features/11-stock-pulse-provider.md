@@ -1,5 +1,7 @@
 # MiniClaw Stock Pulse Provider
 
+> Migration note: stock research provider docs are now grouped under [`docs/providers/stock/research.md`](../providers/stock/research.md). This legacy feature doc keeps the detailed stock-pulse implementation notes for one migration cycle.
+
 > 结论：`stock-pulse` 是股票盘中异动扫描 `pre_provider`。它不让 LLM 自己判断行情异常，而是在 provider 层先完成交易时段 guard、候选股票采集、5m bar 频率异常、60m 涨跌幅、日内涨跌幅和 rolling z-score 计算，再把结构化 `alerts` 交给 LLM 解释原因并推送 Discord。
 
 ## 目标

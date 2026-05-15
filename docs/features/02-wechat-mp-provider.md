@@ -1,5 +1,7 @@
 # WeChat MP Provider
 
+> Migration note: content provider docs are now grouped under [`docs/providers/content.md`](../providers/content.md). This legacy feature doc keeps the detailed WeChat MP implementation notes for one migration cycle.
+
 MiniClaw 通过内置 `wechat-mp` pre-provider 采集微信公众号文章元数据，再交给 cron `task` 汇总并推送到 Discord。
 
 这个方案复用的是 `mp.weixin.qq.com` 微信公众平台后台登录态，也就是公众号后台账号的 web session。它不读取个人微信聊天记录，但 session 文件本身等价于后台登录凭据，必须按敏感凭据处理。

@@ -1,5 +1,7 @@
 # CMB Credit Card Email Provider
 
+> Migration note: email provider docs are now grouped under [`docs/providers/email.md`](../providers/email.md). This legacy feature doc keeps the CMB parser implementation details for one migration cycle.
+
 > 结论：招商信用卡消费分析应该作为 Email capability 的业务 consumer 实现。它只解析招商信用卡通知邮件，输出结构化消费记录，再由 cron task 汇总到 Discord。
 
 ## 架构

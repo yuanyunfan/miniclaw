@@ -18,16 +18,31 @@ function ignoredByGit(path: string): boolean {
   return result.status === 0;
 }
 
+function diffDisabledByGit(path: string): boolean {
+  const result = execFileSync("git", ["check-attr", "diff", "--", path], {
+    cwd: repoRoot,
+    encoding: "utf8",
+  });
+  return result.includes(": diff: unset");
+}
+
 const ignoredPaths = new Set(
   entries
     .map((entry) => entry.zh_path)
     .filter((path): path is string => Boolean(path))
     .filter(ignoredByGit),
 );
+const diffDisabledPaths = new Set(
+  entries
+    .map((entry) => entry.zh_path)
+    .filter((path): path is string => Boolean(path))
+    .filter(diffDisabledByGit),
+);
 
 const findings = analyzeDocsI18n({
   entries,
   ignoredPaths,
+  diffDisabledPaths,
   exists: (path) => {
     try {
       execFileSync("test", ["-e", path], { cwd: repoRoot });

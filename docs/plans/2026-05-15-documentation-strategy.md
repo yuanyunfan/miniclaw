@@ -387,7 +387,7 @@ The Pages workflow should build from `website/` and publish a static site artifa
   - Add website docs only after `website/` exists.
 - docs:
   - Keep this plan under `docs/plans/`.
-  - Keep the Chinese version under `docs/zh/2026-05-15-documentation-strategy.zh.md`.
+  - Keep the Chinese version under `docs/zh/plans/2026-05-15-documentation-strategy.zh.md`.
   - Update `docs/zh/README.md` from local-review-copy wording to first-class Chinese documentation wording when `docs/zh/` is no longer ignored.
   - Remove `docs/zh/` from `.gitignore` in the same slice that promotes Chinese docs to tracked repo docs.
   - Add `docs/documentation-migration-map.md` before moving or merging current docs.
@@ -404,3 +404,4 @@ The Pages workflow should build from `website/` and publish a static site artifa
 - 2026-05-15: Added the `quality:website-docs` gate proposal, including `source_docs` validation, forbidden private/archive references, affected page reporting, and the rule that `website/**` must not satisfy code-to-docs drift requirements.
 - 2026-05-15: Added the current-docs migration plan and the first-class `en` / `zh` documentation maintenance model, including `quality:docs-i18n`, migration map requirements, and the rule that `docs/zh/` should stop being a gitignored local review-copy directory once bilingual docs are adopted.
 - 2026-05-15: First implementation slice is available on branch `codex/documentation-strategy` in a separate worktree. It includes the migration map, tracked `docs/zh`, bilingual website skeleton, `quality:docs-i18n`, `quality:website-docs`, package script wiring, and docs index / quality gate updates. Large-scale `docs/features/` moves remain pending.
+- 2026-05-15: Phase 2 classification started on `main` without deleting legacy feature docs. Added taxonomy entrypoints for runtime, providers, experiments, Eastmoney provider family, content providers, email providers, and stock research pipeline; updated the migration map, website `source_docs`, and D1 docs drift patterns so new taxonomy docs can satisfy source-of-truth requirements while legacy `docs/features/*` remains link-compatible for one migration cycle.

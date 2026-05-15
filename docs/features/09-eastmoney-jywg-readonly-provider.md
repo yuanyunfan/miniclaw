@@ -1,5 +1,7 @@
 # MiniClaw 东方财富 JYWG 只读查询方案
 
+> Migration note: Eastmoney docs are now grouped under [`docs/providers/stock/eastmoney.md`](../providers/stock/eastmoney.md). This legacy feature doc keeps the detailed JYWG readonly implementation notes for one migration cycle.
+
 > 结论：MiniClaw 已实现 `eastmoney-jywg-readonly` provider 和 `eastmoney-jywg` MCP server，用于通过 `jywg.18.cn` 的只读查询接口获取东方财富账户资金和持仓快照。实现只保存最小 cookie jar，不保存账号密码或交易密码，不实现任何下单、撤单、申购或批量交易 endpoint。
 
 ## 当前实现状态
