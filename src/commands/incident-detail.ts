@@ -6,6 +6,10 @@ import {
   type TaskTraceError,
   type TaskTraceModel,
 } from "../store/task-trace-export.js";
+import {
+  formatAgentRunTraceCompactLines,
+  formatAgentRunTraceSummary,
+} from "../store/agent-run-trace-export.js";
 import { formatDiagnosticValue, redactDiagnosticText } from "../privacy/diagnostic-redaction.js";
 
 const DISCORD_CONTENT_LIMIT = 1900;
@@ -165,6 +169,10 @@ function taskTraceLines(traceLines: string[], taskTrace?: IncidentTaskTraceConte
       lines.push(`- export: ${formatTaskTraceSummary(taskTrace.model)}`);
       const compactEvents = formatTaskTraceCompactEvents(taskTrace.model, 3);
       if (compactEvents.length) lines.push("- recent exported events:", ...compactEvents);
+      if (taskTrace.model.agentRunTrace) {
+        lines.push(`- agent manager: ${formatAgentRunTraceSummary(taskTrace.model.agentRunTrace)}`);
+        lines.push("- recent agent activity:", ...formatAgentRunTraceCompactLines(taskTrace.model.agentRunTrace, 3));
+      }
     } else if (taskTrace.error) {
       lines.push(`- export: unavailable (${formatDiagnosticValue(taskTrace.error.message, { maxChars: 160 })})`);
     }

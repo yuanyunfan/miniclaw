@@ -7,6 +7,11 @@ import {
   redactDiagnosticValue,
   type DiagnosticJsonValue,
 } from "../privacy/diagnostic-redaction.js";
+import {
+  buildAgentRunTraceModel,
+  renderAgentRunTraceMarkdown,
+  type AgentRunTraceModel,
+} from "./agent-run-trace-export.js";
 
 export type TaskTraceErrorCode = "missing_id" | "not_found" | "ambiguous_prefix" | "no_events";
 
@@ -56,6 +61,7 @@ export interface TaskTraceModel {
   omittedEventCount: number;
   generatedAt: string;
   redactionPolicy: string;
+  agentRunTrace?: AgentRunTraceModel;
 }
 
 export interface TaskTraceModelOptions {
@@ -306,6 +312,7 @@ export function buildTaskTraceModel(
   const maxFieldChars = positiveIntOption(options.maxFieldChars, DEFAULT_FIELD_CHARS, 20);
   const rows = listTaskEvents(taskId, maxEvents).reverse();
   const events = rows.map((row, index) => traceEvent(row, rows[index - 1], maxFieldChars));
+  const agentRunTrace = buildAgentRunTraceModel(taskId);
 
   return {
     ok: true,
@@ -317,6 +324,7 @@ export function buildTaskTraceModel(
       omittedEventCount: Math.max(0, totalEventCount - events.length),
       generatedAt: new Date().toISOString(),
       redactionPolicy: REDACTION_POLICY,
+      ...(agentRunTrace ? { agentRunTrace } : {}),
     },
   };
 }
@@ -424,6 +432,7 @@ export function renderTaskTraceMarkdown(
     `- omitted_events: ${model.omittedEventCount}`,
     `- redaction_policy: ${model.redactionPolicy}`,
     "",
+    ...(model.agentRunTrace ? [renderAgentRunTraceMarkdown(model.agentRunTrace, { headingLevel: 2 }), ""] : []),
     "## Timeline",
     ...(model.events.length ? model.events.flatMap(eventLines) : ["- (none)", ""]),
   ];

@@ -28,7 +28,15 @@ import {
 import { createManagedAgentBusContext } from "./mcp/injection.js";
 import { resolveAgentRunManagerPolicy, type AgentRunManagerPolicy, type AgentRunManagerPolicyInput } from "./policy.js";
 import { buildManagedRuntimeRolePolicy } from "./role-policy.js";
-import { AgentRunScheduler, createManagedSchedulerPlan } from "./scheduler.js";
+import {
+  AgentRunScheduler,
+  createDagExecutionBatches,
+  createManagedSchedulerPlan,
+  validateManagedDagPlan,
+  type ManagedDagPlanInput,
+  type ManagedDagPlanNode,
+} from "./scheduler.js";
+import { buildFinalSynthesis } from "./final-synthesizer.js";
 import {
   startAgentRunAcpLifecycle,
   type AgentRunAcpLifecycleConfig,
@@ -71,6 +79,7 @@ export interface ManagedRuntimeRunInput {
   runtime: AgentRuntime;
   onViewEvent: (event: TaskViewEvent) => Promise<void> | void;
   maxFixIterations?: number;
+  schedulerPlan?: ManagedDagPlanInput;
 }
 
 interface SpawnInput {
@@ -98,6 +107,11 @@ const MANAGED_ROLE_CAPABILITIES: Record<string, Pick<SpawnInput, "toolPolicyId" 
     toolPolicyId: "read-only",
     canSendKinds: ["decision", "handoff", "question", "artifact", "error"],
     canReceiveKinds: ["finding", "answer", "challenge", "question"],
+  },
+  researcher: {
+    toolPolicyId: "read-only",
+    canSendKinds: ["finding", "artifact", "question", "error"],
+    canReceiveKinds: ["handoff", "question", "challenge"],
   },
   generator: {
     toolPolicyId: "workspace-write",
@@ -350,6 +364,10 @@ export class AgentRunManager {
   }
 
   async runManagedRuntime(input: ManagedRuntimeRunInput): Promise<AgentTaskResult> {
+    if (input.schedulerPlan) {
+      return await this.runManagedDagRuntime(input as ManagedRuntimeRunInput & { schedulerPlan: ManagedDagPlanInput });
+    }
+
     const startedAt = Date.now();
     const root = this.createRootRun();
     const sessionId = `manager:${root.id}`;
@@ -440,6 +458,7 @@ export class AgentRunManager {
 
       let finalVerdict: ManagedRunVerdict = "FAIL";
       let finalSummary = "";
+      let finalFixList: string[] = [];
       for (let iteration = 0; iteration <= maxFixIterations; iteration++) {
         const evaluator = this.spawnManagedRole(root, "evaluator");
         const evaluatorStep = `evaluator:${iteration}`;
@@ -480,7 +499,8 @@ export class AgentRunManager {
 
         finalVerdict = evaluatorTurn.envelope.verdict ?? this.inferVerdict(evaluatorTurn);
         finalSummary = evaluatorTurn.envelope.summary ?? evaluatorTurn.result.result;
-        this.recordFinalVerdict(evaluatorTurn.run, root, finalVerdict, evaluatorTurn.envelope.fix_list ?? []);
+        finalFixList = evaluatorTurn.envelope.fix_list ?? [];
+        this.recordFinalVerdict(evaluatorTurn.run, root, finalVerdict, finalFixList);
         await input.onViewEvent(taskViewEvents.toolProgress({
           provider: "agent-run-manager",
           title: `evaluator: verdict ${finalVerdict}`,
@@ -501,7 +521,7 @@ export class AgentRunManager {
             costUsd: totalCostUsd,
             durationMs,
             turns: totalTurns,
-            result: this.synthesizeFinalResult(finalVerdict, finalSummary),
+            result: this.synthesizeFinalResult(finalVerdict, finalSummary, finalFixList),
             tokensSummary: "manager=managed-scheduler",
             progressLines: this.progressLinesForTask(),
             toolCount: 0,
@@ -549,7 +569,11 @@ export class AgentRunManager {
         costUsd: totalCostUsd,
         durationMs: Date.now() - startedAt,
         turns: totalTurns,
-        result: this.synthesizeFinalResult(finalVerdict, finalSummary || "Evaluator returned FAIL after max fix iterations."),
+        result: this.synthesizeFinalResult(
+          finalVerdict,
+          finalSummary || "Evaluator returned FAIL after max fix iterations.",
+          finalFixList,
+        ),
         tokensSummary: "manager=managed-scheduler",
         progressLines: this.progressLinesForTask(),
         toolCount: 0,
@@ -559,6 +583,180 @@ export class AgentRunManager {
       const message = err instanceof Error ? err.message : String(err);
       scheduler?.fail("failed", message);
       return this.failedResult(startedAt, sessionId, root.id, message);
+    } finally {
+      input.signal.removeEventListener("abort", abortListener);
+      await this.stopAcpLifecycle(acp);
+    }
+  }
+
+  private async runManagedDagRuntime(input: ManagedRuntimeRunInput & { schedulerPlan: ManagedDagPlanInput }): Promise<AgentTaskResult> {
+    const startedAt = Date.now();
+    const root = this.createRootRun();
+    const sessionId = `manager:${root.id}`;
+    const acp = await this.startAcpLifecycle();
+    await input.onViewEvent(taskViewEvents.sessionStarted("agent-run-manager", sessionId));
+    this.params.reporter.event("session_started", {
+      message: sessionId,
+      payload: { provider: "agent-run-manager", session_id: sessionId, root_run_id: root.id, scheduler: "dag" },
+    });
+
+    let scheduler: AgentRunScheduler | undefined;
+    const abortListener = () => {
+      scheduler?.cancel("task cancelled by root signal");
+      this.cancelTask("task cancelled by root signal");
+    };
+    input.signal.addEventListener("abort", abortListener, { once: true });
+
+    try {
+      const plan = validateManagedDagPlan(input.schedulerPlan, {
+        knownRoles: Object.keys(MANAGED_ROLE_CAPABILITIES),
+        maxNodes: this.policy.maxTurns,
+        maxDepth: this.policy.maxTurns,
+        maxParallel: this.policy.maxConcurrentRuns,
+      });
+      const batches = createDagExecutionBatches(plan);
+      scheduler = new AgentRunScheduler({
+        taskId: this.params.taskId,
+        rootRun: root,
+        bus: this.bus,
+        reporter: this.params.reporter,
+        waitTimeoutMs: this.policy.timeoutMs,
+        plan,
+      });
+      scheduler.start("dag:start");
+
+      if (input.signal.aborted) {
+        scheduler.cancel("task cancelled before Agent Run Manager DAG start");
+        this.cancelTask("task cancelled before Agent Run Manager DAG start");
+        return this.cancelledResult(startedAt, sessionId);
+      }
+
+      const turnsByNode = new Map<string, ManagedChildTurn>();
+      let totalCostUsd = 0;
+      let totalTurns = 0;
+      let finalVerdict: ManagedRunVerdict = "PASS";
+      let finalSummary = "";
+      let finalFixList: string[] = [];
+      let verdictRecorded = false;
+
+      for (const batch of batches) {
+        this.params.reporter.event("agent_scheduler_dag_batch_started", {
+          payload: {
+            root_run_id: root.id,
+            node_ids: batch.map((node) => node.id),
+            roles: batch.map((node) => node.role),
+          },
+        });
+
+        for (const node of batch) {
+          if (input.signal.aborted) return this.cancelledResult(startedAt, sessionId);
+          const child = this.spawnManagedRole(root, node.role);
+          const turn = (await scheduler.yieldUntilChildEvent({
+            currentStep: `dag:${node.id}`,
+            childRunId: child.id,
+            waitKinds: node.waits_for,
+            signal: input.signal,
+            runChild: () => this.runProviderChild({
+              run: child,
+              runtime: input.runtime,
+              prompt: this.buildChildPrompt({
+                role: node.role,
+                taskPrompt: input.prompt,
+                instruction: node.instruction,
+                extra: this.dagNodePromptContext(node, turnsByNode),
+              }),
+              signal: input.signal,
+              onViewEvent: input.onViewEvent,
+            }),
+            shouldWaitForResult: (turnResult) => turnResult.result.success,
+            ensureCompletionMessage: (turnResult) => this.ensureSchedulerWakeMessage(root, turnResult, node.waits_for),
+          })).result;
+
+          totalCostUsd += turn.result.costUsd;
+          totalTurns += turn.result.turns;
+          turnsByNode.set(node.id, turn);
+
+          if (input.signal.aborted) return this.cancelledResult(startedAt, sessionId);
+          if (!turn.result.success) {
+            const reason = `${node.id} failed: ${turn.result.result}`;
+            scheduler.fail(`dag:${node.id}`, reason);
+            return this.failedDagResult(startedAt, sessionId, root.id, totalCostUsd, totalTurns, reason);
+          }
+
+          const nodeVerdict = turn.envelope.verdict ?? (node.role === "evaluator" ? this.inferVerdict(turn) : undefined);
+          if (nodeVerdict) {
+            finalVerdict = nodeVerdict;
+            finalSummary = turn.envelope.summary ?? turn.result.result;
+            finalFixList = turn.envelope.fix_list ?? [];
+            if (!verdictRecorded && (turn.run.can_send_kinds.includes("*") || turn.run.can_send_kinds.includes("verdict"))) {
+              this.recordFinalVerdict(turn.run, root, finalVerdict, finalFixList);
+              verdictRecorded = true;
+            }
+            await input.onViewEvent(taskViewEvents.toolProgress({
+              provider: "agent-run-manager",
+              title: `${node.id}: verdict ${finalVerdict}`,
+              countAsTool: false,
+              ...(finalVerdict === "FAIL" ? { severity: "warning" } : {}),
+            }));
+            if (finalVerdict === "FAIL" && plan.fail_policy === "fail_fast") {
+              const reason = `DAG node ${node.id} returned FAIL`;
+              scheduler.fail(`dag:${node.id}`, reason);
+              updateRunStatus(root.id, "failed", { errorMessage: reason });
+              this.params.reporter.event("agent_run_completed", {
+                severity: "error",
+                payload: { run_id: root.id, role: root.role, status: "failed", verdict: finalVerdict },
+              });
+              return {
+                success: false,
+                sessionId,
+                costUsd: totalCostUsd,
+                durationMs: Date.now() - startedAt,
+                turns: totalTurns,
+                result: this.synthesizeFinalResult(finalVerdict, finalSummary, finalFixList),
+                tokensSummary: "manager=dag-scheduler",
+                progressLines: this.progressLinesForTask(),
+                toolCount: 0,
+              };
+            }
+          }
+        }
+      }
+
+      if (!finalSummary) {
+        finalSummary = this.dagTerminalSummaries(plan.nodes, turnsByNode).join(" | ");
+      }
+      if (finalVerdict === "PASS") {
+        scheduler.complete("dag:completed");
+        updateRunStatus(root.id, "completed");
+        this.params.reporter.event("agent_run_completed", {
+          payload: { run_id: root.id, role: root.role, status: "completed", scheduler: "dag" },
+        });
+      } else {
+        const reason = "DAG terminal verdict was FAIL";
+        scheduler.fail("dag:completed", reason);
+        updateRunStatus(root.id, "failed", { errorMessage: reason });
+        this.params.reporter.event("agent_run_completed", {
+          severity: "error",
+          payload: { run_id: root.id, role: root.role, status: "failed", scheduler: "dag", verdict: finalVerdict },
+        });
+      }
+
+      return {
+        success: finalVerdict === "PASS",
+        sessionId,
+        costUsd: totalCostUsd,
+        durationMs: Date.now() - startedAt,
+        turns: totalTurns,
+        result: this.synthesizeFinalResult(finalVerdict, finalSummary, finalFixList),
+        tokensSummary: "manager=dag-scheduler",
+        progressLines: this.progressLinesForTask(),
+        toolCount: 0,
+      };
+    } catch (err) {
+      if (input.signal.aborted) return this.cancelledResult(startedAt, sessionId);
+      const message = err instanceof Error ? err.message : String(err);
+      scheduler?.fail("dag:failed", message);
+      return this.failedDagResult(startedAt, sessionId, root.id, 0, 0, message);
     } finally {
       input.signal.removeEventListener("abort", abortListener);
       await this.stopAcpLifecycle(acp);
@@ -1040,6 +1238,40 @@ export class AgentRunManager {
     return listRunsForTask(this.params.taskId).find((run) => run.role === role);
   }
 
+  private dagNodePromptContext(
+    node: ManagedDagPlanNode,
+    turnsByNode: Map<string, ManagedChildTurn>,
+  ): Record<string, unknown> {
+    const upstreamIds = [...new Set([...node.after, ...node.context_from])];
+    return {
+      scheduler_mode: "dag",
+      dag_node_id: node.id,
+      depends_on: node.after,
+      context_from: node.context_from,
+      wait_kinds: node.waits_for,
+      upstream: upstreamIds.map((nodeId) => {
+        const turn = turnsByNode.get(nodeId);
+        return {
+          node_id: nodeId,
+          role: turn?.run.role,
+          summary: turn?.envelope.summary,
+          verdict: turn?.envelope.verdict,
+          fix_list: turn?.envelope.fix_list,
+          artifact_ids: turn?.artifactIds ?? [],
+        };
+      }),
+      repeat_policy: node.repeat_policy,
+    };
+  }
+
+  private dagTerminalSummaries(nodes: ManagedDagPlanNode[], turnsByNode: Map<string, ManagedChildTurn>): string[] {
+    const dependedOn = new Set(nodes.flatMap((node) => node.after));
+    return nodes
+      .filter((node) => !dependedOn.has(node.id))
+      .map((node) => turnsByNode.get(node.id)?.envelope.summary ?? turnsByNode.get(node.id)?.result.result)
+      .filter((summary): summary is string => Boolean(summary?.trim()));
+  }
+
   private buildChildPrompt(input: {
     role: string;
     taskPrompt: string;
@@ -1074,15 +1306,39 @@ export class AgentRunManager {
       .map((run) => `${run.role}: ${run.status}`);
   }
 
-  private synthesizeFinalResult(verdict: ManagedRunVerdict, summary: string): string {
-    const facts = this.bus.listBlackboard(this.params.taskId);
-    const factLines = facts.map((fact) => `- ${fact.key}: ${fact.content}`).join("\n");
-    return [
-      "Agent Run Manager managed run completed.",
-      `Verdict: ${verdict}.`,
-      summary ? `Summary: ${summary}` : "",
-      factLines ? `Blackboard:\n${factLines}` : "",
-    ].filter(Boolean).join("\n");
+  private synthesizeFinalResult(verdict: ManagedRunVerdict, summary: string, fixList: string[] = []): string {
+    return buildFinalSynthesis({
+      taskId: this.params.taskId,
+      verdict,
+      summary,
+      fixList,
+    });
+  }
+
+  private failedDagResult(
+    startedAt: number,
+    sessionId: string,
+    rootRunId: string,
+    costUsd: number,
+    turns: number,
+    message: string,
+  ): AgentTaskResult {
+    updateRunStatus(rootRunId, "failed", { errorMessage: message });
+    this.params.reporter.event("agent_run_completed", {
+      severity: "error",
+      payload: { run_id: rootRunId, role: "supervisor", status: "failed", reason: message, scheduler: "dag" },
+    });
+    return {
+      success: false,
+      sessionId,
+      costUsd,
+      durationMs: Date.now() - startedAt,
+      turns,
+      result: message,
+      tokensSummary: "manager=dag-scheduler",
+      progressLines: this.progressLinesForTask(),
+      toolCount: 0,
+    };
   }
 
   private failedResult(startedAt: number, sessionId: string, rootRunId: string, message: string): AgentTaskResult {

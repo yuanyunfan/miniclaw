@@ -514,6 +514,12 @@ export function getMessage(id: string): AgentMessage | undefined {
   return row ? toMessage(row) : undefined;
 }
 
+export function listMessagesForTask(taskId: string): AgentMessage[] {
+  return (getDb()
+    .prepare("SELECT * FROM agent_messages WHERE task_id = ? ORDER BY created_at ASC, id ASC")
+    .all(taskId) as AgentMessageRow[]).map(toMessage);
+}
+
 export function countMessagesForTask(taskId: string): number {
   const row = getDb()
     .prepare("SELECT COUNT(*) AS count FROM agent_messages WHERE task_id = ?")
@@ -646,6 +652,12 @@ export function writeArtifact(input: {
 
 export function getArtifact(id: string): AgentArtifact | undefined {
   return getDb().prepare("SELECT * FROM agent_artifacts WHERE id = ?").get(id) as AgentArtifact | undefined;
+}
+
+export function listArtifactsForTask(taskId: string): AgentArtifact[] {
+  return getDb()
+    .prepare("SELECT * FROM agent_artifacts WHERE task_id = ? ORDER BY created_at ASC, id ASC")
+    .all(taskId) as AgentArtifact[];
 }
 
 export function readArtifact(id: string, cwd: string): { artifact: AgentArtifact; content: string | null } | undefined {

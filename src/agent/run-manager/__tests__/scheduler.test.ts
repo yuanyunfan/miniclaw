@@ -13,7 +13,12 @@ import {
 } from "../../../store/agent-run-manager.js";
 import { TaskReporter } from "../../task-reporter.js";
 import { AgentBus } from "../bus.js";
-import { AgentRunScheduler, createManagedSchedulerPlan } from "../scheduler.js";
+import {
+  AgentRunScheduler,
+  createDagExecutionBatches,
+  createManagedSchedulerPlan,
+  validateManagedDagPlan,
+} from "../scheduler.js";
 
 let db: Database.Database;
 let tmp: string;
@@ -150,5 +155,69 @@ describe("AgentRunScheduler", () => {
       status: "cancelled",
       current_step: "cancelled",
     });
+  });
+});
+
+describe("Managed DAG scheduler plan", () => {
+  it("validates diamond-shaped plans and returns topological execution batches", () => {
+    const plan = validateManagedDagPlan({
+      version: "managed-runtime-dag-v1",
+      max_parallel: 2,
+      nodes: [
+        { id: "planner", role: "planner", waits_for: ["handoff"] },
+        { id: "researcher_a", role: "researcher", waits_for: ["finding"], after: ["planner"] },
+        { id: "researcher_b", role: "researcher", waits_for: ["finding"], after: ["planner"] },
+        { id: "generator", role: "generator", waits_for: ["artifact"], after: ["researcher_a", "researcher_b"] },
+        { id: "evaluator", role: "evaluator", waits_for: ["verdict"], after: ["generator"] },
+      ],
+    }, {
+      knownRoles: ["planner", "researcher", "generator", "evaluator"],
+      maxNodes: 8,
+      maxDepth: 5,
+      maxParallel: 2,
+    });
+
+    expect(plan).toMatchObject({
+      version: "managed-runtime-dag-v1",
+      max_nodes: 8,
+      max_depth: 5,
+      max_parallel: 2,
+      fail_policy: "fail_fast",
+    });
+    expect(createDagExecutionBatches(plan).map((batch) => batch.map((node) => node.id))).toEqual([
+      ["planner"],
+      ["researcher_a", "researcher_b"],
+      ["generator"],
+      ["evaluator"],
+    ]);
+  });
+
+  it("rejects cycles, missing dependencies, unknown roles, and over-wide batches", () => {
+    expect(() => validateManagedDagPlan({
+      nodes: [
+        { id: "a", role: "planner", after: ["b"] },
+        { id: "b", role: "generator", after: ["a"] },
+      ],
+    }, { knownRoles: ["planner", "generator"] })).toThrow(/cycle/);
+
+    expect(() => validateManagedDagPlan({
+      nodes: [
+        { id: "a", role: "planner", after: ["missing"] },
+      ],
+    }, { knownRoles: ["planner"] })).toThrow(/unknown dependency/);
+
+    expect(() => validateManagedDagPlan({
+      nodes: [
+        { id: "a", role: "unknown" },
+      ],
+    }, { knownRoles: ["planner"] })).toThrow(/unknown role/);
+
+    expect(() => validateManagedDagPlan({
+      max_parallel: 1,
+      nodes: [
+        { id: "a", role: "planner" },
+        { id: "b", role: "planner" },
+      ],
+    }, { knownRoles: ["planner"], maxParallel: 1 })).toThrow(/parallel limit/);
   });
 });

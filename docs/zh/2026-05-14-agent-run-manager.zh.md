@@ -692,25 +692,29 @@ Discord progress 不应该展示所有 agent 原文。建议输出 compact event
 - **`executeTask()` feature flag integration**：`agent_run_manager.enabled=false` 时保持 single-agent path；开启后可进入 Agent Run Manager path。默认仍关闭。
 - **Managed turn-end envelope fallback**：Codex / Claude child mode 已能通过 `miniclaw_agent_envelope` JSON 回传 summary/message/artifact/blackboard/verdict，Manager 解析后写入 durable collaboration state。
 - **Bounded evaluator fix loop and cancellation cascade**：evaluator `FAIL` 可触发 bounded generator fix loop；root cancellation 会级联取消 active child runs 并写入 durable store。
+- **Manager guardrails config + enforcement**：`agent_run_manager` 已支持 `max_turns`、`timeout_ms`、`max_messages`、`max_artifact_bytes`、`max_spawn_depth`、`max_children_per_run`、`max_concurrent_runs`、`max_ping_pong_turns`、`cleanup_ttl_ms`、`max_fix_iterations` 配置；Manager / Bus 会在 spawn、message、artifact、child timeout 和 fix loop 上执行对应限制。
 - **Minimal ACP adapter/server**：已有 localhost ACP-style manifest、external run、message、artifact reference、blackboard API 和 fake round-trip 测试；默认不做公开 marketplace。
 - **Agent Bus MCP compatibility surface**：`miniclaw-agent-bus` MCP-compatible tool surface 已有 `post_message/read_mailbox/write_artifact/read_artifact/list_blackboard/upsert_blackboard_fact`，并提供 `pnpm run mcp:agent-bus` 入口。
-- **Architecture doc sync**：`docs/architecture.md` 已记录 Agent Run Manager 当前受控插入层、managed envelope fallback、MCP tool surface 和 ACP adapter 状态。
+- **Live MCP bus injection into real child runtime**：Manager 为每个真实 Codex / Claude managed child run 创建 `managedContext`，注入 bus MCP server config、task/run env、guardrail env、allowed tool names 和 prompt usage block；turn-end envelope fallback 仍保留。
+- **Dynamic scheduler / `yield_until_child_event` foundation**：固定 managed runtime 控制流已抽成 `AgentRunScheduler` FSM plan；root supervisor 等待 child event 时会持久化 waiting state，并被 Agent Bus message 唤醒恢复。
+- **Role policy enforcement at runtime boundary**：Codex child 按 role policy 覆盖 sandbox / approval，并拒绝危险 command 或 read-only file change；Claude child 按 role 收窄 allowedTools / permissionMode / canUseTool。
+- **Sweeper / restart recovery**：`AgentRunManagerSweeper` 已接入 app lifecycle，处理 stale active runs、waiting scheduler timeout、cancelled/terminal parent child、cross-task orphan child、terminal task reconciliation 和 restart durable wake recovery。
+- **ACP lifecycle and hardening**：ACP server 已升级为 task-scoped lifecycle，并执行 bearer auth、rate limit、payload size limit、diagnostic redaction error response 和可选 `GET /trace`。
+- **Complexity classifier routing**：`agent_run_manager.enabled=true` 强制 managed path；`enabled=false + auto_enabled=true` 时 medium/high complexity task 自动进入 manager；`enabled=false + auto_enabled=false` 保持 single-agent rollback path。
+- **Documentation promotion**：已新增正式 feature doc `docs/features/21-agent-run-manager.md`，并同步 `docs/prompts.md`、`docs/features/19-agent-prompt-context-audit.md`、`docs/README.md` 和 `docs/architecture.md`。
+- **Arbitrary DAG scheduler foundation**：C7 已新增 `managed-runtime-dag-v1` validated plan schema、topological execution batches、cycle / missing dependency / unknown role / `max_nodes` / `max_depth` / `max_parallel` guardrails，并在 Manager 中提供 opt-in `schedulerPlan` path；默认 FSM path 不变。
+- **Evidence-rich Final Synthesizer**：C8 已把 final synthesis 提升为中文证据型输出，读取 child run status、active blackboard、artifact metadata、agent messages 和 verification signal，固定输出 `完成内容`、`关键证据`、`验证结果`、`剩余风险`、`后续建议`。
+- **Dedicated multi-agent trace UX**：C9 已新增 `src/store/agent-run-trace-export.ts`；`/task-log` / task trace Markdown 会追加 Agent Run Manager section，incident detail 会展示 compact agent summary。
 
 ### 部分完成
 
-- **Dynamic scheduler / `yield_until_child_event`**：Bus 层已经支持 in-memory `waitForMessage()`，fake E2E 验证了 direct wake；真实 managed runtime 当前仍是固定 `planner -> generator -> evaluator` 控制流，不是 Supervisor 可动态 spawn、yield、恢复的通用 DAG/FSM scheduler。
-- **Role policy enforcement**：`tool_policy_id`、`can_write_workspace`、`can_send_kinds`、`can_receive_kinds` 已落库，Bus 会校验 message kind；但 Codex/Claude child runtime 启动层还没有强制 read-only sandbox、generator-only workspace write、dangerous command policy 或 per-role exec policy。
-- **Final Synthesizer**：当前能基于 verdict 和 active blackboard 生成最终结果；还没有系统读取 artifact summaries，也没有形成面向用户的中文验证证据型 synthesis。
-- **Trace / UX surface**：`task_events` 已记录 agent run/message/artifact/blackboard/verdict 事件；`/task-log`、incident view 和 trace export 还没有专门的 multi-agent 可视化视图。
+- **LLM-generated DAG admission**：C7 第一版支持受控 opt-in DAG plan execution，但还没有让 planner envelope 自动生成并切换真实 runtime DAG。
+- **Per-node durable DAG state / replay**：当前 `agent_scheduler_state.plan_json` 保存整份 DAG plan，run/message/artifact 表能还原执行链；尚未增加独立 node-state 表，也不在 restart 后自动重放未完成 DAG node。
 
 ### 尚未实现
 
-- **Live MCP bus injection into real child runtime**：MCP server 和 tool handlers 已存在，但真实 Codex / Claude child session 启动时还没有自动注入 bus MCP server/env/tool config；真实 child 仍主要依赖 turn-end envelope fallback。
-- **Manager guardrails as config + enforcement**：还没有系统化实现 `max_turns`、`timeout_ms`、`max_messages`、`max_artifact_bytes`、`max_spawn_depth`、`max_children_per_run`、`max_concurrent_runs`、`max_ping_pong_turns`、`cleanup_ttl_ms`。
-- **Sweeper / restart recovery**：还没有定期 sweeper 处理 stale active runs、timeout、cancelled parent、orphaned child 和 restart recovery。
-- **ACP production lifecycle and hardening**：还没有正式挂入 app lifecycle/config，也没有补齐 rate limit、payload size limit、redaction policy 和 trace export。
-- **Complexity classifier routing**：还没有按 task complexity 自动进入 managed path；当前仍以 `agent_run_manager.enabled` flag 为主。
-- **Full documentation promotion**：还没有新增正式 `docs/features/21-agent-run-manager.md`，`docs/prompts.md` 也还没有登记 manager/envelope prompt asset，`docs/features/19-agent-prompt-context-audit.md` 还没有更新 Codex Supervisor prompt 修复状态。
+- **Visual trace UI**：当前 C9 是 Markdown / Discord operator surface，不是单独的 web timeline / graph UI。
+- **DAG retry policy execution**：schema 保留 `repeat_policy`，但第一版 DAG executor 还没有实现 per-node bounded retry；现有 bounded fix loop 仍属于 default FSM path。
 
 ## 非阻塞后续问题
 
@@ -725,11 +729,11 @@ Discord progress 不应该展示所有 agent 原文。建议输出 compact event
 
 ## 文档同步
 
-- `docs/architecture.md`: 实现后需要补充 Agent Run Manager 数据流和 schema。
+- `docs/architecture.md`: 已补充 Agent Run Manager DAG / synthesis / trace 当前实现边界。
 - `docs/features/01-stage.md`: 保持 Stage experimental boundary，不把 Stage orchestrator 直接描述为默认 task path。
-- `docs/features/19-agent-prompt-context-audit.md`: 更新 Codex Supervisor prompt 误导问题的修复状态。
-- `docs/prompts.md`: 如新增 manager prompt/envelope prompt，需要登记 prompt asset。
-- `docs/README.md`: 如升级为正式 feature，补 `features/21-agent-run-manager.md` 索引。
+- `docs/features/19-agent-prompt-context-audit.md`: 已更新 Codex Supervisor prompt 误导问题的修复状态。
+- `docs/prompts.md`: 已登记 manager / envelope prompt asset。
+- `docs/README.md`: 已补 `features/21-agent-run-manager.md` 索引，并更新 C7/C8/C9 能力摘要。
 
 ## 执行记录
 
@@ -738,3 +742,4 @@ Discord progress 不应该展示所有 agent 原文。建议输出 compact event
 - 2026-05-15: 明确 MiniClaw 第一阶段不是多 Discord 账号 / multi-account gateway，而是在一个 Discord bot 账号内实现 task-scoped dynamic spawn。新增 single-account route state、OpenClaw 可借鉴边界、Manager `spawn_agent` / `yield_until_child_event` 设计要求。
 - 2026-05-15: 收敛 OpenClaw 调研章节，只保留 Agent Run Manager 相关实现摘要；将可借鉴点下沉到 MiniClaw 的目标执行模型、数据模型、通信契约、执行流程、权限安全和 Discord route state 章节。
 - 2026-05-15: 将文档从设计讨论进一步收敛为执行文档：锁定第一阶段决策、补充 required indexes / repository API、重排 implementation plan、增加 Definition of Done，并把阻塞性未决项改为非阻塞后续项。
+- 2026-05-15: Phase 3 C7/C8/C9 已落地第一版：C7 新增 `managed-runtime-dag-v1` validated DAG plan、topological batches、guardrail validation 和 Manager opt-in DAG path；C8 新增中文 evidence-rich Final Synthesizer；C9 新增 Agent Run Manager trace exporter 并挂入 `/task-log` / incident detail。剩余 follow-up 是 planner envelope 自动 admission、per-node durable DAG state / retry policy、以及独立 visual trace UI。

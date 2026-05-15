@@ -731,18 +731,19 @@ Snapshot date: 2026-05-15.
 - **ACP lifecycle and hardening**: ACP server 已升级为 task-scoped lifecycle：`agent_run_manager.acp.enabled=true` 时随 managed task 启停，默认 localhost + ephemeral bearer token；HTTP 边界执行 payload size limit、per-token/IP rate limit、shared diagnostic redaction error response，并可选通过 `GET /trace` 导出 redacted task trace。
 - **Complexity classifier routing**: `src/agent/run-manager/complexity.ts` 已提供 deterministic local classifier；`agent_run_manager.enabled=true` 强制 managed path，`enabled=false + auto_enabled=true` 时 medium/high complexity task 自动进入 manager，`enabled=false + auto_enabled=false` 保持 single-agent rollback path。
 - **Documentation promotion**: 已新增正式 feature doc `docs/features/21-agent-run-manager.md`，并同步 `docs/prompts.md`、`docs/features/19-agent-prompt-context-audit.md`、`docs/README.md` 和 `docs/architecture.md`。
+- **Arbitrary DAG scheduler foundation**: C7 已新增 `managed-runtime-dag-v1` validated plan schema、topological execution batches、cycle / missing dependency / unknown role / `max_nodes` / `max_depth` / `max_parallel` guardrails，并在 Manager 中提供 opt-in `schedulerPlan` path。默认 managed path 仍保持 `planner -> generator -> evaluator + bounded fix loop` rollback behavior；DAG fixture 覆盖 `planner -> researcher_a + researcher_b -> generator -> evaluator`。
+- **Evidence-rich Final Synthesizer**: C8 已把 final synthesis 提升为中文证据型输出，系统读取 child run status、active blackboard、artifact metadata、agent messages 和 verification signal，固定输出 `完成内容`、`关键证据`、`验证结果`、`剩余风险`、`后续建议`，且不展开 artifact body。
+- **Dedicated multi-agent trace UX**: C9 已新增 `src/store/agent-run-trace-export.ts`，`/task-log` / task trace Markdown 会追加 Agent Run Manager section，按 scheduler、run tree、messages、artifacts、blackboard 展示 managed state；`/incident view` 在关联 task 有 managed state 时展示 compact agent summary 并继续指向 `/task-log` full trace。
 
 ### Partially Implemented
 
-- **Dynamic scheduler extensibility**: C3 已把当前 managed runtime 抽成 scheduler/FSM 并实现 Manager-owned wait/resume；C5 已补上 waiting scheduler 的 durable message recovery。但还没有让 LLM Supervisor 在运行时自由生成任意 DAG；任意 DAG 留给后续 scheduler hardening。
-- **Final Synthesizer**: 当前能基于 verdict 和 active blackboard 生成最终结果；还没有系统读取 artifact summaries，也没有形成面向用户的中文验证证据型 synthesis。
-- **Trace / UX surface**: `task_events` 已记录 agent run/message/artifact/blackboard/verdict 事件，ACP `GET /trace` 可复用 redacted task trace export；但 `/task-log`、incident view 和 trace export 还没有专门的 multi-agent 可视化视图。
+- **LLM-generated DAG admission**: C7 第一版支持受控 opt-in DAG plan execution，但还没有让 planner envelope 自动生成并切换真实 runtime DAG；`miniclaw_agent_envelope.scheduler_plan` admission 可以作为后续 hardening。
+- **Per-node durable DAG state / replay**: 当前 `agent_scheduler_state.plan_json` 保存整份 DAG plan，run/message/artifact 表能还原执行链；尚未增加独立 node-state 表，也不在 restart 后自动重放未完成 DAG node。
 
 ### Not Yet Implemented
 
-- **Arbitrary DAG scheduler**: 当前 managed scheduler 仍是 bounded FSM plan，不支持 LLM Supervisor 在运行时自由生成任意 DAG。
-- **Evidence-rich Final Synthesizer**: 当前 final synthesis 还没有系统读取 artifact summaries 并生成中文验证证据型最终报告。
-- **Dedicated multi-agent trace UX**: `/task-log` 和 incident view 还没有按 run/message/artifact/blackboard 组织的专用多 agent 视图。
+- **Visual trace UI**: 当前 C9 是 Markdown / Discord operator surface，不是单独的 web timeline / graph UI。
+- **DAG retry policy execution**: schema 保留 `repeat_policy`，但第一版 DAG executor 还没有实现 per-node bounded retry；现有 bounded fix loop 仍属于 default FSM path。
 
 ## Next Phase Plan
 
@@ -796,6 +797,105 @@ Phase 2 目标是把 first implementation skeleton 推进到可长期运行的 m
 - 生成正式 `docs/features/21-agent-run-manager.md`，同步 `docs/prompts.md`、`docs/features/19-agent-prompt-context-audit.md`、`docs/README.md`。
 - Verification: ACP lifecycle tests、classifier routing tests、docs quality gate、single-agent regression。
 
+### C7 - Arbitrary DAG Scheduler (completed 2026-05-15)
+
+目标：把当前 bounded FSM managed scheduler 从固定 `planner -> generator -> evaluator` 扩展成受控的 arbitrary DAG executor，同时保留当前 fixed plan 作为默认 fallback。
+
+Implementation scope：
+
+- 新增 validated DAG plan schema：
+  - `nodes[]`: `id`、`role`、`instruction`、`after` / `depends_on` semantics、`waits_for` / `wait_kinds`、`context_from`、`repeat_policy`。
+  - plan-level guardrails：`max_nodes`、`max_depth`、`max_parallel`、`fail_policy`。
+- Manager 目前通过 opt-in `ManagedRuntimeRunInput.schedulerPlan` 执行 DAG；planner envelope 自动产出 `scheduler_plan` 尚未接入，避免把 LLM-generated plan admission 和 executor foundation 混在同一切片。
+- DAG executor 支持 dependency ready check、topological ready batches、child completion wake、`fail_fast` / `continue` verdict policy；第一版按 dependency order 执行 ready batch，尚未做真正并发 child wait 和 per-node retry。
+- `agent_scheduler_state.plan_json` 继续保存计划 JSON；第一版通过 `agent_runs` / `agent_messages` / `agent_artifacts` / `blackboard_facts` 还原 node 执行链，不新增 node-state 表。
+- 当前 `planner -> generator -> evaluator + bounded fix loop` path 必须继续作为 default plan，并保持 existing fake E2E / managed runtime regression 通过。
+
+Definition of Done：
+
+- fake runtime 能跑通一个并行 DAG，例如 `planner -> researcher_a + researcher_b -> generator -> evaluator`。
+- 超过 `max_nodes`、`max_depth`、`max_parallel` 或 role policy 的 DAG 会被拒绝，并产生 controlled failure。
+- root cancellation 会沿用 Manager cancellation cascade，取消 active DAG child runs 并持久化 scheduler status。
+- restart recovery 不要求自动重放未完成 DAG，但 scheduler state 必须保留足够 plan/node status 供 C5 sweeper 标记 stale / timeout。
+
+Verification：
+
+- `pnpm exec vitest run src/agent/run-manager/__tests__/scheduler.test.ts src/agent/run-manager/__tests__/managed-runtime.test.ts`
+- `pnpm run build`
+
+### C8 - Evidence-Rich Final Synthesizer (completed 2026-05-15)
+
+目标：把当前 thin final synthesis 升级成面向用户的中文证据型最终总结，系统读取 verdict、blackboard、artifact metadata 和 verification evidence，而不是只拼 verdict + summary。
+
+Implementation scope：
+
+- 新增 `src/agent/run-manager/final-synthesizer.ts`，把 synthesis 从 `manager.ts` 内联模板中抽出。
+- 输入来源：
+  - active blackboard facts。
+  - latest evaluator verdict / fix list。
+  - child run summaries。
+  - artifact metadata / title / kind / summary / ids。
+  - verification-related blackboard facts、artifact metadata 和 messages。
+  - failed / risk / warning events。
+- 输出固定中文结构：
+  - `完成内容`
+  - `关键证据`
+  - `验证结果`
+  - `剩余风险`
+  - `后续建议`
+- 不把大 artifact 正文塞进 final result；只引用 artifact id、title、kind、summary 和 file/path reference。
+- 如果没有 verification evidence，最终结果必须明确写 `未找到验证证据`，不能暗示已经验证。
+
+Definition of Done：
+
+- managed task final result 稳定包含 evidence section。
+- evaluator `FAIL` 时最终输出列出失败点、fix attempts 和剩余风险。
+- artifact 很大时 final response 不包含 artifact full content。
+- fake runtime 和 managed runtime tests 覆盖 PASS、FAIL、missing verification、large artifact reference。
+
+Verification：
+
+- `pnpm exec vitest run src/agent/run-manager/__tests__/managed-runtime.test.ts`
+- `pnpm exec vitest run src/agent/run-manager/__tests__/final-synthesizer.test.ts`
+- `pnpm run build`
+
+### C9 - Dedicated Multi-Agent Trace UX (completed 2026-05-15)
+
+目标：让 `/task-log`、incident detail 和 trace export 不只展示底层 `task_events`，而能按 Agent Run Manager 的 run/message/artifact/blackboard/scheduler 结构展示多 agent 执行链。
+
+Implementation scope：
+
+- 新增或扩展 trace exporter，例如 `src/store/agent-run-trace-export.ts` 或在 `src/store/task-trace-export.ts` 中增加 managed section。
+- 读取：
+  - `agent_runs`
+  - `agent_messages`
+  - `agent_artifacts`
+  - `blackboard_facts`
+  - `agent_scheduler_state`
+- 输出 compact Markdown：
+  - run tree：root supervisor、child roles、runtime、status、duration。
+  - scheduler status：current step、waiting target、last wake message。
+  - message timeline：kind、from/to、artifact refs、delivered status。
+  - artifact refs：id、kind、title、path/ref、size/hash summary。
+  - active blackboard facts：key、confidence、source message。
+- `/task-log id:<task>` 增加 `Agent Run Manager` section；single-agent task output 不变。
+- `/incident view` 如果关联 task 是 managed task，展示 compact multi-agent trace summary，并继续给出 full trace command。
+- 全部输出复用 existing diagnostic redaction policy，禁止 raw prompt/body/token/cookie/provider payload 泄漏。
+
+Definition of Done：
+
+- 普通 single-agent `/task-log` 不出现 Agent Run Manager section。
+- managed task `/task-log` 包含专门 multi-agent section。
+- incident view 能展示 managed run summary 和 full trace command。
+- trace exporter tests 覆盖 redaction、empty managed state、completed managed state、failed/waiting scheduler state。
+
+Verification：
+
+- `pnpm exec vitest run src/store/__tests__/task-trace-export.test.ts`
+- `pnpm exec vitest run src/commands/__tests__/task-log.test.ts src/commands/__tests__/incident-detail.test.ts`
+- `pnpm run quality:docs`
+- `pnpm run build`
+
 ## Non-Blocking Follow-Ups
 
 这些问题不阻塞第一阶段实现；不要因为它们延迟 schema、manager core、fake E2E 和 `/task` feature flag 集成。
@@ -805,7 +905,7 @@ Phase 2 目标是把 first implementation skeleton 推进到可长期运行的 m
 - ACP server 未来是否从 localhost/token auth 扩展到外部访问、agent discovery 或 marketplace。
 - 非默认 code-investigator / read-only Bash 角色是否需要额外 command policy wrapper；默认 planner/evaluator/generator path 已在 runtime boundary 强制 role policy。
 - Bounded peer-to-peer ping-pong 的默认开启条件；第一阶段默认关闭，只允许 parent-owned completion 和 directed typed messages。
-- `/task-log`、incident view 和 trace export 是否需要专门的 multi-agent 可视化视图。
+- Bounded arbitrary DAG 是否需要长期独立 node-state 表；C7 第一版优先保存在 scheduler snapshot，除非 query / UX 需求证明需要 schema 扩展。
 
 ## Documentation Sync
 
@@ -828,3 +928,4 @@ Phase 2 目标是把 first implementation skeleton 推进到可长期运行的 m
 - 2026-05-15: Phase 2 C4 已落地：新增 `role-policy.ts`，将 child run 的 `tool_policy_id` / `can_write_workspace` 转成 runtime-boundary policy。Codex managed child 会按角色覆盖 sandbox / approval，并在 stream item 层把危险 command / read-only file change 转成 managed policy failure；Claude managed child 会按角色收窄 allowedTools / permissionMode / canUseTool，并拒绝 read-only 写入、workspace 外写入、native subagent tool 和危险 Bash 命令。C4 仍不处理 C5 的 sweeper/restart recovery。
 - 2026-05-15: Phase 2 C5 已落地：新增 `run-manager/sweeper.ts`，在 `agent_run_manager.enabled=true` 时随 app lifecycle 启动 periodic sweeper；C6 后 auto routing 开启时也会启动 sweeper。sweeper 会处理 stale active runs、waiting scheduler timeout、terminal/cancelled parent child、cross-task orphan child、terminal task reconciliation；restart 后如果 durable Agent Bus 已有匹配 wake message，会把 waiting scheduler 恢复为 running 并记录 last message。`cleanup_ttl_ms` 已用于 terminal run-manager durable state cleanup，文件删除只覆盖 manager-owned artifact 路径，不删除用户 workspace file_ref。
 - 2026-05-15: Phase 2 C6 已落地：新增 task-scoped ACP lifecycle/hardening、deterministic complexity classifier auto routing、`agent_run_manager.auto_enabled` / `complexity_min_score` / `acp.*` config、formal feature doc promotion 和 prompt audit/docs index 同步。Targeted verification 已通过：ACP server/adapter tests、task helper classifier tests、config boundary tests、`pnpm exec tsc --noEmit`。
+- 2026-05-15: Phase 3 C7/C8/C9 已落地第一版：C7 新增 `managed-runtime-dag-v1` validated DAG plan、topological batches、guardrail validation 和 Manager opt-in DAG path；C8 新增中文 evidence-rich Final Synthesizer；C9 新增 Agent Run Manager trace exporter 并挂入 `/task-log` / incident detail。剩余 follow-up 是 planner envelope 自动 admission、per-node durable DAG state / retry policy、以及独立 visual trace UI。

@@ -243,6 +243,80 @@ describe("AgentRunManager managed runtime fallback", () => {
     ]);
   });
 
+  it("runs an opt-in arbitrary DAG scheduler plan with fan-out before generation", async () => {
+    const runtime = fakeRuntime([
+      taskResult(envelope({
+        summary: "planner ready",
+        messages: [{ kind: "handoff", content_text: "research before implementation" }],
+      }), "codex:planner"),
+      taskResult(envelope({
+        summary: "research A",
+        messages: [{ kind: "finding", content_text: "finding A" }],
+        blackboard_facts: [{ key: "research_a", content: "finding A", confidence: "medium" }],
+      }), "codex:research-a"),
+      taskResult(envelope({
+        summary: "research B",
+        messages: [{ kind: "finding", content_text: "finding B" }],
+        blackboard_facts: [{ key: "research_b", content: "finding B", confidence: "medium" }],
+      }), "codex:research-b"),
+      taskResult(envelope({
+        summary: "implementation with research",
+        artifacts: [{ kind: "markdown", title: "DAG implementation", summary: "build verification passed", content: "# DAG\n" }],
+      }), "codex:generator"),
+      taskResult(envelope({
+        summary: "accepted after DAG evaluation",
+        verdict: "PASS",
+      }), "codex:evaluator"),
+    ]);
+    const manager = new AgentRunManager({
+      taskId: "task-managed-runtime",
+      cwd: tmp,
+      provider: "codex",
+      reporter: new TaskReporter("task-managed-runtime"),
+      channel: fakeChannel() as never,
+    });
+
+    const result = await manager.runManagedRuntime({
+      prompt: "managed runtime task",
+      runtime,
+      signal: new AbortController().signal,
+      onViewEvent: () => undefined,
+      schedulerPlan: {
+        version: "managed-runtime-dag-v1",
+        max_parallel: 2,
+        nodes: [
+          { id: "planner", role: "planner", waits_for: ["handoff"], instruction: "Plan the work." },
+          { id: "researcher_a", role: "researcher", waits_for: ["finding"], after: ["planner"], instruction: "Research path A." },
+          { id: "researcher_b", role: "researcher", waits_for: ["finding"], after: ["planner"], instruction: "Research path B." },
+          { id: "generator", role: "generator", waits_for: ["artifact"], after: ["researcher_a", "researcher_b"], context_from: ["planner"], instruction: "Implement from research." },
+          { id: "evaluator", role: "evaluator", waits_for: ["verdict"], after: ["generator"], instruction: "Evaluate the generated artifact." },
+        ],
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.tokensSummary).toBe("manager=dag-scheduler");
+    expect(result.result).toContain("Verdict: PASS");
+    expect(result.result).toContain("## 关键证据");
+    expect(listRunsForTask("task-managed-runtime").map((run) => run.role)).toEqual([
+      "supervisor",
+      "planner",
+      "researcher",
+      "researcher",
+      "generator",
+      "evaluator",
+    ]);
+    expect(getAgentSchedulerState("task-managed-runtime")).toMatchObject({
+      status: "completed",
+      current_step: "dag:completed",
+      scheduler_version: "managed-runtime-dag-v1",
+      plan_json: expect.objectContaining({
+        version: "managed-runtime-dag-v1",
+        max_parallel: 2,
+      }),
+    });
+  });
+
   it("applies policy guardrails before spawning child runs beyond max turns", async () => {
     const runtime = fakeRuntime([
       taskResult(envelope({ summary: "planner ready" }), "codex:planner"),
