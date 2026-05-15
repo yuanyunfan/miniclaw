@@ -19,10 +19,10 @@ MiniClaw 不是普通 TypeScript library。它同时包含：
 
 当前已经具备的基础：
 
-- `package.json` 已有 `build`、`lint`、`typecheck`、`test`、`test:cov`、`quality:commit`、`quality:push`、`quality:g0`、`quality:docs`、`quality:secrets`、`quality:deps`、`quality:coverage`、`e2e:cron` 和 `e2e:discord`。
-- `scripts/git-hooks/pre-commit` 调用 `pnpm run quality:commit`；实际顺序是 staged G0、staged secret scan、D1 docs drift、lint、typecheck、Vitest。
-- `scripts/git-hooks/pre-push` 调用 `pnpm run quality:push`；实际顺序是 build、coverage、coverage ratchet、D1 docs drift、lint、cron E2E、full-tree G0、full-tree secret scan、dependency scan，并可用 `MINICLAW_RUN_DISCORD_E2E=1` 显式开启真实 Discord E2E。
-- `.github/workflows/quality.yml` 在 push / pull request 上运行 Node 22、frozen install、G0、gitleaks、typecheck、lint、coverage、coverage ratchet、D1 docs drift、cron E2E、dependency scan 和 build。
+- `package.json` 已有 `build`、`lint`、`typecheck`、`test`、`test:cov`、`quality:commit`、`quality:push`、`quality:g0`、`quality:docs`、`quality:docs:drift`、`quality:docs-i18n`、`quality:website-docs`、`quality:secrets`、`quality:deps`、`quality:coverage`、`e2e:cron` 和 `e2e:discord`。
+- `scripts/git-hooks/pre-commit` 调用 `pnpm run quality:commit`；实际顺序是 staged G0、staged secret scan、D1 docs drift + i18n + website docs、lint、typecheck、Vitest。
+- `scripts/git-hooks/pre-push` 调用 `pnpm run quality:push`；实际顺序是 build、coverage、coverage ratchet、D1 docs drift + i18n + website docs、lint、cron E2E、full-tree G0、full-tree secret scan、dependency scan，并可用 `MINICLAW_RUN_DISCORD_E2E=1` 显式开启真实 Discord E2E。
+- `.github/workflows/quality.yml` 在 push / pull request 上运行 Node 22、frozen install、G0、gitleaks、typecheck、lint、coverage、coverage ratchet、D1 docs drift、cron E2E、dependency scan 和 build；website/docs-i18n gate 进入 `quality:docs` 后由同一入口覆盖。
 - `.github/workflows/discord-e2e.yml` 是独立 manual/nightly workflow；默认 fake agent，可通过 input/nightly 配置扩展 cases 或跑真实 agent。
 - `.github/workflows/release.yml` 是 Release workflow；推荐通过 push `vX.Y.Z` tag 自动发版，也保留从 `main` 手动输入 SemVer 的入口。它要求 `package.json` version 和 `CHANGELOG.md` 版本段一致，先跑 `quality:push`，再创建 GitHub Release 和源码/dist artifact。
 - `eslint.config.js` 对 `src/**/*.ts` 强制 `no-console` 和 `@typescript-eslint/no-floating-promises`，CLI/stdio 入口按例外处理。
@@ -53,7 +53,7 @@ MiniClaw 不是普通 TypeScript library。它同时包含：
 - Node 版本符合 `package.json` engines。
 - `package.json` 和 `pnpm-lock.yaml` 一致。
 - staged / tree 文件不包含 `.env`、SQLite DB、coverage HTML、大 binary、token dump。
-- `docs/private/` 和 `docs/zh/` 都是本机 review / 私有目录，不能进入 commit；`.miniclaw/`、`.playwright-mcp/`、`.miniclaw-attachments/`、`scripts/.channel-map.json` 也必须留在 git 外。
+- `docs/private/` 是本机私有目录，不能进入 commit；`.miniclaw/`、`.playwright-mcp/`、`.miniclaw-attachments/`、`scripts/.channel-map.json` 也必须留在 git 外。`docs/zh/` 是可提交中文文档镜像，但仍按公开 docs 规则扫描本机路径、raw Discord ID 和 secrets。
 - 公开 docs/examples（`docs/**`，不含 `docs/private/**`，以及 `README*.md`、`config.example.yaml`）不能包含本机用户目录路径或 raw Discord snowflake ID；示例必须使用 `DISCORD_*_CHANNEL_ID`、`~/ProjectRepo/...`、`/path/to/...` 这类占位符。
 - 如果依赖文件变更，运行 `pnpm install --frozen-lockfile`。
 - 禁止 `git add .` 式误提交的常见产物进入 staged set。
@@ -252,7 +252,10 @@ MiniClaw 是 docs-first 项目，长期维护依赖 `docs/architecture.md`、`do
 
 当前执行方式：
 
-- `pnpm run quality:docs` 运行 `scripts/quality-docs.ts`，从 `src/store/schema.ts` 检查 DB schema version，并检查 Smart Router ER 字段、`docs/features/*.md` 索引，以及 changed-path 到 source-of-truth docs 的映射。
+- `pnpm run quality:docs` 依次运行 `quality:docs:drift`、`quality:docs-i18n` 和 `quality:website-docs`。
+- `quality:docs:drift` 运行 `scripts/quality-docs.ts`，从 `src/store/schema.ts` 检查 DB schema version，并检查 Smart Router ER 字段、`docs/features/*.md` 索引，以及 changed-path 到 source-of-truth docs 的映射。
+- `quality:docs-i18n` 读取 `docs/documentation-migration-map.md`，检查中文 pairing、`docs/zh/` 是否仍被 git ignore、frontmatter、`translation_of`、`doc_id` 和 heading level shape；初期 missing/pending translation 以 warning 为主。
+- `quality:website-docs` 扫描 `website/**/*.md(x)`，要求非 landing page 声明 language-aware `source_docs`，禁止引用 `docs/private/**`，并报告 canonical docs 变更影响到哪些 website pages。
 - 默认模式先看 staged paths；如果没有 staged paths，则检查 `git diff HEAD` 加 untracked non-ignored files。也可显式使用 `--staged`、`--tree` 或 `--base <ref> [--head <ref>]`。
 - `docs/plans/**`、`docs/archive/**`、`docs/private/**`、tests 和 fixtures 不作为 source trigger；`docs/plans/**` 和 `docs/archive/**` 也不能替代当前 source-of-truth docs。
 - 对紧急本地修复可用 `MINICLAW_DOCS_DRIFT_ALLOW=1 pnpm run quality:docs` 只绕过 changed-path 映射；DB schema、Smart Router ER 和 feature index invariant 仍会失败。

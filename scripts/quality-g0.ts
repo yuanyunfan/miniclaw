@@ -65,7 +65,6 @@ function blockedPathReason(path: string): string | undefined {
   const ext = extname(name).toLowerCase();
 
   if (normalized.startsWith("docs/private/")) return "docs/private is intentionally ignored and must not be committed";
-  if (normalized.startsWith("docs/zh/")) return "docs/zh is a local review-copy directory and must not be committed";
   if (normalized.startsWith(".miniclaw/") || normalized.includes("/.miniclaw/")) return "local .miniclaw runtime data must stay outside git";
   if (normalized.startsWith(".playwright-mcp/")) return "Playwright MCP runtime snapshots must not be committed";
   if (normalized.startsWith(".miniclaw-attachments/")) return "MiniClaw attachment cache must not be committed";

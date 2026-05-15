@@ -1,6 +1,6 @@
 # MiniClaw Docs Index
 
-> 结论：顶层文档只保留 MiniClaw 的整体设计入口；具体能力、子系统、provider 和业务 feature 统一放到 `docs/features/` 下。历史实施计划保留在 `docs/plans/`，过期审计/报告保留在 `docs/archive/`，私有调研保留在 `docs/private/`。
+> 结论：`docs/` 是 MiniClaw 的 implementation source of truth，面向 LLM 和维护者；`website/` 是面向人的 GitHub Pages 展示层。短期内 root `docs/` 仍作为 English canonical tree，`docs/zh/` 是 tracked Chinese mirror，迁移状态由 `documentation-migration-map.md` 记录。
 
 ## Core Design
 
@@ -10,6 +10,7 @@
 - [`install-distribution-strategy.md`](install-distribution-strategy.md): 面向外部用户的安装、配置向导、Release artifact 和本机 Deploy 改造建议。
 - [`prompts.md`](prompts.md): 框架级 prompt 资产管理。
 - [`quality-gates.md`](quality-gates.md): 测试分层、质量门禁、Discord E2E 方案。
+- [`documentation-migration-map.md`](documentation-migration-map.md): 当前 docs 迁移、双语 pairing、website exposure 的 machine-readable 初始地图。
 
 ## Features
 
@@ -41,6 +42,22 @@
 - [`plans/2026-05-15-documentation-strategy.md`](plans/2026-05-15-documentation-strategy.md): `docs/` 作为 LLM 维护的 docs-driven development source of truth，GitHub Pages 作为 human-facing portal 的分层策略。
 - `plans/YYYY-MM-DD-*.md`: 已完成或进行中的实施计划。
 
+## Chinese Docs
+
+- [`zh/README.md`](zh/README.md): tracked 中文文档索引和维护规则。
+- [`zh/plans/2026-05-15-documentation-strategy.zh.md`](zh/plans/2026-05-15-documentation-strategy.zh.md): 文档策略计划中文版本。
+- `docs/zh/**`: English source docs 的中文 mirror。每个中文文档应包含 `doc_id`、`lang`、`translation_of` 和 `translation_status` frontmatter。
+
+中文文档不再是本地 review copy；它是 repo docs 的 first-class language layer。未完成翻译必须显式标记 `translation_status: pending`。
+
+## Website
+
+- `../website/en/`: English GitHub Pages source。
+- `../website/zh/`: Chinese GitHub Pages source。
+- `../website/llms.txt`: LLM-facing website note。
+
+Website pages must stay presentation-only and declare language-aware `source_docs` frontmatter. Website pages do not satisfy code-to-docs drift requirements; canonical implementation facts still belong in `docs/`.
+
 ## Archive
 
 - [`archive/2026-05-11-continuous-improvement-report.md`](archive/2026-05-11-continuous-improvement-report.md): 2026-05-11 架构审计和持续优化历史报告；不再作为当前 source of truth。
@@ -63,3 +80,6 @@
 - 过期审计报告、历史复盘和不再维护的全局路线图放在 `docs/archive/`，不能替代当前 source-of-truth 文档。
 - 可执行运维流程放在 `docs/runbooks/`。
 - 含账户、cookie、交易后台细节的私有调研放 `docs/private/`。
+- 中文文档放在 `docs/zh/`，镜像英文相对路径并使用 `.zh.md` 后缀。
+- 当前 docs 移动、合并或 archive 之前，先更新 `docs/documentation-migration-map.md`。
+- Website content 放在 `website/`，不能把 `docs/plans/**`、`docs/archive/**` 或 `docs/private/**` 直接当作当前公开文档发布。

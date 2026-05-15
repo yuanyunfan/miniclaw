@@ -13,4 +13,3 @@ scripts/e2e-test.ts
 scripts/.channel-map.json
 .miniclaw-attachments/
 docs/private/
-docs/zh/

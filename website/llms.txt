@@ -1,0 +1,5 @@
+# MiniClaw
+
+Canonical implementation docs live in `docs/`.
+
+Public website pages are summaries and must declare `source_docs` frontmatter.
