@@ -9,6 +9,11 @@ import {
   type BlackboardFact,
   type BlackboardFactConfidence,
 } from "../../../store/agent-run-manager.js";
+import {
+  buildTaskTraceModel,
+  formatTaskTraceSummary,
+  renderTaskTraceMarkdown,
+} from "../../../store/task-trace-export.js";
 import { AgentBus } from "../bus.js";
 
 export interface AgentRunAcpAdapterParams {
@@ -25,6 +30,13 @@ export interface AcpManifest {
   auth: "none" | "bearer";
 }
 
+export interface AcpTraceExport {
+  task_id: string;
+  summary: string;
+  redaction_policy: string;
+  markdown: string;
+}
+
 export class AgentRunAcpAdapter {
   constructor(private readonly params: AgentRunAcpAdapterParams) {}
 
@@ -33,7 +45,7 @@ export class AgentRunAcpAdapter {
     return {
       name: "miniclaw-agent-run-manager",
       version: "0.1.0",
-      capabilities: ["manifest", "session_run", "message", "artifact_reference", "blackboard"],
+      capabilities: ["manifest", "session_run", "message", "artifact_reference", "blackboard", "trace_export"],
       auth: this.params.token ? "bearer" : "none",
     };
   }
@@ -144,6 +156,18 @@ export class AgentRunAcpAdapter {
       confidence: input.confidence,
       sourceMessageId: input.sourceMessageId,
     });
+  }
+
+  exportTrace(input: { token?: string; maxEvents?: number; maxBytes?: number } = {}): AcpTraceExport {
+    this.assertToken(input.token);
+    const model = buildTaskTraceModel(this.params.taskId, { maxEvents: input.maxEvents });
+    if (!model.ok) throw new Error(model.error.message);
+    return {
+      task_id: this.params.taskId,
+      summary: formatTaskTraceSummary(model.value),
+      redaction_policy: model.value.redactionPolicy,
+      markdown: renderTaskTraceMarkdown(model.value, { maxBytes: input.maxBytes }),
+    };
   }
 
   private assertToken(token: string | undefined): void {

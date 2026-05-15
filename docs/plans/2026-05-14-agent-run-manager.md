@@ -720,26 +720,29 @@ Snapshot date: 2026-05-15.
 - **`executeTask()` feature flag integration**: `agent_run_manager.enabled=false` 时保持 single-agent path；开启后可进入 Agent Run Manager path。默认仍关闭。
 - **Managed turn-end envelope fallback**: Codex / Claude child mode 已能通过 `miniclaw_agent_envelope` JSON 回传 summary/message/artifact/blackboard/verdict，Manager 解析后写入 durable collaboration state。
 - **Bounded evaluator fix loop and cancellation cascade**: evaluator `FAIL` 可触发 bounded generator fix loop；root cancellation 会级联取消 active child runs 并写入 durable store。
-- **Manager guardrails config + enforcement**: `agent_run_manager` 已支持 `max_turns`、`timeout_ms`、`max_messages`、`max_artifact_bytes`、`max_spawn_depth`、`max_children_per_run`、`max_concurrent_runs`、`max_ping_pong_turns`、`cleanup_ttl_ms`、`max_fix_iterations` 配置；Manager/Bus 会在 spawn、message append、artifact write、child runtime timeout 和 evaluator fix loop 上执行对应限制。`cleanup_ttl_ms` 目前只作为 sweeper/recovery 的配置输入，真正 stale run 清理仍在后续切片。
+- **Manager guardrails config + enforcement**: `agent_run_manager` 已支持 `max_turns`、`timeout_ms`、`max_messages`、`max_artifact_bytes`、`max_spawn_depth`、`max_children_per_run`、`max_concurrent_runs`、`max_ping_pong_turns`、`cleanup_ttl_ms`、`max_fix_iterations` 配置；Manager/Bus 会在 spawn、message append、artifact write、child runtime timeout 和 evaluator fix loop 上执行对应限制；Sweeper 已消费 `cleanup_ttl_ms` 做 terminal durable state cleanup。
 - **Minimal ACP adapter/server**: 已有 localhost ACP-style manifest、external run、message、artifact reference、blackboard API 和 fake round-trip 测试；默认不做公开 marketplace。
 - **Agent Bus MCP compatibility surface**: `miniclaw-agent-bus` MCP-compatible tool surface 已有 `post_message/read_mailbox/write_artifact/read_artifact/list_blackboard/upsert_blackboard_fact`，并提供 `pnpm run mcp:agent-bus` 入口。
 - **Live MCP bus injection into real child runtime**: Manager 为每个真实 Codex / Claude managed child run 创建 `managedContext`，注入 `miniclaw-agent-bus` stdio MCP server config、task/run env、guardrail env、allowed tool names 和 prompt usage block；Codex 通过 SDK client config override 注入 `mcp_servers.miniclaw-agent-bus`，Claude 通过 `mcpServers` / `allowedTools` 合并注入。turn-end `miniclaw_agent_envelope` fallback 仍保留。
 - **Dynamic scheduler / `yield_until_child_event` foundation**: 固定 managed runtime 控制流已抽成 `AgentRunScheduler` FSM plan；root supervisor 在等待 child event 时会持久化 `agent_scheduler_state.status=waiting` 并把 root run 置为 `waiting`，Agent Bus message 到达后恢复为 `running`。scheduler state snapshot 持久化了 `current_step`、wait filter、last wake message 和 plan JSON，为 C5 restart recovery/sweeper 做准备。当前默认 plan 仍是 planner -> generator -> evaluator + bounded fix loop，不是任意 runtime-generated DAG。
 - **Role policy enforcement at runtime boundary**: Manager 会把 child run 的 `tool_policy_id` / `can_write_workspace` 转成 `managedContext.rolePolicy`。Codex child 按 role policy 覆盖 task thread `sandboxMode` / `approvalPolicy`，planner/evaluator 默认 read-only，generator 默认 workspace-write；Codex stream 中出现危险 command 或 read-only file change 时会触发 managed policy failure。Claude child 按 role policy 使用 scoped `allowedTools` / `permissionMode` / `canUseTool`，planner/evaluator 不暴露 Write/Edit/Bash/Agent，generator 才允许 workspace 写入；workspace 外写入、native subagent tool 和危险 Bash 命令会被拒绝。
-- **Sweeper / restart recovery**: `AgentRunManagerSweeper` 已接入 app lifecycle，仅在 `agent_run_manager.enabled=true` 时启动。它会周期性处理 stale active runs、waiting scheduler timeout、cancelled/terminal parent child、cross-task orphan child、terminal task reconciliation，并能在 restart 后从 durable Agent Bus message 恢复 waiting scheduler state。`cleanup_ttl_ms` 已用于清理 terminal Agent Run Manager durable state；文件清理只删除 manager-owned `.miniclaw-task/<task_id>/artifacts/...` artifact，保留用户工作区 file_ref。
+- **Sweeper / restart recovery**: `AgentRunManagerSweeper` 已接入 app lifecycle，在 `agent_run_manager.enabled=true` 或 `agent_run_manager.auto_enabled=true` 时启动。它会周期性处理 stale active runs、waiting scheduler timeout、cancelled/terminal parent child、cross-task orphan child、terminal task reconciliation，并能在 restart 后从 durable Agent Bus message 恢复 waiting scheduler state。`cleanup_ttl_ms` 已用于清理 terminal Agent Run Manager durable state；文件清理只删除 manager-owned `.miniclaw-task/<task_id>/artifacts/...` artifact，保留用户工作区 file_ref。
 - **Architecture doc sync**: `docs/architecture.md` 已记录 Agent Run Manager 当前受控插入层、dynamic scheduler foundation、live MCP bus injection、managed envelope fallback、MCP tool surface 和 ACP adapter 状态。
+- **ACP lifecycle and hardening**: ACP server 已升级为 task-scoped lifecycle：`agent_run_manager.acp.enabled=true` 时随 managed task 启停，默认 localhost + ephemeral bearer token；HTTP 边界执行 payload size limit、per-token/IP rate limit、shared diagnostic redaction error response，并可选通过 `GET /trace` 导出 redacted task trace。
+- **Complexity classifier routing**: `src/agent/run-manager/complexity.ts` 已提供 deterministic local classifier；`agent_run_manager.enabled=true` 强制 managed path，`enabled=false + auto_enabled=true` 时 medium/high complexity task 自动进入 manager，`enabled=false + auto_enabled=false` 保持 single-agent rollback path。
+- **Documentation promotion**: 已新增正式 feature doc `docs/features/21-agent-run-manager.md`，并同步 `docs/prompts.md`、`docs/features/19-agent-prompt-context-audit.md`、`docs/README.md` 和 `docs/architecture.md`。
 
 ### Partially Implemented
 
 - **Dynamic scheduler extensibility**: C3 已把当前 managed runtime 抽成 scheduler/FSM 并实现 Manager-owned wait/resume；C5 已补上 waiting scheduler 的 durable message recovery。但还没有让 LLM Supervisor 在运行时自由生成任意 DAG；任意 DAG 留给后续 scheduler hardening。
 - **Final Synthesizer**: 当前能基于 verdict 和 active blackboard 生成最终结果；还没有系统读取 artifact summaries，也没有形成面向用户的中文验证证据型 synthesis。
-- **Trace / UX surface**: `task_events` 已记录 agent run/message/artifact/blackboard/verdict 事件；`/task-log`、incident view 和 trace export 还没有专门的 multi-agent 可视化视图。
+- **Trace / UX surface**: `task_events` 已记录 agent run/message/artifact/blackboard/verdict 事件，ACP `GET /trace` 可复用 redacted task trace export；但 `/task-log`、incident view 和 trace export 还没有专门的 multi-agent 可视化视图。
 
 ### Not Yet Implemented
 
-- **ACP production lifecycle and hardening**: 还没有正式挂入 app lifecycle/config，也没有补齐 rate limit、payload size limit、redaction policy 和 trace export。
-- **Complexity classifier routing**: 还没有按 task complexity 自动进入 managed path；当前仍以 `agent_run_manager.enabled` flag 为主。
-- **Full documentation promotion**: 还没有新增正式 `docs/features/21-agent-run-manager.md`，`docs/prompts.md` 也还没有登记 manager/envelope prompt asset，`docs/features/19-agent-prompt-context-audit.md` 还没有更新 Codex Supervisor prompt 修复状态。
+- **Arbitrary DAG scheduler**: 当前 managed scheduler 仍是 bounded FSM plan，不支持 LLM Supervisor 在运行时自由生成任意 DAG。
+- **Evidence-rich Final Synthesizer**: 当前 final synthesis 还没有系统读取 artifact summaries 并生成中文验证证据型最终报告。
+- **Dedicated multi-agent trace UX**: `/task-log` 和 incident view 还没有按 run/message/artifact/blackboard 组织的专用多 agent 视图。
 
 ## Next Phase Plan
 
@@ -786,7 +789,7 @@ Phase 2 目标是把 first implementation skeleton 推进到可长期运行的 m
 - 使用 `cleanup_ttl_ms` 控制 durable state cleanup，不删除用户工作区产物，artifact cleanup 只处理 manager-owned artifact path。
 - Verification: stale run fixture、orphan child fixture、restart recovery simulation、state cleanup dry-run。
 
-### C6 - ACP Lifecycle, Classifier Routing, and Docs Promotion
+### C6 - ACP Lifecycle, Classifier Routing, and Docs Promotion (completed 2026-05-15)
 
 - 将 ACP server 挂入 app lifecycle/config，补 rate limit、payload size limit、redaction policy、trace export。
 - 增加 complexity classifier，让复杂任务可自动选择 managed path；保留显式 flag 作为 override / rollback。
@@ -806,11 +809,11 @@ Phase 2 目标是把 first implementation skeleton 推进到可长期运行的 m
 
 ## Documentation Sync
 
-- `docs/architecture.md`: 实现后需要补充 Agent Run Manager 数据流和 schema。
+- `docs/architecture.md`: 已补充 Agent Run Manager 受控插入层、auto routing、ACP lifecycle 和 guardrails。
 - `docs/features/01-stage.md`: 保持 Stage experimental boundary，不把 Stage orchestrator 直接描述为默认 task path。
-- `docs/features/19-agent-prompt-context-audit.md`: 更新 Codex Supervisor prompt 误导问题的修复状态。
-- `docs/prompts.md`: 如新增 manager prompt/envelope prompt，需要登记 prompt asset。
-- `docs/README.md`: 如升级为正式 feature，补 `features/21-agent-run-manager.md` 索引。
+- `docs/features/19-agent-prompt-context-audit.md`: 已更新 Agent Run Manager 下 Codex Supervisor prompt 修复/隔离状态。
+- `docs/prompts.md`: 已登记 manager child prompt、`miniclaw_agent_envelope` fallback 和 live Agent Bus MCP usage block 这些 code-owned prompt fragments。
+- `docs/README.md`: 已补 `features/21-agent-run-manager.md` 索引。
 
 ## Execution Notes
 
@@ -823,4 +826,5 @@ Phase 2 目标是把 first implementation skeleton 推进到可长期运行的 m
 - 2026-05-15: Phase 2 C2 已落地：新增 managed child runtime bus injection contract；Codex child 通过 `mcp_servers.miniclaw-agent-bus` config override 获得 live bus，Claude child 通过 `mcpServers` / `allowedTools` 合并获得 live bus；Manager 对每个 child 注入 task/run env、guardrail env 和 prompt usage block，同时继续要求 turn-end `miniclaw_agent_envelope` fallback。固定 planner -> generator -> evaluator 控制流尚未变成动态 DAG/FSM scheduler，留到 C3。
 - 2026-05-15: Phase 2 C3 已落地：新增 `agent_scheduler_state` migration 和 typed store API；新增 `AgentRunScheduler`，将 managed runtime 从内联 planner -> generator -> evaluator 控制流改为持久化 FSM plan。root supervisor wait/yield 时进入 `waiting`，收到 Agent Bus child event 后恢复 `running`；取消 waiting scheduler 会持久化 `cancelled`。当前默认 plan 仍保持 planner -> generator -> evaluator + bounded fix loop，任意 LLM-generated DAG 和 restart recovery 自动续跑留给后续 hardening。
 - 2026-05-15: Phase 2 C4 已落地：新增 `role-policy.ts`，将 child run 的 `tool_policy_id` / `can_write_workspace` 转成 runtime-boundary policy。Codex managed child 会按角色覆盖 sandbox / approval，并在 stream item 层把危险 command / read-only file change 转成 managed policy failure；Claude managed child 会按角色收窄 allowedTools / permissionMode / canUseTool，并拒绝 read-only 写入、workspace 外写入、native subagent tool 和危险 Bash 命令。C4 仍不处理 C5 的 sweeper/restart recovery。
-- 2026-05-15: Phase 2 C5 已落地：新增 `run-manager/sweeper.ts`，在 `agent_run_manager.enabled=true` 时随 app lifecycle 启动 periodic sweeper。sweeper 会处理 stale active runs、waiting scheduler timeout、terminal/cancelled parent child、cross-task orphan child、terminal task reconciliation；restart 后如果 durable Agent Bus 已有匹配 wake message，会把 waiting scheduler 恢复为 running 并记录 last message。`cleanup_ttl_ms` 已用于 terminal run-manager durable state cleanup，文件删除只覆盖 manager-owned artifact 路径，不删除用户 workspace file_ref。
+- 2026-05-15: Phase 2 C5 已落地：新增 `run-manager/sweeper.ts`，在 `agent_run_manager.enabled=true` 时随 app lifecycle 启动 periodic sweeper；C6 后 auto routing 开启时也会启动 sweeper。sweeper 会处理 stale active runs、waiting scheduler timeout、terminal/cancelled parent child、cross-task orphan child、terminal task reconciliation；restart 后如果 durable Agent Bus 已有匹配 wake message，会把 waiting scheduler 恢复为 running 并记录 last message。`cleanup_ttl_ms` 已用于 terminal run-manager durable state cleanup，文件删除只覆盖 manager-owned artifact 路径，不删除用户 workspace file_ref。
+- 2026-05-15: Phase 2 C6 已落地：新增 task-scoped ACP lifecycle/hardening、deterministic complexity classifier auto routing、`agent_run_manager.auto_enabled` / `complexity_min_score` / `acp.*` config、formal feature doc promotion 和 prompt audit/docs index 同步。Targeted verification 已通过：ACP server/adapter tests、task helper classifier tests、config boundary tests、`pnpm exec tsc --noEmit`。

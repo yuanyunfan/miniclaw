@@ -17,6 +17,16 @@ miniclaw 的所有"长 system prompt"集中存放在 `prompts/` 目录，由 `sr
 
 `memory-extractor` 只负责让 LLM 产生候选数组，不负责最终写入。候选会再经过 `src/memory/curation.ts` 的 type/name/content 校验、dirty content 拦截、canonical key 去重和合并决策；因此 prompt 里新增的 `confidence` 也只是候选 metadata，执行 task/chat 时不会被注入给下游 LLM。
 
+## Code-Owned Prompt Fragments
+
+这些片段目前不是 `prompts/*.md` 文件，因此没有用户级覆盖和 snapshot hash；它们是 runtime contract 的一部分，修改时必须同步对应 feature/plan 文档和 targeted tests。
+
+| 片段 | 用途 | 调用方 | 验证 |
+|---|---|---|---|
+| Agent Run Manager child role prompt | 为 planner/generator/evaluator 构造 task brief、role instruction、agent roster、blackboard 和 extra context | `src/agent/run-manager/manager.ts:buildChildPrompt` | `src/agent/run-manager/__tests__/managed-runtime.test.ts` |
+| `miniclaw_agent_envelope` fallback instruction | 要求 child run 在 final response 中返回 fenced JSON envelope，作为不支持 live bus runtime 的兼容回传 | `src/agent/run-manager/envelope.ts:formatManagedEnvelopeInstruction` | `src/agent/run-manager/__tests__/managed-runtime.test.ts` |
+| Live Agent Bus MCP usage block | 告知 managed child 可用的 `miniclaw-agent-bus` MCP tools，同时保留 envelope fallback | `src/agent/run-manager/mcp/injection.ts:createManagedAgentBusContext` | `src/agent/run-manager/__tests__/managed-runtime.test.ts` |
+
 ## 文件格式
 
 每个 .md 必含 YAML frontmatter：

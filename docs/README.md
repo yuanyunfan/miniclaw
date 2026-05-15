@@ -33,6 +33,7 @@
 - [`features/18-stock-watchlist-research-provider.md`](features/18-stock-watchlist-research-provider.md): 券商 watchlist stock 盘前/每日深度研究 provider，独立推送到 daily-watchlist-stock。
 - [`features/19-agent-prompt-context-audit.md`](features/19-agent-prompt-context-audit.md): Codex / Claude Code chat、task、cron prompt 与上下文注入审计。
 - [`features/20-memory-curation-lifecycle.md`](features/20-memory-curation-lifecycle.md): memory 自动抽取候选校验、去重合并、生命周期 metadata 和定期 maintenance。
+- [`features/21-agent-run-manager.md`](features/21-agent-run-manager.md): task-scoped Agent Run Manager、Agent Bus、ACP lifecycle、managed runtime routing 与 guardrails。
 
 ## Plans
 

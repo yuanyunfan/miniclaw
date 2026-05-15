@@ -107,6 +107,21 @@ agent:
   default_cwd: "${tmpDir}"
 runtime:
   default_agent: claude
+agent_run_manager:
+  auto_enabled: true
+  complexity_min_score: 5
+  max_turns: 9
+  acp:
+    enabled: true
+    host: 127.0.0.1
+    port: 0
+    token: local-acp-token
+    max_payload_bytes: 12345
+    rate_limit_window_ms: 1000
+    rate_limit_max_requests: 7
+    trace_export_enabled: true
+    trace_max_events: 11
+    trace_max_bytes: 22222
 model:
   default_client: openai_compatible
 im:
@@ -148,6 +163,24 @@ attachments:
     expect(runtime.codex.reasoningEffort).toBe("high");
     expect(runtime.channelDefaults["chat-runtime"]).toEqual({ cwd: tmpDir });
     expect(runtime.smartRouter.defaultMode).toBe("auto");
+    expect(runtime.agentRunManager).toMatchObject({
+      enabled: false,
+      autoEnabled: true,
+      complexityMinScore: 5,
+      acp: {
+        enabled: true,
+        host: "127.0.0.1",
+        port: 0,
+        token: "local-acp-token",
+        maxPayloadBytes: 12345,
+        rateLimitWindowMs: 1000,
+        rateLimitMaxRequests: 7,
+        traceExportEnabled: true,
+        traceMaxEvents: 11,
+        traceMaxBytes: 22222,
+      },
+      policy: expect.objectContaining({ maxTurns: 9 }),
+    });
     expect(runtime.doctor.summaryChannelName).toBe("runtime-auto-improve");
     expect(runtime.maxAttachments).toBe(2);
     expect(runtime.openaiBaseUrl).toBe("https://openai.env.example/v1");

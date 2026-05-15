@@ -65,6 +65,11 @@ agent_run_manager:
   # Managed multi-agent path. Disabled by default; enabling it routes /task
   # through the Agent Run Manager instead of the single-agent runtime.
   enabled: false
+  # Optional auto mode. When enabled=false and auto_enabled=true, MiniClaw uses
+  # a local complexity classifier to route medium/high-complexity tasks through
+  # the manager while keeping simple tasks on the single-agent runtime.
+  auto_enabled: false
+  complexity_min_score: 4
   # Guardrails are enforced by the manager/bus before spawning children,
   # appending messages, or writing artifacts. Keep these conservative until
   # live MCP bus injection and restart recovery are fully hardened.
@@ -76,8 +81,22 @@ agent_run_manager:
   max_children_per_run: 8
   max_concurrent_runs: 3
   max_ping_pong_turns: 8
-  cleanup_ttl_ms: 86400000 # 24 hours, consumed by future sweeper/recovery
+  cleanup_ttl_ms: 86400000 # 24 hours, used by sweeper/recovery cleanup
   max_fix_iterations: 2
+  acp:
+    # Task-scoped localhost ACP-style server. Disabled by default; when enabled
+    # it starts only for managed tasks and stops when the task completes.
+    enabled: false
+    host: 127.0.0.1
+    port: 0
+    # Leave unset for an ephemeral per-task bearer token.
+    # token: ""
+    max_payload_bytes: 262144
+    rate_limit_window_ms: 60000
+    rate_limit_max_requests: 120
+    trace_export_enabled: false
+    trace_max_events: 200
+    trace_max_bytes: 96000
 
 model:
   # Preferred short-call ModelClient default for router/doctor-style calls.

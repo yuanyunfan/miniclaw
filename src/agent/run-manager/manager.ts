@@ -29,6 +29,11 @@ import { createManagedAgentBusContext } from "./mcp/injection.js";
 import { resolveAgentRunManagerPolicy, type AgentRunManagerPolicy, type AgentRunManagerPolicyInput } from "./policy.js";
 import { buildManagedRuntimeRolePolicy } from "./role-policy.js";
 import { AgentRunScheduler, createManagedSchedulerPlan } from "./scheduler.js";
+import {
+  startAgentRunAcpLifecycle,
+  type AgentRunAcpLifecycleConfig,
+  type AgentRunAcpLifecycleHandle,
+} from "./acp/lifecycle.js";
 
 const ALL_MESSAGE_KINDS: AgentMessageKind[] = [
   "finding",
@@ -51,6 +56,7 @@ export interface AgentRunManagerParams {
   statusMessage?: Message;
   deliveryChannelId?: string;
   policy?: AgentRunManagerPolicyInput;
+  acp?: AgentRunAcpLifecycleConfig;
 }
 
 export interface ManagedFakeRunInput {
@@ -149,18 +155,20 @@ export class AgentRunManager {
     const startedAt = Date.now();
     const root = this.createRootRun();
     const sessionId = `manager:${root.id}`;
+    const acp = await this.startAcpLifecycle();
     await input.onViewEvent(taskViewEvents.sessionStarted("agent-run-manager", sessionId));
     this.params.reporter.event("session_started", {
       message: sessionId,
       payload: { provider: "agent-run-manager", session_id: sessionId, root_run_id: root.id },
     });
 
-    if (input.signal.aborted) {
-      this.cancelTask("task cancelled before Agent Run Manager start");
-      return this.cancelledResult(startedAt, sessionId);
-    }
+    try {
+      if (input.signal.aborted) {
+        this.cancelTask("task cancelled before Agent Run Manager start");
+        return this.cancelledResult(startedAt, sessionId);
+      }
 
-    const planner = this.spawnAgent({
+      const planner = this.spawnAgent({
       parent: root,
       role: "planner",
       toolPolicyId: "read-only",
@@ -316,32 +324,36 @@ export class AgentRunManager {
 
     const activeFacts = this.bus.listBlackboard(this.params.taskId);
     const durationMs = Date.now() - startedAt;
-    return {
-      success: true,
-      sessionId,
-      costUsd: 0,
-      durationMs,
-      turns: 3,
-      result: [
-        "Agent Run Manager fake E2E completed.",
-        "Flow: planner -> generator -> evaluator.",
-        `Verdict: ${activeFacts.find((fact) => fact.key === "final_verdict")?.content ?? "UNKNOWN"}.`,
-      ].join("\n"),
-      tokensSummary: "manager=fake",
-      progressLines: [
-        "supervisor: root run created",
-        "planner: handoff created",
-        "generator: artifact written",
-        "evaluator: verdict PASS",
-      ],
-      toolCount: 0,
-    };
+      return {
+        success: true,
+        sessionId,
+        costUsd: 0,
+        durationMs,
+        turns: 3,
+        result: [
+          "Agent Run Manager fake E2E completed.",
+          "Flow: planner -> generator -> evaluator.",
+          `Verdict: ${activeFacts.find((fact) => fact.key === "final_verdict")?.content ?? "UNKNOWN"}.`,
+        ].join("\n"),
+        tokensSummary: "manager=fake",
+        progressLines: [
+          "supervisor: root run created",
+          "planner: handoff created",
+          "generator: artifact written",
+          "evaluator: verdict PASS",
+        ],
+        toolCount: 0,
+      };
+    } finally {
+      await this.stopAcpLifecycle(acp);
+    }
   }
 
   async runManagedRuntime(input: ManagedRuntimeRunInput): Promise<AgentTaskResult> {
     const startedAt = Date.now();
     const root = this.createRootRun();
     const sessionId = `manager:${root.id}`;
+    const acp = await this.startAcpLifecycle();
     await input.onViewEvent(taskViewEvents.sessionStarted("agent-run-manager", sessionId));
     this.params.reporter.event("session_started", {
       message: sessionId,
@@ -549,6 +561,7 @@ export class AgentRunManager {
       return this.failedResult(startedAt, sessionId, root.id, message);
     } finally {
       input.signal.removeEventListener("abort", abortListener);
+      await this.stopAcpLifecycle(acp);
     }
   }
 
@@ -587,6 +600,39 @@ export class AgentRunManager {
       payload: { run_id: root.id, role: root.role, runtime: root.runtime, spawn_depth: root.spawn_depth },
     });
     return root;
+  }
+
+  private async startAcpLifecycle(): Promise<AgentRunAcpLifecycleHandle | undefined> {
+    if (!this.params.acp?.enabled) return undefined;
+    const handle = await startAgentRunAcpLifecycle({
+      config: this.params.acp,
+      taskId: this.params.taskId,
+      cwd: this.params.cwd,
+      bus: this.bus,
+    });
+    if (handle) {
+      this.params.reporter.event("agent_acp_server_started", {
+        payload: {
+          url: handle.url,
+          host: handle.host,
+          port: handle.port,
+          token_auth: true,
+          trace_export_enabled: this.params.acp.traceExportEnabled,
+        },
+      });
+    }
+    return handle;
+  }
+
+  private async stopAcpLifecycle(handle: AgentRunAcpLifecycleHandle | undefined): Promise<void> {
+    if (!handle) return;
+    await handle.stop();
+    this.params.reporter.event("agent_acp_server_stopped", {
+      payload: {
+        host: handle.host,
+        port: handle.port,
+      },
+    });
   }
 
   private spawnAgent(input: SpawnInput): AgentRun {

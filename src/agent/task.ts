@@ -18,6 +18,7 @@ import { createTaskRunnerRuntime } from "./runtimes/task-runner-runtime.js";
 import { getDefaultAgentRuntime, isAgentRuntimeId, type DefaultAgentRuntimeConfig } from "./runtimes/registry.js";
 import type { TaskViewEvent } from "./task-view-events.js";
 import { AgentRunManager } from "./run-manager/manager.js";
+import { resolveAgentRunManagerRoute } from "./run-manager/complexity.js";
 
 const log = createLogger("task");
 
@@ -40,6 +41,7 @@ export const __testables = {
   IDENTITY_LINE_TASK,
   finalTaskStatus,
   selectTaskRuntime,
+  resolveAgentRunManagerRoute,
   addActiveTaskForTest,
   deleteActiveTaskForTest,
   resetTaskRuntimeForTest,
@@ -340,7 +342,27 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
   try {
     await viewReporter.start();
 
-    const manager = config.agentRunManager.enabled
+    const managerRoute = resolveAgentRunManagerRoute({
+      routing: config.agentRunManager,
+      task: {
+        prompt: params.prompt,
+        hasAttachments: Boolean(params.attachmentBlocks?.length || params.attachmentCodexInputs?.length),
+        ...(params.resumeSessionId ? { resumeSessionId: params.resumeSessionId } : {}),
+      },
+    });
+    if (managerRoute.mode !== "off") {
+      reporter.event("manager_route_decision", {
+        payload: {
+          mode: managerRoute.mode,
+          use_managed: managerRoute.useManaged,
+          complexity_level: managerRoute.level,
+          complexity_score: managerRoute.score,
+          reasons: managerRoute.reasons,
+        },
+      });
+    }
+
+    const manager = managerRoute.useManaged
       ? new AgentRunManager({
           taskId: params.taskId,
           cwd: params.cwd,
@@ -348,6 +370,7 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
           reporter,
           channel: params.channel,
           policy: config.agentRunManager.policy,
+          acp: config.agentRunManager.acp,
           ...(params.statusMessage ? { statusMessage: params.statusMessage } : {}),
           ...(params.deliveryChannelId ? { deliveryChannelId: params.deliveryChannelId } : {}),
         })

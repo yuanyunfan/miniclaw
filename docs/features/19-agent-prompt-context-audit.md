@@ -527,6 +527,13 @@ Fix direction:
 - Make memory retrieval scoped by project/channel/route keywords rather than raw insertion order.
 - Add stale/duplicate memory cleanup and per-memory last-used metadata.
 
+2026-05-15 Agent Run Manager status:
+
+- Default single-agent Codex/Claude task prompts still keep the existing identity/supervisor/memory behavior for backward compatibility.
+- Managed tasks now have an explicit Manager-owned child role prompt instead of relying on the generic Codex task supervisor block as the orchestration authority.
+- `agent_run_manager.auto_enabled=true` introduces a local complexity gate so only medium/high complexity tasks enter the managed path automatically; `agent_run_manager.enabled=false` with `auto_enabled=false` remains the conservative rollback state.
+- Managed child prompts also include the live Agent Bus MCP usage block and the `miniclaw_agent_envelope` fallback instruction; these code-owned prompt fragments are now registered in `docs/prompts.md`.
+
 ### P1: Provider Payloads Need Schema-Aware Compaction
 
 Stock/provider payloads often contain both raw rows and derived grouped rows. This is useful for deterministic reporting, but inefficient when both are sent in full.

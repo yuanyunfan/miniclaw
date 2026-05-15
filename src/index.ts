@@ -136,7 +136,7 @@ async function main(): Promise<void> {
 
   memoryMaintenanceScheduler = startMemoryMaintenanceScheduler(config.memoryMaintenance);
   agentRunManagerSweeper = startAgentRunManagerSweeper({
-    enabled: config.agentRunManager.enabled,
+    enabled: config.agentRunManager.enabled || config.agentRunManager.autoEnabled,
     policy: config.agentRunManager.policy,
   });
 

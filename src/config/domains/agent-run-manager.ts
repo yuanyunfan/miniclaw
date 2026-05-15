@@ -1,6 +1,18 @@
 import type { ConfigReader } from "../env.js";
 import { DEFAULT_AGENT_RUN_MANAGER_POLICY } from "../../agent/run-manager/policy.js";
 
+const DEFAULT_AGENT_RUN_MANAGER_ACP_CONFIG = {
+  enabled: false,
+  host: "127.0.0.1",
+  port: 0,
+  maxPayloadBytes: 256 * 1024,
+  rateLimitWindowMs: 60_000,
+  rateLimitMaxRequests: 120,
+  traceExportEnabled: false,
+  traceMaxEvents: 200,
+  traceMaxBytes: 96_000,
+};
+
 export function buildAgentRunManagerRuntimeConfig(reader: ConfigReader) {
   return {
     enabled: reader.boolValue(
@@ -8,6 +20,67 @@ export function buildAgentRunManagerRuntimeConfig(reader: ConfigReader) {
       "MINICLAW_AGENT_RUN_MANAGER_ENABLED",
       false
     ),
+    autoEnabled: reader.boolValue(
+      ["agent_run_manager", "auto_enabled"],
+      "MINICLAW_AGENT_RUN_MANAGER_AUTO_ENABLED",
+      false
+    ),
+    complexityMinScore: reader.nonNegativeInt(
+      ["agent_run_manager", "complexity_min_score"],
+      "MINICLAW_AGENT_RUN_MANAGER_COMPLEXITY_MIN_SCORE",
+      4
+    ),
+    acp: {
+      enabled: reader.boolValue(
+        ["agent_run_manager", "acp", "enabled"],
+        "MINICLAW_AGENT_RUN_MANAGER_ACP_ENABLED",
+        DEFAULT_AGENT_RUN_MANAGER_ACP_CONFIG.enabled
+      ),
+      host: reader.requiredString(
+        ["agent_run_manager", "acp", "host"],
+        "MINICLAW_AGENT_RUN_MANAGER_ACP_HOST",
+        DEFAULT_AGENT_RUN_MANAGER_ACP_CONFIG.host
+      ),
+      port: reader.nonNegativeInt(
+        ["agent_run_manager", "acp", "port"],
+        "MINICLAW_AGENT_RUN_MANAGER_ACP_PORT",
+        DEFAULT_AGENT_RUN_MANAGER_ACP_CONFIG.port
+      ),
+      token: reader.optionalString(
+        ["agent_run_manager", "acp", "token"],
+        "MINICLAW_AGENT_RUN_MANAGER_ACP_TOKEN"
+      ),
+      maxPayloadBytes: reader.positiveInt(
+        ["agent_run_manager", "acp", "max_payload_bytes"],
+        "MINICLAW_AGENT_RUN_MANAGER_ACP_MAX_PAYLOAD_BYTES",
+        DEFAULT_AGENT_RUN_MANAGER_ACP_CONFIG.maxPayloadBytes
+      ),
+      rateLimitWindowMs: reader.positiveInt(
+        ["agent_run_manager", "acp", "rate_limit_window_ms"],
+        "MINICLAW_AGENT_RUN_MANAGER_ACP_RATE_LIMIT_WINDOW_MS",
+        DEFAULT_AGENT_RUN_MANAGER_ACP_CONFIG.rateLimitWindowMs
+      ),
+      rateLimitMaxRequests: reader.positiveInt(
+        ["agent_run_manager", "acp", "rate_limit_max_requests"],
+        "MINICLAW_AGENT_RUN_MANAGER_ACP_RATE_LIMIT_MAX_REQUESTS",
+        DEFAULT_AGENT_RUN_MANAGER_ACP_CONFIG.rateLimitMaxRequests
+      ),
+      traceExportEnabled: reader.boolValue(
+        ["agent_run_manager", "acp", "trace_export_enabled"],
+        "MINICLAW_AGENT_RUN_MANAGER_ACP_TRACE_EXPORT_ENABLED",
+        DEFAULT_AGENT_RUN_MANAGER_ACP_CONFIG.traceExportEnabled
+      ),
+      traceMaxEvents: reader.positiveInt(
+        ["agent_run_manager", "acp", "trace_max_events"],
+        "MINICLAW_AGENT_RUN_MANAGER_ACP_TRACE_MAX_EVENTS",
+        DEFAULT_AGENT_RUN_MANAGER_ACP_CONFIG.traceMaxEvents
+      ),
+      traceMaxBytes: reader.positiveInt(
+        ["agent_run_manager", "acp", "trace_max_bytes"],
+        "MINICLAW_AGENT_RUN_MANAGER_ACP_TRACE_MAX_BYTES",
+        DEFAULT_AGENT_RUN_MANAGER_ACP_CONFIG.traceMaxBytes
+      ),
+    },
     policy: {
       maxTurns: reader.positiveInt(
         ["agent_run_manager", "max_turns"],

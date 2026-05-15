@@ -13,6 +13,7 @@ const {
   formatUsage,
   finalTaskStatus,
   selectTaskRuntime,
+  resolveAgentRunManagerRoute,
   addActiveTaskForTest,
   deleteActiveTaskForTest,
   resetTaskRuntimeForTest,
@@ -148,6 +149,49 @@ describe("selectTaskRuntime", () => {
     });
     expect(viewEvents).toEqual(["session_started", "task_completed"]);
     expect(traceEvents).toEqual(["session_started"]);
+  });
+});
+
+describe("resolveAgentRunManagerRoute", () => {
+  it("keeps the single-agent path when explicit and auto manager routing are disabled", () => {
+    const decision = resolveAgentRunManagerRoute({
+      routing: { enabled: false, autoEnabled: false, complexityMinScore: 4 },
+      task: { prompt: "修一下 README 里的错别字" },
+    });
+
+    expect(decision).toMatchObject({
+      useManaged: false,
+      mode: "off",
+    });
+  });
+
+  it("uses the manager when the explicit flag is enabled regardless of complexity", () => {
+    const decision = resolveAgentRunManagerRoute({
+      routing: { enabled: true, autoEnabled: false, complexityMinScore: 999 },
+      task: { prompt: "简单看一下状态" },
+    });
+
+    expect(decision).toMatchObject({
+      useManaged: true,
+      mode: "force",
+    });
+  });
+
+  it("auto-routes doc-driven multi-step implementation tasks through the manager", () => {
+    const decision = resolveAgentRunManagerRoute({
+      routing: { enabled: false, autoEnabled: true, complexityMinScore: 4 },
+      task: {
+        prompt: [
+          "按照 docs/plans/2026-05-14-agent-run-manager.md",
+          "继续完成 C6 的 implementation plan、runtime lifecycle、tests 和 verification plan。",
+        ].join("\n"),
+      },
+    });
+
+    expect(decision.mode).toBe("auto");
+    expect(decision.useManaged).toBe(true);
+    expect(decision.level).not.toBe("low");
+    expect(decision.reasons).toEqual(expect.arrayContaining(["multi_step_plan", "doc_driven_context"]));
   });
 });
 
