@@ -212,6 +212,12 @@ describe("AgentRunManager managed runtime fallback", () => {
     expect(childInputs[0]?.managedContext).toMatchObject({
       taskId: "task-managed-runtime",
       role: "planner",
+      rolePolicy: {
+        toolPolicyId: "read-only",
+        canWriteWorkspace: false,
+        codex: { sandboxMode: "read-only", approvalPolicy: "never" },
+        claude: { permissionMode: "dontAsk" },
+      },
       agentBusMcp: {
         serverName: "miniclaw-agent-bus",
         allowedTools: expect.arrayContaining(["mcp__miniclaw-agent-bus__post_message"]),
@@ -222,11 +228,19 @@ describe("AgentRunManager managed runtime fallback", () => {
             MINICLAW_AGENT_RUN_MANAGER_MAX_MESSAGES: "12",
             MINICLAW_AGENT_RUN_MANAGER_MAX_ARTIFACT_BYTES: "3456",
             MINICLAW_AGENT_RUN_MANAGER_MAX_PING_PONG_TURNS: "4",
+            MINICLAW_AGENT_RUN_MANAGER_TOOL_POLICY_ID: "read-only",
+            MINICLAW_AGENT_RUN_MANAGER_CAN_WRITE_WORKSPACE: "false",
+            MINICLAW_AGENT_RUN_MANAGER_CODEX_SANDBOX: "read-only",
           },
         },
       },
     });
     expect(childInputs.map((input) => input.managedContext?.role)).toEqual(["planner", "generator", "evaluator"]);
+    expect(childInputs.map((input) => input.managedContext?.rolePolicy?.codex.sandboxMode)).toEqual([
+      "read-only",
+      "workspace-write",
+      "read-only",
+    ]);
   });
 
   it("applies policy guardrails before spawning child runs beyond max turns", async () => {

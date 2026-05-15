@@ -1,7 +1,8 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AgentTaskManagedContext, AgentTaskMcpServerConfig } from "../../../runtime/agent-runtime.js";
+import type { AgentTaskManagedContext, AgentTaskManagedRuntimePolicy, AgentTaskMcpServerConfig } from "../../../runtime/agent-runtime.js";
 import type { AgentRunManagerPolicy } from "../policy.js";
+import { managedRuntimePolicyEnv } from "../role-policy.js";
 
 export const AGENT_BUS_MCP_SERVER_NAME = "miniclaw-agent-bus";
 export const AGENT_BUS_MCP_TOOL_NAMES = [
@@ -19,6 +20,7 @@ export interface AgentBusMcpRuntimeContextInput {
   role: string;
   cwd: string;
   policy: Pick<AgentRunManagerPolicy, "maxMessages" | "maxArtifactBytes" | "maxPingPongTurns">;
+  rolePolicy?: AgentTaskManagedRuntimePolicy;
   repoRoot?: string;
 }
 
@@ -34,6 +36,7 @@ export function createAgentBusMcpEnv(input: Omit<AgentBusMcpRuntimeContextInput,
     MINICLAW_AGENT_RUN_MANAGER_MAX_MESSAGES: String(input.policy.maxMessages),
     MINICLAW_AGENT_RUN_MANAGER_MAX_ARTIFACT_BYTES: String(input.policy.maxArtifactBytes),
     MINICLAW_AGENT_RUN_MANAGER_MAX_PING_PONG_TURNS: String(input.policy.maxPingPongTurns),
+    ...(input.rolePolicy ? managedRuntimePolicyEnv(input.rolePolicy) : {}),
   };
 }
 
@@ -55,6 +58,7 @@ export function createAgentBusPromptBlock(input: {
   taskId: string;
   runId: string;
   role: string;
+  rolePolicy?: AgentTaskManagedRuntimePolicy;
 }): string {
   const serverName = input.serverName ?? AGENT_BUS_MCP_SERVER_NAME;
   return [
@@ -62,6 +66,12 @@ export function createAgentBusPromptBlock(input: {
     `Current task_id: ${input.taskId}`,
     `Current run_id: ${input.runId}`,
     `Current role: ${input.role}`,
+    ...(input.rolePolicy
+      ? [
+          `Tool policy: ${input.rolePolicy.toolPolicyId}`,
+          `Workspace write allowed: ${input.rolePolicy.canWriteWorkspace ? "yes" : "no"}`,
+        ]
+      : []),
     `MCP server: ${serverName}`,
     `Available tool names: ${createAgentBusAllowedToolNames(serverName).join(", ")}`,
     "Use these tools during execution to post typed messages, publish artifacts, read mailbox/artifacts, and update the task blackboard.",
@@ -74,6 +84,7 @@ export function createManagedAgentBusContext(input: AgentBusMcpRuntimeContextInp
     taskId: input.taskId,
     runId: input.runId,
     role: input.role,
+    ...(input.rolePolicy ? { rolePolicy: input.rolePolicy } : {}),
     agentBusMcp: {
       serverName: AGENT_BUS_MCP_SERVER_NAME,
       serverConfig: createAgentBusMcpServerConfig(input),

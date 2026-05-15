@@ -28,10 +28,38 @@ export interface AgentTaskMcpServerConfig {
   env?: Record<string, string>;
 }
 
+export type AgentTaskManagedCodexSandboxMode = "read-only" | "workspace-write" | "danger-full-access";
+export type AgentTaskManagedCodexApprovalPolicy = "never" | "on-request" | "on-failure" | "untrusted";
+export type AgentTaskManagedClaudePermissionMode =
+  | "default"
+  | "acceptEdits"
+  | "bypassPermissions"
+  | "plan"
+  | "dontAsk"
+  | "auto";
+
+export interface AgentTaskManagedRuntimePolicy {
+  toolPolicyId: string;
+  canWriteWorkspace: boolean;
+  codex: {
+    sandboxMode: AgentTaskManagedCodexSandboxMode;
+    approvalPolicy: AgentTaskManagedCodexApprovalPolicy;
+    denyDangerousCommands: boolean;
+  };
+  claude: {
+    permissionMode: AgentTaskManagedClaudePermissionMode;
+    allowedTools: string[];
+    denyDangerousCommands: boolean;
+    denyNativeSubagents: boolean;
+    enforceWorkspaceWriteScope: boolean;
+  };
+}
+
 export interface AgentTaskManagedContext {
   taskId: string;
   runId: string;
   role: string;
+  rolePolicy?: AgentTaskManagedRuntimePolicy;
   agentBusMcp?: {
     serverName: string;
     serverConfig: AgentTaskMcpServerConfig;

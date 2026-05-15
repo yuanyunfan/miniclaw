@@ -18,6 +18,7 @@ import { taskViewEvents } from "../task-view-events.js";
 import { pushCompactedLine } from "./progress-lines.js";
 import type { TaskRunner, TaskRunnerResult } from "./types.js";
 import type { AgentTaskManagedContext } from "../../runtime/agent-runtime.js";
+import { isDangerousManagedShellCommand } from "../run-manager/role-policy.js";
 
 export function codexManagedAgentBusOverrides(managedContext: AgentTaskManagedContext | undefined): CodexClientOverrides | undefined {
   const agentBus = managedContext?.agentBusMcp;
@@ -35,6 +36,24 @@ export function codexManagedAgentBusOverrides(managedContext: AgentTaskManagedCo
       },
     },
   };
+}
+
+export function codexManagedRolePolicyViolation(
+  managedContext: AgentTaskManagedContext | undefined,
+  item: { type: string } & Record<string, unknown>,
+): string | undefined {
+  const rolePolicy = managedContext?.rolePolicy;
+  if (!rolePolicy) return undefined;
+  if (item.type === "command_execution") {
+    const command = String((item as { command?: string }).command ?? "");
+    if (rolePolicy.codex.denyDangerousCommands && isDangerousManagedShellCommand(command)) {
+      return `Codex managed role policy ${rolePolicy.toolPolicyId} denied dangerous command: ${command.slice(0, 100)}`;
+    }
+  }
+  if (item.type === "file_change" && !rolePolicy.canWriteWorkspace) {
+    return `Codex managed role policy ${rolePolicy.toolPolicyId} denied workspace file changes for read-only role ${managedContext.role}`;
+  }
+  return undefined;
 }
 
 export const codexTaskRunner: TaskRunner = {
@@ -56,7 +75,7 @@ export const codexTaskRunner: TaskRunner = {
     ].filter(Boolean).join("\n\n");
 
     const codex = getCodexClient(codexManagedAgentBusOverrides(input.managedContext));
-    const threadOptions = codexThreadOptions("task", input.cwd);
+    const threadOptions = codexThreadOptions("task", input.cwd, input.managedContext);
     const thread = resumeRawId
       ? codex.resumeThread(resumeRawId, threadOptions)
       : codex.startThread(threadOptions);
@@ -86,7 +105,7 @@ export const codexTaskRunner: TaskRunner = {
 
     for await (const event of events) {
       if (input.signal.aborted || timeoutCtrl.signal.aborted) {
-        failedMessage = input.signal.aborted ? "任务已被用户取消" : "Codex 执行超时";
+        if (!failedMessage) failedMessage = input.signal.aborted ? "任务已被用户取消" : "Codex 执行超时";
         break;
       }
 
@@ -131,6 +150,18 @@ export const codexTaskRunner: TaskRunner = {
         case "item.completed": {
           if (event.item.type === "agent_message") {
             finalResponse = event.item.text;
+            break;
+          }
+          const policyViolation = codexManagedRolePolicyViolation(input.managedContext, event.item);
+          if (policyViolation) {
+            failedMessage = policyViolation;
+            timeoutCtrl.abort(new Error(policyViolation));
+            await input.onViewEvent(taskViewEvents.providerError("codex", policyViolation, "managed_role_policy"));
+            input.onTraceEvent("provider_error", {
+              severity: "error",
+              message: policyViolation,
+              payload: { provider: "codex", event_type: "managed_role_policy" },
+            });
             break;
           }
           const line = formatCodexItemLine(event.item);

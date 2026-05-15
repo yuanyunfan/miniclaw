@@ -27,6 +27,7 @@ import {
 } from "./envelope.js";
 import { createManagedAgentBusContext } from "./mcp/injection.js";
 import { resolveAgentRunManagerPolicy, type AgentRunManagerPolicy, type AgentRunManagerPolicyInput } from "./policy.js";
+import { buildManagedRuntimeRolePolicy } from "./role-policy.js";
 import { AgentRunScheduler, createManagedSchedulerPlan } from "./scheduler.js";
 
 const ALL_MESSAGE_KINDS: AgentMessageKind[] = [
@@ -700,6 +701,11 @@ export class AgentRunManager {
       role: input.run.role,
       cwd: this.params.cwd,
       policy: this.policy,
+      rolePolicy: buildManagedRuntimeRolePolicy({
+        role: input.run.role,
+        toolPolicyId: input.run.tool_policy_id,
+        canWriteWorkspace: input.run.can_write_workspace,
+      }),
     });
     const promptWithLiveBus = [input.prompt, managedContext.agentBusMcp?.promptBlock].filter(Boolean).join("\n\n");
     const childController = new AbortController();

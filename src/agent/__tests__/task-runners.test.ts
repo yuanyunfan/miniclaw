@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   claudeTaskRunner,
+  managedClaudeAllowedTools,
   managedAgentBusAllowedTools,
   mergeManagedAgentBusMcpServers,
 } from "../runners/claude-task-runner.js";
 import { codexTaskRunner } from "../runners/codex-task-runner.js";
 import { createFakeTaskRunner } from "../runners/fake-task-runner.js";
+import { buildManagedRuntimeRolePolicy, evaluateManagedClaudeToolUse } from "../run-manager/role-policy.js";
 
 describe("task runners", () => {
   it("exports Claude and Codex runners behind the TaskRunner contract", () => {
@@ -41,6 +43,70 @@ describe("task runners", () => {
       },
     });
     expect(managedAgentBusAllowedTools(managedContext)).toEqual(["mcp__miniclaw-agent-bus__post_message"]);
+  });
+
+  it("builds Claude managed read-only runner tools and denies workspace writes", () => {
+    const managedContext = {
+      taskId: "task-claude-policy",
+      runId: "run-planner",
+      role: "planner",
+      rolePolicy: buildManagedRuntimeRolePolicy({
+        role: "planner",
+        toolPolicyId: "read-only",
+        canWriteWorkspace: false,
+      }),
+      agentBusMcp: {
+        serverName: "miniclaw-agent-bus",
+        serverConfig: { type: "stdio" as const, command: "pnpm" },
+        allowedTools: ["mcp__miniclaw-agent-bus__post_message"],
+        promptBlock: "live bus",
+      },
+    };
+
+    const tools = managedClaudeAllowedTools(managedContext);
+    expect(tools).toEqual(expect.arrayContaining(["Read", "Glob", "mcp__miniclaw-agent-bus__post_message"]));
+    expect(tools).not.toEqual(expect.arrayContaining(["Write", "Edit", "Bash", "Agent"]));
+    expect(evaluateManagedClaudeToolUse({
+      policy: managedContext.rolePolicy,
+      cwd: "/tmp/work",
+      toolName: "Write",
+      toolInput: { file_path: "/tmp/work/file.txt" },
+    })).toMatchObject({ behavior: "deny" });
+  });
+
+  it("builds Claude generator runner tools and denies dangerous commands", () => {
+    const managedContext = {
+      taskId: "task-claude-policy",
+      runId: "run-generator",
+      role: "generator",
+      rolePolicy: buildManagedRuntimeRolePolicy({
+        role: "generator",
+        toolPolicyId: "workspace-write",
+        canWriteWorkspace: true,
+      }),
+      agentBusMcp: {
+        serverName: "miniclaw-agent-bus",
+        serverConfig: { type: "stdio" as const, command: "pnpm" },
+        allowedTools: ["mcp__miniclaw-agent-bus__write_artifact"],
+        promptBlock: "live bus",
+      },
+    };
+
+    const tools = managedClaudeAllowedTools(managedContext);
+    expect(tools).toEqual(expect.arrayContaining(["Write", "Edit", "Bash", "mcp__miniclaw-agent-bus__write_artifact"]));
+    expect(tools).not.toEqual(expect.arrayContaining(["Agent"]));
+    expect(evaluateManagedClaudeToolUse({
+      policy: managedContext.rolePolicy,
+      cwd: "/tmp/work",
+      toolName: "Write",
+      toolInput: { file_path: "/tmp/work/file.txt" },
+    })).toMatchObject({ behavior: "allow" });
+    expect(evaluateManagedClaudeToolUse({
+      policy: managedContext.rolePolicy,
+      cwd: "/tmp/work",
+      toolName: "Bash",
+      toolInput: { command: "sudo rm -rf /" },
+    })).toMatchObject({ behavior: "deny" });
   });
 
   it("fake runner emits provider-neutral view events and trace facts", async () => {

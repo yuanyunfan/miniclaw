@@ -81,6 +81,52 @@ describe("codexThreadOptions", () => {
       workingDirectory: "/tmp/project",
     });
   });
+
+  it("applies managed read-only role policy over default task sandbox", async () => {
+    process.env.MINICLAW_CODEX_TASK_SANDBOX = "workspace-write";
+    process.env.MINICLAW_CODEX_APPROVAL_POLICY = "on-request";
+
+    const { codexThreadOptions } = await import("../codex.js");
+    const { buildManagedRuntimeRolePolicy } = await import("../run-manager/role-policy.js");
+    const opts = codexThreadOptions("task", "/tmp/project", {
+      taskId: "task-codex-policy",
+      runId: "run-planner",
+      role: "planner",
+      rolePolicy: buildManagedRuntimeRolePolicy({
+        role: "planner",
+        toolPolicyId: "read-only",
+        canWriteWorkspace: false,
+      }),
+    });
+
+    expect(opts).toMatchObject({
+      sandboxMode: "read-only",
+      approvalPolicy: "never",
+      workingDirectory: "/tmp/project",
+    });
+  });
+
+  it("applies managed generator workspace-write sandbox", async () => {
+    process.env.MINICLAW_CODEX_TASK_SANDBOX = "read-only";
+
+    const { codexThreadOptions } = await import("../codex.js");
+    const { buildManagedRuntimeRolePolicy } = await import("../run-manager/role-policy.js");
+    const opts = codexThreadOptions("task", "/tmp/project", {
+      taskId: "task-codex-policy",
+      runId: "run-generator",
+      role: "generator",
+      rolePolicy: buildManagedRuntimeRolePolicy({
+        role: "generator",
+        toolPolicyId: "workspace-write",
+        canWriteWorkspace: true,
+      }),
+    });
+
+    expect(opts).toMatchObject({
+      sandboxMode: "workspace-write",
+      approvalPolicy: "never",
+    });
+  });
 });
 
 describe("codex managed Agent Bus overrides", () => {
@@ -133,6 +179,67 @@ describe("codex managed Agent Bus overrides", () => {
           },
         },
       });
+    } finally {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      rmSync(localTmp, { recursive: true, force: true });
+      vi.resetModules();
+    }
+  });
+
+  it("detects managed role policy violations in Codex stream items", async () => {
+    const localTmp = mkdtempSync(join(tmpdir(), "miniclaw-codex-managed-policy-"));
+    const previous = {
+      MINICLAW_CONFIG: process.env.MINICLAW_CONFIG,
+      DISCORD_TOKEN: process.env.DISCORD_TOKEN,
+      DISCORD_CLIENT_ID: process.env.DISCORD_CLIENT_ID,
+      DISCORD_GUILD_ID: process.env.DISCORD_GUILD_ID,
+      MINICLAW_ALLOWED_USER_ID: process.env.MINICLAW_ALLOWED_USER_ID,
+    };
+    try {
+      vi.resetModules();
+      const miniclawConfig = join(localTmp, "miniclaw.yaml");
+      writeFileSync(miniclawConfig, "{}");
+      process.env.MINICLAW_CONFIG = miniclawConfig;
+      process.env.DISCORD_TOKEN = "test-token";
+      process.env.DISCORD_CLIENT_ID = "test-client";
+      process.env.DISCORD_GUILD_ID = "test-guild";
+      process.env.MINICLAW_ALLOWED_USER_ID = "test-user";
+
+      const { codexManagedRolePolicyViolation } = await import("../runners/codex-task-runner.js");
+      const { buildManagedRuntimeRolePolicy } = await import("../run-manager/role-policy.js");
+      const readOnlyContext = {
+        taskId: "task-codex-policy",
+        runId: "run-planner",
+        role: "planner",
+        rolePolicy: buildManagedRuntimeRolePolicy({
+          role: "planner",
+          toolPolicyId: "read-only",
+          canWriteWorkspace: false,
+        }),
+      };
+      const generatorContext = {
+        taskId: "task-codex-policy",
+        runId: "run-generator",
+        role: "generator",
+        rolePolicy: buildManagedRuntimeRolePolicy({
+          role: "generator",
+          toolPolicyId: "workspace-write",
+          canWriteWorkspace: true,
+        }),
+      };
+
+      expect(codexManagedRolePolicyViolation(readOnlyContext, { type: "file_change" })).toContain("read-only");
+      expect(codexManagedRolePolicyViolation(generatorContext, {
+        type: "command_execution",
+        command: "git reset --hard HEAD",
+      })).toContain("dangerous command");
+      expect(codexManagedRolePolicyViolation(generatorContext, {
+        type: "command_execution",
+        command: "git status --short",
+      })).toBeUndefined();
     } finally {
       for (const [key, value] of Object.entries(previous)) {
         if (value === undefined) delete process.env[key];

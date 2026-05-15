@@ -13,6 +13,11 @@ import { taskViewEvents } from "../task-view-events.js";
 import { pushCompactedLine } from "./progress-lines.js";
 import type { TaskRunner, TaskRunnerResult } from "./types.js";
 import type { AgentTaskManagedContext } from "../../runtime/agent-runtime.js";
+import {
+  allowedClaudeToolsForManagedPolicy,
+  evaluateManagedClaudeToolUse,
+  isDangerousManagedShellCommand,
+} from "../run-manager/role-policy.js";
 
 function toolIcon(name: string): string {
   if (name === "Skill") return "📚";
@@ -63,6 +68,37 @@ export function managedAgentBusAllowedTools(managedContext: AgentTaskManagedCont
   return managedContext?.agentBusMcp?.allowedTools ?? [];
 }
 
+function uniqueTools(tools: string[]): string[] {
+  return [...new Set(tools)];
+}
+
+function legacyAllowedTools(mcpServers: Record<string, unknown>, managedContext: AgentTaskManagedContext | undefined): string[] {
+  return uniqueTools([
+    "Read", "Write", "Edit", "Bash", "Glob",
+    "WebSearch", "WebFetch", "Agent",
+    "mcp__exa__web_search_exa",
+    "mcp__exa__get_code_context_exa",
+    "mcp__context7__resolve-library-id",
+    "mcp__context7__query-docs",
+    ...allowedEastmoneyJywgMcpTools(mcpServers),
+    ...allowedFutuStockMcpTools(mcpServers),
+    ...managedAgentBusAllowedTools(managedContext),
+  ]);
+}
+
+export function managedClaudeAllowedTools(
+  managedContext: AgentTaskManagedContext,
+  mcpServers: Record<string, unknown> = {},
+): string[] {
+  const rolePolicy = managedContext.rolePolicy;
+  if (!rolePolicy) return legacyAllowedTools(mcpServers, managedContext);
+  return allowedClaudeToolsForManagedPolicy(rolePolicy, [
+    ...allowedEastmoneyJywgMcpTools(mcpServers),
+    ...allowedFutuStockMcpTools(mcpServers),
+    ...managedAgentBusAllowedTools(managedContext),
+  ]);
+}
+
 function formatToolDetail(name: string, input: Record<string, unknown>): string {
   let raw = "";
   if (name === "Bash") raw = String(input.command ?? "");
@@ -111,6 +147,10 @@ export const claudeTaskRunner: TaskRunner = {
     const claudeFlagSettings = config.claude.disableHooks
       ? { disableAllHooks: true as const }
       : undefined;
+    const managedRolePolicy = input.managedContext?.rolePolicy;
+    const allowedTools = managedRolePolicy && input.managedContext
+      ? managedClaudeAllowedTools(input.managedContext, mcpServers)
+      : legacyAllowedTools(mcpServers, input.managedContext);
 
     const appendParts = [identityLine, supervisorBlock, memoryBlock].filter(Boolean);
 
@@ -137,7 +177,7 @@ export const claudeTaskRunner: TaskRunner = {
       options: {
         model: config.claudeModel,
         cwd: input.cwd,
-        permissionMode: "acceptEdits",
+        permissionMode: managedRolePolicy?.claude.permissionMode ?? "acceptEdits",
         settingSources: config.claude.settingSources,
         ...(claudeFlagSettings ? { settings: claudeFlagSettings } : {}),
         systemPrompt: {
@@ -145,17 +185,7 @@ export const claudeTaskRunner: TaskRunner = {
           preset: "claude_code",
           append: appendParts.join("\n\n"),
         },
-        allowedTools: [
-          "Read", "Write", "Edit", "Bash", "Glob",
-          "WebSearch", "WebFetch", "Agent",
-          "mcp__exa__web_search_exa",
-          "mcp__exa__get_code_context_exa",
-          "mcp__context7__resolve-library-id",
-          "mcp__context7__query-docs",
-          ...allowedEastmoneyJywgMcpTools(mcpServers),
-          ...allowedFutuStockMcpTools(mcpServers),
-          ...managedAgentBusAllowedTools(input.managedContext),
-        ],
+        allowedTools,
         agents: subagents,
         ...(Object.keys(mcpServers).length ? { mcpServers } : {}),
         canUseTool: async (toolName, toolInput) => {
@@ -166,6 +196,16 @@ export const claudeTaskRunner: TaskRunner = {
               behavior: "deny" as const,
               message: `${skillName} 在 miniclaw 中被禁用（它是面向 CLI 交互的 slash command，与 SDK Discord bot 流程不匹配）。请改用项目角色化 subagent 完成多阶段任务。`,
             };
+          }
+          if (managedRolePolicy) {
+            const decision = evaluateManagedClaudeToolUse({
+              policy: managedRolePolicy,
+              cwd: input.cwd,
+              toolName,
+              toolInput,
+            });
+            if (decision.behavior === "deny") return decision;
+            return { behavior: "allow" as const, updatedInput: decision.updatedInput };
           }
           if (toolName === "Agent" || toolName === "Task") {
             const role = String((toolInput as { subagent_type?: string }).subagent_type ?? "general");
@@ -180,8 +220,7 @@ export const claudeTaskRunner: TaskRunner = {
           }
           if (toolName === "Bash") {
             const cmd = String((toolInput as { command?: string }).command ?? "");
-            const DESTRUCTIVE = /\b(rm\s+-rf?\s+\/(?!tmp\/|var\/folders\/)|sudo\b|npm\s+publish|pnpm\s+publish|git\s+push\s+--force(?!-with-lease))\b/;
-            if (DESTRUCTIVE.test(cmd)) {
+            if (isDangerousManagedShellCommand(cmd)) {
               return {
                 behavior: "deny" as const,
                 message: `Bash 命令被拒绝：检测到高风险破坏性操作 (${cmd.slice(0, 80)})。如确需执行，请由用户手动操作。`,

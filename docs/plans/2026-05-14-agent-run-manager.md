@@ -725,12 +725,12 @@ Snapshot date: 2026-05-15.
 - **Agent Bus MCP compatibility surface**: `miniclaw-agent-bus` MCP-compatible tool surface 已有 `post_message/read_mailbox/write_artifact/read_artifact/list_blackboard/upsert_blackboard_fact`，并提供 `pnpm run mcp:agent-bus` 入口。
 - **Live MCP bus injection into real child runtime**: Manager 为每个真实 Codex / Claude managed child run 创建 `managedContext`，注入 `miniclaw-agent-bus` stdio MCP server config、task/run env、guardrail env、allowed tool names 和 prompt usage block；Codex 通过 SDK client config override 注入 `mcp_servers.miniclaw-agent-bus`，Claude 通过 `mcpServers` / `allowedTools` 合并注入。turn-end `miniclaw_agent_envelope` fallback 仍保留。
 - **Dynamic scheduler / `yield_until_child_event` foundation**: 固定 managed runtime 控制流已抽成 `AgentRunScheduler` FSM plan；root supervisor 在等待 child event 时会持久化 `agent_scheduler_state.status=waiting` 并把 root run 置为 `waiting`，Agent Bus message 到达后恢复为 `running`。scheduler state snapshot 持久化了 `current_step`、wait filter、last wake message 和 plan JSON，为 C5 restart recovery/sweeper 做准备。当前默认 plan 仍是 planner -> generator -> evaluator + bounded fix loop，不是任意 runtime-generated DAG。
+- **Role policy enforcement at runtime boundary**: Manager 会把 child run 的 `tool_policy_id` / `can_write_workspace` 转成 `managedContext.rolePolicy`。Codex child 按 role policy 覆盖 task thread `sandboxMode` / `approvalPolicy`，planner/evaluator 默认 read-only，generator 默认 workspace-write；Codex stream 中出现危险 command 或 read-only file change 时会触发 managed policy failure。Claude child 按 role policy 使用 scoped `allowedTools` / `permissionMode` / `canUseTool`，planner/evaluator 不暴露 Write/Edit/Bash/Agent，generator 才允许 workspace 写入；workspace 外写入、native subagent tool 和危险 Bash 命令会被拒绝。
 - **Architecture doc sync**: `docs/architecture.md` 已记录 Agent Run Manager 当前受控插入层、dynamic scheduler foundation、live MCP bus injection、managed envelope fallback、MCP tool surface 和 ACP adapter 状态。
 
 ### Partially Implemented
 
 - **Dynamic scheduler extensibility**: C3 已把当前 managed runtime 抽成 scheduler/FSM 并实现 Manager-owned wait/resume；但还没有让 LLM Supervisor 在运行时自由生成任意 DAG，也还没有把 restart 后的 persisted scheduler state 自动恢复执行。任意 DAG 和 restart recovery 分别留给后续 scheduler/sweeper hardening。
-- **Role policy enforcement**: `tool_policy_id`、`can_write_workspace`、`can_send_kinds`、`can_receive_kinds` 已落库，Bus 会校验 message kind；但 Codex/Claude child runtime 启动层还没有强制 read-only sandbox、generator-only workspace write、dangerous command policy 或 per-role exec policy。
 - **Final Synthesizer**: 当前能基于 verdict 和 active blackboard 生成最终结果；还没有系统读取 artifact summaries，也没有形成面向用户的中文验证证据型 synthesis。
 - **Trace / UX surface**: `task_events` 已记录 agent run/message/artifact/blackboard/verdict 事件；`/task-log`、incident view 和 trace export 还没有专门的 multi-agent 可视化视图。
 
@@ -773,7 +773,7 @@ Phase 2 目标是把 first implementation skeleton 推进到可长期运行的 m
 - 增加 scheduler state persistence，为 restart recovery 做准备。
 - Verification: dynamic spawn fixture、direct wake without polling、cancel during waiting、max depth/fan-out regression。
 
-### C4 - Role Policy Enforcement at Runtime Boundary
+### C4 - Role Policy Enforcement at Runtime Boundary (completed 2026-05-15)
 
 - 把 `tool_policy_id`、`can_write_workspace`、`can_send_kinds` 从记录/prompt 约束推进到 runtime 启动层。
 - Codex child 应按角色应用 sandbox、dangerous command policy、workspace write policy；Claude child 应对齐 allowed tools / canUseTool。
@@ -800,7 +800,7 @@ Phase 2 目标是把 first implementation skeleton 推进到可长期运行的 m
 - Blackboard fact 是否要在 P2 增加 confidence scoring 和 evaluator challenge 自动降权。
 - Long-lived persona catalog 是否需要独立于 task-scoped roles，例如 `macro-analyst`、`industry-analyst`、`technical-analyst`、`sentiment-analyst`。
 - ACP server 未来是否从 localhost/token auth 扩展到外部访问、agent discovery 或 marketplace。
-- Codex strict no-Bash researcher 是否需要额外 command policy wrapper；第一阶段先以 sandbox + manager policy + role prompt 限制。
+- 非默认 code-investigator / read-only Bash 角色是否需要额外 command policy wrapper；默认 planner/evaluator/generator path 已在 runtime boundary 强制 role policy。
 - Bounded peer-to-peer ping-pong 的默认开启条件；第一阶段默认关闭，只允许 parent-owned completion 和 directed typed messages。
 - `/task-log`、incident view 和 trace export 是否需要专门的 multi-agent 可视化视图。
 
@@ -822,3 +822,4 @@ Phase 2 目标是把 first implementation skeleton 推进到可长期运行的 m
 - 2026-05-15: Phase 2 C0/C1 已落地：新增下一阶段 C-slice 计划，并实现 Agent Run Manager policy/guardrails 配置与 Manager/Bus enforcement。
 - 2026-05-15: Phase 2 C2 已落地：新增 managed child runtime bus injection contract；Codex child 通过 `mcp_servers.miniclaw-agent-bus` config override 获得 live bus，Claude child 通过 `mcpServers` / `allowedTools` 合并获得 live bus；Manager 对每个 child 注入 task/run env、guardrail env 和 prompt usage block，同时继续要求 turn-end `miniclaw_agent_envelope` fallback。固定 planner -> generator -> evaluator 控制流尚未变成动态 DAG/FSM scheduler，留到 C3。
 - 2026-05-15: Phase 2 C3 已落地：新增 `agent_scheduler_state` migration 和 typed store API；新增 `AgentRunScheduler`，将 managed runtime 从内联 planner -> generator -> evaluator 控制流改为持久化 FSM plan。root supervisor wait/yield 时进入 `waiting`，收到 Agent Bus child event 后恢复 `running`；取消 waiting scheduler 会持久化 `cancelled`。当前默认 plan 仍保持 planner -> generator -> evaluator + bounded fix loop，任意 LLM-generated DAG 和 restart recovery 自动续跑留给后续 hardening。
+- 2026-05-15: Phase 2 C4 已落地：新增 `role-policy.ts`，将 child run 的 `tool_policy_id` / `can_write_workspace` 转成 runtime-boundary policy。Codex managed child 会按角色覆盖 sandbox / approval，并在 stream item 层把危险 command / read-only file change 转成 managed policy failure；Claude managed child 会按角色收窄 allowedTools / permissionMode / canUseTool，并拒绝 read-only 写入、workspace 外写入、native subagent tool 和危险 Bash 命令。C4 仍不处理 C5 的 sweeper/restart recovery。
