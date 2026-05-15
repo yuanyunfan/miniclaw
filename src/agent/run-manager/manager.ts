@@ -25,6 +25,7 @@ import {
   type ManagedEnvelopeMessage,
   type ManagedRunVerdict,
 } from "./envelope.js";
+import { createManagedAgentBusContext } from "./mcp/injection.js";
 import { resolveAgentRunManagerPolicy, type AgentRunManagerPolicy, type AgentRunManagerPolicyInput } from "./policy.js";
 
 const ALL_MESSAGE_KINDS: AgentMessageKind[] = [
@@ -616,6 +617,14 @@ export class AgentRunManager {
       title: `${input.run.role}: child run started`,
       countAsTool: false,
     }));
+    const managedContext = createManagedAgentBusContext({
+      taskId: this.params.taskId,
+      runId: input.run.id,
+      role: input.run.role,
+      cwd: this.params.cwd,
+      policy: this.policy,
+    });
+    const promptWithLiveBus = [input.prompt, managedContext.agentBusMcp?.promptBlock].filter(Boolean).join("\n\n");
     const childController = new AbortController();
     let timedOut = false;
     const forwardAbort = () => childController.abort(input.signal.reason);
@@ -631,8 +640,9 @@ export class AgentRunManager {
     try {
       result = await input.runtime.startTask({
         taskId: this.params.taskId,
-        prompt: input.prompt,
+        prompt: promptWithLiveBus,
         cwd: this.params.cwd,
+        managedContext,
         signal: childController.signal,
         onViewEvent: async (event) => {
           if (event.type === "task_completed" || event.type === "task_failed" || event.type === "session_started") return;

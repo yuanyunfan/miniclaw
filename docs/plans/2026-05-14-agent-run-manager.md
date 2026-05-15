@@ -583,7 +583,7 @@ Discord progress 不应该展示所有 agent 原文。建议输出 compact event
    - 为 role 构造 compact prompt。
    - 每个 role 调 `AgentRuntime.startTask()` 或更低层 child runner。
    - 记录 `provider_session_id`，支持取消和失败恢复。
-   - 先支持 turn-end envelope；live MCP bus 接入作为后续 hardening。
+   - 注入 live Agent Bus MCP server/env/tool config，并保留 turn-end envelope 作为兼容 fallback。
 
 8. **Claude managed child sessions**
    - 先复用 Claude task runner 能力，但不依赖 native Agent tool 作为 orchestration 真相源。
@@ -618,7 +618,7 @@ Discord progress 不应该展示所有 agent 原文。建议输出 compact event
 - Manager 能在不依赖 SQLite polling 的情况下唤醒 waiting run；SQLite 只作为 durable append/recovery state。
 - Root run 能持有 Discord route state，并把 child completion 映射为 compact Discord progress / final reply。
 - 取消 root task 会级联取消 active child runs，并把状态写入 durable store。
-- Codex / Claude managed child mode 至少支持 turn-end envelope fallback；live MCP bus 可以在后续 hardening 中增强。
+- Codex / Claude managed child mode 支持 live `miniclaw-agent-bus` MCP 注入，并保留 turn-end envelope fallback。
 - Minimal ACP adapter/server 有 fake round-trip 测试，但不对公网开放。
 - 验证命令至少覆盖 `pnpm run build`、store migration tests、manager fake E2E、single-agent regression 和 docs quality gate。
 
@@ -663,7 +663,6 @@ Discord progress 不应该展示所有 agent 原文。建议输出 compact event
 
 仍待 hardening：
 
-- live MCP bus 注入到真实 Codex / Claude child runtime 的启动配置中，让 child 在执行中主动调用 bus，而不是只依赖 turn-end envelope。
 - ACP HTTP server 的正式 lifecycle 管理、rate limit、payload size limit、redaction policy 和 trace export。
 - complexity classifier 自动选择 managed path；当前仍以 `agent_run_manager.enabled` flag 为主。
 
@@ -695,7 +694,8 @@ Snapshot date: 2026-05-15.
 - **Manager guardrails config + enforcement**: `agent_run_manager` 已支持 `max_turns`、`timeout_ms`、`max_messages`、`max_artifact_bytes`、`max_spawn_depth`、`max_children_per_run`、`max_concurrent_runs`、`max_ping_pong_turns`、`cleanup_ttl_ms`、`max_fix_iterations` 配置；Manager/Bus 会在 spawn、message append、artifact write、child runtime timeout 和 evaluator fix loop 上执行对应限制。`cleanup_ttl_ms` 目前只作为 sweeper/recovery 的配置输入，真正 stale run 清理仍在后续切片。
 - **Minimal ACP adapter/server**: 已有 localhost ACP-style manifest、external run、message、artifact reference、blackboard API 和 fake round-trip 测试；默认不做公开 marketplace。
 - **Agent Bus MCP compatibility surface**: `miniclaw-agent-bus` MCP-compatible tool surface 已有 `post_message/read_mailbox/write_artifact/read_artifact/list_blackboard/upsert_blackboard_fact`，并提供 `pnpm run mcp:agent-bus` 入口。
-- **Architecture doc sync**: `docs/architecture.md` 已记录 Agent Run Manager 当前受控插入层、managed envelope fallback、MCP tool surface 和 ACP adapter 状态。
+- **Live MCP bus injection into real child runtime**: Manager 为每个真实 Codex / Claude managed child run 创建 `managedContext`，注入 `miniclaw-agent-bus` stdio MCP server config、task/run env、guardrail env、allowed tool names 和 prompt usage block；Codex 通过 SDK client config override 注入 `mcp_servers.miniclaw-agent-bus`，Claude 通过 `mcpServers` / `allowedTools` 合并注入。turn-end `miniclaw_agent_envelope` fallback 仍保留。
+- **Architecture doc sync**: `docs/architecture.md` 已记录 Agent Run Manager 当前受控插入层、live MCP bus injection、managed envelope fallback、MCP tool surface 和 ACP adapter 状态。
 
 ### Partially Implemented
 
@@ -706,7 +706,6 @@ Snapshot date: 2026-05-15.
 
 ### Not Yet Implemented
 
-- **Live MCP bus injection into real child runtime**: MCP server 和 tool handlers 已存在，但真实 Codex / Claude child session 启动时还没有自动注入 bus MCP server/env/tool config；真实 child 仍主要依赖 turn-end envelope fallback。
 - **Sweeper / restart recovery**: 还没有定期 sweeper 处理 stale active runs、timeout、cancelled parent、orphaned child 和 restart recovery。
 - **ACP production lifecycle and hardening**: 还没有正式挂入 app lifecycle/config，也没有补齐 rate limit、payload size limit、redaction policy 和 trace export。
 - **Complexity classifier routing**: 还没有按 task complexity 自动进入 managed path；当前仍以 `agent_run_manager.enabled` flag 为主。
@@ -730,7 +729,7 @@ Phase 2 目标是把 first implementation skeleton 推进到可长期运行的 m
 - 在 managed child runtime path 强制 `timeout_ms`，并把 `max_fix_iterations` 从硬编码迁入 policy。
 - Verification: config tests、Agent Bus tests、managed runtime tests、`pnpm run build`。
 
-### C2 - Live MCP Bus Injection
+### C2 - Live MCP Bus Injection (completed 2026-05-15)
 
 - 为真实 Codex / Claude managed child session 增加 managed context contract，让 `AgentRuntime.startTask()` 或 child runner 能接收 bus MCP server/env/tool config。
 - Codex runner 需要把 `miniclaw-agent-bus` 暴露给 child session；Claude runner 需要把已有 `mcpServers` / `allowedTools` 注入点和 role policy 对齐。
@@ -791,3 +790,4 @@ Phase 2 目标是把 first implementation skeleton 推进到可长期运行的 m
 - 2026-05-15: 收敛 OpenClaw 调研章节，只保留 Agent Run Manager 相关实现摘要；将可借鉴点下沉到 MiniClaw 的目标执行模型、数据模型、通信契约、执行流程、权限安全和 Discord route state 章节。
 - 2026-05-15: 将文档从设计讨论进一步收敛为执行文档：锁定第一阶段决策、补充 required indexes / repository API、重排 implementation plan、增加 Definition of Done，并把阻塞性未决项改为非阻塞后续项。
 - 2026-05-15: Phase 2 C0/C1 已落地：新增下一阶段 C-slice 计划，并实现 Agent Run Manager policy/guardrails 配置与 Manager/Bus enforcement。
+- 2026-05-15: Phase 2 C2 已落地：新增 managed child runtime bus injection contract；Codex child 通过 `mcp_servers.miniclaw-agent-bus` config override 获得 live bus，Claude child 通过 `mcpServers` / `allowedTools` 合并获得 live bus；Manager 对每个 child 注入 task/run env、guardrail env 和 prompt usage block，同时继续要求 turn-end `miniclaw_agent_envelope` fallback。固定 planner -> generator -> evaluator 控制流尚未变成动态 DAG/FSM scheduler，留到 C3。

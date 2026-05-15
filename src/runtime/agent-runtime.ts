@@ -21,12 +21,32 @@ export interface AgentTaskAttachments {
   inputEntries?: unknown[];
 }
 
+export interface AgentTaskMcpServerConfig {
+  type?: "stdio";
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+}
+
+export interface AgentTaskManagedContext {
+  taskId: string;
+  runId: string;
+  role: string;
+  agentBusMcp?: {
+    serverName: string;
+    serverConfig: AgentTaskMcpServerConfig;
+    allowedTools: string[];
+    promptBlock: string;
+  };
+}
+
 export interface AgentTaskInput {
   taskId: string;
   prompt: string;
   cwd: string;
   resumeSessionId?: string;
   attachments?: AgentTaskAttachments;
+  managedContext?: AgentTaskManagedContext;
   signal: AbortSignal;
   onViewEvent: (event: TaskViewEvent) => Promise<void> | void;
   onTraceEvent: (eventType: string, options?: AgentRuntimeTraceOptions) => void;

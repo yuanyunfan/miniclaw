@@ -7,6 +7,7 @@ import { buildSupervisorBlock } from "../supervisor.js";
 import { assertProviderSession, formatSessionId } from "../session.js";
 import { formatCodexUsage } from "../usage.js";
 import {
+  type CodexClientOverrides,
   codexInput,
   codexThreadOptions,
   formatCodexItemLine,
@@ -16,6 +17,25 @@ import {
 import { taskViewEvents } from "../task-view-events.js";
 import { pushCompactedLine } from "./progress-lines.js";
 import type { TaskRunner, TaskRunnerResult } from "./types.js";
+import type { AgentTaskManagedContext } from "../../runtime/agent-runtime.js";
+
+export function codexManagedAgentBusOverrides(managedContext: AgentTaskManagedContext | undefined): CodexClientOverrides | undefined {
+  const agentBus = managedContext?.agentBusMcp;
+  if (!agentBus) return undefined;
+  const { serverConfig } = agentBus;
+  return {
+    config: {
+      mcp_servers: {
+        [agentBus.serverName]: {
+          enabled: true,
+          command: serverConfig.command,
+          ...(serverConfig.args ? { args: serverConfig.args } : {}),
+          ...(serverConfig.env ? { env: serverConfig.env } : {}),
+        },
+      },
+    },
+  };
+}
 
 export const codexTaskRunner: TaskRunner = {
   provider: "codex",
@@ -35,7 +55,7 @@ export const codexTaskRunner: TaskRunner = {
       formatTaskPromptForSystem(input.prompt),
     ].filter(Boolean).join("\n\n");
 
-    const codex = getCodexClient();
+    const codex = getCodexClient(codexManagedAgentBusOverrides(input.managedContext));
     const threadOptions = codexThreadOptions("task", input.cwd);
     const thread = resumeRawId
       ? codex.resumeThread(resumeRawId, threadOptions)

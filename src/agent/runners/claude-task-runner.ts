@@ -1,9 +1,10 @@
 import { config } from "../../config.js";
+import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import { EASTMONEY_JYWG_TOOL_NAMES } from "../../mcp/eastmoney-jywg/safety.js";
 import { FUTU_STOCK_TOOL_NAMES } from "../../mcp/futu-stock/safety.js";
 import { buildMemoryPrompt } from "../../memory/inject.js";
 import { IDENTITY_LINE_TASK } from "../identity.js";
-import { loadMcpServers } from "../mcp.js";
+import { loadMcpServers, type McpServers } from "../mcp.js";
 import { assertProviderSession, formatSessionId } from "../session.js";
 import { loadSubagents, listSubagentNames } from "../subagents.js";
 import { buildSupervisorBlock } from "../supervisor.js";
@@ -11,6 +12,7 @@ import { formatAnthropicUsage } from "../usage.js";
 import { taskViewEvents } from "../task-view-events.js";
 import { pushCompactedLine } from "./progress-lines.js";
 import type { TaskRunner, TaskRunnerResult } from "./types.js";
+import type { AgentTaskManagedContext } from "../../runtime/agent-runtime.js";
 
 function toolIcon(name: string): string {
   if (name === "Skill") return "📚";
@@ -43,6 +45,22 @@ function allowedEastmoneyJywgMcpTools(mcpServers: Record<string, unknown>): stri
   return mcpServers["eastmoney-jywg"]
     ? EASTMONEY_JYWG_TOOL_NAMES.map((name) => `mcp__eastmoney-jywg__${name}`)
     : [];
+}
+
+export function mergeManagedAgentBusMcpServers(
+  mcpServers: McpServers,
+  managedContext: AgentTaskManagedContext | undefined,
+): McpServers {
+  const agentBus = managedContext?.agentBusMcp;
+  if (!agentBus) return mcpServers;
+  return {
+    ...mcpServers,
+    [agentBus.serverName]: agentBus.serverConfig as McpServerConfig,
+  };
+}
+
+export function managedAgentBusAllowedTools(managedContext: AgentTaskManagedContext | undefined): string[] {
+  return managedContext?.agentBusMcp?.allowedTools ?? [];
 }
 
 function formatToolDetail(name: string, input: Record<string, unknown>): string {
@@ -88,7 +106,7 @@ export const claudeTaskRunner: TaskRunner = {
 
     const subagents = loadSubagents();
     const subagentNames = listSubagentNames();
-    const mcpServers = loadMcpServers();
+    const mcpServers = mergeManagedAgentBusMcpServers(loadMcpServers(), input.managedContext);
     const supervisorBlock = buildSupervisorBlock(subagentNames);
     const claudeFlagSettings = config.claude.disableHooks
       ? { disableAllHooks: true as const }
@@ -136,6 +154,7 @@ export const claudeTaskRunner: TaskRunner = {
           "mcp__context7__query-docs",
           ...allowedEastmoneyJywgMcpTools(mcpServers),
           ...allowedFutuStockMcpTools(mcpServers),
+          ...managedAgentBusAllowedTools(input.managedContext),
         ],
         agents: subagents,
         ...(Object.keys(mcpServers).length ? { mcpServers } : {}),

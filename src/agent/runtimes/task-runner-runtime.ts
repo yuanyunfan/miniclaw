@@ -18,6 +18,7 @@ export function createTaskRunnerRuntime(params: {
     ...(input.attachments?.inputEntries
       ? { attachmentCodexInputs: input.attachments.inputEntries as CodexInputEntry[] }
       : {}),
+    ...(input.managedContext ? { managedContext: input.managedContext } : {}),
     signal: input.signal,
     onViewEvent: input.onViewEvent,
     onTraceEvent: input.onTraceEvent,

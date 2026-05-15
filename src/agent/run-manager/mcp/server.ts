@@ -12,6 +12,7 @@ import {
   type BlackboardFactConfidence,
 } from "../../../store/agent-run-manager.js";
 import { AgentBus } from "../bus.js";
+import { DEFAULT_AGENT_RUN_MANAGER_POLICY } from "../policy.js";
 
 const VERSION = "0.1.0";
 
@@ -33,6 +34,37 @@ function jsonText(value: unknown): string {
 function stringArray(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
   return value.filter((item): item is string => typeof item === "string");
+}
+
+function positiveIntFromEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const value = Number(raw);
+  return Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
+function nonNegativeIntFromEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const value = Number(raw);
+  return Number.isInteger(value) && value >= 0 ? value : fallback;
+}
+
+export function createAgentBusFromEnv(): AgentBus {
+  return new AgentBus({
+    maxMessages: positiveIntFromEnv(
+      "MINICLAW_AGENT_RUN_MANAGER_MAX_MESSAGES",
+      DEFAULT_AGENT_RUN_MANAGER_POLICY.maxMessages
+    ),
+    maxArtifactBytes: positiveIntFromEnv(
+      "MINICLAW_AGENT_RUN_MANAGER_MAX_ARTIFACT_BYTES",
+      DEFAULT_AGENT_RUN_MANAGER_POLICY.maxArtifactBytes
+    ),
+    maxPingPongTurns: nonNegativeIntFromEnv(
+      "MINICLAW_AGENT_RUN_MANAGER_MAX_PING_PONG_TURNS",
+      DEFAULT_AGENT_RUN_MANAGER_POLICY.maxPingPongTurns
+    ),
+  });
 }
 
 export function createAgentBusToolHandlers(context: AgentBusToolContext) {
@@ -183,7 +215,7 @@ export async function runAgentBusMcpServerFromEnv(): Promise<void> {
     throw new Error("MINICLAW_AGENT_BUS_TASK_ID and MINICLAW_AGENT_BUS_RUN_ID are required");
   }
   initDb();
-  const server = createAgentBusMcpServer({ taskId, runId, cwd, bus: new AgentBus() });
+  const server = createAgentBusMcpServer({ taskId, runId, cwd, bus: createAgentBusFromEnv() });
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }

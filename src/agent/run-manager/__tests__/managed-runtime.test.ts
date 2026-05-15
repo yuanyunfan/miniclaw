@@ -163,6 +163,62 @@ describe("AgentRunManager managed runtime fallback", () => {
     expect(listRunsForTask("task-managed-runtime").find((run) => run.role === "supervisor")?.status).toBe("failed");
   });
 
+  it("passes live Agent Bus MCP managed context into provider child runs", async () => {
+    const childInputs: AgentTaskInput[] = [];
+    const runtime: AgentRuntime = {
+      id: "codex",
+      kind: "coding_agent",
+      capabilities: { resumeSession: true, cancel: true, toolEvents: true, workspaceWrite: true },
+      startTask: vi.fn(async (input) => {
+        childInputs.push(input);
+        if (childInputs.length === 1) return taskResult(envelope({ summary: "planner ready" }), "codex:planner");
+        if (childInputs.length === 2) return taskResult(envelope({ summary: "implementation" }), "codex:generator");
+        return taskResult(envelope({ summary: "accepted", verdict: "PASS" }), "codex:evaluator");
+      }),
+    };
+    const manager = new AgentRunManager({
+      taskId: "task-managed-runtime",
+      cwd: tmp,
+      provider: "codex",
+      reporter: new TaskReporter("task-managed-runtime"),
+      channel: fakeChannel() as never,
+      policy: {
+        maxMessages: 12,
+        maxArtifactBytes: 3456,
+        maxPingPongTurns: 4,
+      },
+    });
+
+    const result = await manager.runManagedRuntime({
+      prompt: "managed runtime task",
+      runtime,
+      signal: new AbortController().signal,
+      onViewEvent: () => undefined,
+    });
+
+    expect(result.success).toBe(true);
+    expect(childInputs).toHaveLength(3);
+    expect(childInputs[0]?.prompt).toContain("MiniClaw live Agent Bus MCP tools are available");
+    expect(childInputs[0]?.managedContext).toMatchObject({
+      taskId: "task-managed-runtime",
+      role: "planner",
+      agentBusMcp: {
+        serverName: "miniclaw-agent-bus",
+        allowedTools: expect.arrayContaining(["mcp__miniclaw-agent-bus__post_message"]),
+        serverConfig: {
+          command: "pnpm",
+          env: {
+            MINICLAW_AGENT_BUS_TASK_ID: "task-managed-runtime",
+            MINICLAW_AGENT_RUN_MANAGER_MAX_MESSAGES: "12",
+            MINICLAW_AGENT_RUN_MANAGER_MAX_ARTIFACT_BYTES: "3456",
+            MINICLAW_AGENT_RUN_MANAGER_MAX_PING_PONG_TURNS: "4",
+          },
+        },
+      },
+    });
+    expect(childInputs.map((input) => input.managedContext?.role)).toEqual(["planner", "generator", "evaluator"]);
+  });
+
   it("applies policy guardrails before spawning child runs beyond max turns", async () => {
     const runtime = fakeRuntime([
       taskResult(envelope({ summary: "planner ready" }), "codex:planner"),

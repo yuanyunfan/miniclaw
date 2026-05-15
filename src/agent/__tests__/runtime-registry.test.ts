@@ -67,6 +67,11 @@ describe("agent runtime registry", () => {
           contentBlocks: [{ type: "text", text: "attachment" }],
           inputEntries: [{ type: "input_text", text: "attachment" }],
         },
+        managedContext: {
+          taskId: "task-1",
+          runId: "run-1",
+          role: "planner",
+        },
         signal,
         onViewEvent: () => undefined,
         onTraceEvent: () => undefined,
@@ -78,6 +83,11 @@ describe("agent runtime registry", () => {
         cwd: "/tmp/work",
         attachmentBlocks: [{ type: "text", text: "attachment" }],
         attachmentCodexInputs: [{ type: "input_text", text: "attachment" }],
+        managedContext: {
+          taskId: "task-1",
+          runId: "run-1",
+          role: "planner",
+        },
         signal,
       }));
     } finally {

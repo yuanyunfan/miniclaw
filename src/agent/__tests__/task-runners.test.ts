@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { claudeTaskRunner } from "../runners/claude-task-runner.js";
+import {
+  claudeTaskRunner,
+  managedAgentBusAllowedTools,
+  mergeManagedAgentBusMcpServers,
+} from "../runners/claude-task-runner.js";
 import { codexTaskRunner } from "../runners/codex-task-runner.js";
 import { createFakeTaskRunner } from "../runners/fake-task-runner.js";
 
@@ -9,6 +13,34 @@ describe("task runners", () => {
     expect(typeof claudeTaskRunner.run).toBe("function");
     expect(codexTaskRunner.provider).toBe("codex");
     expect(typeof codexTaskRunner.run).toBe("function");
+  });
+
+  it("merges managed Agent Bus MCP into Claude runner options", () => {
+    const managedContext = {
+      taskId: "task-claude-bus",
+      runId: "run-claude-child",
+      role: "planner",
+      agentBusMcp: {
+        serverName: "miniclaw-agent-bus",
+        serverConfig: {
+          type: "stdio" as const,
+          command: "pnpm",
+          args: ["--dir", "/repo/miniclaw", "run", "mcp:agent-bus"],
+          env: { MINICLAW_AGENT_BUS_RUN_ID: "run-claude-child" },
+        },
+        allowedTools: ["mcp__miniclaw-agent-bus__post_message"],
+        promptBlock: "live bus",
+      },
+    };
+
+    expect(mergeManagedAgentBusMcpServers({ exa: { command: "exa" } }, managedContext)).toMatchObject({
+      exa: { command: "exa" },
+      "miniclaw-agent-bus": {
+        command: "pnpm",
+        env: { MINICLAW_AGENT_BUS_RUN_ID: "run-claude-child" },
+      },
+    });
+    expect(managedAgentBusAllowedTools(managedContext)).toEqual(["mcp__miniclaw-agent-bus__post_message"]);
   });
 
   it("fake runner emits provider-neutral view events and trace facts", async () => {

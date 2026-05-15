@@ -12,16 +12,29 @@ export type CodexMode = "task" | "chat" | "stage";
 
 let client: Codex | null = null;
 
+export type CodexClientOverrides = Pick<CodexOptions, "config" | "env">;
+
 export function resetCodexClient(): void {
   client = null;
 }
 
-export function getCodexClient(): Codex {
+function baseCodexOptions(): CodexOptions {
+  const opts: CodexOptions = {};
+  if (config.openaiApiKey) opts.apiKey = config.openaiApiKey;
+  if (config.openaiBaseUrl) opts.baseUrl = config.openaiBaseUrl;
+  return opts;
+}
+
+export function getCodexClient(overrides?: CodexClientOverrides): Codex {
+  if (overrides) {
+    return new Codex({
+      ...baseCodexOptions(),
+      ...(overrides.config ? { config: overrides.config } : {}),
+      ...(overrides.env ? { env: overrides.env } : {}),
+    });
+  }
   if (!client) {
-    const opts: CodexOptions = {};
-    if (config.openaiApiKey) opts.apiKey = config.openaiApiKey;
-    if (config.openaiBaseUrl) opts.baseUrl = config.openaiBaseUrl;
-    client = new Codex(opts);
+    client = new Codex(baseCodexOptions());
   }
   return client;
 }

@@ -82,3 +82,64 @@ describe("codexThreadOptions", () => {
     });
   });
 });
+
+describe("codex managed Agent Bus overrides", () => {
+  it("maps managed MCP context into Codex config overrides", async () => {
+    const localTmp = mkdtempSync(join(tmpdir(), "miniclaw-codex-managed-"));
+    const previous = {
+      MINICLAW_CONFIG: process.env.MINICLAW_CONFIG,
+      DISCORD_TOKEN: process.env.DISCORD_TOKEN,
+      DISCORD_CLIENT_ID: process.env.DISCORD_CLIENT_ID,
+      DISCORD_GUILD_ID: process.env.DISCORD_GUILD_ID,
+      MINICLAW_ALLOWED_USER_ID: process.env.MINICLAW_ALLOWED_USER_ID,
+    };
+    try {
+      vi.resetModules();
+      const miniclawConfig = join(localTmp, "miniclaw.yaml");
+      writeFileSync(miniclawConfig, "{}");
+      process.env.MINICLAW_CONFIG = miniclawConfig;
+      process.env.DISCORD_TOKEN = "test-token";
+      process.env.DISCORD_CLIENT_ID = "test-client";
+      process.env.DISCORD_GUILD_ID = "test-guild";
+      process.env.MINICLAW_ALLOWED_USER_ID = "test-user";
+
+      const { codexManagedAgentBusOverrides } = await import("../runners/codex-task-runner.js");
+      const overrides = codexManagedAgentBusOverrides({
+        taskId: "task-codex-bus",
+        runId: "run-codex-child",
+        role: "planner",
+        agentBusMcp: {
+          serverName: "miniclaw-agent-bus",
+          serverConfig: {
+            type: "stdio",
+            command: "pnpm",
+            args: ["--dir", "/repo/miniclaw", "run", "mcp:agent-bus"],
+            env: { MINICLAW_AGENT_BUS_RUN_ID: "run-codex-child" },
+          },
+          allowedTools: ["mcp__miniclaw-agent-bus__post_message"],
+          promptBlock: "live bus",
+        },
+      });
+
+      expect(overrides).toEqual({
+        config: {
+          mcp_servers: {
+            "miniclaw-agent-bus": {
+              enabled: true,
+              command: "pnpm",
+              args: ["--dir", "/repo/miniclaw", "run", "mcp:agent-bus"],
+              env: { MINICLAW_AGENT_BUS_RUN_ID: "run-codex-child" },
+            },
+          },
+        },
+      });
+    } finally {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      rmSync(localTmp, { recursive: true, force: true });
+      vi.resetModules();
+    }
+  });
+});
