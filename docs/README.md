@@ -1,13 +1,12 @@
 # MiniClaw Docs Index
 
-> 结论：顶层文档只保留 MiniClaw 的整体设计入口；具体能力、子系统、provider 和业务 feature 统一放到 `docs/features/` 下。历史实施计划保留在 `docs/plans/`，私有调研保留在 `docs/private/`。
+> 结论：顶层文档只保留 MiniClaw 的整体设计入口；具体能力、子系统、provider 和业务 feature 统一放到 `docs/features/` 下。历史实施计划保留在 `docs/plans/`，过期审计/报告保留在 `docs/archive/`，私有调研保留在 `docs/private/`。
 
 ## Core Design
 
 - [`architecture.md`](architecture.md): MiniClaw 全局架构、数据流、cron、DB、用户级目录。
 - [`bot-routing.md`](bot-routing.md): Discord Gateway、message、slash command、thread continuation、chat/task routing。
 - [`chat-router-current-logic.md`](chat-router-current-logic.md): 当前 chat router 的代码级判断逻辑、capability 映射、确认按钮和真实误分流边界。
-- [`continuous-improvement-report.md`](continuous-improvement-report.md): MiniClaw 当前架构审计、持续优化方向和 30/60/90 天路线图。
 - [`install-distribution-strategy.md`](install-distribution-strategy.md): 面向外部用户的安装、配置向导、Release artifact 和本机 Deploy 改造建议。
 - [`prompts.md`](prompts.md): 框架级 prompt 资产管理。
 - [`quality-gates.md`](quality-gates.md): 测试分层、质量门禁、Discord E2E 方案。
@@ -40,6 +39,10 @@
 - [`plans/README.md`](plans/README.md): 非平凡开发任务的 plan 文档规范。
 - `plans/YYYY-MM-DD-*.md`: 已完成或进行中的实施计划。
 
+## Archive
+
+- [`archive/2026-05-11-continuous-improvement-report.md`](archive/2026-05-11-continuous-improvement-report.md): 2026-05-11 架构审计和持续优化历史报告；不再作为当前 source of truth。
+
 ## Runbooks
 
 - [`runbooks/install.md`](runbooks/install.md): MiniClaw 1.0 面向技术用户的安装、配置和故障排查流程。
@@ -55,5 +58,6 @@
 - 用户可见子系统、业务能力、capability 和 provider 文档全部放在 `docs/features/`，不再创建子级目录。
 - feature 文件使用两位阿拉伯数字前缀，按实现顺序从 `01-` 开始递增。
 - 实施计划只放 `docs/plans/`，不要与当前设计文档混放。
+- 过期审计报告、历史复盘和不再维护的全局路线图放在 `docs/archive/`，不能替代当前 source-of-truth 文档。
 - 可执行运维流程放在 `docs/runbooks/`。
 - 含账户、cookie、交易后台细节的私有调研放 `docs/private/`。

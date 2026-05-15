@@ -99,7 +99,7 @@ For normal work, the right fix is to update the mapped doc or add a new source-o
    - If it grows, move to `scripts/docs-drift-map.ts`.
 4. Avoid false positives for plan-only changes.
    - Changes under `docs/plans/**` should not require source docs.
-   - Changes under `docs/continuous-improvement-report.md` should not require docs sync.
+   - Changes under `docs/archive/**` should not require docs sync.
 5. Add tests or testable helpers.
    - Extract pure helpers into importable module if needed.
    - Test representative path sets and expected required docs.
@@ -151,7 +151,7 @@ Final behavior:
 - Added testable changed-path mapping helpers in `src/quality/docs-drift.ts`; `scripts/quality-docs.ts` now keeps the fixed D1 invariant checks and wires git changed-path collection into those helpers.
 - `quality:docs` defaults to staged paths when any staged path exists; otherwise it checks `git diff HEAD` plus untracked non-ignored paths. It also supports `--staged`, `--tree`, `--base <ref> [--head <ref>]`, `MINICLAW_DOCS_DRIFT_BASE`, and `MINICLAW_DOCS_DRIFT_HEAD`.
 - `MINICLAW_DOCS_DRIFT_ALLOW=1` bypasses only changed-path mapping failures. Schema version, Smart Router ER fields, and feature-doc index invariants still fail normally.
-- Ignored source triggers: `docs/plans/**`, `docs/continuous-improvement-report.md`, `docs/private/**`, tests, specs, and fixtures. Plan docs are not accepted as source-of-truth docs for mapped source changes.
+- Ignored source triggers: `docs/plans/**`, `docs/archive/**`, `docs/private/**`, tests, specs, and fixtures. Plan docs and archived reports are not accepted as source-of-truth docs for mapped source changes.
 
 Final mapping:
 

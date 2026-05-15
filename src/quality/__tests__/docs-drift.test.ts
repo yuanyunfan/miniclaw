@@ -47,12 +47,13 @@ describe("docs drift requirement matching", () => {
     expect(findings[0].missingAnyOf).toContain("docs/bot-routing.md");
   });
 
-  it("ignores tests, fixtures, plans, and continuous-improvement-only changes as source triggers", () => {
+  it("ignores tests, fixtures, plans, and archive-only changes as source triggers", () => {
     const evaluation = evaluateDocsDrift([
       "src/cron/__tests__/loader.test.ts",
       "src/routing/__fixtures__/router-review.json",
       "docs/plans/2026-05-11-docs-drift-gate.md",
-      "docs/continuous-improvement-report.md",
+      "docs/archive/2026-05-11-continuous-improvement-report.md",
+      "docs/archive/old-report.md",
     ]);
 
     expect(evaluation.matchedRequirements).toEqual([]);

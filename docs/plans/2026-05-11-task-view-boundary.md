@@ -222,7 +222,7 @@ Final Ralph phase target for this plan.
 
 - Update `docs/architecture.md` task execution section with the new runner/view/trace split.
 - Update `docs/features/03-discord-task-output.md` or equivalent Discord output doc if message behavior changes.
-- Update `docs/continuous-improvement-report.md` only after implementation if this task is no longer open.
+- Do not update archived improvement reports for current implementation status; sync current source-of-truth docs instead.
 - Run `pnpm run quality:docs`.
 
 ## Execution Notes

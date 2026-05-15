@@ -19,7 +19,7 @@ export interface DocsDriftFinding extends MatchedDocsDriftRequirement {
 
 export const DOCS_DRIFT_IGNORED_PATTERNS = [
   "docs/plans/**",
-  "docs/continuous-improvement-report.md",
+  "docs/archive/**",
   "docs/private/**",
   "**/__tests__/**",
   "**/*.test.ts",

@@ -198,7 +198,7 @@ Record migration versions, repository splits, retention defaults, and verificati
   - `src/store/migrations/*`: one module per schema version plus shared helpers/types.
   - `src/store/__tests__/migrations.test.ts`: covers new DB migration history, old v4 upgrade, idempotent rerun, and failed migration rollback.
   - `src/store/__tests__/db.test.ts`: covers facade-level history table presence and current history rows.
-  - `scripts/quality-docs.ts`, `docs/architecture.md`, `docs/quality-gates.md`, `docs/continuous-improvement-report.md`: moved the schema version source of truth to `src/store/schema.ts` and documented the audit table.
+  - `scripts/quality-docs.ts`, `docs/architecture.md`, `docs/quality-gates.md`, `docs/archive/2026-05-11-continuous-improvement-report.md`: moved the schema version source of truth to `src/store/schema.ts` and documented the audit table.
 - Verification:
   - `pnpm vitest run src/store/__tests__/migrations.test.ts src/store/__tests__/db.test.ts` passed, 24 tests.
   - `pnpm vitest run src/store` passed, 43 tests.
@@ -223,7 +223,7 @@ Record migration versions, repository splits, retention defaults, and verificati
 - Changed files:
   - `src/store/db.ts`: remains the public facade and re-exports repository helpers; Stage scene helpers remain in place.
   - `src/store/__tests__/db.test.ts`: added direct repository characterization tests for task outcome linkage and chat history ordering.
-  - `docs/architecture.md`, `docs/continuous-improvement-report.md`: documented the repository boundary and updated current hotspot status.
+  - `docs/architecture.md`, `docs/archive/2026-05-11-continuous-improvement-report.md`: documented the repository boundary and updated current hotspot status.
 - Verification:
   - `pnpm vitest run src/store/__tests__/db.test.ts` passed, 22 tests.
   - `pnpm vitest run src/store/__tests__/migrations.test.ts src/store/__tests__/db.test.ts` passed, 26 tests.
@@ -252,7 +252,7 @@ Record migration versions, repository splits, retention defaults, and verificati
   - `scripts/state-cleanup.ts`, `package.json`: added `pnpm run state:cleanup -- [--dry-run | --execute] [--table <scope>] [--older-than-days <n>]`.
   - `src/config.ts`, `src/__tests__/config.test.ts`, `config.example.yaml`: added `state.retention.*` YAML/env configuration with env override coverage.
   - `src/store/__tests__/state-cleanup.test.ts`: covered dry-run rollback behavior, single-scope cleanup, market forecast child-before-parent deletion, and closed incident safety.
-  - `docs/architecture.md`, `docs/continuous-improvement-report.md`: documented retention defaults, cleanup command, and remaining redaction-policy gap.
+  - `docs/architecture.md`, `docs/archive/2026-05-11-continuous-improvement-report.md`: documented retention defaults, cleanup command, and remaining redaction-policy gap.
 - Verification:
   - `pnpm vitest run src/store/__tests__/state-cleanup.test.ts` passed, 6 tests.
   - `pnpm vitest run src/__tests__/config.test.ts` passed, 17 tests.
@@ -279,7 +279,7 @@ Record migration versions, repository splits, retention defaults, and verificati
   - `src/commands/incident-detail.ts`: routed summary, source/diagnosis fields, trace snippets, repair paths, and incident event payload text through the shared diagnostic redaction policy.
   - `src/commands/task-log.ts`, `src/discord/task-trace-attachment.ts`: updated user-facing safety copy to include session/account redaction.
   - `src/privacy/__tests__/diagnostic-redaction.test.ts`, `src/store/__tests__/task-trace-export.test.ts`, `src/commands/__tests__/incident-detail.test.ts`: covered credential text, recursive object redaction, hashed session/account identifiers, trace export redaction, and incident detail redaction.
-  - `docs/architecture.md`, `docs/features/03-discord-task-output.md`, `docs/features/13-auto-doctor.md`, `docs/continuous-improvement-report.md`: documented the shared diagnostic redaction boundary and updated hotspot status.
+  - `docs/architecture.md`, `docs/features/03-discord-task-output.md`, `docs/features/13-auto-doctor.md`, `docs/archive/2026-05-11-continuous-improvement-report.md`: documented the shared diagnostic redaction boundary and updated hotspot status.
 - Verification:
   - `pnpm vitest run src/privacy/__tests__/diagnostic-redaction.test.ts src/store/__tests__/task-trace-export.test.ts src/commands/__tests__/incident-detail.test.ts` passed, 12 tests.
   - `pnpm vitest run src/commands/__tests__/task-log.test.ts src/discord/__tests__/task-view-reporter.test.ts` passed, 11 tests.

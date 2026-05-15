@@ -30,7 +30,7 @@ MiniClaw 不是普通 TypeScript library。它同时包含：
 
 当前仍需注意：
 
-- D1 文档漂移已有第一层脚本化检查；changed-path 到 docs path 的语义映射仍需要人工 review。
+- D1 文档漂移已有脚本化 changed-path 映射；语义是否写对仍需要人工 review。
 - 真实 Discord E2E 依赖 test Discord secrets 和网络稳定性，不进入普通 pre-commit / pre-push / CI 默认路径。
 - coverage ratchet 只覆盖第一批纯逻辑/formatter/provider 模块；I/O-heavy 入口仍以 targeted tests + E2E fixture 保护。
 
@@ -254,7 +254,7 @@ MiniClaw 是 docs-first 项目，长期维护依赖 `docs/architecture.md`、`do
 
 - `pnpm run quality:docs` 运行 `scripts/quality-docs.ts`，从 `src/store/schema.ts` 检查 DB schema version，并检查 Smart Router ER 字段、`docs/features/*.md` 索引，以及 changed-path 到 source-of-truth docs 的映射。
 - 默认模式先看 staged paths；如果没有 staged paths，则检查 `git diff HEAD` 加 untracked non-ignored files。也可显式使用 `--staged`、`--tree` 或 `--base <ref> [--head <ref>]`。
-- `docs/plans/**`、`docs/continuous-improvement-report.md`、`docs/private/**`、tests 和 fixtures 不作为 source trigger；`docs/plans/**` 也不能替代当前 source-of-truth docs。
+- `docs/plans/**`、`docs/archive/**`、`docs/private/**`、tests 和 fixtures 不作为 source trigger；`docs/plans/**` 和 `docs/archive/**` 也不能替代当前 source-of-truth docs。
 - 对紧急本地修复可用 `MINICLAW_DOCS_DRIFT_ALLOW=1 pnpm run quality:docs` 只绕过 changed-path 映射；DB schema、Smart Router ER 和 feature index invariant 仍会失败。
 - 如果确实暂不改文档，必须在 commit body、PR 或后续 plan 中写明原因和补文档路径。
 

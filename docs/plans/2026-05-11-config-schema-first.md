@@ -181,7 +181,7 @@ Record moved modules, compatibility behavior, env precedence, and verification c
   - `src/config/types.ts`: moved public config type aliases and notification config interface.
   - `src/config/__tests__/config-boundaries.test.ts`: added boundary tests for YAML loading, explicit missing config behavior, raw schema rejection, env precedence, blank-env unlimited semantics, path resolution, and E2E guard behavior.
   - `src/quality/docs-drift.ts`, `src/quality/__tests__/docs-drift.test.ts`, `docs/quality-gates.md`: updated docs drift mapping so future `src/config/**` changes require config docs sync.
-  - `docs/architecture.md`, `docs/continuous-improvement-report.md`: documented the new config facade/module boundary and remaining runtime assembly hotspot.
+  - `docs/architecture.md`, `docs/archive/2026-05-11-continuous-improvement-report.md`: documented the new config facade/module boundary and remaining runtime assembly hotspot.
 - Behavior parity tests:
   - `pnpm vitest run src/quality/__tests__/docs-drift.test.ts src/config/__tests__/config-boundaries.test.ts src/__tests__/config.test.ts src/e2e/__tests__/safety.test.ts` passed, 36 tests.
   - `pnpm run typecheck` passed.
@@ -199,7 +199,7 @@ Record moved modules, compatibility behavior, env precedence, and verification c
   - `src/config/runtime.ts`: added `createRuntimeConfig()`, `config`, `assertE2eSafeRuntimePath()`, deep runtime freeze, provider base URL env side-effect preservation, auto-reply warning, and final E2E cross-field validation.
   - `src/config/domains/*.ts`: added domain builders that keep defaults, YAML paths, env keys, enum/typed validators, and path resolution near each config domain.
   - `src/config/__tests__/config-boundaries.test.ts`: added direct runtime composition and deep-freeze coverage without importing the singleton config facade.
-  - `docs/architecture.md`, `docs/continuous-improvement-report.md`: updated config boundary documentation and current hotspot status.
+  - `docs/architecture.md`, `docs/archive/2026-05-11-continuous-improvement-report.md`: updated config boundary documentation and current hotspot status.
 - Behavior parity tests:
   - `pnpm vitest run src/config/__tests__/config-boundaries.test.ts src/__tests__/config.test.ts src/e2e/__tests__/safety.test.ts` passed, 28 tests.
   - `pnpm run typecheck` passed.

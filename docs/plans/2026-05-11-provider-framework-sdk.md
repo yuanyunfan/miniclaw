@@ -43,7 +43,7 @@ This matters because cron failures, Auto Doctor, and zero-touch reports need to 
   - `src/providers/eastmoney-jywg-readonly/*`
   - `src/providers/futu-stock/*`
 - `docs/plans/2026-05-10-market-intel-pre-market-research.md`: structured evidence direction.
-- `docs/continuous-improvement-report.md`: provider framework gap and manifest sketch.
+- `docs/archive/2026-05-11-continuous-improvement-report.md`: provider framework gap and manifest sketch.
 
 ## Proposed Manifest
 

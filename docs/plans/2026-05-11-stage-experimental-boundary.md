@@ -35,7 +35,7 @@ If Stage becomes deeply coupled to the Discord task runtime, MiniClaw will effec
 - `src/stage/personas.ts`: Stage persona definitions.
 - `src/stage/e2e.ts` and `src/stage/smoke.ts`: Stage checks.
 - `src/stage/__tests__/*`: existing Stage tests.
-- `docs/continuous-improvement-report.md`: recommends keeping Stage experimental.
+- `docs/archive/2026-05-11-continuous-improvement-report.md`: recommends keeping Stage experimental.
 
 ## Boundary Rules
 

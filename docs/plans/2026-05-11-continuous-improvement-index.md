@@ -5,7 +5,7 @@ Date: 2026-05-11
 
 ## Background
 
-`docs/continuous-improvement-report.md` collects the next MiniClaw improvement backlog after the current code alignment pass. This index turns that report into execution-ready plan documents under `docs/plans/`.
+`docs/archive/2026-05-11-continuous-improvement-report.md` collects the next MiniClaw improvement backlog after the current code alignment pass. This index turns that report into execution-ready plan documents under `docs/plans/`.
 
 Each linked plan is meant to be usable as the kickoff artifact for a separate Codex session. A later session should start by reading the specific plan, then verify current code state before editing because MiniClaw is changing quickly.
 
