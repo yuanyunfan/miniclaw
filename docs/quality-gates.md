@@ -254,7 +254,7 @@ MiniClaw 是 docs-first 项目，长期维护依赖 `docs/architecture.md`、`do
 
 - `pnpm run quality:docs` 依次运行 `quality:docs:drift`、`quality:docs-i18n` 和 `quality:website-docs`。
 - `quality:docs:drift` 运行 `scripts/quality-docs.ts`，从 `src/store/schema.ts` 检查 DB schema version，并检查 Smart Router ER 字段、`docs/features/*.md` 索引，以及 changed-path 到 source-of-truth docs 的映射。
-- `quality:docs-i18n` 读取 `docs/documentation-migration-map.md`，检查中文 pairing、`docs/zh/` 是否仍被 git ignore、frontmatter、`translation_of`、`doc_id` 和 heading level shape；初期 missing/pending translation 以 warning 为主。
+- `quality:docs-i18n` 读取 `docs/documentation-migration-map.md`，检查中文 pairing、`docs/zh/` 是否仍被 git ignore、frontmatter、`translation_of`、`doc_id`，并只对 `translation_status: current` 的文档检查 heading level shape；初期 missing/pending translation 以 warning 为主。
 - `quality:website-docs` 扫描 `website/**/*.md(x)`，要求非 landing page 声明 language-aware `source_docs`，禁止引用 `docs/private/**`，并报告 canonical docs 变更影响到哪些 website pages。
 - 默认模式先看 staged paths；如果没有 staged paths，则检查 `git diff HEAD` 加 untracked non-ignored files。也可显式使用 `--staged`、`--tree` 或 `--base <ref> [--head <ref>]`。
 - `docs/plans/**`、`docs/archive/**`、`docs/private/**`、tests 和 fixtures 不作为 source trigger；`docs/plans/**` 和 `docs/archive/**` 也不能替代当前 source-of-truth docs。

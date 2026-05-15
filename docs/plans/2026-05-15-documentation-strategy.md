@@ -1,6 +1,6 @@
 # MiniClaw Documentation Strategy
 
-Status: draft
+Status: in_progress
 Date: 2026-05-15
 
 ## Background
@@ -403,3 +403,4 @@ The Pages workflow should build from `website/` and publish a static site artifa
 - 2026-05-15: Initial strategy captured as a plan after deciding that `docs/` should remain the LLM-maintained canonical layer and GitHub Pages should be a separate human-facing portal.
 - 2026-05-15: Added the `quality:website-docs` gate proposal, including `source_docs` validation, forbidden private/archive references, affected page reporting, and the rule that `website/**` must not satisfy code-to-docs drift requirements.
 - 2026-05-15: Added the current-docs migration plan and the first-class `en` / `zh` documentation maintenance model, including `quality:docs-i18n`, migration map requirements, and the rule that `docs/zh/` should stop being a gitignored local review-copy directory once bilingual docs are adopted.
+- 2026-05-15: First implementation slice is available on branch `codex/documentation-strategy` in a separate worktree. It includes the migration map, tracked `docs/zh`, bilingual website skeleton, `quality:docs-i18n`, `quality:website-docs`, package script wiring, and docs index / quality gate updates. Large-scale `docs/features/` moves remain pending.

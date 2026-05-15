@@ -55,4 +55,4 @@ if (errors.length || (strict && warnings.length)) {
 }
 
 const suffix = warnings.length ? `, ${warnings.length} warning(s)` : "";
-console.log(`Docs i18n check passed (${entries.length} migration map entrie(s)${suffix}).`);
+console.log(`Docs i18n check passed (${entries.length} migration map entry(s)${suffix}).`);

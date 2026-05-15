@@ -7,7 +7,7 @@ translation_status: current
 
 # MiniClaw 文档策略
 
-Status: draft
+Status: in_progress
 Date: 2026-05-15
 
 ## Background
@@ -105,3 +105,4 @@ flowchart LR
 ## Execution Notes
 
 - 2026-05-15: 首批实现落地为独立 worktree slice，范围包括 migration map、tracked `docs/zh`、i18n/website docs gates、website skeleton 和 docs index 同步。
+- 2026-05-15: 本 slice 位于 branch `codex/documentation-strategy` 的独立 worktree；大规模 `docs/features/` 分类、移动和合并仍保留为后续 docs-only slices。

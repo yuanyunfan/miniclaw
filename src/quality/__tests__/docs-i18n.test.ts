@@ -93,4 +93,27 @@ translation_status: current
       ]),
     );
   });
+
+  it("skips heading shape comparison for pending translations", () => {
+    const pendingEntry: DocumentationMigrationEntry = {
+      ...currentEntry,
+      translation_status: "pending",
+    };
+    const findings = analyze(
+      {
+        "docs/architecture.md": "# Architecture\n\n## Runtime\n",
+        "docs/zh/architecture.zh.md": `---
+doc_id: architecture
+lang: zh
+translation_of: docs/architecture.md
+translation_status: pending
+---
+# 架构
+`,
+      },
+      [pendingEntry],
+    );
+
+    expect(findings).toEqual([]);
+  });
 });

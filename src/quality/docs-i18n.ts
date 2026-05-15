@@ -109,7 +109,7 @@ function validateChinesePair(
     findings.push(finding("error", zhPath, `doc_id must be ${entry.doc_id}`));
   }
 
-  if (input.exists(entry.source_path)) {
+  if (entry.translation_status === "current" && input.exists(entry.source_path)) {
     const sourceShape = headingLevelShape(input.readText(entry.source_path));
     const zhShape = headingLevelShape(input.readText(zhPath));
     if (sourceShape !== zhShape) {
