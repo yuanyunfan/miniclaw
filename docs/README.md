@@ -34,20 +34,23 @@ Runtime 仍复用部分 legacy feature docs 作为详细实现记录：
 - [`providers/content.md`](providers/content.md): Content provider family，当前覆盖 WeChat MP ingestion 和 dedupe 边界。
 - [`providers/email.md`](providers/email.md): Email provider family，区分通用只读 email capability 与业务 parser。
 - [`providers/stock/README.md`](providers/stock/README.md): Stock provider family 数据流。
-- [`providers/stock/eastmoney.md`](providers/stock/eastmoney.md): Eastmoney provider family，合并 JYWG readonly 和 MyFavor watchlist 两条文档线。
+- [`providers/stock/eastmoney.md`](providers/stock/eastmoney.md): Eastmoney provider family，是 JYWG readonly 和 MyFavor watchlist 的当前 source of truth。
 - [`providers/stock/research.md`](providers/stock/research.md): Stock research provider pipeline，串联 portfolio、pulse、market-intel 和 watchlist research。
 
 - [`features/02-wechat-mp-provider.md`](features/02-wechat-mp-provider.md): 微信公众号文章采集 pre-provider。
 - [`features/06-futu-stock.md`](features/06-futu-stock.md): 富途股票账户只读查询 MCP / provider。
 - [`features/07-email-capability.md`](features/07-email-capability.md): 通用只读 Email capability。
 - [`features/08-cmb-credit-card-email-provider.md`](features/08-cmb-credit-card-email-provider.md): 招商信用卡邮件消费解析 provider。
-- [`features/09-eastmoney-jywg-readonly-provider.md`](features/09-eastmoney-jywg-readonly-provider.md): 东方财富 JYWG 只读查询 provider 的 legacy detailed doc；current family entry 是 [`providers/stock/eastmoney.md`](providers/stock/eastmoney.md)。
 - [`features/10-stock-portfolio-provider.md`](features/10-stock-portfolio-provider.md): 多券商股票账户聚合 provider。
 - [`features/11-stock-pulse-provider.md`](features/11-stock-pulse-provider.md): 股票盘中 hourly 异动扫描 provider。
 - [`features/14-market-intel-provider.md`](features/14-market-intel-provider.md): CN/US 盘前市场情报、forecast persistence、盘后评价与 calibration loop。
 - [`features/16-provider-framework.md`](features/16-provider-framework.md): provider manifest、health check、dry-run、structured output 和兼容 adapter。
-- [`features/17-eastmoney-myfavor-watchlist.md`](features/17-eastmoney-myfavor-watchlist.md): 东方财富 MyFavor 自选股只读源的 legacy detailed doc；current family entry 是 [`providers/stock/eastmoney.md`](providers/stock/eastmoney.md)。
 - [`features/18-stock-watchlist-research-provider.md`](features/18-stock-watchlist-research-provider.md): 券商 watchlist stock 盘前/每日深度研究 provider，独立推送到 daily-watchlist-stock。
+
+Eastmoney legacy compatibility stubs:
+
+- [`features/09-eastmoney-jywg-readonly-provider.md`](features/09-eastmoney-jywg-readonly-provider.md): merged into [`providers/stock/eastmoney.md`](providers/stock/eastmoney.md#jywg-readonly-provider).
+- [`features/17-eastmoney-myfavor-watchlist.md`](features/17-eastmoney-myfavor-watchlist.md): merged into [`providers/stock/eastmoney.md`](providers/stock/eastmoney.md#myfavor-watchlist-provider).
 
 ## Experiments
 

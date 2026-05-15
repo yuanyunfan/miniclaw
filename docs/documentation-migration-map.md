@@ -407,7 +407,7 @@ Field meanings:
     "category": "provider",
     "status": "website-source",
     "merge_group": "providers/eastmoney",
-    "website_exposure": "internal",
+    "website_exposure": "public",
     "translation_required": true,
     "translation_status": "pending"
   },
