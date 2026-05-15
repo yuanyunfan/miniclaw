@@ -25,6 +25,8 @@ Providers 为 cron、task 和 research workflow 准备可信上下文。迁移�
 
 repo 现在维护 current 中文 provider mirror，因此本页把英文和中文 provider docs 作为配对 source material。
 
+历史 provider feature stub 已统一归档到 `docs/archive/features/`；provider contract 现在由本页 `source_docs` 中列出的 provider family docs 维护。
+
 ```mermaid
 flowchart TD
   ProviderFramework[Provider Framework] --> Health[Health Check]

@@ -211,7 +211,7 @@ Record schema version, config defaults, query commands, and verification output 
 - Legacy `pre_provider` collection failures now use the provider error categorizer before raising `CronTaskRunError`, so `cron_runs.provider_*` and `cron_runs.error_category` are no longer left as generic task-run errors for provider failures.
 - Scheduler failure finalization now persists `errorCategory` carried by runner errors before falling back to the generic JavaScript error name.
 - Added tests for health preflight metadata, dry-run preflight metadata, and durable `cron_runs` rows for unsupported provider preflight.
-- Updated `docs/features/16-provider-framework.md` with the persisted preflight/provider failure metadata contract.
+- Updated `docs/archive/features/16-provider-framework.md` with the persisted preflight/provider failure metadata contract.
 - Verification:
   - `pnpm exec vitest run src/cron/__tests__/runner-task.test.ts src/cron/__tests__/scheduler.test.ts` passed: 2 files, 22 tests.
   - `pnpm run typecheck` passed.

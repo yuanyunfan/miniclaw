@@ -407,7 +407,7 @@ Stage CLI 有独立 persona、orchestrator、TUI 和 smoke/e2e，但它和 Disco
 
 目标：把 provider 和 state 治理从约定变成框架。
 
-1. 写 `docs/features/15-provider-framework.md`。
+1. 写 `docs/archive/features/15-provider-framework.md`。
 2. 改造 1 个 provider 作为 manifest + health + dry-run + replay fixture 样板。
 3. 建立 `src/store/migrations/`。
 4. 拆分 `src/config.ts` 的 load/schema/resolve/runtime。

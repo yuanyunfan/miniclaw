@@ -144,7 +144,7 @@ cron task
 
 The previous feature-level doc is a compatibility stub for one migration cycle:
 
-- [`../features/02-wechat-mp-provider.md`](../features/02-wechat-mp-provider.md)
+- [`../archive/features/02-wechat-mp-provider.md`](../archive/features/02-wechat-mp-provider.md)
 
 New implementation facts should be added here instead of the stub.
 

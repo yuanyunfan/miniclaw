@@ -68,6 +68,6 @@ Each linked plan is meant to be usable as the kickoff artifact for a separate Co
 These plans are draft execution plans, not permanent source of truth. When a task is implemented:
 
 - Update the plan `Status` and `Execution Notes`.
-- Update the relevant source-of-truth doc, usually `docs/architecture.md`, `docs/bot-routing.md`, `docs/quality-gates.md`, or `docs/features/*.md`.
+- Update the relevant source-of-truth doc, usually `docs/architecture.md`, `docs/bot-routing.md`, `docs/quality-gates.md`, or `docs/archive/features/*.md`.
 - If behavior materially diverges from the plan, record the new decision in the plan before closing the session.
 

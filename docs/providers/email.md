@@ -269,8 +269,8 @@ Skip behavior:
 
 The previous feature-level docs are compatibility stubs for one migration cycle:
 
-- [`../features/07-email-capability.md`](../features/07-email-capability.md)
-- [`../features/08-cmb-credit-card-email-provider.md`](../features/08-cmb-credit-card-email-provider.md)
+- [`../archive/features/07-email-capability.md`](../archive/features/07-email-capability.md)
+- [`../archive/features/08-cmb-credit-card-email-provider.md`](../archive/features/08-cmb-credit-card-email-provider.md)
 
 New implementation facts should be added to this provider-family doc. Private mailbox, credential, or account-specific setup details should stay out of public docs.
 

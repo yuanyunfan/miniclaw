@@ -5,7 +5,7 @@ Date: 2026-05-13
 
 ## Background
 
-MiniClaw currently assembles agent prompts across chat, task, Smart Router, cron, provider, memory, and runtime adapter modules. The current implementation is functional, but an audit in `docs/features/19-agent-prompt-context-audit.md` found several issues that will limit the next iteration:
+MiniClaw currently assembles agent prompts across chat, task, Smart Router, cron, provider, memory, and runtime adapter modules. The current implementation is functional, but an audit in `docs/archive/features/19-agent-prompt-context-audit.md` found several issues that will limit the next iteration:
 
 - Codex and Claude Code receive differently layered prompt inputs.
 - Cron/provider prompts can become very large and persist private provider payloads in SQLite.
@@ -41,7 +41,7 @@ MiniClaw currently assembles agent prompts across chat, task, Smart Router, cron
 - `src/cron/runner-task.ts`: cron pre-context rendering and persistence.
 - `prompts/templates/cron-*.md`: cron prompt templates.
 - `prompts/supervisor.md`: supervisor guidance injected into task.
-- `docs/features/19-agent-prompt-context-audit.md`: current-state audit and real-case evidence.
+- `docs/archive/features/19-agent-prompt-context-audit.md`: current-state audit and real-case evidence.
 
 ## Implementation Plan
 
@@ -126,10 +126,10 @@ MiniClaw currently assembles agent prompts across chat, task, Smart Router, cron
 
 ## Documentation Sync
 
-- `docs/features/19-agent-prompt-context-audit.md`: source audit.
+- `docs/archive/features/19-agent-prompt-context-audit.md`: source audit.
 - `docs/prompts.md`: update prompt asset ownership and envelope rendering rules.
-- `docs/features/03-discord-task-output.md`: update only if task trace/audit output changes user-visible behavior.
-- `docs/features/04-smart-task-router.md`: update only if router input context changes.
+- `docs/archive/features/03-discord-task-output.md`: update only if task trace/audit output changes user-visible behavior.
+- `docs/archive/features/04-smart-task-router.md`: update only if router input context changes.
 - `docs/README.md`: keep feature index current.
 
 ## Execution Notes

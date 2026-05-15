@@ -181,7 +181,7 @@ describe("doctor repair policy", () => {
     expect(selectTargetedTestCommands(["src/routing/__tests__/intent.test.ts"])).toEqual([
       ["pnpm", ["exec", "vitest", "run", "src/routing/__tests__/intent.test.ts"]],
     ]);
-    expect(selectTargetedTestCommands(["docs/features/13-auto-doctor.md"])).toEqual([]);
+    expect(selectTargetedTestCommands(["docs/runtime/README.md"])).toEqual([]);
   });
 });
 

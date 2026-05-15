@@ -128,7 +128,7 @@ Provider failures 应保留足够信息给 cron 和 Auto Doctor，同时不能�
 
 上一轮 feature-level framework doc 会作为兼容 stub 保留一个迁移周期：
 
-- [`../../features/16-provider-framework.md`](../../features/16-provider-framework.md)
+- [`../../archive/features/16-provider-framework.md`](../../archive/features/16-provider-framework.md)
 
 旧中文 feature placeholder 是历史文档；当前中文 pair 是 [`provider-framework.zh.md`](provider-framework.zh.md)。
 

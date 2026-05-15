@@ -355,7 +355,7 @@ Recommended action:
 
 - `docs/architecture.md`: add the Auto Doctor and Self-Repair Worker once implementation starts.
 - `docs/quality-gates.md`: document repair-specific verification gates when Phase 3 exists.
-- `docs/features/`: add a feature doc after the first user-facing `/doctor` command lands.
+- `docs/archive/features/`: add a feature doc after the first user-facing `/doctor` command lands.
 - `README.md`: add only a short operator summary after the feature is usable.
 
 ## Execution Notes

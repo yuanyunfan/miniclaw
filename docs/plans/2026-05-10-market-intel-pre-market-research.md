@@ -1171,12 +1171,12 @@ Mitigation:
 
 Docs to update during implementation:
 
-- `docs/features/10-stock-portfolio-provider.md`
+- `docs/archive/features/10-stock-portfolio-provider.md`
   - Only if `stock-portfolio` contract changes.
-- `docs/features/11-stock-pulse-provider.md`
+- `docs/archive/features/11-stock-pulse-provider.md`
   - No expected change unless shared market utilities are extracted.
 - New doc:
-  - `docs/features/14-market-intel-provider.md`
+  - `docs/archive/features/14-market-intel-provider.md`
 - `docs/README.md`
   - Add a feature index entry after implementation.
 - `CHANGELOG.md`

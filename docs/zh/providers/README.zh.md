@@ -37,11 +37,11 @@ flowchart LR
 
 Stock legacy compatibility stubs:
 
-- [`../../features/06-futu-stock.md`](../../features/06-futu-stock.md): moved into [`../../providers/stock/README.md`](../../providers/stock/README.md#futu-stock-provider).
-- [`../../features/10-stock-portfolio-provider.md`](../../features/10-stock-portfolio-provider.md): merged into [`../../providers/stock/research.md`](../../providers/stock/research.md#stock-portfolio).
-- [`../../features/11-stock-pulse-provider.md`](../../features/11-stock-pulse-provider.md): merged into [`../../providers/stock/research.md`](../../providers/stock/research.md#stock-pulse).
-- [`../../features/14-market-intel-provider.md`](../../features/14-market-intel-provider.md): merged into [`../../providers/stock/research.md`](../../providers/stock/research.md#market-intel).
-- [`../../features/18-stock-watchlist-research-provider.md`](../../features/18-stock-watchlist-research-provider.md): merged into [`../../providers/stock/research.md`](../../providers/stock/research.md#stock-watchlist-research).
+- [`../../archive/features/06-futu-stock.md`](../../archive/features/06-futu-stock.md): moved into [`../../providers/stock/README.md`](../../providers/stock/README.md#futu-stock-provider).
+- [`../../archive/features/10-stock-portfolio-provider.md`](../../archive/features/10-stock-portfolio-provider.md): merged into [`../../providers/stock/research.md`](../../providers/stock/research.md#stock-portfolio).
+- [`../../archive/features/11-stock-pulse-provider.md`](../../archive/features/11-stock-pulse-provider.md): merged into [`../../providers/stock/research.md`](../../providers/stock/research.md#stock-pulse).
+- [`../../archive/features/14-market-intel-provider.md`](../../archive/features/14-market-intel-provider.md): merged into [`../../providers/stock/research.md`](../../providers/stock/research.md#market-intel).
+- [`../../archive/features/18-stock-watchlist-research-provider.md`](../../archive/features/18-stock-watchlist-research-provider.md): merged into [`../../providers/stock/research.md`](../../providers/stock/research.md#stock-watchlist-research).
 
 ## Content Providers
 
@@ -49,7 +49,7 @@ Stock legacy compatibility stubs:
 
 Content legacy compatibility stub:
 
-- [`../../features/02-wechat-mp-provider.md`](../../features/02-wechat-mp-provider.md): merged into [`../../providers/content.md`](../../providers/content.md#wechat-mp-provider).
+- [`../../archive/features/02-wechat-mp-provider.md`](../../archive/features/02-wechat-mp-provider.md): merged into [`../../providers/content.md`](../../providers/content.md#wechat-mp-provider).
 
 ## Email Providers
 
@@ -57,8 +57,8 @@ Content legacy compatibility stub:
 
 Email legacy compatibility stubs:
 
-- [`../../features/07-email-capability.md`](../../features/07-email-capability.md): merged into [`../../providers/email.md`](../../providers/email.md#shared-read-only-email-capability).
-- [`../../features/08-cmb-credit-card-email-provider.md`](../../features/08-cmb-credit-card-email-provider.md): merged into [`../../providers/email.md`](../../providers/email.md#cmb-credit-card-email-provider).
+- [`../../archive/features/07-email-capability.md`](../../archive/features/07-email-capability.md): merged into [`../../providers/email.md`](../../providers/email.md#shared-read-only-email-capability).
+- [`../../archive/features/08-cmb-credit-card-email-provider.md`](../../archive/features/08-cmb-credit-card-email-provider.md): merged into [`../../providers/email.md`](../../providers/email.md#cmb-credit-card-email-provider).
 
 ## Maintenance Rules
 

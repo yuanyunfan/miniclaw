@@ -172,7 +172,7 @@ Record schema version, added fields, report command, fixture categories, and ver
 - Wired Smart Router decisions so direct chat, auto task, confirmed task, continued chat, cancel, expired click, and task creation failure write final route/choice facts. Task status updates now backfill linked Smart Router rows by `created_task_id`.
 - Added local review report: `pnpm run router:review -- --days 7`, backed by `src/routing/router-review.ts`; report aggregates channel, intent, classifier error, user choice, final route, task outcome, and correction type without printing full prompts.
 - Added focused tests for DB schema/helper behavior and review rendering. Added an ambiguous follow-up implementation fixture to existing router eval fixtures.
-- Synced docs: `docs/architecture.md`, `docs/bot-routing.md`, `docs/chat-router-current-logic.md`, `docs/features/04-smart-task-router.md`, `docs/features/05-smart-task-router.en.md`, and `scripts/quality-docs.ts`.
+- Synced docs: `docs/architecture.md`, `docs/bot-routing.md`, `docs/chat-router-current-logic.md`, `docs/archive/features/04-smart-task-router.md`, `docs/archive/features/05-smart-task-router.en.md`, and `scripts/quality-docs.ts`.
 - Verification passed:
   - `pnpm vitest run src/routing/__tests__/router-review.test.ts src/store/__tests__/db.test.ts` -> 19 tests passed.
   - `pnpm run typecheck` -> passed.

@@ -158,7 +158,7 @@ After the pilot, adapt one private/sensitive provider such as `email-query` or `
      - `src/providers/<provider>/__tests__/fixtures.test.ts`
    - Cover replay, format drift, redaction, and no-data behavior.
 9. Add docs.
-   - New feature doc candidate: `docs/features/15-provider-framework.md`.
+   - New feature doc candidate: `docs/archive/features/15-provider-framework.md`.
    - Include provider author checklist.
 
 ## Provider Author Checklist
@@ -204,7 +204,7 @@ Every new provider should specify:
 
 ## Documentation Sync
 
-- Add `docs/features/15-provider-framework.md`.
+- Add `docs/archive/features/15-provider-framework.md`.
 - Update `docs/README.md` feature index.
 - Update `docs/architecture.md` provider/cron section.
 - Update `docs/quality-gates.md` if new provider fixture requirements become a gate.
@@ -223,7 +223,7 @@ Record pilot provider, manifest fields, CLI commands, cron integration state, an
 - `stock-pulse` dry-run executes the scan but returns a redacted summary only: run context, universe counts, and position/alert/failure/warning counts. Nested provider `commit()` is not called during dry-run.
 - Added CLI entries: `pnpm provider:health -- --provider stock-pulse --config us-hourly`, `pnpm provider:health -- --all --json`, and `pnpm provider:dry-run -- --provider stock-pulse --config us-hourly`.
 - Cron integration state: cron runner behavior was intentionally unchanged; existing cron `pre_provider` calls still enter through `runPreProvider()` and provider commits remain delayed until downstream task success.
-- Documentation sync: added `docs/features/16-provider-framework.md`, updated `docs/README.md`, `docs/architecture.md`, and `docs/quality-gates.md`.
+- Documentation sync: added `docs/archive/features/16-provider-framework.md`, updated `docs/README.md`, `docs/architecture.md`, and `docs/quality-gates.md`.
 - Verification:
   - `pnpm vitest run src/providers` passed: 43 files, 125 tests.
   - `pnpm vitest run src/providers/__tests__/framework.test.ts src/providers/__tests__/index.test.ts src/providers/stock-pulse/__tests__/framework.test.ts src/providers/stock-pulse/__tests__/index.test.ts` passed: 4 files, 7 tests.
@@ -242,7 +242,7 @@ Record pilot provider, manifest fields, CLI commands, cron integration state, an
 - `eastmoney-jywg-readonly` dry-run executes the read-only broker snapshot path and builds the structured payload, but the preview is a redacted summary only: included section flags, market session, position/top-position counts, and warning count. Updated broker sessions are not saved during dry-run.
 - Compatibility state: existing `runEastmoneyJywgProvider()` now uses `runProviderModuleAsPreProvider()`, so updated session persistence remains delayed until the downstream cron task succeeds and invokes `commit()`.
 - Registry state: `eastmoney-jywg-readonly` is now exposed through `getProviderManifest()`, `listProviderManifests()`, `runProviderHealthCheck()`, and `runProviderDryRun()`.
-- Documentation sync: updated `docs/features/16-provider-framework.md` and `docs/architecture.md` to describe the sensitive provider lifecycle and privacy boundary.
+- Documentation sync: updated `docs/archive/features/16-provider-framework.md` and `docs/architecture.md` to describe the sensitive provider lifecycle and privacy boundary.
 - Verification:
   - `pnpm vitest run src/providers/eastmoney-jywg-readonly/__tests__/framework.test.ts src/providers/eastmoney-jywg-readonly/__tests__/index.test.ts src/providers/__tests__/index.test.ts` passed: 3 files, 7 tests.
   - `pnpm run provider:health -- --provider eastmoney-jywg-readonly --config __missing__ --json` returned expected exit 1 with `category=config` for a missing profile.
@@ -257,7 +257,7 @@ Record pilot provider, manifest fields, CLI commands, cron integration state, an
 - Wired `runner-task` so `health` runs `runProviderHealthCheck()` and `dry_run` runs `runProviderDryRun()` before the real `runPreProvider()` call. If preflight fails, the runner sends a Discord failure notice and stops before provider collection, task creation, and downstream LLM execution.
 - Dry-run preflight output is used only as a redacted gate; it is not injected into the prompt. The real provider still runs after a passing dry-run preflight, preserving existing prompt and delayed `commit()` semantics.
 - Default cron behavior remains unchanged when `pre_provider_preflight` is omitted or set to `off`.
-- Documentation sync: updated `docs/features/16-provider-framework.md` and `docs/architecture.md` with the new cron preflight config and execution path.
+- Documentation sync: updated `docs/archive/features/16-provider-framework.md` and `docs/architecture.md` with the new cron preflight config and execution path.
 - Verification:
   - `pnpm vitest run src/cron/__tests__/loader.test.ts src/cron/__tests__/runner-task.test.ts` passed: 2 files, 30 tests.
   - `pnpm run typecheck` passed.
@@ -278,7 +278,7 @@ Record pilot provider, manifest fields, CLI commands, cron integration state, an
 - Added fixture tests:
   - `src/providers/stock-pulse/__tests__/fixtures.test.ts`
   - `src/providers/eastmoney-jywg-readonly/__tests__/fixtures.test.ts`
-- Documentation sync: updated `docs/features/16-provider-framework.md` with fixture locations/coverage and updated `docs/quality-gates.md` so migrated framework providers require replay/no-data/format-drift fixture coverage.
+- Documentation sync: updated `docs/archive/features/16-provider-framework.md` with fixture locations/coverage and updated `docs/quality-gates.md` so migrated framework providers require replay/no-data/format-drift fixture coverage.
 - Full plan state: implementation plan items 1-9 are complete; stock-pulse remains the low-risk pilot, eastmoney-jywg-readonly covers sensitive provider behavior, cron preflight is opt-in, and replay fixtures now cover the remaining fixture/redaction goal. Status moved to `done` after Ralph provider verification passed.
 - Verification:
   - `pnpm vitest run src/providers/stock-pulse/__tests__/fixtures.test.ts src/providers/eastmoney-jywg-readonly/__tests__/fixtures.test.ts` passed: 2 files, 5 tests.

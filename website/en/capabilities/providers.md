@@ -25,6 +25,8 @@ Providers prepare trusted context for cron jobs, tasks, and research workflows. 
 
 The repo now maintains current Chinese provider mirrors, so this page treats English and Chinese provider docs as paired source material.
 
+Historical provider feature stubs are archived under `docs/archive/features/`; provider contracts now live in the provider family docs listed in this page's `source_docs`.
+
 ```mermaid
 flowchart TD
   ProviderFramework[Provider Framework] --> Health[Health Check]

@@ -95,8 +95,8 @@ Boundary contract:
 
 上一轮 feature-level experiment docs 会作为兼容 stub 保留一个迁移周期：
 
-- [`../../features/01-stage.md`](../../features/01-stage.md)
-- [`../../features/15-ralph-controller.md`](../../features/15-ralph-controller.md)
+- [`../../archive/features/01-stage.md`](../../archive/features/01-stage.md)
+- [`../../archive/features/15-ralph-controller.md`](../../archive/features/15-ralph-controller.md)
 
 新的实现事实应写到这里或 `docs/ralph/**`，不要写到 stubs。
 

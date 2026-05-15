@@ -276,8 +276,8 @@ Skip behavior:
 
 上一轮 feature-level docs 会作为兼容 stub 保留一个迁移周期：
 
-- [`../../features/07-email-capability.md`](../../features/07-email-capability.md)
-- [`../../features/08-cmb-credit-card-email-provider.md`](../../features/08-cmb-credit-card-email-provider.md)
+- [`../../archive/features/07-email-capability.md`](../../archive/features/07-email-capability.md)
+- [`../../archive/features/08-cmb-credit-card-email-provider.md`](../../archive/features/08-cmb-credit-card-email-provider.md)
 
 新的实现事实应写到本 provider-family doc。Private mailbox、credential 或 account-specific setup details 不应进入 public docs。
 

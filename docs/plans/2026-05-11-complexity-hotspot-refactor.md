@@ -284,7 +284,7 @@ For each completed slice, record:
   - `src/ops/doctor-scheduler/notifications.ts`: extracted single/group/digest incident notification text, repair notification text, and Discord summary-channel delivery.
   - `src/ops/doctor-scheduler/repair-policy.ts`: extracted repair eligibility, UTC day bucket, and parallel/daily repair rate-limit skip decisions.
   - `src/ops/__tests__/doctor-scheduler-boundaries.test.ts`: added direct tests for grouping normalization, notification text through the extracted formatter, repair policy skip reasons, and scheduler state behavior.
-  - `docs/architecture.md`, `docs/features/13-auto-doctor.md`: documented the new Auto Doctor scheduler module boundary.
+  - `docs/architecture.md`, `docs/archive/features/13-auto-doctor.md`: documented the new Auto Doctor scheduler module boundary.
 - Behavior parity tests:
   - `pnpm vitest run src/ops/__tests__/doctor-scheduler*.test.ts` passed, 12 tests.
   - `pnpm run typecheck` passed.
@@ -305,7 +305,7 @@ For each completed slice, record:
   - `src/providers/market-intel/collectors/parsers/filings.ts`: extracted SEC ticker/submission parsing, JSONP parsing, and SSE/SZSE/HKEX announcement parsers.
   - `src/providers/market-intel/collectors/parsers/risk.ts`: extracted derived risk keyword classification.
   - `src/providers/market-intel/__tests__/official-parsers.test.ts`: added fixture tests for macro, SEC, exchange announcement, dated HTML, and risk parser behavior.
-  - `docs/architecture.md`, `docs/features/14-market-intel-provider.md`, `docs/archive/2026-05-11-continuous-improvement-report.md`: documented the parser/orchestration boundary and updated remaining hotspot status.
+  - `docs/architecture.md`, `docs/archive/features/14-market-intel-provider.md`, `docs/archive/2026-05-11-continuous-improvement-report.md`: documented the parser/orchestration boundary and updated remaining hotspot status.
 - Behavior parity tests:
   - `pnpm vitest run src/providers/market-intel/__tests__/official-parsers.test.ts src/providers/market-intel/__tests__/official-collectors.test.ts` passed, 7 tests.
   - `pnpm vitest run src/providers/market-intel` passed, 27 tests.
@@ -328,7 +328,7 @@ For each completed slice, record:
   - `src/providers/market-intel/collectors/scoring-input.ts`: extracted evidence section assembly, dedupe, earnings/filings split, derived risk evidence, and empty collection construction.
   - `src/providers/market-intel/collectors/official-http.ts`, `src/providers/market-intel/collectors/official-shared.ts`: extracted fetch-backed HTTP client, shared source/result helpers, failure redaction, and section helpers.
   - `src/providers/market-intel/__tests__/official-collectors.test.ts`: added direct characterization coverage for independently callable macro/news/events source-family collectors.
-  - `docs/architecture.md`, `docs/features/14-market-intel-provider.md`, `docs/archive/2026-05-11-continuous-improvement-report.md`: documented the new official evidence facade/source-family/scoring-input boundary and updated current hotspot status.
+  - `docs/architecture.md`, `docs/archive/features/14-market-intel-provider.md`, `docs/archive/2026-05-11-continuous-improvement-report.md`: documented the new official evidence facade/source-family/scoring-input boundary and updated current hotspot status.
 - Behavior parity tests:
   - `pnpm vitest run src/providers/market-intel/__tests__/official-collectors.test.ts src/providers/market-intel/__tests__/official-parsers.test.ts` passed, 8 tests.
   - `pnpm vitest run src/providers/market-intel` passed, 28 tests.
@@ -350,7 +350,7 @@ For each completed slice, record:
   - `src/ops/doctor-repair/prompt.ts`: extracted repair worker prompt rendering with injected allowed/blocked path policy.
   - `src/ops/doctor-repair/verification.ts`: extracted targeted test selection, standard verification command list, and command runner loop.
   - `src/ops/__tests__/doctor-repair-boundaries.test.ts`: added focused characterization tests for the extracted policy, path, prompt, and verification boundaries.
-  - `docs/features/13-auto-doctor.md`, `docs/architecture.md`, `docs/archive/2026-05-11-continuous-improvement-report.md`: documented the new guarded repair module boundary and updated hotspot status.
+  - `docs/archive/features/13-auto-doctor.md`, `docs/architecture.md`, `docs/archive/2026-05-11-continuous-improvement-report.md`: documented the new guarded repair module boundary and updated hotspot status.
 - Behavior parity tests:
   - `pnpm vitest run src/ops/__tests__/doctor-repair.test.ts src/ops/__tests__/doctor-repair-boundaries.test.ts` passed, 17 tests.
   - `pnpm run typecheck` passed.
@@ -370,7 +370,7 @@ For each completed slice, record:
   - `src/ops/doctor-repair/agent.ts`: extracted Codex repair agent streaming, timeout handling, agent response capture, tool log capture, and agent failure mapping.
   - `src/ops/doctor-repair/report.ts`: extracted CLI/report formatting for dry-run, policy, changed files, verification, commit, and push status output.
   - `src/ops/__tests__/doctor-repair-boundaries.test.ts`: added focused tests for sanitized worktree targets, worktree creation/reuse command routing, commit/push command routing, and report formatting.
-  - `docs/architecture.md`, `docs/features/13-auto-doctor.md`, `docs/archive/2026-05-11-continuous-improvement-report.md`: documented the completed guarded repair module boundary and updated hotspot status.
+  - `docs/architecture.md`, `docs/archive/features/13-auto-doctor.md`, `docs/archive/2026-05-11-continuous-improvement-report.md`: documented the completed guarded repair module boundary and updated hotspot status.
 - Behavior parity tests:
   - `pnpm vitest run src/ops/__tests__/doctor-repair.test.ts src/ops/__tests__/doctor-repair-boundaries.test.ts` passed, 21 tests.
   - `pnpm run typecheck` passed.
@@ -458,7 +458,7 @@ For each completed slice, record:
   - `src/commands/incident-detail.ts`: routed incident summary/source/diagnosis values, task trace snippets, repair paths, and event payload rendering through shared diagnostic redaction.
   - `src/commands/task-log.ts`, `src/discord/task-trace-attachment.ts`: updated safety copy to mention session/account redaction.
   - `src/privacy/__tests__/diagnostic-redaction.test.ts`, `src/store/__tests__/task-trace-export.test.ts`, `src/commands/__tests__/incident-detail.test.ts`: added focused redaction coverage.
-  - `docs/architecture.md`, `docs/features/03-discord-task-output.md`, `docs/features/13-auto-doctor.md`, `docs/archive/2026-05-11-continuous-improvement-report.md`, `docs/plans/2026-05-11-db-migrations-state-lifecycle.md`: documented the shared diagnostic redaction boundary and marked the DB lifecycle sub-plan done.
+  - `docs/architecture.md`, `docs/archive/features/03-discord-task-output.md`, `docs/archive/features/13-auto-doctor.md`, `docs/archive/2026-05-11-continuous-improvement-report.md`, `docs/plans/2026-05-11-db-migrations-state-lifecycle.md`: documented the shared diagnostic redaction boundary and marked the DB lifecycle sub-plan done.
 - Behavior parity tests:
   - `pnpm vitest run src/privacy/__tests__/diagnostic-redaction.test.ts src/store/__tests__/task-trace-export.test.ts src/commands/__tests__/incident-detail.test.ts` passed, 12 tests.
   - `pnpm vitest run src/commands/__tests__/task-log.test.ts src/discord/__tests__/task-view-reporter.test.ts` passed, 11 tests.
@@ -524,7 +524,7 @@ For each completed slice, record:
   - `src/ops/doctor/report.ts`: extracted CLI text report formatting.
   - `src/ops/doctor/redaction.ts`: extracted doctor-local redaction and value normalization helpers.
   - `src/ops/__tests__/doctor-boundaries.test.ts`: added direct tests for diagnosis, report formatting, and doctor redaction boundaries.
-  - `docs/architecture.md`, `docs/features/13-auto-doctor.md`, `docs/archive/2026-05-11-continuous-improvement-report.md`: documented the final read-only doctor module boundary and updated remaining hotspot status.
+  - `docs/architecture.md`, `docs/archive/features/13-auto-doctor.md`, `docs/archive/2026-05-11-continuous-improvement-report.md`: documented the final read-only doctor module boundary and updated remaining hotspot status.
 - Behavior parity tests:
   - `pnpm vitest run src/ops/__tests__/doctor.test.ts src/ops/__tests__/doctor-boundaries.test.ts` passed, 10 tests.
   - `pnpm vitest run src/ops/__tests__/doctor.test.ts src/ops/__tests__/doctor-boundaries.test.ts src/ops/__tests__/doctor-incidents.test.ts src/ops/__tests__/doctor-scheduler.test.ts src/ops/__tests__/doctor-scheduler-boundaries.test.ts src/ops/__tests__/doctor-repair.test.ts src/ops/__tests__/doctor-repair-boundaries.test.ts src/ops/__tests__/doctor-ship.test.ts src/ops/__tests__/doctor-metrics.test.ts` passed, 9 files / 53 tests.

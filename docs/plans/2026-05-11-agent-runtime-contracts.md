@@ -192,7 +192,7 @@ Keep separate from `AgentRuntime` and `ModelClient`. The detailed provider frame
 ## Documentation Sync
 
 - Update `docs/architecture.md` runtime section.
-- Update `docs/features/03-discord-task-output.md` only if Discord boundaries change.
+- Update `docs/archive/features/03-discord-task-output.md` only if Discord boundaries change.
 - Update config examples when `runtime.default_agent` or `model.default_client` are accepted.
 - Run `pnpm run quality:docs`.
 

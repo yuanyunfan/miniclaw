@@ -233,10 +233,10 @@ pre_provider_preflight: health
 
 上一轮 feature-level stock research docs 会作为兼容 stub 保留一个迁移周期：
 
-- [`../../../features/10-stock-portfolio-provider.md`](../../../features/10-stock-portfolio-provider.md)
-- [`../../../features/11-stock-pulse-provider.md`](../../../features/11-stock-pulse-provider.md)
-- [`../../../features/14-market-intel-provider.md`](../../../features/14-market-intel-provider.md)
-- [`../../../features/18-stock-watchlist-research-provider.md`](../../../features/18-stock-watchlist-research-provider.md)
+- [`../../../archive/features/10-stock-portfolio-provider.md`](../../../archive/features/10-stock-portfolio-provider.md)
+- [`../../../archive/features/11-stock-pulse-provider.md`](../../../archive/features/11-stock-pulse-provider.md)
+- [`../../../archive/features/14-market-intel-provider.md`](../../../archive/features/14-market-intel-provider.md)
+- [`../../../archive/features/18-stock-watchlist-research-provider.md`](../../../archive/features/18-stock-watchlist-research-provider.md)
 
 新的实现事实应写到这里，或写到 [`../../../providers/stock/eastmoney.md`](../../../providers/stock/eastmoney.md) 这样的 stock source family docs。
 

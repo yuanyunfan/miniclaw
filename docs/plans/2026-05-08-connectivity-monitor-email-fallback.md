@@ -61,7 +61,7 @@ MiniClaw cron/task output depends on Discord. The user often needs VPN/proxy con
 ## Documentation Sync
 
 - `docs/architecture.md`: monitor and runtime state.
-- `docs/features/07-email-capability.md`: clarify SMTP notifier is separate from read-only email capability.
+- `docs/archive/features/07-email-capability.md`: clarify SMTP notifier is separate from read-only email capability.
 - Add feature doc for connectivity monitor if needed.
 
 ## Execution Notes

@@ -15,7 +15,7 @@ translation_status: not_required
 - 每个中文文档应包含 `doc_id`、`lang: zh`、`translation_of` 和 `translation_status` frontmatter。
 - `translation_status: current` 表示中文内容应与英文 source 保持结构同步。
 - `translation_status: pending` 不再允许用于 `translation_required=true` 的文档；确实不需要中文 pair 的 source doc 应在 migration map 中标为 `translation_status: not_required`。
-- 迁移期仍保留少量历史平铺 `.zh.md` 翻译；新的 first-class pairing 以镜像英文相对路径为准。
+- 早期平铺 `.zh.md` 翻译已经清理：计划翻译迁移到 `docs/zh/plans/`，历史 feature 翻译迁移到 `docs/zh/archive/features/`，平铺 legacy redirect 迁移到 `docs/zh/archive/legacy/`。
 
 ## Current Chinese Docs
 
@@ -30,10 +30,14 @@ translation_status: not_required
 - [`providers/stock/README.zh.md`](providers/stock/README.zh.md): Stock provider family 中文 mirror。
 - [`providers/stock/eastmoney.zh.md`](providers/stock/eastmoney.zh.md): Eastmoney provider family 中文 mirror。
 - [`providers/stock/research.zh.md`](providers/stock/research.zh.md): Stock research provider pipeline 中文 mirror。
-- [`features/16-provider-framework.zh.md`](features/16-provider-framework.zh.md): 历史 provider framework feature 中文兼容 stub；当前 pairing 已迁移到 `providers/provider-framework.zh.md`。
 - [`quality-gates.zh.md`](quality-gates.zh.md): 质量门禁中文 mirror。
 - [`runbooks/install.zh.md`](runbooks/install.zh.md): 安装 runbook 中文 mirror。
-- 平铺历史翻译：`2026-05-*.zh.md`、`13-auto-doctor.zh.md`、`19-agent-prompt-context-audit.zh.md`。这些文件保留用于人工审阅，后续迁移 slice 再逐步归入镜像路径或 archive。
+
+## Historical Chinese Docs
+
+- [`plans/`](plans/): 早期中文 plan 翻译已经迁移到英文 `docs/plans/` 的镜像路径；除 documentation strategy 外，这些历史计划翻译不作为 required current parity pair。
+- [`archive/features/`](archive/features/): 早期 feature 中文翻译归档位置；当前实现事实应以 `runtime/`、`providers/`、`experiments/` 下的 current 中文 mirror 为准。
+- [`archive/legacy/`](archive/legacy/): 早期平铺中文入口的兼容归档位置。
 
 ## Maintenance
 

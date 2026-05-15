@@ -79,8 +79,8 @@ Existing MiniClaw cron jobs support `pre_provider`, where a provider collects st
 
 ## Documentation Sync
 
-- Add `docs/features/07-email-capability.md`.
-- Add `docs/features/08-cmb-credit-card-email-provider.md`.
+- Add `docs/archive/features/07-email-capability.md`.
+- Add `docs/archive/features/08-cmb-credit-card-email-provider.md`.
 - Update `docs/architecture.md` with the new base capability.
 
 ## Execution Notes

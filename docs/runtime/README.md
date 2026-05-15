@@ -222,14 +222,14 @@ Runtime boundary:
 
 The previous feature-level runtime docs are compatibility stubs for one migration cycle:
 
-- [`../features/03-discord-task-output.md`](../features/03-discord-task-output.md)
-- [`../features/04-smart-task-router.md`](../features/04-smart-task-router.md)
-- [`../features/05-smart-task-router.en.md`](../features/05-smart-task-router.en.md)
-- [`../features/12-connectivity-monitor.md`](../features/12-connectivity-monitor.md)
-- [`../features/13-auto-doctor.md`](../features/13-auto-doctor.md)
-- [`../features/19-agent-prompt-context-audit.md`](../features/19-agent-prompt-context-audit.md)
-- [`../features/20-memory-curation-lifecycle.md`](../features/20-memory-curation-lifecycle.md)
-- [`../features/21-agent-run-manager.md`](../features/21-agent-run-manager.md)
+- [`../archive/features/03-discord-task-output.md`](../archive/features/03-discord-task-output.md)
+- [`../archive/features/04-smart-task-router.md`](../archive/features/04-smart-task-router.md)
+- [`../archive/features/05-smart-task-router.en.md`](../archive/features/05-smart-task-router.en.md)
+- [`../archive/features/12-connectivity-monitor.md`](../archive/features/12-connectivity-monitor.md)
+- [`../archive/features/13-auto-doctor.md`](../archive/features/13-auto-doctor.md)
+- [`../archive/features/19-agent-prompt-context-audit.md`](../archive/features/19-agent-prompt-context-audit.md)
+- [`../archive/features/20-memory-curation-lifecycle.md`](../archive/features/20-memory-curation-lifecycle.md)
+- [`../archive/features/21-agent-run-manager.md`](../archive/features/21-agent-run-manager.md)
 
 New implementation facts should be added here or to the linked top-level runtime docs, not to the stubs.
 

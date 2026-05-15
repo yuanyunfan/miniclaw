@@ -8,10 +8,10 @@ import {
 } from "../docs-drift.js";
 
 describe("docs drift path matching", () => {
-  it("matches exact paths and single-level feature docs globs", () => {
+  it("matches exact paths and single-level docs globs", () => {
     expect(matchesPathPattern("src/bot.ts", "src/bot.ts")).toBe(true);
-    expect(matchesPathPattern("docs/features/04-smart-task-router.md", "docs/features/*.md")).toBe(true);
-    expect(matchesPathPattern("docs/features/archive/old.md", "docs/features/*.md")).toBe(false);
+    expect(matchesPathPattern("docs/providers/content.md", "docs/providers/*.md")).toBe(true);
+    expect(matchesPathPattern("docs/providers/stock/eastmoney.md", "docs/providers/*.md")).toBe(false);
     expect(matchesPathPattern("docs/providers/provider-framework.md", "docs/providers/*.md")).toBe(true);
     expect(matchesPathPattern("docs/providers/stock/eastmoney.md", "docs/providers/**/*.md")).toBe(true);
   });
@@ -97,7 +97,7 @@ describe("docs drift requirement matching", () => {
     ).toEqual([]);
   });
 
-  it("maps provider source changes to provider docs and rejects legacy feature stubs", () => {
+  it("maps provider source changes to provider docs and rejects archived feature docs", () => {
     expect(
       findDocsDriftFindings([
         "src/providers/wechat-mp/collector.ts",
@@ -105,7 +105,7 @@ describe("docs drift requirement matching", () => {
       ])
     ).toEqual([]);
     expect(
-      findDocsDriftFindings(["src/ops/doctor-repair.ts", "docs/features/13-auto-doctor.md"])
+      findDocsDriftFindings(["src/ops/doctor-repair.ts", "docs/archive/features/13-auto-doctor.md"])
     ).toHaveLength(1);
   });
 

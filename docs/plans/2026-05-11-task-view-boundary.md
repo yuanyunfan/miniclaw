@@ -189,7 +189,7 @@ Final Ralph phase target for this plan.
   - `src/agent/__tests__/*.test.ts`
   - `src/discord/formatter.ts`
   - `docs/architecture.md`
-  - `docs/features/03-discord-task-output.md`
+  - `docs/archive/features/03-discord-task-output.md`
 
 ## Verification Plan
 
@@ -221,7 +221,7 @@ Final Ralph phase target for this plan.
 ## Documentation Sync
 
 - Update `docs/architecture.md` task execution section with the new runner/view/trace split.
-- Update `docs/features/03-discord-task-output.md` or equivalent Discord output doc if message behavior changes.
+- Update `docs/archive/features/03-discord-task-output.md` or equivalent Discord output doc if message behavior changes.
 - Do not update archived improvement reports for current implementation status; sync current source-of-truth docs instead.
 - Run `pnpm run quality:docs`.
 
@@ -303,7 +303,7 @@ Record the final module boundary, changed files, and verification commands here 
 - `src/agent/task.ts`: now wires `TaskRunner`, `TaskReporter`, and `DiscordTaskViewReporter`; task DB row updates and session id persistence stay in `executeTask`, while view rendering is delegated to the Discord reporter.
 - `src/discord/__tests__/task-view-reporter.test.ts`: added focused coverage for raw fallback formatting, realtime progress tail behavior, execution summary formatting, duplicate progress compaction, status embed updates, final Markdown send, and reporter snapshot state.
 - `src/agent/__tests__/task-helpers.test.ts`: removed Discord-rendering helper assertions now covered by the Discord reporter tests; retained task runtime helper coverage.
-- `docs/architecture.md` and `docs/features/03-discord-task-output.md`: updated the task runtime docs to describe the runner/view/trace split and the completed Discord view reporter phase.
+- `docs/architecture.md` and `docs/archive/features/03-discord-task-output.md`: updated the task runtime docs to describe the runner/view/trace split and the completed Discord view reporter phase.
 - Verification:
   - `pnpm vitest run src/discord/__tests__/task-view-reporter.test.ts src/agent/__tests__/task-helpers.test.ts src/agent/__tests__/e2e-fake-runtime.test.ts` passed: 3 files, 27 tests.
   - `pnpm run typecheck` passed.

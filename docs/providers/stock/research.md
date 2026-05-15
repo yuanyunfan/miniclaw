@@ -226,10 +226,10 @@ pre_provider_preflight: health
 
 The previous feature-level stock research docs are compatibility stubs for one migration cycle:
 
-- [`../../features/10-stock-portfolio-provider.md`](../../features/10-stock-portfolio-provider.md)
-- [`../../features/11-stock-pulse-provider.md`](../../features/11-stock-pulse-provider.md)
-- [`../../features/14-market-intel-provider.md`](../../features/14-market-intel-provider.md)
-- [`../../features/18-stock-watchlist-research-provider.md`](../../features/18-stock-watchlist-research-provider.md)
+- [`../../archive/features/10-stock-portfolio-provider.md`](../../archive/features/10-stock-portfolio-provider.md)
+- [`../../archive/features/11-stock-pulse-provider.md`](../../archive/features/11-stock-pulse-provider.md)
+- [`../../archive/features/14-market-intel-provider.md`](../../archive/features/14-market-intel-provider.md)
+- [`../../archive/features/18-stock-watchlist-research-provider.md`](../../archive/features/18-stock-watchlist-research-provider.md)
 
 New implementation facts should be added here or to stock source family docs such as [`eastmoney.md`](eastmoney.md).
 

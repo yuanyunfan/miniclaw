@@ -28,3 +28,5 @@ flowchart LR
 ```
 
 网站只保留面向人的运行时地图；实现规则、owner paths 和高 drift contracts 维护在 repo runtime docs 及其 current 中文 mirror 中。
+
+旧 runtime feature stub 已归档；runtime source-of-truth 更新现在走 `docs/runtime/` 以及 routing 相关顶层文档。

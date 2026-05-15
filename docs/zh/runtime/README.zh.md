@@ -229,14 +229,14 @@ Runtime boundary:
 
 上一轮 feature-level runtime docs 会作为兼容 stub 保留一个迁移周期：
 
-- [`../../features/03-discord-task-output.md`](../../features/03-discord-task-output.md)
-- [`../../features/04-smart-task-router.md`](../../features/04-smart-task-router.md)
-- [`../../features/05-smart-task-router.en.md`](../../features/05-smart-task-router.en.md)
-- [`../../features/12-connectivity-monitor.md`](../../features/12-connectivity-monitor.md)
-- [`../../features/13-auto-doctor.md`](../../features/13-auto-doctor.md)
-- [`../../features/19-agent-prompt-context-audit.md`](../../features/19-agent-prompt-context-audit.md)
-- [`../../features/20-memory-curation-lifecycle.md`](../../features/20-memory-curation-lifecycle.md)
-- [`../../features/21-agent-run-manager.md`](../../features/21-agent-run-manager.md)
+- [`../../archive/features/03-discord-task-output.md`](../../archive/features/03-discord-task-output.md)
+- [`../../archive/features/04-smart-task-router.md`](../../archive/features/04-smart-task-router.md)
+- [`../../archive/features/05-smart-task-router.en.md`](../../archive/features/05-smart-task-router.en.md)
+- [`../../archive/features/12-connectivity-monitor.md`](../../archive/features/12-connectivity-monitor.md)
+- [`../../archive/features/13-auto-doctor.md`](../../archive/features/13-auto-doctor.md)
+- [`../../archive/features/19-agent-prompt-context-audit.md`](../../archive/features/19-agent-prompt-context-audit.md)
+- [`../../archive/features/20-memory-curation-lifecycle.md`](../../archive/features/20-memory-curation-lifecycle.md)
+- [`../../archive/features/21-agent-run-manager.md`](../../archive/features/21-agent-run-manager.md)
 
 新的实现事实应写到这里或链接的顶层 runtime docs，而不是写到 stub。
 

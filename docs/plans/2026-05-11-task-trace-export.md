@@ -153,7 +153,7 @@ Use an allowlist first. Regex redaction is a second line of defense, not the mai
 
 - Update `docs/architecture.md` with the trace exporter and redaction policy.
 - Update `docs/bot-routing.md` for the new slash command.
-- Update `docs/zh/13-auto-doctor.zh.md` if incident detail links to task trace.
+- Update `docs/zh/archive/features/13-auto-doctor.zh.md` if incident detail links to task trace.
 - Update `docs/README.md` if a new feature doc is created.
 - Run `pnpm run quality:docs`.
 
@@ -167,7 +167,7 @@ Record command name, config defaults, redaction policy, and verification evidenc
   - Added local CLI `pnpm run task:trace -- --id <task-prefix> [--out path] [--json]` via `scripts/task-trace.ts`; no new config defaults were added in this phase.
   - Added Discord slash command `/task-log id:<prefix>` with allowed-user check, ephemeral defer, inline short trace replies, and Markdown attachment for long traces.
   - Added incident detail operator hint `Task trace: /task-log id:<task-prefix>` for task incidents without duplicating trace rendering in incident formatting.
-  - Updated `docs/architecture.md` and `docs/bot-routing.md`; `docs/zh/13-auto-doctor.zh.md` was not updated because that file does not exist in this checkout.
+  - Updated `docs/architecture.md` and `docs/bot-routing.md`; `docs/zh/archive/features/13-auto-doctor.zh.md` was not updated because that file does not exist in this checkout.
   - Remaining plan item: threshold-based automatic trace attachment after task completion is not implemented yet; status stays `draft`.
 - Verification evidence:
   - `pnpm vitest run src/store/__tests__/task-trace-export.test.ts src/commands/__tests__/task-log.test.ts src/commands/__tests__/incident-detail.test.ts` passed: 3 files, 11 tests.

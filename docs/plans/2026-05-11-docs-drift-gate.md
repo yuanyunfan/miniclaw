@@ -5,7 +5,7 @@ Date: 2026-05-11
 
 ## Background
 
-MiniClaw is a docs-first project. `pnpm run quality:docs` currently checks a first slice of D1 invariants: DB schema version, selected Smart Router ER fields, and `docs/features/*.md` index coverage.
+MiniClaw is a docs-first project. `pnpm run quality:docs` currently checks a first slice of D1 invariants: DB schema version, selected Smart Router ER fields, and `docs/archive/features/*.md` index coverage.
 
 The remaining gap is changed-path semantics. When source paths change, the relevant source-of-truth docs should either change in the same commit or the developer should record an explicit reason for deferring docs updates.
 
@@ -33,7 +33,7 @@ The remaining gap is changed-path semantics. When source paths change, the relev
 - `docs/architecture.md`: source of truth for DB schema, cron, task runtime, config, and user-level layout.
 - `docs/bot-routing.md`: source of truth for Discord routing.
 - `docs/prompts.md`: source of truth for prompt templates.
-- `docs/features/*.md`: feature-level source-of-truth docs.
+- `docs/archive/features/*.md`: feature-level source-of-truth docs.
 
 ## Mapping Proposal
 
@@ -43,11 +43,11 @@ Start with a conservative map:
   - require one of:
     - `docs/bot-routing.md`
     - `docs/chat-router-current-logic.md`
-    - relevant `docs/features/*.md`
+    - relevant `docs/archive/features/*.md`
 - `src/agent/**`
   - require one of:
     - `docs/architecture.md`
-    - `docs/features/03-discord-task-output.md`
+    - `docs/archive/features/03-discord-task-output.md`
     - relevant runtime/agent feature doc
 - `src/cron/**`, `scripts/cron-*`
   - require one of:
@@ -65,7 +65,7 @@ Start with a conservative map:
 - `scripts/quality-*`, `.github/workflows/**`, `scripts/git-hooks/**`
   - require `docs/quality-gates.md`
 - `src/ops/doctor*`, `scripts/doctor*`
-  - require `docs/zh/13-auto-doctor.zh.md` or Auto Doctor plan/doc
+  - require `docs/zh/archive/features/13-auto-doctor.zh.md` or Auto Doctor plan/doc
 - `src/stage/**`
   - require Stage doc only if Stage behavior is intended to be source-of-truth, otherwise allow with experimental-boundary note.
 
@@ -155,16 +155,16 @@ Final behavior:
 
 Final mapping:
 
-- `src/bot.ts`, `src/commands/**`, `src/discord/**`, `src/routing/**` -> one of `docs/bot-routing.md`, `docs/chat-router-current-logic.md`, `docs/features/*.md`.
-- `src/agent/**` except `src/agent/prompts.ts` -> one of `docs/architecture.md`, `docs/features/03-discord-task-output.md`, `docs/features/*.md`.
-- `src/cron/**`, `scripts/cron-*` -> one of `docs/architecture.md`, `docs/features/*.md`.
+- `src/bot.ts`, `src/commands/**`, `src/discord/**`, `src/routing/**` -> one of `docs/bot-routing.md`, `docs/chat-router-current-logic.md`, `docs/archive/features/*.md`.
+- `src/agent/**` except `src/agent/prompts.ts` -> one of `docs/architecture.md`, `docs/archive/features/03-discord-task-output.md`, `docs/archive/features/*.md`.
+- `src/cron/**`, `scripts/cron-*` -> one of `docs/architecture.md`, `docs/archive/features/*.md`.
 - `src/store/db.ts`, `src/store/**` -> `docs/architecture.md`.
-- `src/providers/**` -> one of `docs/architecture.md`, `docs/features/*.md`.
-- `src/config.ts`, `config.example.yaml` -> one of `docs/architecture.md`, `docs/features/*.md`.
+- `src/providers/**` -> one of `docs/architecture.md`, `docs/archive/features/*.md`.
+- `src/config.ts`, `config.example.yaml` -> one of `docs/architecture.md`, `docs/archive/features/*.md`.
 - `prompts/**`, `src/agent/prompts.ts` -> `docs/prompts.md` and `src/__tests__/prompt-snapshot.test.ts`.
 - `scripts/quality-*`, `src/quality/**`, `.github/workflows/**`, `scripts/git-hooks/**` -> `docs/quality-gates.md`.
-- `src/ops/doctor*`, `scripts/doctor*` -> `docs/features/13-auto-doctor.md`.
-- `src/stage/**` -> `docs/features/01-stage.md`.
+- `src/ops/doctor*`, `scripts/doctor*` -> `docs/archive/features/13-auto-doctor.md`.
+- `src/stage/**` -> `docs/archive/features/01-stage.md`.
 
 Documentation sync:
 
@@ -177,7 +177,7 @@ Verification evidence:
 - `pnpm run typecheck` -> passed.
 - `pnpm run lint` -> passed.
 - `pnpm run quality:docs` on the final worktree -> passed: 15 feature docs, schema v9, 5 changed paths, 1 mapped rule, `tree(auto)`.
-- Manual simulation source-only failure: temporary `src/bot.ts` change without routing docs failed with actionable output naming `src/bot.ts` and expected `docs/bot-routing.md`, `docs/chat-router-current-logic.md`, or `docs/features/*.md`.
+- Manual simulation source-only failure: temporary `src/bot.ts` change without routing docs failed with actionable output naming `src/bot.ts` and expected `docs/bot-routing.md`, `docs/chat-router-current-logic.md`, or `docs/archive/features/*.md`.
 - Manual simulation source + docs pass: temporary `src/bot.ts` plus `docs/bot-routing.md` changes passed; both temporary changes were reverted.
 - `pnpm test` full suite first run hit an unrelated concurrent sqlite lock in `src/discord/__tests__/task-view-reporter.test.ts`; the run otherwise reported 127 passed test files, 634 passed tests, and 8 skipped tests. Rerunning `pnpm vitest run src/discord/__tests__/task-view-reporter.test.ts` passed 8 tests.
 - `pnpm ralph:verify -- --task docs-drift-gate` -> passed docs profile (`pnpm run quality:docs`, `pnpm run lint`).

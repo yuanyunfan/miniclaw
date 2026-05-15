@@ -730,7 +730,7 @@ Snapshot date: 2026-05-15.
 - **Architecture doc sync**: `docs/architecture.md` 已记录 Agent Run Manager 当前受控插入层、dynamic scheduler foundation、live MCP bus injection、managed envelope fallback、MCP tool surface 和 ACP adapter 状态。
 - **ACP lifecycle and hardening**: ACP server 已升级为 task-scoped lifecycle：`agent_run_manager.acp.enabled=true` 时随 managed task 启停，默认 localhost + ephemeral bearer token；HTTP 边界执行 payload size limit、per-token/IP rate limit、shared diagnostic redaction error response，并可选通过 `GET /trace` 导出 redacted task trace。
 - **Complexity classifier routing**: `src/agent/run-manager/complexity.ts` 已提供 deterministic local classifier；`agent_run_manager.enabled=true` 强制 managed path，`enabled=false + auto_enabled=true` 时 medium/high complexity task 自动进入 manager，`enabled=false + auto_enabled=false` 保持 single-agent rollback path。
-- **Documentation promotion**: 已新增正式 feature doc `docs/features/21-agent-run-manager.md`，并同步 `docs/prompts.md`、`docs/features/19-agent-prompt-context-audit.md`、`docs/README.md` 和 `docs/architecture.md`。
+- **Documentation promotion**: 已新增正式 feature doc `docs/archive/features/21-agent-run-manager.md`，并同步 `docs/prompts.md`、`docs/archive/features/19-agent-prompt-context-audit.md`、`docs/README.md` 和 `docs/architecture.md`。
 - **Arbitrary DAG scheduler foundation**: C7 已新增 `managed-runtime-dag-v1` validated plan schema、topological execution batches、cycle / missing dependency / unknown role / `max_nodes` / `max_depth` / `max_parallel` guardrails，并在 Manager 中提供 opt-in `schedulerPlan` path。默认 managed path 仍保持 `planner -> generator -> evaluator + bounded fix loop` rollback behavior；DAG fixture 覆盖 `planner -> researcher_a + researcher_b -> generator -> evaluator`。
 - **Evidence-rich Final Synthesizer**: C8 已把 final synthesis 提升为中文证据型输出，系统读取 child run status、active blackboard、artifact metadata、agent messages 和 verification signal，固定输出 `完成内容`、`关键证据`、`验证结果`、`剩余风险`、`后续建议`，且不展开 artifact body。
 - **Dedicated multi-agent trace UX**: C9 已新增 `src/store/agent-run-trace-export.ts`，`/task-log` / task trace Markdown 会追加 Agent Run Manager section，按 scheduler、run tree、messages、artifacts、blackboard 展示 managed state；`/incident view` 在关联 task 有 managed state 时展示 compact agent summary 并继续指向 `/task-log` full trace。
@@ -794,7 +794,7 @@ Phase 2 目标是把 first implementation skeleton 推进到可长期运行的 m
 
 - 将 ACP server 挂入 app lifecycle/config，补 rate limit、payload size limit、redaction policy、trace export。
 - 增加 complexity classifier，让复杂任务可自动选择 managed path；保留显式 flag 作为 override / rollback。
-- 生成正式 `docs/features/21-agent-run-manager.md`，同步 `docs/prompts.md`、`docs/features/19-agent-prompt-context-audit.md`、`docs/README.md`。
+- 生成正式 `docs/archive/features/21-agent-run-manager.md`，同步 `docs/prompts.md`、`docs/archive/features/19-agent-prompt-context-audit.md`、`docs/README.md`。
 - Verification: ACP lifecycle tests、classifier routing tests、docs quality gate、single-agent regression。
 
 ### C7 - Arbitrary DAG Scheduler (completed 2026-05-15)
@@ -910,8 +910,8 @@ Verification：
 ## Documentation Sync
 
 - `docs/architecture.md`: 已补充 Agent Run Manager 受控插入层、auto routing、ACP lifecycle 和 guardrails。
-- `docs/features/01-stage.md`: 保持 Stage experimental boundary，不把 Stage orchestrator 直接描述为默认 task path。
-- `docs/features/19-agent-prompt-context-audit.md`: 已更新 Agent Run Manager 下 Codex Supervisor prompt 修复/隔离状态。
+- `docs/archive/features/01-stage.md`: 保持 Stage experimental boundary，不把 Stage orchestrator 直接描述为默认 task path。
+- `docs/archive/features/19-agent-prompt-context-audit.md`: 已更新 Agent Run Manager 下 Codex Supervisor prompt 修复/隔离状态。
 - `docs/prompts.md`: 已登记 manager child prompt、`miniclaw_agent_envelope` fallback 和 live Agent Bus MCP usage block 这些 code-owned prompt fragments。
 - `docs/README.md`: 已补 `features/21-agent-run-manager.md` 索引。
 

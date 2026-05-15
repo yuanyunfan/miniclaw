@@ -151,7 +151,7 @@ cron task
 
 上一轮 feature-level doc 会作为兼容 stub 保留一个迁移周期：
 
-- [`../../features/02-wechat-mp-provider.md`](../../features/02-wechat-mp-provider.md)
+- [`../../archive/features/02-wechat-mp-provider.md`](../../archive/features/02-wechat-mp-provider.md)
 
 新的实现事实应写到这里，而不是写到 stub。
 

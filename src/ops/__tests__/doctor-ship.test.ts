@@ -315,7 +315,7 @@ describe("formatDoctorShipResult", () => {
     const row = incident();
     const repair = repairRun(row, {
       report_json: JSON.stringify({
-        changedFiles: ["src/ops/doctor-ship.ts", "docs/features/13-auto-doctor.md"],
+        changedFiles: ["src/ops/doctor-ship.ts", "docs/runtime/README.md"],
         diffSummary: "2 files changed, 45 insertions, 8 deletions",
         blockers: [".env: blocked path"],
         pushError: "token=secret-token-123456 denied",

@@ -279,7 +279,7 @@ Record migration versions, repository splits, retention defaults, and verificati
   - `src/commands/incident-detail.ts`: routed summary, source/diagnosis fields, trace snippets, repair paths, and incident event payload text through the shared diagnostic redaction policy.
   - `src/commands/task-log.ts`, `src/discord/task-trace-attachment.ts`: updated user-facing safety copy to include session/account redaction.
   - `src/privacy/__tests__/diagnostic-redaction.test.ts`, `src/store/__tests__/task-trace-export.test.ts`, `src/commands/__tests__/incident-detail.test.ts`: covered credential text, recursive object redaction, hashed session/account identifiers, trace export redaction, and incident detail redaction.
-  - `docs/architecture.md`, `docs/features/03-discord-task-output.md`, `docs/features/13-auto-doctor.md`, `docs/archive/2026-05-11-continuous-improvement-report.md`: documented the shared diagnostic redaction boundary and updated hotspot status.
+  - `docs/architecture.md`, `docs/archive/features/03-discord-task-output.md`, `docs/archive/features/13-auto-doctor.md`, `docs/archive/2026-05-11-continuous-improvement-report.md`: documented the shared diagnostic redaction boundary and updated hotspot status.
 - Verification:
   - `pnpm vitest run src/privacy/__tests__/diagnostic-redaction.test.ts src/store/__tests__/task-trace-export.test.ts src/commands/__tests__/incident-detail.test.ts` passed, 12 tests.
   - `pnpm vitest run src/commands/__tests__/task-log.test.ts src/discord/__tests__/task-view-reporter.test.ts` passed, 11 tests.

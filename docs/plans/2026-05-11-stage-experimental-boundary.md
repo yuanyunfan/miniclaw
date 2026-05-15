@@ -53,7 +53,7 @@ If Stage becomes deeply coupled to the Discord task runtime, MiniClaw will effec
 ## Implementation Plan
 
 1. Add or update Stage documentation.
-   - Candidate doc: `docs/features/16-stage-experimental.md` or `docs/stage.md`.
+   - Candidate doc: `docs/archive/features/16-stage-experimental.md` or `docs/stage.md`.
    - Include:
      - purpose;
      - non-goals;
@@ -118,7 +118,7 @@ If Stage becomes deeply coupled to the Discord task runtime, MiniClaw will effec
 
 Record doc path, boundary tests, and any runtime-contract adoption status here when implemented.
 
-- 2026-05-13: Completed the Stage experimental boundary phase. Updated `docs/features/01-stage.md` to identify Stage as an experimental persona / multi-agent CLI playground, document non-goals, source import boundaries, Stage quality separation, current runtime-contract adoption status, and promotion criteria. Updated `docs/README.md` and `docs/architecture.md` so the docs index and architecture summary no longer present Stage as a peer default product surface for Discord tasks.
+- 2026-05-13: Completed the Stage experimental boundary phase. Updated `docs/archive/features/01-stage.md` to identify Stage as an experimental persona / multi-agent CLI playground, document non-goals, source import boundaries, Stage quality separation, current runtime-contract adoption status, and promotion criteria. Updated `docs/README.md` and `docs/architecture.md` so the docs index and architecture summary no longer present Stage as a peer default product surface for Discord tasks.
 - Added `src/stage/__tests__/boundary.test.ts`, a static import-boundary test that prevents Stage production modules from importing Discord bot/runtime/command handler modules and prevents Discord runtime modules from importing `src/stage/*`.
 - Runtime-contract adoption status: no Stage runtime migration in this phase. `AgentRuntime` / `ModelClient` exist, but current `AgentRuntime` adapters focus on long-running task execution and do not expose the persona turn streaming/tool-callback contract Stage needs. Stage remains on its existing `chatOnce` path until a stable Stage-compatible chat turn contract exists.
 - Verification: `pnpm vitest run src/stage` passed (6 files, 50 tests); `pnpm run typecheck` passed; `pnpm run lint` passed; `pnpm run quality:docs` passed after the final plan update (`D1 docs drift check passed (16 feature doc(s), schema v11, 5 changed path(s), 0 mapped rule(s), mode=tree(auto))`); `pnpm test` passed (153 files, 766 tests).

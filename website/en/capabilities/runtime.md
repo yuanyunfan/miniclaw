@@ -28,3 +28,5 @@ flowchart LR
 ```
 
 The website keeps this as a readable map. Implementation rules, owner paths, and drift-sensitive contracts live in the repo runtime docs and their current Chinese mirror.
+
+The old runtime feature stubs are archived; runtime source-of-truth updates now go through `docs/runtime/` plus routing-specific top-level docs.

@@ -112,7 +112,7 @@ Futu watchlist rows are observation-universe symbols. They must not be rendered 
 
 The previous Futu feature doc is a compatibility stub for one migration cycle:
 
-- [`../../features/06-futu-stock.md`](../../features/06-futu-stock.md)
+- [`../../archive/features/06-futu-stock.md`](../../archive/features/06-futu-stock.md)
 
 Stock research legacy stubs are listed in [`research.md`](research.md#legacy-compatibility).
 

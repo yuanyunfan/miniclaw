@@ -156,7 +156,7 @@ Field meanings:
   },
   {
     "doc_id": "stage-experiment",
-    "source_path": "docs/features/01-stage.md",
+    "source_path": "docs/archive/features/01-stage.md",
     "target_path": "docs/experiments/README.md",
     "zh_path": null,
     "category": "experiment",
@@ -168,7 +168,7 @@ Field meanings:
   },
   {
     "doc_id": "ralph-controller",
-    "source_path": "docs/features/15-ralph-controller.md",
+    "source_path": "docs/archive/features/15-ralph-controller.md",
     "target_path": "docs/experiments/README.md",
     "zh_path": null,
     "category": "experiment",
@@ -235,7 +235,7 @@ Field meanings:
   },
   {
     "doc_id": "discord-task-output",
-    "source_path": "docs/features/03-discord-task-output.md",
+    "source_path": "docs/archive/features/03-discord-task-output.md",
     "target_path": "docs/runtime/README.md",
     "zh_path": null,
     "category": "runtime",
@@ -247,7 +247,7 @@ Field meanings:
   },
   {
     "doc_id": "smart-task-router-legacy-zh",
-    "source_path": "docs/features/04-smart-task-router.md",
+    "source_path": "docs/archive/features/04-smart-task-router.md",
     "target_path": "docs/runtime/README.md",
     "zh_path": null,
     "category": "runtime",
@@ -259,7 +259,7 @@ Field meanings:
   },
   {
     "doc_id": "smart-task-router-en",
-    "source_path": "docs/features/05-smart-task-router.en.md",
+    "source_path": "docs/archive/features/05-smart-task-router.en.md",
     "target_path": "docs/runtime/README.md",
     "zh_path": null,
     "category": "runtime",
@@ -271,7 +271,7 @@ Field meanings:
   },
   {
     "doc_id": "connectivity-monitor",
-    "source_path": "docs/features/12-connectivity-monitor.md",
+    "source_path": "docs/archive/features/12-connectivity-monitor.md",
     "target_path": "docs/runtime/README.md",
     "zh_path": null,
     "category": "runtime",
@@ -283,7 +283,7 @@ Field meanings:
   },
   {
     "doc_id": "auto-doctor",
-    "source_path": "docs/features/13-auto-doctor.md",
+    "source_path": "docs/archive/features/13-auto-doctor.md",
     "target_path": "docs/runtime/README.md",
     "zh_path": null,
     "category": "runtime",
@@ -295,7 +295,7 @@ Field meanings:
   },
   {
     "doc_id": "agent-prompt-context-audit",
-    "source_path": "docs/features/19-agent-prompt-context-audit.md",
+    "source_path": "docs/archive/features/19-agent-prompt-context-audit.md",
     "target_path": "docs/runtime/README.md",
     "zh_path": null,
     "category": "runtime",
@@ -307,7 +307,7 @@ Field meanings:
   },
   {
     "doc_id": "memory-curation-lifecycle",
-    "source_path": "docs/features/20-memory-curation-lifecycle.md",
+    "source_path": "docs/archive/features/20-memory-curation-lifecycle.md",
     "target_path": "docs/runtime/README.md",
     "zh_path": null,
     "category": "runtime",
@@ -319,7 +319,7 @@ Field meanings:
   },
   {
     "doc_id": "agent-run-manager-feature",
-    "source_path": "docs/features/21-agent-run-manager.md",
+    "source_path": "docs/archive/features/21-agent-run-manager.md",
     "target_path": "docs/runtime/README.md",
     "zh_path": null,
     "category": "runtime",
@@ -342,7 +342,7 @@ Field meanings:
   },
   {
     "doc_id": "wechat-mp-provider",
-    "source_path": "docs/features/02-wechat-mp-provider.md",
+    "source_path": "docs/archive/features/02-wechat-mp-provider.md",
     "target_path": "docs/providers/content.md",
     "zh_path": null,
     "category": "provider",
@@ -354,7 +354,7 @@ Field meanings:
   },
   {
     "doc_id": "futu-stock-provider",
-    "source_path": "docs/features/06-futu-stock.md",
+    "source_path": "docs/archive/features/06-futu-stock.md",
     "target_path": "docs/providers/stock/README.md",
     "zh_path": null,
     "category": "provider",
@@ -366,7 +366,7 @@ Field meanings:
   },
   {
     "doc_id": "email-capability",
-    "source_path": "docs/features/07-email-capability.md",
+    "source_path": "docs/archive/features/07-email-capability.md",
     "target_path": "docs/providers/email.md",
     "zh_path": null,
     "category": "provider",
@@ -378,7 +378,7 @@ Field meanings:
   },
   {
     "doc_id": "cmb-credit-card-email-provider",
-    "source_path": "docs/features/08-cmb-credit-card-email-provider.md",
+    "source_path": "docs/archive/features/08-cmb-credit-card-email-provider.md",
     "target_path": "docs/providers/email.md",
     "zh_path": null,
     "category": "provider",
@@ -390,7 +390,7 @@ Field meanings:
   },
   {
     "doc_id": "provider-framework-legacy",
-    "source_path": "docs/features/16-provider-framework.md",
+    "source_path": "docs/archive/features/16-provider-framework.md",
     "target_path": "docs/providers/provider-framework.md",
     "zh_path": null,
     "category": "provider",
@@ -413,7 +413,7 @@ Field meanings:
   },
   {
     "doc_id": "eastmoney-jywg-readonly",
-    "source_path": "docs/features/09-eastmoney-jywg-readonly-provider.md",
+    "source_path": "docs/archive/features/09-eastmoney-jywg-readonly-provider.md",
     "target_path": "docs/providers/stock/eastmoney.md",
     "zh_path": null,
     "category": "provider",
@@ -425,7 +425,7 @@ Field meanings:
   },
   {
     "doc_id": "eastmoney-myfavor-watchlist",
-    "source_path": "docs/features/17-eastmoney-myfavor-watchlist.md",
+    "source_path": "docs/archive/features/17-eastmoney-myfavor-watchlist.md",
     "target_path": "docs/providers/stock/eastmoney.md",
     "zh_path": null,
     "category": "provider",
@@ -437,7 +437,7 @@ Field meanings:
   },
   {
     "doc_id": "stock-portfolio-provider",
-    "source_path": "docs/features/10-stock-portfolio-provider.md",
+    "source_path": "docs/archive/features/10-stock-portfolio-provider.md",
     "target_path": "docs/providers/stock/research.md",
     "zh_path": null,
     "category": "provider",
@@ -449,7 +449,7 @@ Field meanings:
   },
   {
     "doc_id": "stock-pulse-provider",
-    "source_path": "docs/features/11-stock-pulse-provider.md",
+    "source_path": "docs/archive/features/11-stock-pulse-provider.md",
     "target_path": "docs/providers/stock/research.md",
     "zh_path": null,
     "category": "provider",
@@ -461,7 +461,7 @@ Field meanings:
   },
   {
     "doc_id": "market-intel-provider",
-    "source_path": "docs/features/14-market-intel-provider.md",
+    "source_path": "docs/archive/features/14-market-intel-provider.md",
     "target_path": "docs/providers/stock/research.md",
     "zh_path": null,
     "category": "provider",
@@ -473,7 +473,7 @@ Field meanings:
   },
   {
     "doc_id": "stock-watchlist-research-provider",
-    "source_path": "docs/features/18-stock-watchlist-research-provider.md",
+    "source_path": "docs/archive/features/18-stock-watchlist-research-provider.md",
     "target_path": "docs/providers/stock/research.md",
     "zh_path": null,
     "category": "provider",
@@ -640,7 +640,7 @@ Field meanings:
   {
     "doc_id": "market-intel-pre-market-research-plan",
     "source_path": "docs/plans/2026-05-10-market-intel-pre-market-research.md",
-    "zh_path": null,
+    "zh_path": "docs/zh/plans/2026-05-10-market-intel-pre-market-research.zh.md",
     "category": "plan",
     "status": "keep",
     "merge_group": null,
@@ -651,7 +651,7 @@ Field meanings:
   {
     "doc_id": "miniclaw-auto-doctor-self-repair-plan",
     "source_path": "docs/plans/2026-05-10-miniclaw-auto-doctor-self-repair.md",
-    "zh_path": null,
+    "zh_path": "docs/zh/plans/2026-05-10-miniclaw-auto-doctor-self-repair.zh.md",
     "category": "plan",
     "status": "keep",
     "merge_group": null,
@@ -673,7 +673,7 @@ Field meanings:
   {
     "doc_id": "complexity-hotspot-refactor-plan",
     "source_path": "docs/plans/2026-05-11-complexity-hotspot-refactor.md",
-    "zh_path": null,
+    "zh_path": "docs/zh/plans/2026-05-11-complexity-hotspot-refactor.zh.md",
     "category": "plan",
     "status": "keep",
     "merge_group": null,
@@ -684,7 +684,7 @@ Field meanings:
   {
     "doc_id": "config-schema-first-plan",
     "source_path": "docs/plans/2026-05-11-config-schema-first.md",
-    "zh_path": null,
+    "zh_path": "docs/zh/plans/2026-05-11-config-schema-first.zh.md",
     "category": "plan",
     "status": "keep",
     "merge_group": null,
@@ -695,7 +695,7 @@ Field meanings:
   {
     "doc_id": "continuous-improvement-index-plan",
     "source_path": "docs/plans/2026-05-11-continuous-improvement-index.md",
-    "zh_path": null,
+    "zh_path": "docs/zh/plans/2026-05-11-continuous-improvement-index.zh.md",
     "category": "plan",
     "status": "keep",
     "merge_group": null,
@@ -706,7 +706,7 @@ Field meanings:
   {
     "doc_id": "cron-run-history-control-plan",
     "source_path": "docs/plans/2026-05-11-cron-run-history-control.md",
-    "zh_path": null,
+    "zh_path": "docs/zh/plans/2026-05-11-cron-run-history-control.zh.md",
     "category": "plan",
     "status": "keep",
     "merge_group": null,
@@ -717,7 +717,7 @@ Field meanings:
   {
     "doc_id": "db-migrations-state-lifecycle-plan",
     "source_path": "docs/plans/2026-05-11-db-migrations-state-lifecycle.md",
-    "zh_path": null,
+    "zh_path": "docs/zh/plans/2026-05-11-db-migrations-state-lifecycle.zh.md",
     "category": "plan",
     "status": "keep",
     "merge_group": null,
@@ -728,7 +728,7 @@ Field meanings:
   {
     "doc_id": "docs-drift-gate-plan",
     "source_path": "docs/plans/2026-05-11-docs-drift-gate.md",
-    "zh_path": null,
+    "zh_path": "docs/zh/plans/2026-05-11-docs-drift-gate.zh.md",
     "category": "plan",
     "status": "keep",
     "merge_group": null,
@@ -739,7 +739,7 @@ Field meanings:
   {
     "doc_id": "incident-center-ops-view-plan",
     "source_path": "docs/plans/2026-05-11-incident-center-ops-view.md",
-    "zh_path": null,
+    "zh_path": "docs/zh/plans/2026-05-11-incident-center-ops-view.zh.md",
     "category": "plan",
     "status": "keep",
     "merge_group": null,
@@ -750,7 +750,7 @@ Field meanings:
   {
     "doc_id": "provider-framework-sdk-plan",
     "source_path": "docs/plans/2026-05-11-provider-framework-sdk.md",
-    "zh_path": null,
+    "zh_path": "docs/zh/plans/2026-05-11-provider-framework-sdk.zh.md",
     "category": "plan",
     "status": "keep",
     "merge_group": null,
@@ -761,7 +761,7 @@ Field meanings:
   {
     "doc_id": "smart-router-evaluation-loop-plan",
     "source_path": "docs/plans/2026-05-11-smart-router-evaluation-loop.md",
-    "zh_path": null,
+    "zh_path": "docs/zh/plans/2026-05-11-smart-router-evaluation-loop.zh.md",
     "category": "plan",
     "status": "keep",
     "merge_group": null,
@@ -772,7 +772,7 @@ Field meanings:
   {
     "doc_id": "stage-experimental-boundary-plan",
     "source_path": "docs/plans/2026-05-11-stage-experimental-boundary.md",
-    "zh_path": null,
+    "zh_path": "docs/zh/plans/2026-05-11-stage-experimental-boundary.zh.md",
     "category": "plan",
     "status": "keep",
     "merge_group": null,
@@ -783,7 +783,7 @@ Field meanings:
   {
     "doc_id": "task-trace-export-plan",
     "source_path": "docs/plans/2026-05-11-task-trace-export.md",
-    "zh_path": null,
+    "zh_path": "docs/zh/plans/2026-05-11-task-trace-export.zh.md",
     "category": "plan",
     "status": "keep",
     "merge_group": null,
@@ -794,7 +794,7 @@ Field meanings:
   {
     "doc_id": "task-view-boundary-plan",
     "source_path": "docs/plans/2026-05-11-task-view-boundary.md",
-    "zh_path": null,
+    "zh_path": "docs/zh/plans/2026-05-11-task-view-boundary.zh.md",
     "category": "plan",
     "status": "keep",
     "merge_group": null,
@@ -805,7 +805,7 @@ Field meanings:
   {
     "doc_id": "agent-prompt-context-management-plan",
     "source_path": "docs/plans/2026-05-13-agent-prompt-context-management.md",
-    "zh_path": null,
+    "zh_path": "docs/zh/plans/2026-05-13-agent-prompt-context-management.zh.md",
     "category": "plan",
     "status": "keep",
     "merge_group": null,
@@ -816,7 +816,7 @@ Field meanings:
   {
     "doc_id": "agent-run-manager-plan",
     "source_path": "docs/plans/2026-05-14-agent-run-manager.md",
-    "zh_path": null,
+    "zh_path": "docs/zh/plans/2026-05-14-agent-run-manager.zh.md",
     "category": "plan",
     "status": "keep",
     "merge_group": null,

@@ -277,8 +277,8 @@ pnpm run typecheck
 
 The previous feature-level docs are compatibility stubs for one migration cycle:
 
-- [`../../features/09-eastmoney-jywg-readonly-provider.md`](../../features/09-eastmoney-jywg-readonly-provider.md)
-- [`../../features/17-eastmoney-myfavor-watchlist.md`](../../features/17-eastmoney-myfavor-watchlist.md)
+- [`../../archive/features/09-eastmoney-jywg-readonly-provider.md`](../../archive/features/09-eastmoney-jywg-readonly-provider.md)
+- [`../../archive/features/17-eastmoney-myfavor-watchlist.md`](../../archive/features/17-eastmoney-myfavor-watchlist.md)
 
 New implementation facts should be added to this family doc and, when sensitive, to `docs/private/eastmoney/**`.
 

@@ -284,8 +284,8 @@ pnpm run typecheck
 
 上一轮 feature-level docs 会作为兼容 stub 保留一个迁移周期：
 
-- [`../../../features/09-eastmoney-jywg-readonly-provider.md`](../../../features/09-eastmoney-jywg-readonly-provider.md)
-- [`../../../features/17-eastmoney-myfavor-watchlist.md`](../../../features/17-eastmoney-myfavor-watchlist.md)
+- [`../../../archive/features/09-eastmoney-jywg-readonly-provider.md`](../../../archive/features/09-eastmoney-jywg-readonly-provider.md)
+- [`../../../archive/features/17-eastmoney-myfavor-watchlist.md`](../../../archive/features/17-eastmoney-myfavor-watchlist.md)
 
 新的实现事实应写到本 family doc；敏感内容写到 `docs/private/eastmoney/**`。
 

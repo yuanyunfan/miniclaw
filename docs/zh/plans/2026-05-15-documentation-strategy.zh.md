@@ -31,7 +31,7 @@ MiniClaw 需要两个文档表面：repo 内 `docs/` 继续作为 LLM 和维护�
 - 不公开 `docs/private/**`。
 - 不把 archive 报告当作当前实现状态。
 - 不让 `website/**` 替代 code-to-docs drift gate 所要求的 canonical docs。
-- 不在最初的 plan-only 设计 slice 中一次性移动所有 `docs/features/` 文件。
+- 不在最初的 plan-only 设计 slice 中一次性移动所有 `docs/archive/features/` 文件。
 
 ## Existing Architecture Evidence
 
@@ -58,14 +58,14 @@ source code -> canonical docs -> website
 1. 保留 `docs/` 作为 canonical docs-driven development layer。
 2. 定义 `en` / `zh` 维护模型：短期保留 root `docs/` 作为 English canonical tree，`docs/zh/` 作为 tracked Chinese mirror。
 3. 维护 `docs/documentation-migration-map.md`，用 `doc_id`、`source_path`、`target_path`、`zh_path`、`category`、`status`、`merge_group`、`website_exposure`、`translation_required` 和 `translation_status` 记录迁移状态；所有 tracked canonical `docs/**/*.md` source（排除 `docs/zh/**`）都必须进入 migration map。
-4. 分阶段迁移当前 docs：先 inventory，再建立 i18n parity gate，然后分类/合并 `docs/features/`，最后只把 curated material 暴露给 website。
+4. 分阶段迁移当前 docs：先 inventory，再建立 i18n parity gate，然后分类/合并 `docs/archive/features/`，最后只把 curated material 暴露给 website。
 5. 对 Eastmoney 相关文档，后续应合并成一个 provider-family entry，用 sections 区分 JYWG readonly 和 MyFavor watchlist。
 6. 新增 `website/en/**` 和 `website/zh/**` 骨架，网站页面必须声明 language-aware `source_docs`。
 7. 新增 `quality:website-docs` 检查 frontmatter、`source_docs`、private/archive source 禁用规则和 affected page reporting。
 8. 新增 `quality:docs-i18n` 检查 migration map inventory completeness、translation pairing、heading parity、ignored-path detection 和 missing translation reporting；migration map 漏收 tracked source doc、required 中文 pair 缺失或 `translation_status: pending` 都是 blocking error。
-9. Phase 2 分类迁移先增加 taxonomy entrypoints，不立即删除 legacy `docs/features/*`。当前入口包括 `docs/runtime/README.md`、`docs/providers/README.md`、`docs/providers/provider-framework.md`、`docs/providers/content.md`、`docs/providers/email.md`、`docs/providers/stock/eastmoney.md`、`docs/providers/stock/research.md` 和 `docs/experiments/README.md`。
+9. Phase 2 分类迁移先增加 taxonomy entrypoints，不立即删除 legacy `docs/archive/features/*`。当前入口包括 `docs/runtime/README.md`、`docs/providers/README.md`、`docs/providers/provider-framework.md`、`docs/providers/content.md`、`docs/providers/email.md`、`docs/providers/stock/eastmoney.md`、`docs/providers/stock/research.md` 和 `docs/experiments/README.md`。
 10. 新增 GitHub Pages build / deploy path：`scripts/build-website.ts` 把 `website/**/*.md(x)` 构建成 `website-dist/**/*.html`，`pnpm run website:build` 做本地验证，`.github/workflows/pages.yml` 先跑 `quality:website-docs` 再发布 Pages artifact。
-11. Phase 3 从小 slice 开始迁移：Eastmoney 和 Email 已先完成 provider-family merge；最终 runtime、experiments、content、provider-framework、stock 和 stock research 也已迁移完成，legacy `docs/features/*.md` 路径只保留兼容 stub 一轮。
+11. Phase 3 从小 slice 开始迁移：Eastmoney 和 Email 已先完成 provider-family merge；最终 runtime、experiments、content、provider-framework、stock 和 stock research 也已迁移完成，legacy `docs/archive/features/*.md` 路径只保留兼容 stub 一轮。
 12. 本阶段保留 root `docs/` 作为 English canonical tree，不迁到 `docs/en/**`；如果未来确实需要显式双语树，再单独开迁移计划。
 
 ```mermaid
@@ -109,12 +109,13 @@ flowchart LR
 ## Execution Notes
 
 - 2026-05-15: 首批实现落地为独立 worktree slice，范围包括 migration map、tracked `docs/zh`、i18n/website docs gates、website skeleton 和 docs index 同步。
-- 2026-05-15: 本 slice 位于 branch `codex/documentation-strategy` 的独立 worktree；大规模 `docs/features/` 分类、移动和合并仍保留为后续 docs-only slices。
+- 2026-05-15: 本 slice 位于 branch `codex/documentation-strategy` 的独立 worktree；大规模 `docs/archive/features/` 分类、移动和合并仍保留为后续 docs-only slices。
 - 2026-05-15: 已在 `main` 开始 Phase 2 分类，不删除 legacy feature docs。新增 runtime/providers/experiments taxonomy 入口、Eastmoney provider family、content/email provider family 和 stock research pipeline，并同步 migration map、website `source_docs` 与 D1 docs drift patterns。
 - 2026-05-15: 在 `main` 完成 migration-map inventory slice：`docs/documentation-migration-map.md` 覆盖所有 tracked canonical `docs/**/*.md` source（排除 `docs/zh/**`），`quality:docs-i18n` 会把 migration map 漏收 tracked source doc 判为 blocking error。Focused verification 已通过：`pnpm exec vitest run src/quality/__tests__/docs-i18n.test.ts` 和 `pnpm run quality:docs-i18n`，后者报告 73 个 migration map entries。
 - 2026-05-15: inventory slice 的 broader verification 已通过：`pnpm run typecheck`、`pnpm run lint`、`pnpm run build`、`pnpm test`（185 files / 903 tests）和 `MINICLAW_DOCS_DRIFT_ALLOW=1 pnpm run quality:docs`。当前 raw `pnpm run quality:docs` 被同一 worktree 中并行的 Agent Run Manager runtime/store 改动挡住，不是本 inventory slice 导致。
 - 2026-05-15: 新增 GitHub Pages deployment path：`scripts/build-website.ts` 从 `website/**/*.md(x)` 构建 `website-dist/**/*.html`，`package.json` 暴露 `website:build`，`.github/workflows/pages.yml` 在发布前运行 `quality:website-docs` 并上传 Pages artifact；workflow 也监听 website docs gate implementation 和 frontmatter parser，避免校验逻辑变化时绕过 Pages build。`website-dist/` 是生成物，已加入 `.gitignore`。
-- 2026-05-15: 完成第一个 Phase 3 provider merge slice：`docs/providers/stock/eastmoney.md` 成为 JYWG readonly 和 MyFavor watchlist 的 provider-family source of truth；`docs/features/09-eastmoney-jywg-readonly-provider.md` 与 `docs/features/17-eastmoney-myfavor-watchlist.md` 改为兼容 stub；同步更新 `docs/README.md`、migration map 和中文摘要；后续 hardening follow-up 已把该中文 pair 提升为 current parity。
-- 2026-05-15: 完成第二个 Phase 3 provider merge slice：`docs/providers/email.md` 成为通用只读 Email capability、`email-query` 和 `cmb-credit-card-email` 的 provider-family source of truth；`docs/features/07-email-capability.md` 与 `docs/features/08-cmb-credit-card-email-provider.md` 改为兼容 stub；同步更新 provider indexes、migration map、中文 Email 摘要和 website provider `source_docs`；后续 hardening follow-up 已把该中文 pair 提升为 current parity。
-- 2026-05-15: 完成剩余 Phase 3/4 迁移：`docs/runtime/README.md`、`docs/experiments/README.md`、`docs/providers/content.md`、`docs/providers/provider-framework.md`、`docs/providers/stock/README.md` 和 `docs/providers/stock/research.md` 成为对应 feature groups 的当前 source of truth；所有 `docs/features/*.md` 都变成一轮兼容 stub。新增 runtime、experiments、content、stock、stock research 的中文 mirror 摘要；更新 docs drift 规则，使 legacy feature stubs 不再满足未来 source-code 变更；新增 website runtime 页面并刷新 provider `source_docs`。后续 hardening follow-up 已把 required 中文 mirrors 提升为 current parity。本阶段保留 root English docs，不迁移到 `docs/en/**`。
+- 2026-05-15: 完成第一个 Phase 3 provider merge slice：`docs/providers/stock/eastmoney.md` 成为 JYWG readonly 和 MyFavor watchlist 的 provider-family source of truth；`docs/archive/features/09-eastmoney-jywg-readonly-provider.md` 与 `docs/archive/features/17-eastmoney-myfavor-watchlist.md` 改为兼容 stub；同步更新 `docs/README.md`、migration map 和中文摘要；后续 hardening follow-up 已把该中文 pair 提升为 current parity。
+- 2026-05-15: 完成第二个 Phase 3 provider merge slice：`docs/providers/email.md` 成为通用只读 Email capability、`email-query` 和 `cmb-credit-card-email` 的 provider-family source of truth；`docs/archive/features/07-email-capability.md` 与 `docs/archive/features/08-cmb-credit-card-email-provider.md` 改为兼容 stub；同步更新 provider indexes、migration map、中文 Email 摘要和 website provider `source_docs`；后续 hardening follow-up 已把该中文 pair 提升为 current parity。
+- 2026-05-15: 完成剩余 Phase 3/4 迁移：`docs/runtime/README.md`、`docs/experiments/README.md`、`docs/providers/content.md`、`docs/providers/provider-framework.md`、`docs/providers/stock/README.md` 和 `docs/providers/stock/research.md` 成为对应 feature groups 的当前 source of truth；所有 `docs/archive/features/*.md` 都变成一轮兼容 stub。新增 runtime、experiments、content、stock、stock research 的中文 mirror 摘要；更新 docs drift 规则，使 legacy feature stubs 不再满足未来 source-code 变更；新增 website runtime 页面并刷新 provider `source_docs`。后续 hardening follow-up 已把 required 中文 mirrors 提升为 current parity。本阶段保留 root English docs，不迁移到 `docs/en/**`。
 - 2026-05-15: 完成 bilingual 和 website drift hardening follow-up：required 中文 pair 全部变为 `translation_status: current`，`quality:docs-i18n` 会阻止 missing/pending required translations；`quality:website-docs` 会阻止 canonical docs 变更后 website page 未同步更新的情况，除非同 patch 更新 website page、页面 frontmatter 显式标记 `website_docs_drift: unaffected` 并说明原因，或紧急设置 `MINICLAW_WEBSITE_DOCS_DRIFT_ALLOW=1`。
+- 2026-05-15: 完成 feature stub archive 与 zh cleanup follow-up。所有 legacy `docs/features/*.md` 已移动到 `docs/archive/features/`，`quality:docs:drift` 不再把 archived feature docs 当成当前 source index；早期平铺中文翻译要么迁移到带标准 frontmatter 的 `docs/zh/plans/`，要么归档到 `docs/zh/archive/**`。Pages workflow 现在会先检查仓库 Pages 配置；如果 Pages 还没有启用，CI 会保留 website build/artifact path 成功，不再在 `actions/configure-pages` 阶段失败。

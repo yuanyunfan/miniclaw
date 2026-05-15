@@ -88,8 +88,8 @@ Boundary contract:
 
 The previous feature-level experiment docs are compatibility stubs for one migration cycle:
 
-- [`../features/01-stage.md`](../features/01-stage.md)
-- [`../features/15-ralph-controller.md`](../features/15-ralph-controller.md)
+- [`../archive/features/01-stage.md`](../archive/features/01-stage.md)
+- [`../archive/features/15-ralph-controller.md`](../archive/features/15-ralph-controller.md)
 
 New implementation facts should be added here or to `docs/ralph/**`, not to the stubs.
 

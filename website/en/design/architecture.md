@@ -27,3 +27,5 @@ flowchart LR
 ```
 
 MiniClaw's repo docs remain the implementation source of truth. This website page is a human-facing architecture summary with links back to the canonical docs and the current Chinese mirror.
+
+Legacy feature docs now live under `docs/archive/features/`; current implementation facts live in runtime, provider, experiment, and reference docs.

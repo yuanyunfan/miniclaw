@@ -47,7 +47,7 @@ The remaining gap is operator continuity. From one incident id, the user should 
 - `src/ops/doctor-scheduler.ts`: scheduled diagnosis, notifications, repair attempts.
 - `src/ops/doctor-repair.ts`: isolated worktree repair flow and repair reports.
 - `src/ops/doctor-ship.ts`: guarded ship and optional safe restart.
-- `docs/zh/13-auto-doctor.zh.md`: current Auto Doctor user-facing docs.
+- `docs/zh/archive/features/13-auto-doctor.zh.md`: current Auto Doctor user-facing docs.
 - `docs/plans/2026-05-10-miniclaw-auto-doctor-self-repair.md`: original self-repair loop plan.
 
 ## Target User Experience
@@ -184,7 +184,7 @@ Do not add schema fields until the formatter proves the current stored JSON cann
 
 ## Documentation Sync
 
-- Update `docs/zh/13-auto-doctor.zh.md`.
+- Update `docs/zh/archive/features/13-auto-doctor.zh.md`.
 - Update `docs/architecture.md` if incident data model or command surface changes.
 - Update `docs/bot-routing.md` if slash command behavior changes materially.
 - Run `pnpm run quality:docs`.
@@ -199,7 +199,7 @@ Record new filters, formatter behavior, command output examples, and verificatio
 - Added `listIncidents(filters, limit)` and `countIncidents(filters)` in `src/store/incidents.ts`; category/provider/route are read from existing JSON payloads, and `repair_status` matches the latest `repair_runs.status`. No schema fields were added.
 - Added compact incident list formatting in `src/commands/incidents.ts`: active filter summary, severity/type groups, rows with short id, severity/status, type, latest repair state, updated age, subject, source route/provider when present, and operator hints.
 - Wired the slash command options in `src/commands/register.ts` and `handleIncidents` in `src/commands/handlers.ts`.
-- Updated docs in `docs/features/13-auto-doctor.md`, `docs/bot-routing.md`, and `docs/architecture.md` for the new filter surface and store query behavior.
+- Updated docs in `docs/archive/features/13-auto-doctor.md`, `docs/bot-routing.md`, and `docs/architecture.md` for the new filter surface and store query behavior.
 - Focused verification passed:
   - `pnpm vitest run src/store/__tests__/incidents.test.ts src/commands/__tests__/incidents.test.ts src/commands/__tests__/incident-detail.test.ts` - 13 tests passed.
   - `pnpm run typecheck` - passed.
@@ -215,7 +215,7 @@ Record new filters, formatter behavior, command output examples, and verificatio
 - Added `listCronRunsForIncident(incidentId, limit)` in `src/store/cron-runs.ts` and wired `handleIncident(view)` to pass linked cron run history for cron incidents. No schema fields were added; the link uses existing `cron_runs.incident_id`.
 - Expanded latest repair rendering from existing `repair_runs.report_json` and `verification_json`: changed files, blockers, commit/push errors, and verification command statuses are displayed only when recorded, keeping the Discord output under the 1900 character guard.
 - Added ship/restart continuity from recent incident events: ship preview request, main update, live restart completed/deferred/failed, pre-ship vs shipped rollback hints, and a next recommended operator action based on current status and latest repair state.
-- Updated docs in `docs/features/13-auto-doctor.md`, `docs/bot-routing.md`, and `docs/architecture.md` for the richer operator view and cron-run link behavior.
+- Updated docs in `docs/archive/features/13-auto-doctor.md`, `docs/bot-routing.md`, and `docs/architecture.md` for the richer operator view and cron-run link behavior.
 - Focused verification passed:
   - `pnpm vitest run src/commands/__tests__/incident-detail.test.ts src/commands/__tests__/incidents.test.ts src/store/__tests__/cron-runs.test.ts` - 16 tests passed.
   - `pnpm run typecheck` - passed.
@@ -231,7 +231,7 @@ Record new filters, formatter behavior, command output examples, and verificatio
 - Added `formatRepairReviewReport` in `src/ops/doctor-repair/report.ts` and wired `formatDoctorShipResult` to it, so local `pnpm run doctor:ship -- --incident <id>` and Discord `/incident ship-preview` share the same report body.
 - The review report now includes incident identity, ship state, repair branch and commit/base SHA, changed paths, diff summary when recorded, verification commands with inferred exit status, path-policy blockers, risks, rollback instructions, and local/Discord ship commands.
 - The formatter uses the shared diagnostic redaction policy before printing stored report fields and keeps the Discord path on changed paths/summaries rather than raw diffs.
-- Updated docs in `docs/features/13-auto-doctor.md` and `docs/bot-routing.md` for the shared dry-run/ship-preview review surface.
+- Updated docs in `docs/archive/features/13-auto-doctor.md` and `docs/bot-routing.md` for the shared dry-run/ship-preview review surface.
 - Focused verification passed:
   - `pnpm vitest run src/ops/__tests__/doctor-ship.test.ts` - 8 tests passed.
   - `pnpm run typecheck` - passed.
@@ -247,7 +247,7 @@ Record new filters, formatter behavior, command output examples, and verificatio
 - Added `formatTaskTraceCompactEvents` in `src/store/task-trace-export.ts` so incident detail reuses the existing trace projection/redaction boundary instead of rendering raw task event payloads.
 - Kept the Discord detail compact: the `Task Trace` section now shows the resolved source, exporter availability, full `/task-log` command, and the incident evidence trace slice when present; full Markdown export stays behind `/task-log` / `pnpm run task:trace`.
 - Wired `handleIncident(view)` to build and pass the trace context for both direct task incidents and cron incidents with linked task runs. No schema fields were added.
-- Updated docs in `docs/features/13-auto-doctor.md`, `docs/bot-routing.md`, and `docs/architecture.md` for the shared trace-exporter summary behavior.
+- Updated docs in `docs/archive/features/13-auto-doctor.md`, `docs/bot-routing.md`, and `docs/architecture.md` for the shared trace-exporter summary behavior.
 - Focused verification passed:
   - `pnpm vitest run src/commands/__tests__/incident-detail.test.ts src/commands/__tests__/incidents.test.ts src/store/__tests__/task-trace-export.test.ts` - 16 tests passed.
   - `pnpm run typecheck` - passed.

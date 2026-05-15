@@ -187,7 +187,7 @@ describe("doctor repair verification boundary", () => {
       return `${label} ok`;
     });
 
-    const results = runVerification("/repo", ["docs/features/13-auto-doctor.md"], run);
+    const results = runVerification("/repo", ["docs/runtime/README.md"], run);
 
     expect(results.map((item) => [item.command, item.ok])).toEqual([
       ["pnpm run quality:g0", true],

@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 import { execFileSync } from "node:child_process";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { evaluateDocsDrift, type DocsDriftFinding } from "../src/quality/docs-drift.js";
 
 interface Finding {
@@ -140,6 +140,7 @@ for (const field of [
 const docsIndex = readText("docs/README.md");
 
 function markdownFiles(dir: string): string[] {
+  if (!existsSync(dir)) return [];
   return readdirSync(dir)
     .flatMap((entry) => {
       const path = `${dir}/${entry}`;
@@ -151,7 +152,6 @@ function markdownFiles(dir: string): string[] {
 }
 
 const indexedSourceDocs = [
-  ...markdownFiles("docs/features"),
   ...markdownFiles("docs/runtime"),
   ...markdownFiles("docs/providers"),
   ...markdownFiles("docs/experiments"),
