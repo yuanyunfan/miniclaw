@@ -37,6 +37,7 @@
 ## Plans
 
 - [`plans/README.md`](plans/README.md): 非平凡开发任务的 plan 文档规范。
+- [`plans/2026-05-15-documentation-strategy.md`](plans/2026-05-15-documentation-strategy.md): `docs/` 作为 LLM 维护的 docs-driven development source of truth，GitHub Pages 作为 human-facing portal 的分层策略。
 - `plans/YYYY-MM-DD-*.md`: 已完成或进行中的实施计划。
 
 ## Archive

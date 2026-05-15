@@ -4,6 +4,10 @@ This directory stores durable development plans for non-trivial MiniClaw changes
 
 Use a plan document before editing production code when a task changes architecture, runtime behavior, data flow, auth/permissions, schema, cron/provider/task execution, Discord output, Agent/Codex/Claude behavior, Stage, or shared configuration.
 
+## Current Planning Notes
+
+- [`2026-05-15-documentation-strategy.md`](2026-05-15-documentation-strategy.md): 分层文档策略；`docs/` 作为 LLM 维护的 docs-driven development source of truth，GitHub Pages 作为 human-facing portal。
+
 File naming:
 
 ```text
