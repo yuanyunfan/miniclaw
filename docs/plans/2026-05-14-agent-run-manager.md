@@ -679,6 +679,39 @@ Discord progress 不应该展示所有 agent 原文。建议输出 compact event
   - Mitigation: max message count, max fix iterations, explicit manager route decisions。
   - Rollback: stop route loop and ask user for decision。
 
+## Current Implementation Status
+
+Snapshot date: 2026-05-15.
+
+### Completed
+
+- **Schema slice**: `agent_runs`、`agent_messages`、`agent_artifacts`、`blackboard_facts` 以及 required indexes 已通过 migration 落地。
+- **Typed store repositories**: run/message/mailbox/blackboard/artifact 的 typed API 已落地，并校验 runtime/status/message kind/artifact kind/blackboard lifecycle、sender/receiver task 归属、artifact owner 和 source message。
+- **Agent Bus core**: `listAgents`、`sendMessage`、`waitForMessage`、`readMailbox`、`publishArtifact`、`readArtifact`、`listBlackboard`、`upsertBlackboardFact` 已有 TypeScript service API；direct message 会唤醒 in-memory waiter，并同步写 durable log。
+- **Fake runtime E2E**: `agent_run_manager.enabled=true` + fake runtime 可以跑通 `planner -> generator -> evaluator`，并产生 agent runs、typed messages、artifacts、blackboard facts、task events 和 final synthesis。
+- **`executeTask()` feature flag integration**: `agent_run_manager.enabled=false` 时保持 single-agent path；开启后可进入 Agent Run Manager path。默认仍关闭。
+- **Managed turn-end envelope fallback**: Codex / Claude child mode 已能通过 `miniclaw_agent_envelope` JSON 回传 summary/message/artifact/blackboard/verdict，Manager 解析后写入 durable collaboration state。
+- **Bounded evaluator fix loop and cancellation cascade**: evaluator `FAIL` 可触发 bounded generator fix loop；root cancellation 会级联取消 active child runs 并写入 durable store。
+- **Minimal ACP adapter/server**: 已有 localhost ACP-style manifest、external run、message、artifact reference、blackboard API 和 fake round-trip 测试；默认不做公开 marketplace。
+- **Agent Bus MCP compatibility surface**: `miniclaw-agent-bus` MCP-compatible tool surface 已有 `post_message/read_mailbox/write_artifact/read_artifact/list_blackboard/upsert_blackboard_fact`，并提供 `pnpm run mcp:agent-bus` 入口。
+- **Architecture doc sync**: `docs/architecture.md` 已记录 Agent Run Manager 当前受控插入层、managed envelope fallback、MCP tool surface 和 ACP adapter 状态。
+
+### Partially Implemented
+
+- **Dynamic scheduler / `yield_until_child_event`**: Bus 层已经支持 in-memory `waitForMessage()`，fake E2E 验证了 direct wake；真实 managed runtime 当前仍是固定 `planner -> generator -> evaluator` 控制流，不是 Supervisor 可动态 spawn、yield、恢复的通用 DAG/FSM scheduler。
+- **Role policy enforcement**: `tool_policy_id`、`can_write_workspace`、`can_send_kinds`、`can_receive_kinds` 已落库，Bus 会校验 message kind；但 Codex/Claude child runtime 启动层还没有强制 read-only sandbox、generator-only workspace write、dangerous command policy 或 per-role exec policy。
+- **Final Synthesizer**: 当前能基于 verdict 和 active blackboard 生成最终结果；还没有系统读取 artifact summaries，也没有形成面向用户的中文验证证据型 synthesis。
+- **Trace / UX surface**: `task_events` 已记录 agent run/message/artifact/blackboard/verdict 事件；`/task-log`、incident view 和 trace export 还没有专门的 multi-agent 可视化视图。
+
+### Not Yet Implemented
+
+- **Live MCP bus injection into real child runtime**: MCP server 和 tool handlers 已存在，但真实 Codex / Claude child session 启动时还没有自动注入 bus MCP server/env/tool config；真实 child 仍主要依赖 turn-end envelope fallback。
+- **Manager guardrails as config + enforcement**: 还没有系统化实现 `max_turns`、`timeout_ms`、`max_messages`、`max_artifact_bytes`、`max_spawn_depth`、`max_children_per_run`、`max_concurrent_runs`、`max_ping_pong_turns`、`cleanup_ttl_ms`。
+- **Sweeper / restart recovery**: 还没有定期 sweeper 处理 stale active runs、timeout、cancelled parent、orphaned child 和 restart recovery。
+- **ACP production lifecycle and hardening**: 还没有正式挂入 app lifecycle/config，也没有补齐 rate limit、payload size limit、redaction policy 和 trace export。
+- **Complexity classifier routing**: 还没有按 task complexity 自动进入 managed path；当前仍以 `agent_run_manager.enabled` flag 为主。
+- **Full documentation promotion**: 还没有新增正式 `docs/features/21-agent-run-manager.md`，`docs/prompts.md` 也还没有登记 manager/envelope prompt asset，`docs/features/19-agent-prompt-context-audit.md` 还没有更新 Codex Supervisor prompt 修复状态。
+
 ## Non-Blocking Follow-Ups
 
 这些问题不阻塞第一阶段实现；不要因为它们延迟 schema、manager core、fake E2E 和 `/task` feature flag 集成。
