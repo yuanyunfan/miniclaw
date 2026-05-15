@@ -11,6 +11,7 @@ import { migration010SchemaVersionHistory } from "./010-schema-version-history.j
 import { migration011CronRuns } from "./011-cron-runs.js";
 import { migration012RecoveryOutbox } from "./012-recovery-outbox.js";
 import { migration013AgentRunManager } from "./013-agent-run-manager.js";
+import { migration014AgentSchedulerState } from "./014-agent-scheduler-state.js";
 import type { SchemaMigration } from "./types.js";
 
 export const migrations: SchemaMigration[] = [
@@ -27,4 +28,5 @@ export const migrations: SchemaMigration[] = [
   migration011CronRuns,
   migration012RecoveryOutbox,
   migration013AgentRunManager,
+  migration014AgentSchedulerState,
 ];

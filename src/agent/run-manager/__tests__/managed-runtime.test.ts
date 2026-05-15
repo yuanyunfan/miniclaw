@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setDb } from "../../../store/connection.js";
 import { ensureBaseSchema, runMigrations } from "../../../store/schema.js";
 import { createTask } from "../../../store/repositories/tasks.js";
-import { listActiveFacts, listArtifactsForRun, listRunsForTask } from "../../../store/agent-run-manager.js";
+import { getAgentSchedulerState, listActiveFacts, listArtifactsForRun, listRunsForTask } from "../../../store/agent-run-manager.js";
 import type { AgentRuntime, AgentTaskInput, AgentTaskResult } from "../../../runtime/agent-runtime.js";
 import { TaskReporter } from "../../task-reporter.js";
 import { AgentRunManager } from "../manager.js";
@@ -131,6 +131,12 @@ describe("AgentRunManager managed runtime fallback", () => {
       expect.objectContaining({ key: "implementation", content: "fixed draft", confidence: "high" }),
       expect.objectContaining({ key: "final_verdict", content: "PASS", confidence: "high" }),
     ]));
+    expect(getAgentSchedulerState("task-managed-runtime")).toMatchObject({
+      status: "completed",
+      current_step: "completed",
+      scheduler_version: "managed-runtime-v1",
+      plan_json: expect.objectContaining({ max_fix_iterations: 1 }),
+    });
     expect(events.some((event) => typeof event === "object" && event !== null && (event as { type?: string }).type === "tool_progress")).toBe(true);
   });
 
@@ -161,6 +167,10 @@ describe("AgentRunManager managed runtime fallback", () => {
     expect(result.success).toBe(false);
     expect(result.result).toContain("Verdict: FAIL");
     expect(listRunsForTask("task-managed-runtime").find((run) => run.role === "supervisor")?.status).toBe("failed");
+    expect(getAgentSchedulerState("task-managed-runtime")).toMatchObject({
+      status: "failed",
+      current_step: "completed",
+    });
   });
 
   it("passes live Agent Bus MCP managed context into provider child runs", async () => {
@@ -243,6 +253,7 @@ describe("AgentRunManager managed runtime fallback", () => {
     expect(result.result).toContain("max_turns=1");
     expect(listRunsForTask("task-managed-runtime").map((run) => run.role)).toEqual(["supervisor", "planner"]);
     expect(listRunsForTask("task-managed-runtime").find((run) => run.role === "supervisor")?.status).toBe("failed");
+    expect(getAgentSchedulerState("task-managed-runtime")).toMatchObject({ status: "failed" });
   });
 
   it("times out managed child runs with a controlled failure", async () => {

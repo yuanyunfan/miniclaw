@@ -27,6 +27,7 @@ import {
 } from "./envelope.js";
 import { createManagedAgentBusContext } from "./mcp/injection.js";
 import { resolveAgentRunManagerPolicy, type AgentRunManagerPolicy, type AgentRunManagerPolicyInput } from "./policy.js";
+import { AgentRunScheduler, createManagedSchedulerPlan } from "./scheduler.js";
 
 const ALL_MESSAGE_KINDS: AgentMessageKind[] = [
   "finding",
@@ -345,67 +346,124 @@ export class AgentRunManager {
       message: sessionId,
       payload: { provider: "agent-run-manager", session_id: sessionId, root_run_id: root.id },
     });
-    const abortListener = () => this.cancelTask("task cancelled by root signal");
+    const maxFixIterations = Math.max(0, input.maxFixIterations ?? this.policy.maxFixIterations);
+    let scheduler: AgentRunScheduler | undefined;
+    const abortListener = () => {
+      scheduler?.cancel("task cancelled by root signal");
+      this.cancelTask("task cancelled by root signal");
+    };
     input.signal.addEventListener("abort", abortListener, { once: true });
 
     try {
+      scheduler = new AgentRunScheduler({
+        taskId: this.params.taskId,
+        rootRun: root,
+        bus: this.bus,
+        reporter: this.params.reporter,
+        waitTimeoutMs: this.policy.timeoutMs,
+        plan: createManagedSchedulerPlan(maxFixIterations),
+      });
+      scheduler.start("start");
+
       if (input.signal.aborted) {
+        scheduler.cancel("task cancelled before Agent Run Manager start");
         this.cancelTask("task cancelled before Agent Run Manager start");
         return this.cancelledResult(startedAt, sessionId);
       }
 
       const planner = this.spawnManagedRole(root, "planner");
-      const plannerTurn = await this.runProviderChild({
-        run: planner,
-        runtime: input.runtime,
-        prompt: this.buildChildPrompt({
-          role: "planner",
-          taskPrompt: input.prompt,
-          instruction: "Create a compact orchestration handoff for the generator and record key acceptance criteria.",
-        }),
+      const { result: plannerTurn } = await scheduler.yieldUntilChildEvent({
+        currentStep: "planner",
+        childRunId: planner.id,
+        waitKinds: ["handoff"],
         signal: input.signal,
-        onViewEvent: input.onViewEvent,
-      });
-      if (input.signal.aborted) return this.cancelledResult(startedAt, sessionId);
-      if (!plannerTurn.result.success) return this.failedResult(startedAt, sessionId, root.id, `planner failed: ${plannerTurn.result.result}`);
-
-      let generatorTurn = await this.runGeneratorTurn({
-        root,
-        runtime: input.runtime,
-        taskPrompt: input.prompt,
-        plannerSummary: plannerTurn.envelope.summary,
-        signal: input.signal,
-        onViewEvent: input.onViewEvent,
-      });
-      if (input.signal.aborted) return this.cancelledResult(startedAt, sessionId);
-      if (!generatorTurn.result.success) return this.failedResult(startedAt, sessionId, root.id, `generator failed: ${generatorTurn.result.result}`);
-
-      let finalVerdict: ManagedRunVerdict = "FAIL";
-      let finalSummary = "";
-      const maxFixIterations = Math.max(0, input.maxFixIterations ?? this.policy.maxFixIterations);
-      for (let iteration = 0; iteration <= maxFixIterations; iteration++) {
-        const evaluator = this.spawnManagedRole(root, "evaluator");
-        const evaluatorTurn = await this.runProviderChild({
-          run: evaluator,
+        runChild: () => this.runProviderChild({
+          run: planner,
           runtime: input.runtime,
           prompt: this.buildChildPrompt({
-            role: "evaluator",
+            role: "planner",
             taskPrompt: input.prompt,
-            instruction: [
-              "Evaluate the latest generator artifact.",
-              "Set verdict to PASS when acceptance criteria are satisfied; otherwise set verdict to FAIL and include fix_list.",
-            ].join(" "),
-            extra: {
-              generator_summary: generatorTurn.envelope.summary,
-              generator_artifact_ids: generatorTurn.artifactIds,
-              fix_iteration: iteration,
-            },
+            instruction: "Create a compact orchestration handoff for the generator and record key acceptance criteria.",
           }),
           signal: input.signal,
           onViewEvent: input.onViewEvent,
-        });
+        }),
+        shouldWaitForResult: (turn) => turn.result.success,
+        ensureCompletionMessage: (turn) => this.ensureSchedulerWakeMessage(root, turn, ["handoff"]),
+      });
+      if (input.signal.aborted) return this.cancelledResult(startedAt, sessionId);
+      if (!plannerTurn.result.success) {
+        scheduler.fail("planner", `planner failed: ${plannerTurn.result.result}`);
+        return this.failedResult(startedAt, sessionId, root.id, `planner failed: ${plannerTurn.result.result}`);
+      }
+
+      let totalCostUsd = plannerTurn.result.costUsd;
+      let totalTurns = plannerTurn.result.turns;
+      const firstGenerator = this.spawnManagedRole(root, "generator");
+      let generatorTurn = (await scheduler.yieldUntilChildEvent({
+        currentStep: "generator",
+        childRunId: firstGenerator.id,
+        waitKinds: ["artifact", "finding"],
+        signal: input.signal,
+        runChild: () => this.runGeneratorTurn({
+          root,
+          run: firstGenerator,
+          runtime: input.runtime,
+          taskPrompt: input.prompt,
+          plannerSummary: plannerTurn.envelope.summary,
+          signal: input.signal,
+          onViewEvent: input.onViewEvent,
+        }),
+        shouldWaitForResult: (turn) => turn.result.success,
+        ensureCompletionMessage: (turn) => this.ensureSchedulerWakeMessage(root, turn, ["artifact", "finding"]),
+      })).result;
+      totalCostUsd += generatorTurn.result.costUsd;
+      totalTurns += generatorTurn.result.turns;
+      if (input.signal.aborted) return this.cancelledResult(startedAt, sessionId);
+      if (!generatorTurn.result.success) {
+        scheduler.fail("generator", `generator failed: ${generatorTurn.result.result}`);
+        return this.failedResult(startedAt, sessionId, root.id, `generator failed: ${generatorTurn.result.result}`);
+      }
+
+      let finalVerdict: ManagedRunVerdict = "FAIL";
+      let finalSummary = "";
+      for (let iteration = 0; iteration <= maxFixIterations; iteration++) {
+        const evaluator = this.spawnManagedRole(root, "evaluator");
+        const evaluatorStep = `evaluator:${iteration}`;
+        const evaluatorTurn = (await scheduler.yieldUntilChildEvent({
+          currentStep: evaluatorStep,
+          childRunId: evaluator.id,
+          waitKinds: ["verdict"],
+          signal: input.signal,
+          runChild: () => this.runProviderChild({
+            run: evaluator,
+            runtime: input.runtime,
+            prompt: this.buildChildPrompt({
+              role: "evaluator",
+              taskPrompt: input.prompt,
+              instruction: [
+                "Evaluate the latest generator artifact.",
+                "Set verdict to PASS when acceptance criteria are satisfied; otherwise set verdict to FAIL and include fix_list.",
+              ].join(" "),
+              extra: {
+                generator_summary: generatorTurn.envelope.summary,
+                generator_artifact_ids: generatorTurn.artifactIds,
+                fix_iteration: iteration,
+              },
+            }),
+            signal: input.signal,
+            onViewEvent: input.onViewEvent,
+          }),
+          shouldWaitForResult: (turn) => turn.result.success,
+          ensureCompletionMessage: (turn) => this.ensureSchedulerWakeMessage(root, turn, ["verdict"]),
+        })).result;
+        totalCostUsd += evaluatorTurn.result.costUsd;
+        totalTurns += evaluatorTurn.result.turns;
         if (input.signal.aborted) return this.cancelledResult(startedAt, sessionId);
-        if (!evaluatorTurn.result.success) return this.failedResult(startedAt, sessionId, root.id, `evaluator failed: ${evaluatorTurn.result.result}`);
+        if (!evaluatorTurn.result.success) {
+          scheduler.fail(evaluatorStep, `evaluator failed: ${evaluatorTurn.result.result}`);
+          return this.failedResult(startedAt, sessionId, root.id, `evaluator failed: ${evaluatorTurn.result.result}`);
+        }
 
         finalVerdict = evaluatorTurn.envelope.verdict ?? this.inferVerdict(evaluatorTurn);
         finalSummary = evaluatorTurn.envelope.summary ?? evaluatorTurn.result.result;
@@ -418,6 +476,7 @@ export class AgentRunManager {
         }));
 
         if (finalVerdict === "PASS") {
+          scheduler.complete("completed");
           updateRunStatus(root.id, "completed");
           this.params.reporter.event("agent_run_completed", {
             payload: { run_id: root.id, role: root.role, status: "completed" },
@@ -426,30 +485,46 @@ export class AgentRunManager {
           return {
             success: true,
             sessionId,
-            costUsd: plannerTurn.result.costUsd + generatorTurn.result.costUsd + evaluatorTurn.result.costUsd,
+            costUsd: totalCostUsd,
             durationMs,
-            turns: plannerTurn.result.turns + generatorTurn.result.turns + evaluatorTurn.result.turns,
+            turns: totalTurns,
             result: this.synthesizeFinalResult(finalVerdict, finalSummary),
-            tokensSummary: "manager=managed-envelope",
+            tokensSummary: "manager=managed-scheduler",
             progressLines: this.progressLinesForTask(),
             toolCount: 0,
           };
         }
 
         if (iteration >= maxFixIterations) break;
-        generatorTurn = await this.runGeneratorTurn({
-          root,
-          runtime: input.runtime,
-          taskPrompt: input.prompt,
-          plannerSummary: plannerTurn.envelope.summary,
-          fixList: evaluatorTurn.envelope.fix_list ?? ["Evaluator returned FAIL without a structured fix list."],
+        const fixGenerator = this.spawnManagedRole(root, "generator");
+        generatorTurn = (await scheduler.yieldUntilChildEvent({
+          currentStep: `generator:fix:${iteration + 1}`,
+          childRunId: fixGenerator.id,
+          waitKinds: ["artifact", "finding"],
           signal: input.signal,
-          onViewEvent: input.onViewEvent,
-        });
+          runChild: () => this.runGeneratorTurn({
+            root,
+            run: fixGenerator,
+            runtime: input.runtime,
+            taskPrompt: input.prompt,
+            plannerSummary: plannerTurn.envelope.summary,
+            fixList: evaluatorTurn.envelope.fix_list ?? ["Evaluator returned FAIL without a structured fix list."],
+            signal: input.signal,
+            onViewEvent: input.onViewEvent,
+          }),
+          shouldWaitForResult: (turn) => turn.result.success,
+          ensureCompletionMessage: (turn) => this.ensureSchedulerWakeMessage(root, turn, ["artifact", "finding"]),
+        })).result;
+        totalCostUsd += generatorTurn.result.costUsd;
+        totalTurns += generatorTurn.result.turns;
         if (input.signal.aborted) return this.cancelledResult(startedAt, sessionId);
-        if (!generatorTurn.result.success) return this.failedResult(startedAt, sessionId, root.id, `generator fix failed: ${generatorTurn.result.result}`);
+        if (!generatorTurn.result.success) {
+          scheduler.fail(`generator:fix:${iteration + 1}`, `generator fix failed: ${generatorTurn.result.result}`);
+          return this.failedResult(startedAt, sessionId, root.id, `generator fix failed: ${generatorTurn.result.result}`);
+        }
       }
 
+      scheduler.fail("completed", "evaluator returned FAIL after max fix iterations");
       updateRunStatus(root.id, "failed", { errorMessage: "evaluator returned FAIL after max fix iterations" });
       this.params.reporter.event("agent_run_completed", {
         severity: "error",
@@ -458,17 +533,18 @@ export class AgentRunManager {
       return {
         success: false,
         sessionId,
-        costUsd: 0,
+        costUsd: totalCostUsd,
         durationMs: Date.now() - startedAt,
-        turns: 0,
+        turns: totalTurns,
         result: this.synthesizeFinalResult(finalVerdict, finalSummary || "Evaluator returned FAIL after max fix iterations."),
-        tokensSummary: "manager=managed-envelope",
+        tokensSummary: "manager=managed-scheduler",
         progressLines: this.progressLinesForTask(),
         toolCount: 0,
       };
     } catch (err) {
       if (input.signal.aborted) return this.cancelledResult(startedAt, sessionId);
       const message = err instanceof Error ? err.message : String(err);
+      scheduler?.fail("failed", message);
       return this.failedResult(startedAt, sessionId, root.id, message);
     } finally {
       input.signal.removeEventListener("abort", abortListener);
@@ -578,6 +654,7 @@ export class AgentRunManager {
 
   private async runGeneratorTurn(input: {
     root: AgentRun;
+    run?: AgentRun;
     runtime: AgentRuntime;
     taskPrompt: string;
     plannerSummary?: string;
@@ -585,7 +662,7 @@ export class AgentRunManager {
     signal: AbortSignal;
     onViewEvent: (event: TaskViewEvent) => Promise<void> | void;
   }): Promise<ManagedChildTurn> {
-    const generator = this.spawnManagedRole(input.root, "generator");
+    const generator = input.run ?? this.spawnManagedRole(input.root, "generator");
     return await this.runProviderChild({
       run: generator,
       runtime: input.runtime,
@@ -836,6 +913,41 @@ export class AgentRunManager {
       },
     });
     return persisted;
+  }
+
+  private ensureSchedulerWakeMessage(root: AgentRun, turn: ManagedChildTurn, waitKinds: AgentMessageKind[]): void {
+    const alreadyWakeable = turn.messages.some((message) =>
+      (message.to_run_id === root.id || message.to_run_id === null) && waitKinds.includes(message.kind)
+    );
+    if (alreadyWakeable) return;
+
+    const defaultKind = this.defaultMessageKind(turn.run.role, turn.envelope);
+    const kind = waitKinds.includes(defaultKind) ? defaultKind : waitKinds[0];
+    if (!kind) return;
+
+    const message = this.bus.sendMessage({
+      taskId: this.params.taskId,
+      fromRunId: turn.run.id,
+      toRunId: root.id,
+      kind,
+      contentText: turn.envelope.summary ?? `${turn.run.role} completed`,
+      payload: {
+        scheduler_event: "child_completed",
+        role: turn.run.role,
+        result_success: turn.result.success,
+        ...(turn.envelope.verdict ? { verdict: turn.envelope.verdict } : {}),
+        ...(turn.envelope.fix_list?.length ? { fix_list: turn.envelope.fix_list } : {}),
+      },
+      artifactIds: turn.artifactIds,
+    });
+    this.params.reporter.event("agent_scheduler_child_event", {
+      payload: {
+        message_id: message.id,
+        run_id: turn.run.id,
+        role: turn.run.role,
+        kind,
+      },
+    });
   }
 
   private recordFinalVerdict(evaluator: AgentRun, root: AgentRun, verdict: ManagedRunVerdict, fixList: string[]): void {

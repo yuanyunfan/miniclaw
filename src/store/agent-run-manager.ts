@@ -11,6 +11,8 @@ export const AGENT_CONTROL_SCOPES = ["root", "child", "peer"] as const;
 export type AgentControlScope = "root" | "child" | "peer";
 export const AGENT_RUNTIME_IDS = ["claude", "codex", "external-acp", "fake"] as const;
 export type AgentRuntimeId = "claude" | "codex" | "external-acp" | "fake";
+export const AGENT_SCHEDULER_STATUSES = ["initialized", "running", "waiting", "completed", "failed", "cancelled"] as const;
+export type AgentSchedulerStatus = typeof AGENT_SCHEDULER_STATUSES[number];
 export const AGENT_MESSAGE_KINDS = [
   "finding",
   "question",
@@ -111,6 +113,20 @@ export interface AgentArtifact {
   created_at: string;
 }
 
+export interface AgentSchedulerState {
+  task_id: string;
+  root_run_id: string;
+  scheduler_version: string;
+  status: AgentSchedulerStatus;
+  current_step: string;
+  wait_run_id: string | null;
+  wait_kinds: AgentMessageKind[];
+  last_message_id: string | null;
+  plan_json: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
 type AgentRunRow = Omit<AgentRun, "can_spawn" | "can_write_workspace" | "can_send_kinds" | "can_receive_kinds" | "route"> & {
   can_spawn: number;
   can_write_workspace: number;
@@ -122,6 +138,11 @@ type AgentRunRow = Omit<AgentRun, "can_spawn" | "can_write_workspace" | "can_sen
 type AgentMessageRow = Omit<AgentMessage, "payload_json" | "artifact_ids"> & {
   payload_json: string | null;
   artifact_ids_json: string;
+};
+
+type AgentSchedulerStateRow = Omit<AgentSchedulerState, "wait_kinds" | "plan_json"> & {
+  wait_kinds_json: string;
+  plan_json: string;
 };
 
 function includesReadonly<T extends readonly string[]>(values: T, value: unknown): value is T[number] {
@@ -181,6 +202,18 @@ function toMessage(row: AgentMessageRow): AgentMessage {
     ...row,
     payload_json: parseJson<unknown>(row.payload_json, undefined),
     artifact_ids: parseJson<string[]>(row.artifact_ids_json, []),
+  };
+}
+
+function parseMessageKinds(value: string | null | undefined): AgentMessageKind[] {
+  return parseJson<unknown[]>(value, []).filter((item): item is AgentMessageKind => isAgentMessageKind(item));
+}
+
+function toSchedulerState(row: AgentSchedulerStateRow): AgentSchedulerState {
+  return {
+    ...row,
+    wait_kinds: parseMessageKinds(row.wait_kinds_json),
+    plan_json: parseJson<unknown>(row.plan_json, {}),
   };
 }
 
@@ -320,6 +353,81 @@ export function listActiveChildren(parentRunId: string): AgentRun[] {
        ORDER BY started_at ASC, rowid ASC`
     )
     .all(parentRunId) as AgentRunRow[]).map(toRun);
+}
+
+export interface UpsertAgentSchedulerStateInput {
+  taskId: string;
+  rootRunId: string;
+  schedulerVersion: string;
+  status: AgentSchedulerStatus;
+  currentStep: string;
+  waitRunId?: string;
+  waitKinds?: AgentMessageKind[];
+  lastMessageId?: string;
+  plan?: unknown;
+}
+
+export function upsertAgentSchedulerState(input: UpsertAgentSchedulerStateInput): AgentSchedulerState {
+  assertKnown(AGENT_SCHEDULER_STATUSES, input.status, "agent scheduler status");
+  for (const kind of input.waitKinds ?? []) {
+    assertKnown(AGENT_MESSAGE_KINDS, kind, "agent scheduler wait kind");
+  }
+  const root = getRun(input.rootRunId);
+  if (!root) throw new Error(`Unknown scheduler root run: ${input.rootRunId}`);
+  if (root.task_id !== input.taskId) {
+    throw new Error(`Scheduler root run ${input.rootRunId} does not belong to task ${input.taskId}`);
+  }
+  if (input.waitRunId) {
+    const waitRun = getRun(input.waitRunId);
+    if (!waitRun) throw new Error(`Unknown scheduler wait run: ${input.waitRunId}`);
+    if (waitRun.task_id !== input.taskId) {
+      throw new Error(`Scheduler wait run ${input.waitRunId} does not belong to task ${input.taskId}`);
+    }
+  }
+  if (input.lastMessageId) {
+    const message = getMessage(input.lastMessageId);
+    if (!message) throw new Error(`Unknown scheduler last message: ${input.lastMessageId}`);
+    if (message.task_id !== input.taskId) {
+      throw new Error(`Scheduler last message ${input.lastMessageId} does not belong to task ${input.taskId}`);
+    }
+  }
+  getDb().prepare(
+    `INSERT INTO agent_scheduler_state (
+       task_id, root_run_id, scheduler_version, status, current_step, wait_run_id,
+       wait_kinds_json, last_message_id, plan_json, updated_at
+     ) VALUES (
+       @task_id, @root_run_id, @scheduler_version, @status, @current_step, @wait_run_id,
+       @wait_kinds_json, @last_message_id, @plan_json, datetime('now')
+     )
+     ON CONFLICT(task_id) DO UPDATE SET
+       root_run_id = excluded.root_run_id,
+       scheduler_version = excluded.scheduler_version,
+       status = excluded.status,
+       current_step = excluded.current_step,
+       wait_run_id = excluded.wait_run_id,
+       wait_kinds_json = excluded.wait_kinds_json,
+       last_message_id = excluded.last_message_id,
+       plan_json = excluded.plan_json,
+       updated_at = datetime('now')`
+  ).run({
+    task_id: input.taskId,
+    root_run_id: input.rootRunId,
+    scheduler_version: input.schedulerVersion,
+    status: input.status,
+    current_step: input.currentStep,
+    wait_run_id: input.waitRunId ?? null,
+    wait_kinds_json: JSON.stringify(input.waitKinds ?? []),
+    last_message_id: input.lastMessageId ?? null,
+    plan_json: JSON.stringify(input.plan ?? {}),
+  });
+  return getAgentSchedulerState(input.taskId) as AgentSchedulerState;
+}
+
+export function getAgentSchedulerState(taskId: string): AgentSchedulerState | undefined {
+  const row = getDb()
+    .prepare("SELECT * FROM agent_scheduler_state WHERE task_id = ?")
+    .get(taskId) as AgentSchedulerStateRow | undefined;
+  return row ? toSchedulerState(row) : undefined;
 }
 
 export interface AppendMessageInput {

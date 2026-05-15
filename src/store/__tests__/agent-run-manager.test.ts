@@ -10,6 +10,7 @@ import { createTask } from "../repositories/tasks.js";
 import {
   appendMessage,
   createRun,
+  getAgentSchedulerState,
   getMessage,
   listActiveChildren,
   listActiveFacts,
@@ -18,6 +19,7 @@ import {
   readArtifact,
   readMailbox,
   updateRunStatus,
+  upsertAgentSchedulerState,
   upsertBlackboardFact,
   writeArtifact,
 } from "../agent-run-manager.js";
@@ -175,5 +177,67 @@ describe("Agent Run Manager store", () => {
       status: "rejected",
     });
     expect(listActiveFacts("task-agent-runs")).toEqual([]);
+  });
+
+  it("persists scheduler state with wait filters and plan snapshots", () => {
+    const root = createRun({
+      id: "run-root",
+      taskId: "task-agent-runs",
+      role: "supervisor",
+      runtime: "fake",
+      controlScope: "root",
+      cwd: tmp,
+      toolPolicyId: "supervisor",
+      canSendKinds: ["finding"],
+      canReceiveKinds: ["finding"],
+    });
+    const message = appendMessage({
+      id: "message-scheduler",
+      taskId: "task-agent-runs",
+      fromRunId: root.id,
+      kind: "finding",
+      contentText: "scheduler marker",
+    });
+
+    const waiting = upsertAgentSchedulerState({
+      taskId: "task-agent-runs",
+      rootRunId: root.id,
+      schedulerVersion: "test-scheduler-v1",
+      status: "waiting",
+      currentStep: "planner",
+      waitRunId: root.id,
+      waitKinds: ["handoff", "finding"],
+      plan: { nodes: [{ id: "planner" }] },
+    });
+    expect(waiting).toMatchObject({
+      status: "waiting",
+      current_step: "planner",
+      wait_run_id: root.id,
+      wait_kinds: ["handoff", "finding"],
+      plan_json: { nodes: [{ id: "planner" }] },
+    });
+
+    const running = upsertAgentSchedulerState({
+      taskId: "task-agent-runs",
+      rootRunId: root.id,
+      schedulerVersion: "test-scheduler-v1",
+      status: "running",
+      currentStep: "planner",
+      lastMessageId: message.id,
+      plan: { nodes: [{ id: "planner" }] },
+    });
+    expect(running.last_message_id).toBe(message.id);
+    expect(getAgentSchedulerState("task-agent-runs")).toMatchObject({
+      status: "running",
+      current_step: "planner",
+      last_message_id: message.id,
+    });
+    expect(() => upsertAgentSchedulerState({
+      taskId: "task-agent-runs",
+      rootRunId: root.id,
+      schedulerVersion: "test-scheduler-v1",
+      status: "bad-status" as never,
+      currentStep: "bad",
+    })).toThrow(/Invalid agent scheduler status/);
   });
 });

@@ -288,6 +288,32 @@ interface AgentArtifact {
 .miniclaw-task/<taskId>/artifacts/<runId>/<artifactId>.<ext>
 ```
 
+### `agent_scheduler_state`
+
+Scheduler state 是 root Supervisor orchestration 的 durable snapshot，用于表达当前 FSM/DAG 执行到哪一步、root 是否在等待 child event，以及后续 sweeper/restart recovery 可以从哪里恢复。
+
+```ts
+interface AgentSchedulerState {
+  task_id: string;
+  root_run_id: string;
+  scheduler_version: string;
+  status: "initialized" | "running" | "waiting" | "completed" | "failed" | "cancelled";
+  current_step: string;
+  wait_run_id?: string;
+  wait_kinds: AgentMessageKind[];
+  last_message_id?: string;
+  plan_json: unknown;
+  created_at: string;
+  updated_at: string;
+}
+```
+
+关键要求：
+
+- `status="waiting"` 时，root supervisor run 也应处于 `waiting`，并记录 `wait_run_id` / `wait_kinds`。
+- Agent Bus 唤醒 root 后，scheduler 将 root 恢复为 `running`，并把 `last_message_id` 写入 state。
+- C3 只持久化和恢复当前进程内 wait/resume；跨进程 restart 后自动续跑留给 C5 sweeper/recovery。
+
 ### Required Indexes
 
 第一阶段 migration 必须至少包含这些索引，避免 manager 在等待、恢复和 trace 查询时退化成全表扫描：
@@ -300,6 +326,8 @@ interface AgentArtifact {
 - `agent_messages(from_run_id, created_at)`
 - `blackboard_facts(task_id, key, status)`
 - `agent_artifacts(task_id, run_id, created_at)`
+- `agent_scheduler_state(status, updated_at)`
+- `agent_scheduler_state(root_run_id)`
 
 Store repository 必须提供 typed API，而不是让 manager 直接拼 SQL：
 
@@ -307,6 +335,7 @@ Store repository 必须提供 typed API，而不是让 manager 直接拼 SQL：
 - `appendMessage` / `readMailbox` / `markMessageDelivered`
 - `upsertBlackboardFact` / `listActiveFacts`
 - `writeArtifact` / `readArtifact` / `listArtifactsForRun`
+- `upsertAgentSchedulerState` / `getAgentSchedulerState`
 
 ## Communication Contract
 
@@ -695,11 +724,12 @@ Snapshot date: 2026-05-15.
 - **Minimal ACP adapter/server**: 已有 localhost ACP-style manifest、external run、message、artifact reference、blackboard API 和 fake round-trip 测试；默认不做公开 marketplace。
 - **Agent Bus MCP compatibility surface**: `miniclaw-agent-bus` MCP-compatible tool surface 已有 `post_message/read_mailbox/write_artifact/read_artifact/list_blackboard/upsert_blackboard_fact`，并提供 `pnpm run mcp:agent-bus` 入口。
 - **Live MCP bus injection into real child runtime**: Manager 为每个真实 Codex / Claude managed child run 创建 `managedContext`，注入 `miniclaw-agent-bus` stdio MCP server config、task/run env、guardrail env、allowed tool names 和 prompt usage block；Codex 通过 SDK client config override 注入 `mcp_servers.miniclaw-agent-bus`，Claude 通过 `mcpServers` / `allowedTools` 合并注入。turn-end `miniclaw_agent_envelope` fallback 仍保留。
-- **Architecture doc sync**: `docs/architecture.md` 已记录 Agent Run Manager 当前受控插入层、live MCP bus injection、managed envelope fallback、MCP tool surface 和 ACP adapter 状态。
+- **Dynamic scheduler / `yield_until_child_event` foundation**: 固定 managed runtime 控制流已抽成 `AgentRunScheduler` FSM plan；root supervisor 在等待 child event 时会持久化 `agent_scheduler_state.status=waiting` 并把 root run 置为 `waiting`，Agent Bus message 到达后恢复为 `running`。scheduler state snapshot 持久化了 `current_step`、wait filter、last wake message 和 plan JSON，为 C5 restart recovery/sweeper 做准备。当前默认 plan 仍是 planner -> generator -> evaluator + bounded fix loop，不是任意 runtime-generated DAG。
+- **Architecture doc sync**: `docs/architecture.md` 已记录 Agent Run Manager 当前受控插入层、dynamic scheduler foundation、live MCP bus injection、managed envelope fallback、MCP tool surface 和 ACP adapter 状态。
 
 ### Partially Implemented
 
-- **Dynamic scheduler / `yield_until_child_event`**: Bus 层已经支持 in-memory `waitForMessage()`，fake E2E 验证了 direct wake；真实 managed runtime 当前仍是固定 `planner -> generator -> evaluator` 控制流，不是 Supervisor 可动态 spawn、yield、恢复的通用 DAG/FSM scheduler。
+- **Dynamic scheduler extensibility**: C3 已把当前 managed runtime 抽成 scheduler/FSM 并实现 Manager-owned wait/resume；但还没有让 LLM Supervisor 在运行时自由生成任意 DAG，也还没有把 restart 后的 persisted scheduler state 自动恢复执行。任意 DAG 和 restart recovery 分别留给后续 scheduler/sweeper hardening。
 - **Role policy enforcement**: `tool_policy_id`、`can_write_workspace`、`can_send_kinds`、`can_receive_kinds` 已落库，Bus 会校验 message kind；但 Codex/Claude child runtime 启动层还没有强制 read-only sandbox、generator-only workspace write、dangerous command policy 或 per-role exec policy。
 - **Final Synthesizer**: 当前能基于 verdict 和 active blackboard 生成最终结果；还没有系统读取 artifact summaries，也没有形成面向用户的中文验证证据型 synthesis。
 - **Trace / UX surface**: `task_events` 已记录 agent run/message/artifact/blackboard/verdict 事件；`/task-log`、incident view 和 trace export 还没有专门的 multi-agent 可视化视图。
@@ -736,7 +766,7 @@ Phase 2 目标是把 first implementation skeleton 推进到可长期运行的 m
 - 保留 turn-end `miniclaw_agent_envelope` fallback，live bus failure 不应破坏 managed run。
 - Verification: fake MCP bus fixture、Codex/Claude runner unit tests、managed runtime fallback regression。
 
-### C3 - Dynamic Scheduler and Yield/Resume
+### C3 - Dynamic Scheduler and Yield/Resume (completed 2026-05-15)
 
 - 将固定 `planner -> generator -> evaluator` 控制流抽象成 Supervisor-owned DAG/FSM scheduler。
 - `yield_until_child_event` / `wait_for_message` 需要能把 Supervisor 置为 waiting，并在 direct child event 到达后恢复 orchestration。
@@ -791,3 +821,4 @@ Phase 2 目标是把 first implementation skeleton 推进到可长期运行的 m
 - 2026-05-15: 将文档从设计讨论进一步收敛为执行文档：锁定第一阶段决策、补充 required indexes / repository API、重排 implementation plan、增加 Definition of Done，并把阻塞性未决项改为非阻塞后续项。
 - 2026-05-15: Phase 2 C0/C1 已落地：新增下一阶段 C-slice 计划，并实现 Agent Run Manager policy/guardrails 配置与 Manager/Bus enforcement。
 - 2026-05-15: Phase 2 C2 已落地：新增 managed child runtime bus injection contract；Codex child 通过 `mcp_servers.miniclaw-agent-bus` config override 获得 live bus，Claude child 通过 `mcpServers` / `allowedTools` 合并获得 live bus；Manager 对每个 child 注入 task/run env、guardrail env 和 prompt usage block，同时继续要求 turn-end `miniclaw_agent_envelope` fallback。固定 planner -> generator -> evaluator 控制流尚未变成动态 DAG/FSM scheduler，留到 C3。
+- 2026-05-15: Phase 2 C3 已落地：新增 `agent_scheduler_state` migration 和 typed store API；新增 `AgentRunScheduler`，将 managed runtime 从内联 planner -> generator -> evaluator 控制流改为持久化 FSM plan。root supervisor wait/yield 时进入 `waiting`，收到 Agent Bus child event 后恢复 `running`；取消 waiting scheduler 会持久化 `cancelled`。当前默认 plan 仍保持 planner -> generator -> evaluator + bounded fix loop，任意 LLM-generated DAG 和 restart recovery 自动续跑留给后续 hardening。

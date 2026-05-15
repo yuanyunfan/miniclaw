@@ -8,7 +8,7 @@ import type { SchemaMigration } from "./migrations/types.js";
 
 export { columnExists } from "./migrations/helpers.js";
 
-export const SCHEMA_VERSION = 13;
+export const SCHEMA_VERSION = 14;
 
 export interface SchemaVersionHistoryRow {
   id: number;

@@ -189,6 +189,8 @@ describe("schema migrations", () => {
     expect(__testables.columnExists("agent_messages", "delivered_at")).toBe(true);
     expect(__testables.columnExists("blackboard_facts", "source_message_id")).toBe(true);
     expect(__testables.columnExists("agent_artifacts", "content_hash")).toBe(true);
+    expect(__testables.columnExists("agent_scheduler_state", "current_step")).toBe(true);
+    expect(__testables.columnExists("agent_scheduler_state", "wait_kinds_json")).toBe(true);
   });
 });
 

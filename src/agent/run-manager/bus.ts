@@ -48,6 +48,7 @@ export interface AgentBusWaitInput {
   kinds?: AgentMessageKind[];
   afterCursor?: string;
   timeoutMs: number;
+  signal?: AbortSignal;
 }
 
 export interface AgentBusPolicy {
@@ -133,6 +134,9 @@ export class AgentBus {
   }
 
   async waitForMessage(input: AgentBusWaitInput): Promise<AgentMessage> {
+    if (input.signal?.aborted) {
+      throw new Error(`Agent message wait aborted run=${input.runId}`);
+    }
     const existing = readMailbox({
       runId: input.runId,
       afterCursor: input.afterCursor,
@@ -144,29 +148,39 @@ export class AgentBus {
     }
 
     return await new Promise<AgentMessage>((resolve, reject) => {
-      const timer = setTimeout(() => {
+      let timer: NodeJS.Timeout;
+      let waiter: Waiter;
+      const cleanup = () => {
+        clearTimeout(timer);
         this.waiters.delete(waiter);
+        input.signal?.removeEventListener("abort", abortWait);
+      };
+      const abortWait = () => {
+        cleanup();
+        reject(new Error(`Agent message wait aborted run=${input.runId}`));
+      };
+      timer = setTimeout(() => {
+        cleanup();
         reject(new Error(`Timed out waiting for agent message run=${input.runId}`));
       }, input.timeoutMs);
       timer.unref?.();
 
-      const waiter: Waiter = {
+      waiter = {
         runId: input.runId,
         kinds: input.kinds,
         resolve: (message) => {
-          clearTimeout(timer);
-          this.waiters.delete(waiter);
+          cleanup();
           markMessageDelivered(message.id);
           resolve(message);
         },
         reject: (err) => {
-          clearTimeout(timer);
-          this.waiters.delete(waiter);
+          cleanup();
           reject(err);
         },
         timer,
       };
       this.waiters.add(waiter);
+      input.signal?.addEventListener("abort", abortWait, { once: true });
     });
   }
 
