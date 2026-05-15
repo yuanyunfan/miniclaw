@@ -91,4 +91,15 @@ describe("AgentBus", () => {
       })
     ).toThrow(/cannot send question/);
   });
+
+  it("times out waiters with a controlled error", async () => {
+    const planner = makeRun("run-planner", "planner", ["question"], ["finding"]);
+    const bus = new AgentBus();
+
+    await expect(bus.waitForMessage({
+      runId: planner.id,
+      kinds: ["finding"],
+      timeoutMs: 5,
+    })).rejects.toThrow(/Timed out waiting for agent message/);
+  });
 });

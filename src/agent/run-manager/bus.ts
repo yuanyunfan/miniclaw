@@ -16,6 +16,7 @@ import {
   type AgentRun,
   type BlackboardFact,
   type BlackboardFactConfidence,
+  type BlackboardFactStatus,
 } from "../../store/agent-run-manager.js";
 
 interface Waiter {
@@ -172,6 +173,7 @@ export class AgentBus {
     content: string;
     sourceMessageId: string;
     confidence: BlackboardFactConfidence;
+    status?: BlackboardFactStatus;
   }): BlackboardFact {
     return upsertBlackboardFact(input);
   }

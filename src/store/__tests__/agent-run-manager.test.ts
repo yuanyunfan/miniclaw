@@ -10,6 +10,7 @@ import { createTask } from "../repositories/tasks.js";
 import {
   appendMessage,
   createRun,
+  getMessage,
   listActiveChildren,
   listActiveFacts,
   listArtifactsForRun,
@@ -117,5 +118,62 @@ describe("Agent Run Manager store", () => {
 
     updateRunStatus(child.id, "completed", { providerSessionId: "fake:child" });
     expect(listActiveChildren(root.id)).toEqual([]);
+  });
+
+  it("rejects malformed messages, missing runs, and supports blackboard lifecycle states", () => {
+    const root = createRun({
+      id: "run-root",
+      taskId: "task-agent-runs",
+      role: "supervisor",
+      runtime: "fake",
+      controlScope: "root",
+      cwd: tmp,
+      toolPolicyId: "supervisor",
+      canSendKinds: ["finding"],
+      canReceiveKinds: ["finding"],
+    });
+
+    expect(() =>
+      appendMessage({
+        taskId: "task-agent-runs",
+        fromRunId: "missing-run",
+        kind: "finding",
+        contentText: "missing",
+      })
+    ).toThrow(/Unknown sender/);
+    expect(() =>
+      appendMessage({
+        taskId: "task-agent-runs",
+        fromRunId: root.id,
+        kind: "bad-kind" as never,
+        contentText: "bad",
+      })
+    ).toThrow(/Invalid agent message kind/);
+
+    const message = appendMessage({
+      id: "message-lifecycle",
+      taskId: "task-agent-runs",
+      fromRunId: root.id,
+      kind: "finding",
+      contentText: "finding",
+    });
+    expect(getMessage(message.id)).toBeDefined();
+    upsertBlackboardFact({
+      id: "fact-lifecycle",
+      taskId: "task-agent-runs",
+      key: "risk",
+      content: "initial",
+      sourceMessageId: message.id,
+      confidence: "medium",
+    });
+    upsertBlackboardFact({
+      taskId: "task-agent-runs",
+      key: "risk",
+      content: "rejected after evaluation",
+      sourceMessageId: message.id,
+      confidence: "high",
+      status: "rejected",
+    });
+    expect(listActiveFacts("task-agent-runs")).toEqual([]);
   });
 });

@@ -648,6 +648,25 @@ Discord progress 不应该展示所有 agent 原文。建议输出 compact event
   - Mitigation: first version only supports MiniClaw task roles and local SQLite state。
   - Rollback: disable with `agent_run_manager.enabled=false` and fall back to current runtime。
 
+## Implementation Notes
+
+### 2026-05-15 managed fallback and transport slice
+
+已补齐 first implementation skeleton 之后的下一批可验证切片：
+
+- `executeTask()` 在 `agent_run_manager.enabled=true` 时可以进入 managed runtime path；默认 flag 仍为 false，single-agent path 不变。
+- Codex / Claude child mode 先走 turn-end envelope fallback：child run 返回 `miniclaw_agent_envelope` JSON，Manager 解析后写入 `agent_messages`、`agent_artifacts` 和 `blackboard_facts`。
+- Manager 增加 planner -> generator -> evaluator 控制流、evaluator FAIL 后的 bounded generator fix loop、root cancellation cascade、compact progress 和 final synthesis。
+- Store repository 增加运行时 enum 校验，拒绝 malformed message kind、missing run id、未知 artifact owner 和非法 blackboard lifecycle 值。
+- 新增 Minimal ACP adapter / localhost HTTP wrapper，支持 manifest、external run、message、artifact reference 和 blackboard round-trip；默认可用 bearer token 保护，不做公网 marketplace。
+- 新增 `miniclaw-agent-bus` MCP-compatible tool surface：`post_message`、`read_mailbox`、`write_artifact`、`read_artifact`、`list_blackboard`、`upsert_blackboard_fact`，并提供 `pnpm run mcp:agent-bus` 入口。
+
+仍待 hardening：
+
+- live MCP bus 注入到真实 Codex / Claude child runtime 的启动配置中，让 child 在执行中主动调用 bus，而不是只依赖 turn-end envelope。
+- ACP HTTP server 的正式 lifecycle 管理、rate limit、payload size limit、redaction policy 和 trace export。
+- complexity classifier 自动选择 managed path；当前仍以 `agent_run_manager.enabled` flag 为主。
+
 - **Risk: context cost rises instead of falls**
   - Mitigation: enforce artifact references, blackboard summaries, per-role context budgets。
   - Rollback: disable manager for narrow tasks and keep single-agent direct path。

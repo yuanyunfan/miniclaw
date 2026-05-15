@@ -5,9 +5,23 @@ import { getDb } from "./connection.js";
 
 export const AGENT_RUN_STATUSES = ["queued", "running", "waiting", "completed", "failed", "cancelled"] as const;
 export type AgentRunStatus = typeof AGENT_RUN_STATUSES[number];
+export const AGENT_CONTEXT_MODES = ["isolated", "fork"] as const;
 export type AgentContextMode = "isolated" | "fork";
+export const AGENT_CONTROL_SCOPES = ["root", "child", "peer"] as const;
 export type AgentControlScope = "root" | "child" | "peer";
+export const AGENT_RUNTIME_IDS = ["claude", "codex", "external-acp", "fake"] as const;
 export type AgentRuntimeId = "claude" | "codex" | "external-acp" | "fake";
+export const AGENT_MESSAGE_KINDS = [
+  "finding",
+  "question",
+  "answer",
+  "challenge",
+  "decision",
+  "handoff",
+  "artifact",
+  "verdict",
+  "error",
+] as const;
 export type AgentMessageKind =
   | "finding"
   | "question"
@@ -18,8 +32,11 @@ export type AgentMessageKind =
   | "artifact"
   | "verdict"
   | "error";
+export const BLACKBOARD_FACT_CONFIDENCES = ["low", "medium", "high"] as const;
 export type BlackboardFactConfidence = "low" | "medium" | "high";
+export const BLACKBOARD_FACT_STATUSES = ["active", "superseded", "rejected"] as const;
 export type BlackboardFactStatus = "active" | "superseded" | "rejected";
+export const AGENT_ARTIFACT_KINDS = ["markdown", "json", "diff", "log", "file_ref"] as const;
 export type AgentArtifactKind = "markdown" | "json" | "diff" | "log" | "file_ref";
 
 export interface DiscordRouteState {
@@ -107,6 +124,32 @@ type AgentMessageRow = Omit<AgentMessage, "payload_json" | "artifact_ids"> & {
   artifact_ids_json: string;
 };
 
+function includesReadonly<T extends readonly string[]>(values: T, value: unknown): value is T[number] {
+  return typeof value === "string" && (values as readonly string[]).includes(value);
+}
+
+export function isAgentMessageKind(value: unknown): value is AgentMessageKind {
+  return includesReadonly(AGENT_MESSAGE_KINDS, value);
+}
+
+export function isAgentArtifactKind(value: unknown): value is AgentArtifactKind {
+  return includesReadonly(AGENT_ARTIFACT_KINDS, value);
+}
+
+export function isBlackboardFactConfidence(value: unknown): value is BlackboardFactConfidence {
+  return includesReadonly(BLACKBOARD_FACT_CONFIDENCES, value);
+}
+
+export function isBlackboardFactStatus(value: unknown): value is BlackboardFactStatus {
+  return includesReadonly(BLACKBOARD_FACT_STATUSES, value);
+}
+
+function assertKnown<T extends readonly string[]>(values: T, value: unknown, label: string): asserts value is T[number] {
+  if (!includesReadonly(values, value)) {
+    throw new Error(`Invalid ${label}: ${String(value)}`);
+  }
+}
+
 function parseJson<T>(value: string | null | undefined, fallback: T): T {
   if (!value) return fallback;
   try {
@@ -189,6 +232,12 @@ export interface CreateRunInput {
 
 export function createRun(input: CreateRunInput): AgentRun {
   const id = input.id ?? randomUUID();
+  const status = input.status ?? "running";
+  const contextMode = input.contextMode ?? "isolated";
+  assertKnown(AGENT_RUNTIME_IDS, input.runtime, "agent runtime");
+  assertKnown(AGENT_RUN_STATUSES, status, "agent run status");
+  assertKnown(AGENT_CONTROL_SCOPES, input.controlScope, "agent control scope");
+  assertKnown(AGENT_CONTEXT_MODES, contextMode, "agent context mode");
   getDb().prepare(
     `INSERT INTO agent_runs (
        id, task_id, parent_run_id, controller_run_id, requester_run_id, role, runtime,
@@ -210,10 +259,10 @@ export function createRun(input: CreateRunInput): AgentRun {
     role: input.role,
     runtime: input.runtime,
     provider_session_id: input.providerSessionId ?? null,
-    status: input.status ?? "running",
+    status,
     spawn_depth: input.spawnDepth ?? 0,
     control_scope: input.controlScope,
-    context_mode: input.contextMode ?? "isolated",
+    context_mode: contextMode,
     cwd: input.cwd,
     tool_policy_id: input.toolPolicyId,
     can_spawn: input.canSpawn ? 1 : 0,
@@ -236,6 +285,7 @@ export function updateRunStatus(
   status: AgentRunStatus,
   options: { providerSessionId?: string; errorMessage?: string; completedAt?: string | null } = {},
 ): void {
+  assertKnown(AGENT_RUN_STATUSES, status, "agent run status");
   const terminal = status === "completed" || status === "failed" || status === "cancelled";
   getDb().prepare(
     `UPDATE agent_runs
@@ -286,6 +336,19 @@ export interface AppendMessageInput {
 
 export function appendMessage(input: AppendMessageInput): AgentMessage {
   const id = input.id ?? randomUUID();
+  assertKnown(AGENT_MESSAGE_KINDS, input.kind, "agent message kind");
+  const fromRun = getRun(input.fromRunId);
+  if (!fromRun) throw new Error(`Unknown sender agent run: ${input.fromRunId}`);
+  if (fromRun.task_id !== input.taskId) {
+    throw new Error(`Sender run ${input.fromRunId} does not belong to task ${input.taskId}`);
+  }
+  if (input.toRunId) {
+    const toRun = getRun(input.toRunId);
+    if (!toRun) throw new Error(`Unknown target agent run: ${input.toRunId}`);
+    if (toRun.task_id !== input.taskId) {
+      throw new Error(`Target run ${input.toRunId} does not belong to task ${input.taskId}`);
+    }
+  }
   getDb().prepare(
     `INSERT INTO agent_messages (
        id, task_id, from_run_id, to_run_id, kind, content_text, payload_json,
@@ -353,6 +416,12 @@ export function upsertBlackboardFact(input: {
   status?: BlackboardFactStatus;
 }): BlackboardFact {
   const id = input.id ?? randomUUID();
+  assertKnown(BLACKBOARD_FACT_CONFIDENCES, input.confidence, "blackboard fact confidence");
+  const status = input.status ?? "active";
+  assertKnown(BLACKBOARD_FACT_STATUSES, status, "blackboard fact status");
+  if (!getMessage(input.sourceMessageId)) {
+    throw new Error(`Unknown source agent message: ${input.sourceMessageId}`);
+  }
   getDb().prepare(
     `INSERT INTO blackboard_facts (
        id, task_id, key, content, source_message_id, confidence, status, updated_at
@@ -372,7 +441,7 @@ export function upsertBlackboardFact(input: {
     content: input.content,
     source_message_id: input.sourceMessageId,
     confidence: input.confidence,
-    status: input.status ?? "active",
+    status,
   });
   return getDb()
     .prepare("SELECT * FROM blackboard_facts WHERE task_id = ? AND key = ?")
@@ -397,6 +466,12 @@ export function writeArtifact(input: {
   path?: string;
 }): AgentArtifact {
   const id = input.id ?? randomUUID();
+  assertKnown(AGENT_ARTIFACT_KINDS, input.kind, "agent artifact kind");
+  const run = getRun(input.runId);
+  if (!run) throw new Error(`Unknown artifact owner agent run: ${input.runId}`);
+  if (run.task_id !== input.taskId) {
+    throw new Error(`Artifact owner ${input.runId} does not belong to task ${input.taskId}`);
+  }
   const relativePath = input.path ?? join(".miniclaw-task", input.taskId, "artifacts", input.runId, `${id}.${artifactExtension(input.kind)}`);
   const absolutePath = resolveArtifactPath(input.cwd, relativePath);
   const content = input.content ?? (existsSync(absolutePath) ? readFileSync(absolutePath, "utf8") : "");

@@ -73,6 +73,7 @@
     "eastmoney-myfavor:login": "tsx scripts/eastmoney-myfavor-login.ts",
     "mcp:eastmoney-jywg": "tsx src/mcp/eastmoney-jywg/server.ts",
     "mcp:futu-stock": "tsx src/mcp/futu-stock/server.ts",
+    "mcp:agent-bus": "tsx src/agent/run-manager/mcp/server.ts",
     "stage": "tsx src/stage/index.tsx",
     "stage:repl": "tsx src/stage/repl.ts"
   },

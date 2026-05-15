@@ -340,23 +340,35 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
   try {
     await viewReporter.start();
 
-    const runtimeResult = config.agentRunManager.enabled && config.e2e.fakeAgent
-      ? await new AgentRunManager({
+    const manager = config.agentRunManager.enabled
+      ? new AgentRunManager({
           taskId: params.taskId,
           cwd: params.cwd,
-          provider: "fake",
+          provider: config.e2e.fakeAgent ? "fake" : selectedRuntime.provider === "claude" ? "claude" : "codex",
           reporter,
           channel: params.channel,
           ...(params.statusMessage ? { statusMessage: params.statusMessage } : {}),
           ...(params.deliveryChannelId ? { deliveryChannelId: params.deliveryChannelId } : {}),
-        }).runFakePlannerGeneratorEvaluator({
-          prompt: params.prompt,
-          signal: abortController.signal,
-          onViewEvent: async (event: TaskViewEvent) => {
-            if (event.type === "session_started") updateTask(params.taskId, { session_id: event.sessionId });
-            await viewReporter.handle(event);
-          },
         })
+      : undefined;
+    const managedViewHandler = async (event: TaskViewEvent) => {
+      if (event.type === "session_started") updateTask(params.taskId, { session_id: event.sessionId });
+      await viewReporter.handle(event);
+    };
+
+    const runtimeResult = manager
+      ? config.e2e.fakeAgent
+        ? await manager.runFakePlannerGeneratorEvaluator({
+            prompt: params.prompt,
+            signal: abortController.signal,
+            onViewEvent: managedViewHandler,
+          })
+        : await manager.runManagedRuntime({
+            prompt: params.prompt,
+            signal: abortController.signal,
+            runtime: selectedRuntime.runtime,
+            onViewEvent: managedViewHandler,
+          })
       : await selectedRuntime.runtime.startTask({
           taskId: params.taskId,
           prompt: params.prompt,
