@@ -27,9 +27,9 @@ export const DOCS_DRIFT_IGNORED_PATTERNS = [
   "src/**/__fixtures__/**",
 ] as const;
 
-const RUNTIME_DOCS = ["docs/runtime/*.md", "docs/features/*.md"];
-const PROVIDER_DOCS = ["docs/providers/*.md", "docs/providers/**/*.md", "docs/features/*.md"];
-const EXPERIMENT_DOCS = ["docs/experiments/*.md", "docs/features/*.md"];
+const RUNTIME_DOCS = ["docs/runtime/*.md"];
+const PROVIDER_DOCS = ["docs/providers/*.md", "docs/providers/**/*.md"];
+const EXPERIMENT_DOCS = ["docs/experiments/*.md"];
 
 export const DOCS_DRIFT_REQUIREMENTS: DocsDriftRequirement[] = [
   {
@@ -42,7 +42,7 @@ export const DOCS_DRIFT_REQUIREMENTS: DocsDriftRequirement[] = [
     id: "agent-runtime",
     sourcePatterns: ["src/agent/**"],
     excludePatterns: ["src/agent/prompts.ts"],
-    requiredAnyOf: ["docs/architecture.md", "docs/features/03-discord-task-output.md", ...RUNTIME_DOCS],
+    requiredAnyOf: ["docs/architecture.md", ...RUNTIME_DOCS],
     reason: "Agent runtime or task execution behavior changed",
   },
   {
@@ -85,13 +85,13 @@ export const DOCS_DRIFT_REQUIREMENTS: DocsDriftRequirement[] = [
   {
     id: "auto-doctor",
     sourcePatterns: ["src/ops/doctor*", "scripts/doctor*"],
-    requiredAnyOf: ["docs/features/13-auto-doctor.md", "docs/runtime/*.md"],
+    requiredAnyOf: ["docs/runtime/*.md"],
     reason: "Auto Doctor runtime or shipping behavior changed",
   },
   {
     id: "stage",
     sourcePatterns: ["src/stage/**"],
-    requiredAnyOf: ["docs/features/01-stage.md", ...EXPERIMENT_DOCS],
+    requiredAnyOf: [...EXPERIMENT_DOCS],
     reason: "Stage behavior changed",
   },
 ];

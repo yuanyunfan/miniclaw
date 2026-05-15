@@ -97,7 +97,7 @@ describe("docs drift requirement matching", () => {
     ).toEqual([]);
   });
 
-  it("maps provider and Auto Doctor source changes to feature docs", () => {
+  it("maps provider source changes to provider docs and rejects legacy feature stubs", () => {
     expect(
       findDocsDriftFindings([
         "src/providers/wechat-mp/collector.ts",
@@ -106,7 +106,7 @@ describe("docs drift requirement matching", () => {
     ).toEqual([]);
     expect(
       findDocsDriftFindings(["src/ops/doctor-repair.ts", "docs/features/13-auto-doctor.md"])
-    ).toEqual([]);
+    ).toHaveLength(1);
   });
 
   it("accepts new taxonomy docs for runtime, provider, and experiment source changes", () => {

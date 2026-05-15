@@ -27,6 +27,7 @@ interface WebsitePage {
 const navOrder = [
   "index.html",
   "design/architecture.html",
+  "capabilities/runtime.html",
   "capabilities/providers.html",
   "guides/getting-started.html",
   "reference/quality-gates.html",

@@ -10,40 +10,42 @@
 - [`install-distribution-strategy.md`](install-distribution-strategy.md): 面向外部用户的安装、配置向导、Release artifact 和本机 Deploy 改造建议。
 - [`prompts.md`](prompts.md): 框架级 prompt 资产管理。
 - [`quality-gates.md`](quality-gates.md): 测试分层、质量门禁、Discord E2E 方案。
-- [`documentation-migration-map.md`](documentation-migration-map.md): 当前 docs 迁移、双语 pairing、website exposure 的 machine-readable 初始地图。
+- [`documentation-migration-map.md`](documentation-migration-map.md): 当前 docs 迁移、双语 pairing、website exposure 的 machine-readable 地图。
 
 ## Runtime
 
 - [`runtime/README.md`](runtime/README.md): Discord intake、routing、chat/task/cron runtime、memory/context、operations 的当前 source-of-truth 入口。
 
-Runtime 仍复用部分 legacy feature docs 作为详细实现记录：
+Runtime legacy compatibility stubs:
 
-- [`features/03-discord-task-output.md`](features/03-discord-task-output.md): Discord task 输出、进度和 embed 设计。
-- [`features/04-smart-task-router.md`](features/04-smart-task-router.md): Smart Task Router 中文设计。
-- [`features/05-smart-task-router.en.md`](features/05-smart-task-router.en.md): Smart Task Router English design.
-- [`features/12-connectivity-monitor.md`](features/12-connectivity-monitor.md): Discord / 网络 / SMTP 链路探测与 Email fallback 告警。
-- [`features/13-auto-doctor.md`](features/13-auto-doctor.md): task / cron / PM2 / 日志 / connectivity 的只读运行态诊断。
-- [`features/19-agent-prompt-context-audit.md`](features/19-agent-prompt-context-audit.md): Codex / Claude Code chat、task、cron prompt 与上下文注入审计。
-- [`features/20-memory-curation-lifecycle.md`](features/20-memory-curation-lifecycle.md): memory 自动抽取候选校验、去重合并、生命周期 metadata 和定期 maintenance。
-- [`features/21-agent-run-manager.md`](features/21-agent-run-manager.md): task-scoped Agent Run Manager、Agent Bus、ACP lifecycle、managed runtime routing、guardrails、DAG scheduler foundation、final synthesis 与 trace UX。
+- [`features/03-discord-task-output.md`](features/03-discord-task-output.md): moved into [`runtime/README.md`](runtime/README.md#task-output-and-trace-ux).
+- [`features/04-smart-task-router.md`](features/04-smart-task-router.md): merged into [`runtime/README.md`](runtime/README.md#intake-and-routing), [`bot-routing.md`](bot-routing.md), and [`chat-router-current-logic.md`](chat-router-current-logic.md).
+- [`features/05-smart-task-router.en.md`](features/05-smart-task-router.en.md): merged into [`runtime/README.md`](runtime/README.md#intake-and-routing), [`bot-routing.md`](bot-routing.md), and [`chat-router-current-logic.md`](chat-router-current-logic.md).
+- [`features/12-connectivity-monitor.md`](features/12-connectivity-monitor.md): moved into [`runtime/README.md`](runtime/README.md#connectivity-and-recovery).
+- [`features/13-auto-doctor.md`](features/13-auto-doctor.md): moved into [`runtime/README.md`](runtime/README.md#auto-doctor).
+- [`features/19-agent-prompt-context-audit.md`](features/19-agent-prompt-context-audit.md): moved into [`runtime/README.md`](runtime/README.md#memory-and-prompt-context).
+- [`features/20-memory-curation-lifecycle.md`](features/20-memory-curation-lifecycle.md): moved into [`runtime/README.md`](runtime/README.md#memory-and-prompt-context).
+- [`features/21-agent-run-manager.md`](features/21-agent-run-manager.md): moved into [`runtime/README.md`](runtime/README.md#agent-run-manager).
 
 ## Providers
 
 - [`providers/README.md`](providers/README.md): Provider 文档总入口，描述 provider runtime、trust boundary、privacy boundary 和维护规则。
-- [`providers/provider-framework.md`](providers/provider-framework.md): Provider framework 当前入口，链接到详细实现记录。
+- [`providers/provider-framework.md`](providers/provider-framework.md): Provider framework source of truth，覆盖 manifest、health、dry-run、structured output、fixture 和 failure taxonomy。
 - [`providers/content.md`](providers/content.md): Content provider family，当前覆盖 WeChat MP ingestion 和 dedupe 边界。
 - [`providers/email.md`](providers/email.md): Email provider family，区分通用只读 email capability 与业务 parser。
-- [`providers/stock/README.md`](providers/stock/README.md): Stock provider family 数据流。
+- [`providers/stock/README.md`](providers/stock/README.md): Stock provider family 数据流与 Futu readonly provider 边界。
 - [`providers/stock/eastmoney.md`](providers/stock/eastmoney.md): Eastmoney provider family，是 JYWG readonly 和 MyFavor watchlist 的当前 source of truth。
 - [`providers/stock/research.md`](providers/stock/research.md): Stock research provider pipeline，串联 portfolio、pulse、market-intel 和 watchlist research。
 
-- [`features/02-wechat-mp-provider.md`](features/02-wechat-mp-provider.md): 微信公众号文章采集 pre-provider。
-- [`features/06-futu-stock.md`](features/06-futu-stock.md): 富途股票账户只读查询 MCP / provider。
-- [`features/10-stock-portfolio-provider.md`](features/10-stock-portfolio-provider.md): 多券商股票账户聚合 provider。
-- [`features/11-stock-pulse-provider.md`](features/11-stock-pulse-provider.md): 股票盘中 hourly 异动扫描 provider。
-- [`features/14-market-intel-provider.md`](features/14-market-intel-provider.md): CN/US 盘前市场情报、forecast persistence、盘后评价与 calibration loop。
-- [`features/16-provider-framework.md`](features/16-provider-framework.md): provider manifest、health check、dry-run、structured output 和兼容 adapter。
-- [`features/18-stock-watchlist-research-provider.md`](features/18-stock-watchlist-research-provider.md): 券商 watchlist stock 盘前/每日深度研究 provider，独立推送到 daily-watchlist-stock。
+Provider legacy compatibility stubs:
+
+- [`features/02-wechat-mp-provider.md`](features/02-wechat-mp-provider.md): merged into [`providers/content.md`](providers/content.md#wechat-mp-provider).
+- [`features/06-futu-stock.md`](features/06-futu-stock.md): moved into [`providers/stock/README.md`](providers/stock/README.md#futu-stock-provider).
+- [`features/10-stock-portfolio-provider.md`](features/10-stock-portfolio-provider.md): merged into [`providers/stock/research.md`](providers/stock/research.md#stock-portfolio).
+- [`features/11-stock-pulse-provider.md`](features/11-stock-pulse-provider.md): merged into [`providers/stock/research.md`](providers/stock/research.md#stock-pulse).
+- [`features/14-market-intel-provider.md`](features/14-market-intel-provider.md): merged into [`providers/stock/research.md`](providers/stock/research.md#market-intel).
+- [`features/16-provider-framework.md`](features/16-provider-framework.md): moved into [`providers/provider-framework.md`](providers/provider-framework.md).
+- [`features/18-stock-watchlist-research-provider.md`](features/18-stock-watchlist-research-provider.md): merged into [`providers/stock/research.md`](providers/stock/research.md#stock-watchlist-research).
 
 Email legacy compatibility stubs:
 
@@ -58,13 +60,13 @@ Eastmoney legacy compatibility stubs:
 ## Experiments
 
 - [`experiments/README.md`](experiments/README.md): 实验性控制面总入口。
-- [`features/01-stage.md`](features/01-stage.md): Stage 实验性 CLI 多 agent 控制台及 Discord runtime 边界。
-- [`features/15-ralph-controller.md`](features/15-ralph-controller.md): plan-based fresh-context Codex execution controller。
+- [`features/01-stage.md`](features/01-stage.md): moved into [`experiments/README.md`](experiments/README.md#stage).
+- [`features/15-ralph-controller.md`](features/15-ralph-controller.md): moved into [`experiments/README.md`](experiments/README.md#ralph-controller) and [`ralph/README.md`](ralph/README.md).
 
 ## Plans
 
 - [`plans/README.md`](plans/README.md): 非平凡开发任务的 plan 文档规范。
-- [`plans/2026-05-15-documentation-strategy.md`](plans/2026-05-15-documentation-strategy.md): `docs/` 作为 LLM 维护的 docs-driven development source of truth，GitHub Pages 作为 human-facing portal 的分层策略。
+- [`plans/2026-05-15-documentation-strategy.md`](plans/2026-05-15-documentation-strategy.md): 已完成的分层文档策略；`docs/` 作为 LLM 维护的 docs-driven development source of truth，GitHub Pages 作为 human-facing portal。
 - `plans/YYYY-MM-DD-*.md`: 已完成或进行中的实施计划。
 
 ## Chinese Docs
@@ -100,7 +102,7 @@ Website pages must stay presentation-only and declare language-aware `source_doc
 
 - 全局架构、路由、工程治理和 framework-level prompt 文档放在 `docs/` 顶层。
 - Runtime 文档放在 `docs/runtime/`，provider 文档放在 `docs/providers/`，实验控制面放在 `docs/experiments/`。
-- `docs/features/` 是迁移期 legacy detailed-doc 目录；旧 feature 文件继续保留一轮以保护历史链接，但新增 source-of-truth 文档优先进入 runtime/providers/experiments 分类目录。
+- `docs/features/` 是迁移期 legacy stub 目录；旧 feature 文件继续保留一轮以保护历史链接，但当前 source-of-truth 文档已经进入 runtime/providers/experiments 分类目录。
 - 实施计划只放 `docs/plans/`，不要与当前设计文档混放。
 - 过期审计报告、历史复盘和不再维护的全局路线图放在 `docs/archive/`，不能替代当前 source-of-truth 文档。
 - 可执行运维流程放在 `docs/runbooks/`。

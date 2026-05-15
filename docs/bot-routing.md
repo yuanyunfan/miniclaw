@@ -305,7 +305,7 @@ SIGINT / SIGTERM 由 `src/index.ts` 的 graceful shutdown 处理：先停止 mon
 
 ## Smart Task Router 文档
 
-详细设计见 `docs/features/04-smart-task-router.md`（中文复查版）和 `docs/features/05-smart-task-router.en.md`（英文版）。当前实现遵循核心原则：**不提升 chat 权限，而是把 task-like prompt 转入现有 task 执行链路**。
+当前设计见 `docs/runtime/README.md#intake-and-routing`，代码级实现细节见 `docs/chat-router-current-logic.md`。当前实现遵循核心原则：**不提升 chat 权限，而是把 task-like prompt 转入现有 task 执行链路**。
 
 ---
 

@@ -7,7 +7,7 @@ translation_status: current
 
 # MiniClaw 文档策略
 
-Status: in_progress
+Status: completed
 Date: 2026-05-15
 
 ## Background
@@ -31,7 +31,7 @@ MiniClaw 需要两个文档表面：repo 内 `docs/` 继续作为 LLM 和维护�
 - 不公开 `docs/private/**`。
 - 不把 archive 报告当作当前实现状态。
 - 不让 `website/**` 替代 code-to-docs drift gate 所要求的 canonical docs。
-- 不在本 slice 中一次性移动所有 `docs/features/` 文件。
+- 不在最初的 plan-only 设计 slice 中一次性移动所有 `docs/features/` 文件。
 
 ## Existing Architecture Evidence
 
@@ -39,7 +39,7 @@ MiniClaw 需要两个文档表面：repo 内 `docs/` 继续作为 LLM 和维护�
 - `docs/plans/README.md`: plan 文档模板。
 - `scripts/quality-docs.ts` 与 `src/quality/docs-drift.ts`: 现有 D1 docs drift gate。
 - `docs/quality-gates.md`: 质量门禁说明。
-- `.gitignore`: 历史上忽略 `docs/zh/`，本策略要求后续移除。
+- `.gitignore`: 当前只忽略生成物 `website-dist/`，不忽略 tracked `docs/zh/`。
 
 当前 drift 方向：
 
@@ -65,7 +65,8 @@ source code -> canonical docs -> website
 8. 新增 `quality:docs-i18n` 检查 migration map inventory completeness、translation pairing、heading parity、ignored-path detection 和 missing translation reporting；migration map 漏收 tracked source doc 是 blocking error，missing / pending translation 在迁移期可以先作为 warning。
 9. Phase 2 分类迁移先增加 taxonomy entrypoints，不立即删除 legacy `docs/features/*`。当前入口包括 `docs/runtime/README.md`、`docs/providers/README.md`、`docs/providers/provider-framework.md`、`docs/providers/content.md`、`docs/providers/email.md`、`docs/providers/stock/eastmoney.md`、`docs/providers/stock/research.md` 和 `docs/experiments/README.md`。
 10. 新增 GitHub Pages build / deploy path：`scripts/build-website.ts` 把 `website/**/*.md(x)` 构建成 `website-dist/**/*.html`，`pnpm run website:build` 做本地验证，`.github/workflows/pages.yml` 先跑 `quality:website-docs` 再发布 Pages artifact。
-11. Phase 3 从小 slice 开始迁移：Eastmoney provider family 先合并 JYWG readonly 和 MyFavor watchlist 两个 legacy feature 文档，legacy 路径只保留兼容 stub 一轮。
+11. Phase 3 从小 slice 开始迁移：Eastmoney 和 Email 已先完成 provider-family merge；最终 runtime、experiments、content、provider-framework、stock 和 stock research 也已迁移完成，legacy `docs/features/*.md` 路径只保留兼容 stub 一轮。
+12. 本阶段保留 root `docs/` 作为 English canonical tree，不迁到 `docs/en/**`；如果未来确实需要显式双语树，再单独开迁移计划。
 
 ```mermaid
 flowchart LR
@@ -115,3 +116,4 @@ flowchart LR
 - 2026-05-15: 新增 GitHub Pages deployment path：`scripts/build-website.ts` 从 `website/**/*.md(x)` 构建 `website-dist/**/*.html`，`package.json` 暴露 `website:build`，`.github/workflows/pages.yml` 在发布前运行 `quality:website-docs` 并上传 Pages artifact；workflow 也监听 website docs gate implementation 和 frontmatter parser，避免校验逻辑变化时绕过 Pages build。`website-dist/` 是生成物，已加入 `.gitignore`。
 - 2026-05-15: 完成第一个 Phase 3 provider merge slice：`docs/providers/stock/eastmoney.md` 成为 JYWG readonly 和 MyFavor watchlist 的 provider-family source of truth；`docs/features/09-eastmoney-jywg-readonly-provider.md` 与 `docs/features/17-eastmoney-myfavor-watchlist.md` 改为兼容 stub；同步更新 `docs/README.md`、migration map 和 pending 中文摘要。
 - 2026-05-15: 完成第二个 Phase 3 provider merge slice：`docs/providers/email.md` 成为通用只读 Email capability、`email-query` 和 `cmb-credit-card-email` 的 provider-family source of truth；`docs/features/07-email-capability.md` 与 `docs/features/08-cmb-credit-card-email-provider.md` 改为兼容 stub；同步更新 provider indexes、migration map、pending 中文 Email 摘要和 website provider `source_docs`。
+- 2026-05-15: 完成剩余 Phase 3/4 迁移：`docs/runtime/README.md`、`docs/experiments/README.md`、`docs/providers/content.md`、`docs/providers/provider-framework.md`、`docs/providers/stock/README.md` 和 `docs/providers/stock/research.md` 成为对应 feature groups 的当前 source of truth；所有 `docs/features/*.md` 都变成一轮兼容 stub。新增 runtime、experiments、content、stock、stock research 的 pending 中文 mirror 摘要；更新 docs drift 规则，使 legacy feature stubs 不再满足未来 source-code 变更；新增 website runtime 页面并刷新 provider `source_docs`。本阶段保留 root English docs，不迁移到 `docs/en/**`。

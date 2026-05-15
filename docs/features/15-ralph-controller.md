@@ -1,123 +1,13 @@
-# Ralph Controller
+# Moved: Ralph Controller
 
-Status: draft
-Date: 2026-05-12
+> This legacy feature doc is kept only as a compatibility stub for old links during the docs migration. The current source-of-truth is [`docs/experiments/README.md`](../experiments/README.md#ralph-controller) and [`docs/ralph/README.md`](../ralph/README.md).
 
-## TLDR
+## Current Location
 
-MiniClaw Ralph 是一个轻量外部执行控制器：它不把 Codex 长会话当状态源，而是用 repo 内 plan、队列、Git worktree、验证命令和 commit/push 边界来驱动每个任务。每次任务执行都会启动新的 `codex exec --ephemeral`，从而获得 fresh context。默认 dry-run，只有显式 `--execute` 才会创建 worktree 并运行 Codex。`ralph:next` / `ralph:loop` 在此基础上提供串行迭代入口，用 `main` 作为每轮任务之间的集成线；`--push-main` 会在每轮发布前 fetch 最新 `main`、rebase 任务分支、处理冲突、重新验证、做 lease check，并在远端抢先变化时重试。
+- Experiments doc: [`../experiments/README.md`](../experiments/README.md)
+- Ralph section: [`../experiments/README.md#ralph-controller`](../experiments/README.md#ralph-controller)
+- Ralph operations doc: [`../ralph/README.md`](../ralph/README.md)
 
-## Purpose
+## Migration Status
 
-MiniClaw 的持续优化任务已经被拆成 `docs/plans/2026-05-11-*.md`。这些任务适合 Ralph 风格执行：
-
-- plan 是任务 spec。
-- 每个 task 在独立 worktree/branch 中运行。
-- Codex 每轮 fresh context。
-- Controller 负责验证、commit 和 push。
-- Git 是 rollback 和审查边界。
-
-这和普通 Codex 聊天不同。Codex 不负责长期队列状态；长期状态由 repo 文件和 Git 历史维护。
-
-## Files
-
-- `docs/ralph/README.md`: Ralph 运行协议。
-- `docs/ralph/queue.json`: 当前计划任务队列。
-- `docs/ralph/learnings.md`: append-only lessons。
-- `.ralph/`: 本机 raw run logs，已被 `.gitignore` 忽略。
-- `scripts/ralph-run.ts`: worktree + fresh Codex session controller。
-- `scripts/ralph-loop.ts`: next/loop orchestrator for serial Ralph iterations.
-- `scripts/ralph-verify.ts`: per-task verification runner。
-
-## Commands
-
-Inspect the next task without running Codex:
-
-```bash
-pnpm ralph:run -- --task task-view-boundary
-```
-
-Execute one task in an isolated worktree:
-
-```bash
-pnpm ralph:run -- --task task-view-boundary --execute
-```
-
-Execute and push the task branch:
-
-```bash
-pnpm ralph:run -- --task task-view-boundary --execute --push
-```
-
-Run verification for a task in the current checkout:
-
-```bash
-pnpm ralph:verify -- --task task-view-boundary
-```
-
-Run the next open Ralph iteration:
-
-```bash
-pnpm ralph:next -- --execute
-```
-
-Run up to three serialized iterations through `main`:
-
-```bash
-pnpm ralph:loop -- --limit 3 --execute --merge-main --push-main
-```
-
-Run one task until its plan or queue status closes:
-
-```bash
-pnpm ralph:task -- --task task-view-boundary --execute --merge-main --push-main
-```
-
-## Execution Model
-
-1. `ralph:run` resolves a task from `docs/ralph/queue.json`.
-2. It checks that the controller checkout is clean.
-3. It creates an isolated Git worktree under `../miniclaw-ralph/<task-id>` by default.
-4. It starts Codex with `codex exec --ephemeral --sandbox workspace-write`.
-5. Codex receives a strict prompt: implement the largest coherent reviewable phase from the plan, prefer behavior wiring plus focused tests, do not commit, do not push, update the plan notes, include a specific commit title/description block in the final response, and mark the plan `Status:` as `done` only when the full plan is genuinely complete and verified.
-6. If the plan `Status:` is closed, the controller syncs the matching queue entry in `docs/ralph/queue.json` before verification and commit.
-7. The controller checks for a non-empty diff.
-8. The controller runs `pnpm ralph:verify`.
-9. If verification passes, the controller commits the worktree branch with the parsed per-run commit subject/body, falling back to the queue title only when Codex omitted the metadata block.
-10. If `--push` is set, the controller pushes the task branch to `origin`.
-
-`ralph:loop` wraps this single-task execution:
-
-1. It selects the first queue task whose queue status is `pending` and whose plan `Status:` is still open.
-2. It runs the task through `ralph:run --reuse-worktree`, so repeated slices of the same plan can reuse the same branch.
-3. With `--merge-main` alone, it fast-forwards the local base branch to the verified task branch after each iteration.
-4. With `--push-main`, it switches to integration-safe publication: fetch `origin/<base>`, rebase the task branch onto the live base, run a bounded Codex conflict resolver if the rebase stops on conflicts, re-run `pnpm ralph:verify`, check the live remote SHA, push the task branch to `refs/heads/<base>` with a lease guard, and retry the whole fetch/rebase/reverify/push sequence when the remote base moves first.
-5. After a successful `--push-main`, it fetches and fast-forwards the local base checkout to `origin/<base>`.
-6. It reloads the queue before the next iteration.
-
-`ralph:task` is the fixed-task variant. It requires a `--task` id and, when executing, requires `--merge-main` so completion can be observed from the base checkout. It stops when that task's queue status or plan `Status:` becomes closed. If the safety `--limit` is reached while the task is still open, the command fails and asks for a higher limit or manual inspection.
-
-## Safety Boundaries
-
-- `ralph:run` defaults to dry-run.
-- Codex is instructed not to commit or push.
-- Codex is instructed to avoid micro-slices; a Ralph iteration should normally complete a plan phase rather than only one helper, type, or test.
-- Raw Codex JSONL/stdout/stderr logs are written under ignored `.ralph/`; the terminal only shows summarized redacted progress events.
-- Integration conflict-resolver logs are also written under ignored `.ralph/runs/<task-id>/...` and are local-only.
-- The controller refuses to run from a dirty checkout unless `--force` is used.
-- `--push` is explicit; local branch commit is the default execute behavior.
-- `--push-main` is separate from `--push`: it publishes the integrated base branch, not the task branch, after rebase, re-verification, and lease checking.
-- Loop mode stops if a task branch exists but is not merged into the base branch.
-- Existing git hooks still run on controller-created commits.
-
-## Relationship To Plans
-
-`docs/plans/*.md` remains the source of task scope. Ralph can update a plan's `Execution Notes`, but the plan body should be treated as spec. Material scope changes should happen as a separate docs commit, not hidden inside a task implementation branch.
-
-## Current Limits
-
-- Queue status is auto-synced only when the plan reaches a closed `Status:`. Ralph does not maintain transient queue states such as `running`.
-- Raw run logs are local-only under `.ralph/`.
-- Automatic retry is limited to `--push-main` integration races where `origin/<base>` moves before push. General Codex execution failures, verification failures, and unresolved conflict-resolver failures still stop the run for inspection.
-- Parallel execution is possible by choosing different tasks, but `ralph:loop --merge-main` is intentionally serial.
-- Commit titles are per-run when Codex provides the required final metadata block; the queue `commit_title` remains only a fallback.
+The Ralph plan-based fresh-context controller notes have moved into experiments and Ralph docs. Future changes to queue semantics, worktree execution, verification profiles, merge-main, push-main, or raw run log handling should update those docs instead of this stub.

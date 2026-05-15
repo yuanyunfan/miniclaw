@@ -236,25 +236,25 @@ MiniClaw 特有 lint 规则：
 
 目标：防止 AI 基于过期文档继续改错。
 
-MiniClaw 是 docs-first 项目，长期维护依赖 `docs/architecture.md`、`docs/bot-routing.md`、`docs/prompts.md`、`docs/runtime/*.md`、`docs/providers/**/*.md`、`docs/experiments/*.md`、迁移期 `docs/features/*.md` 和 plan 文档。代码改了但 docs 不变，是后续 AI 误判的主要来源。
+MiniClaw 是 docs-first 项目，长期维护依赖 `docs/architecture.md`、`docs/bot-routing.md`、`docs/prompts.md`、`docs/runtime/*.md`、`docs/providers/**/*.md`、`docs/experiments/*.md` 和 plan 文档。`docs/features/*.md` 当前只保留迁移期 legacy stub，用于保护旧链接，不再作为新增实现事实的首选位置。代码改了但 docs 不变，是后续 AI 误判的主要来源。
 
 脚本化规则：
 
-- 改 `src/bot.ts`、`src/commands/**`、`src/discord/**`、`src/routing/**`：必须同步 `docs/bot-routing.md`、`docs/chat-router-current-logic.md`、`docs/runtime/*.md` 或迁移期 `docs/features/*.md`。
-- 改 `src/agent/**`：必须同步 `docs/architecture.md`、`docs/features/03-discord-task-output.md`、`docs/runtime/*.md` 或迁移期 `docs/features/*.md`；`src/agent/prompts.ts` 走 prompt 规则。
-- 改 `src/cron/**` 或 `scripts/cron-*`：必须同步 `docs/architecture.md`、`docs/runtime/*.md`、`docs/providers/**/*.md` 或迁移期 `docs/features/*.md`。
+- 改 `src/bot.ts`、`src/commands/**`、`src/discord/**`、`src/routing/**`：必须同步 `docs/bot-routing.md`、`docs/chat-router-current-logic.md` 或 `docs/runtime/*.md`。
+- 改 `src/agent/**`：必须同步 `docs/architecture.md` 或 `docs/runtime/*.md`；`src/agent/prompts.ts` 走 prompt 规则。
+- 改 `src/cron/**` 或 `scripts/cron-*`：必须同步 `docs/architecture.md`、`docs/runtime/*.md` 或 `docs/providers/**/*.md`。
 - 改 `src/store/db.ts`、`src/store/schema.ts` 或 `src/store/**`：必须同步 `docs/architecture.md`。
-- 改 `src/providers/**`：必须同步 `docs/architecture.md`、`docs/providers/**/*.md` 或迁移期 `docs/features/*.md`。
-- 改 `src/config.ts`、`src/config/**` 或 `config.example.yaml`：必须同步 `docs/architecture.md`、`docs/runtime/*.md`、`docs/providers/**/*.md` 或迁移期 `docs/features/*.md`。
+- 改 `src/providers/**`：必须同步 `docs/architecture.md` 或 `docs/providers/**/*.md`。
+- 改 `src/config.ts`、`src/config/**` 或 `config.example.yaml`：必须同步 `docs/architecture.md`、`docs/runtime/*.md` 或 `docs/providers/**/*.md`。
 - 改 `prompts/**` 或 `src/agent/prompts.ts`：必须同步 `docs/prompts.md`，并同步 `src/__tests__/prompt-snapshot.test.ts`。
 - 改 `scripts/quality-*`、`src/quality/**`、`.github/workflows/**` 或 `scripts/git-hooks/**`：必须同步 `docs/quality-gates.md`。
-- 改 `src/ops/doctor*` 或 `scripts/doctor*`：必须同步 `docs/features/13-auto-doctor.md` 或 `docs/runtime/*.md`。
-- 改 `src/stage/**`：必须同步 `docs/features/01-stage.md` 或 `docs/experiments/*.md`。
+- 改 `src/ops/doctor*` 或 `scripts/doctor*`：必须同步 `docs/runtime/*.md`。
+- 改 `src/stage/**`：必须同步 `docs/experiments/*.md`。
 
 当前执行方式：
 
 - `pnpm run quality:docs` 依次运行 `quality:docs:drift`、`quality:docs-i18n` 和 `quality:website-docs`。
-- `quality:docs:drift` 运行 `scripts/quality-docs.ts`，从 `src/store/schema.ts` 检查 DB schema version，并检查 Smart Router ER 字段、`docs/features/*.md` / `docs/runtime/*.md` / `docs/providers/**/*.md` / `docs/experiments/*.md` source index，以及 changed-path 到 source-of-truth docs 的映射。
+- `quality:docs:drift` 运行 `scripts/quality-docs.ts`，从 `src/store/schema.ts` 检查 DB schema version，并检查 Smart Router ER 字段、`docs/runtime/*.md` / `docs/providers/**/*.md` / `docs/experiments/*.md` / 迁移期 `docs/features/*.md` source index，以及 changed-path 到 source-of-truth docs 的映射。
 - `quality:docs-i18n` 读取 `docs/documentation-migration-map.md`，检查每个 tracked canonical `docs/**/*.md` source（排除 `docs/zh/**`）是否已进入 migration map，并检查中文 pairing、`docs/zh/` 是否仍被 git ignore 或通过 `.gitattributes` 禁用 text diff、frontmatter、`translation_of`、`doc_id`，并只对 `translation_status: current` 的文档检查 heading level shape；migration map 漏收 tracked source doc 是 blocking error，初期 missing/pending translation 以 warning 为主。
 - `quality:website-docs` 扫描 `website/**/*.md(x)`，要求非 landing page 声明 language-aware `source_docs`，禁止引用 `docs/private/**`，并报告 canonical docs 变更影响到哪些 website pages。
 - `website:build` 运行 `scripts/build-website.ts`，把 `website/**/*.md(x)` 转成 `website-dist/**/*.html`，复制 `website/llms.txt`，保留 Mermaid block 的浏览器渲染入口，并写入 `.nojekyll`；`website-dist/` 是本地/CI 生成物，不进入 git。

@@ -4,13 +4,19 @@ source_docs:
   en:
     - docs/providers/README.md
     - docs/providers/provider-framework.md
+    - docs/providers/content.md
     - docs/providers/email.md
+    - docs/providers/stock/README.md
     - docs/providers/stock/eastmoney.md
     - docs/providers/stock/research.md
   zh:
+    - docs/zh/providers/README.zh.md
     - docs/zh/providers/provider-framework.zh.md
+    - docs/zh/providers/content.zh.md
     - docs/zh/providers/email.zh.md
+    - docs/zh/providers/stock/README.zh.md
     - docs/zh/providers/stock/eastmoney.zh.md
+    - docs/zh/providers/stock/research.zh.md
 ---
 
 # Providers
@@ -27,4 +33,7 @@ flowchart TD
   Eastmoney --> MyFavor[MyFavor Watchlist]
   Email[Email Provider Family] --> EmailQuery[Generic Email Query]
   Email --> CMB[CMB Credit-card Parser]
+  Content[Content Provider Family] --> WeChat[WeChat MP Metadata]
+  Stock[Stock Provider Family] --> Futu[Futu Readonly]
+  Stock --> Research[Stock Research Pipeline]
 ```

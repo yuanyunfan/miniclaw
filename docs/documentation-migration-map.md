@@ -80,46 +80,46 @@ Field meanings:
   {
     "doc_id": "runtime-index",
     "source_path": "docs/runtime/README.md",
-    "zh_path": null,
+    "zh_path": "docs/zh/runtime/README.zh.md",
     "category": "runtime",
-    "status": "keep",
+    "status": "website-source",
     "merge_group": null,
-    "website_exposure": "internal",
-    "translation_required": false,
-    "translation_status": "not_required"
+    "website_exposure": "public",
+    "translation_required": true,
+    "translation_status": "pending"
   },
   {
     "doc_id": "providers-index",
     "source_path": "docs/providers/README.md",
-    "zh_path": null,
+    "zh_path": "docs/zh/providers/README.zh.md",
     "category": "provider",
-    "status": "keep",
+    "status": "website-source",
     "merge_group": "providers",
     "website_exposure": "public",
-    "translation_required": false,
-    "translation_status": "not_required"
+    "translation_required": true,
+    "translation_status": "pending"
   },
   {
     "doc_id": "stock-providers-index",
     "source_path": "docs/providers/stock/README.md",
-    "zh_path": null,
+    "zh_path": "docs/zh/providers/stock/README.zh.md",
     "category": "provider",
-    "status": "keep",
+    "status": "website-source",
     "merge_group": "providers/stock",
     "website_exposure": "public",
-    "translation_required": false,
-    "translation_status": "not_required"
+    "translation_required": true,
+    "translation_status": "pending"
   },
   {
     "doc_id": "content-provider-family",
     "source_path": "docs/providers/content.md",
-    "zh_path": null,
+    "zh_path": "docs/zh/providers/content.zh.md",
     "category": "provider",
-    "status": "keep",
+    "status": "website-source",
     "merge_group": "providers/content",
     "website_exposure": "public",
-    "translation_required": false,
-    "translation_status": "not_required"
+    "translation_required": true,
+    "translation_status": "pending"
   },
   {
     "doc_id": "email-provider-family",
@@ -135,24 +135,24 @@ Field meanings:
   {
     "doc_id": "stock-research-provider-pipeline",
     "source_path": "docs/providers/stock/research.md",
-    "zh_path": null,
+    "zh_path": "docs/zh/providers/stock/research.zh.md",
     "category": "provider",
     "status": "website-source",
     "merge_group": "providers/stock/research",
     "website_exposure": "public",
-    "translation_required": false,
-    "translation_status": "not_required"
+    "translation_required": true,
+    "translation_status": "pending"
   },
   {
     "doc_id": "experiments-index",
     "source_path": "docs/experiments/README.md",
-    "zh_path": null,
+    "zh_path": "docs/zh/experiments/README.zh.md",
     "category": "experiment",
     "status": "keep",
     "merge_group": "experiments",
     "website_exposure": "internal",
-    "translation_required": false,
-    "translation_status": "not_required"
+    "translation_required": true,
+    "translation_status": "pending"
   },
   {
     "doc_id": "stage-experiment",

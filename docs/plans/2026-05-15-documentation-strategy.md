@@ -1,6 +1,6 @@
 # MiniClaw Documentation Strategy
 
-Status: in_progress
+Status: completed
 Date: 2026-05-15
 
 ## Background
@@ -32,7 +32,7 @@ The current `docs/` tree already contains current design docs, feature/provider 
 - Do not present `docs/archive/**` as current implementation state.
 - Do not let `website/**` satisfy `quality:docs` changed-path requirements for code changes.
 - Do not require website pages to include line-by-line implementation details.
-- Do not migrate all existing `docs/features/` files in this plan-only change.
+- Do not migrate all existing `docs/features/` files in the initial plan-only design change.
 - Do not keep the current gitignored `docs/zh/` review-copy model as the long-term bilingual documentation model.
 - Do not require private provider notes to be translated or published unless a safe redacted version is explicitly created.
 
@@ -46,8 +46,8 @@ The current `docs/` tree already contains current design docs, feature/provider 
   - `docs/quality-gates.md`: describes `quality:docs`, `quality:commit`, and `quality:push`.
   - `package.json`: exposes `quality:docs`, `quality:commit`, and `quality:push`.
   - `.github/workflows/quality.yml`: runs `pnpm run quality:docs` in CI.
-  - `docs/zh/README.md`: currently describes `docs/zh/` as a gitignored local review-copy directory.
-  - `.gitignore`: currently ignores `docs/zh/`.
+  - `docs/zh/README.md`: describes `docs/zh/` as the tracked first-class Chinese mirror.
+  - `.gitignore`: ignores generated `website-dist/`, not tracked `docs/zh/`.
 - Relevant commands:
   - `pnpm run quality:docs`
   - `pnpm run quality:commit`
@@ -56,7 +56,7 @@ The current `docs/` tree already contains current design docs, feature/provider 
   - `docs/plans/**`, `docs/archive/**`, and `docs/private/**` are intentionally not user-facing website content.
   - Current docs drift checks treat repo docs as canonical, not presentation pages.
   - A future website should live under `website/` or `docs-site/`, not under the canonical `docs/` tree.
-  - Current `docs/features/` mixes providers, runtime subsystems, business capabilities, experiments, and provider-family docs.
+  - `docs/features/` is now a migration-period compatibility-stub directory; current source-of-truth docs live under `docs/runtime/`, `docs/providers/`, and `docs/experiments/`.
   - Current language layout is inconsistent: most source docs are English, some feature docs use ad hoc `.en.md` suffixes, and Chinese copies live under a gitignored local-review directory.
 
 Current docs drift direction:
@@ -82,13 +82,13 @@ source code -> canonical docs -> website
    - Keep the existing root `docs/` English paths as the short-term canonical English tree to avoid breaking current links and docs drift mappings.
    - Promote `docs/zh/` from local review copies to tracked first-class Chinese documentation.
    - Mirror the English relative path under `docs/zh/` instead of keeping all Chinese files flat.
-   - Use `.zh.md` suffixes for Chinese files during the transition, for example `docs/features/16-provider-framework.md` and `docs/zh/features/16-provider-framework.zh.md`.
+   - Use `.zh.md` suffixes for Chinese files during the transition, for example `docs/providers/provider-framework.md` and `docs/zh/providers/provider-framework.zh.md`.
    - Add shared frontmatter to translated docs so LLMs and scripts can match language pairs:
 
 ```yaml
 doc_id: provider-framework
 lang: zh
-translation_of: docs/features/16-provider-framework.md
+translation_of: docs/providers/provider-framework.md
 translation_status: current
 ```
 
@@ -190,10 +190,10 @@ Each website page should declare its backing source docs:
 source_docs:
   en:
     - docs/architecture.md
-    - docs/features/16-provider-framework.md
+    - docs/providers/provider-framework.md
   zh:
     - docs/zh/architecture.zh.md
-    - docs/zh/features/16-provider-framework.zh.md
+    - docs/zh/providers/provider-framework.zh.md
 status: public-summary
 ```
 
@@ -327,7 +327,9 @@ website/
 
 The Pages workflow should build from `website/` and publish a static site artifact, while internal repo docs remain in repository context.
 
-12. Only after the docs inventory, bilingual mirror, and first migration slices are stable, decide whether to move the English root docs into explicit `docs/en/**`.
+12. Keep the English root docs as the current canonical English tree for this phase.
+   - Do not move to `docs/en/**` yet because current links, docs drift mappings, and plan history are stable with root English paths.
+   - Revisit an explicit `docs/en/**` tree only in a later dedicated migration plan.
 
 ## Verification Plan
 
@@ -413,3 +415,4 @@ The Pages workflow should build from `website/` and publish a static site artifa
 - 2026-05-15: Added the first GitHub Pages deployment path for the human-facing website: `scripts/build-website.ts` builds `website/**/*.md(x)` into `website-dist/**/*.html`, `pnpm run website:build` exposes the local build command, `.github/workflows/pages.yml` validates `quality:website-docs`, builds the artifact, and deploys via GitHub Pages. The workflow also watches the website docs gate implementation and frontmatter parser so validation logic changes exercise the Pages build. `website-dist/` is ignored and remains generated output.
 - 2026-05-15: Completed the first Phase 3 provider merge slice for Eastmoney docs. `docs/providers/stock/eastmoney.md` is now the source-of-truth family doc for JYWG readonly and MyFavor watchlist boundaries, while `docs/features/09-eastmoney-jywg-readonly-provider.md` and `docs/features/17-eastmoney-myfavor-watchlist.md` are compatibility stubs for one migration cycle. `docs/README.md`, the migration map, and the pending Chinese Eastmoney summary were updated in the same slice.
 - 2026-05-15: Completed the second Phase 3 provider merge slice for Email docs. `docs/providers/email.md` is now the source-of-truth family doc for the shared read-only Email capability, `email-query`, and `cmb-credit-card-email`; `docs/features/07-email-capability.md` and `docs/features/08-cmb-credit-card-email-provider.md` are compatibility stubs for one migration cycle. The provider indexes, migration map, pending Chinese Email summary, and website provider `source_docs` were updated in the same slice.
+- 2026-05-15: Completed the remaining Phase 3/4 migration work. `docs/runtime/README.md`, `docs/experiments/README.md`, `docs/providers/content.md`, `docs/providers/provider-framework.md`, `docs/providers/stock/README.md`, and `docs/providers/stock/research.md` now own the current implementation facts for their migrated feature groups; all `docs/features/*.md` files are compatibility stubs for one migration cycle. Added pending Chinese mirror summaries for runtime, experiments, content, stock, and stock research docs; updated docs drift rules so legacy feature stubs no longer satisfy future source-code changes; added the website runtime page and refreshed provider `source_docs`. The English root docs remain the canonical English tree for this completed phase; no `docs/en/**` move is planned without a separate migration.

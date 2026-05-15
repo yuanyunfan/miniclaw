@@ -24,19 +24,25 @@ flowchart LR
 
 ## Stock Providers
 
-- [`stock/README.md`](stock/README.md): stock-provider family map and data-flow summary.
+- [`stock/README.md`](stock/README.md): stock-provider family map, Futu readonly provider boundary, and stock data-flow summary.
 - [`stock/eastmoney.md`](stock/eastmoney.md): Eastmoney provider family, merging JYWG readonly holdings and MyFavor watchlist boundaries.
 - [`stock/research.md`](stock/research.md): stock research pipeline across portfolio, pulse, market-intel, and watchlist research.
-- [`../features/06-futu-stock.md`](../features/06-futu-stock.md): Futu stock account readonly MCP/provider.
-- [`../features/10-stock-portfolio-provider.md`](../features/10-stock-portfolio-provider.md): multi-broker portfolio aggregation provider.
-- [`../features/11-stock-pulse-provider.md`](../features/11-stock-pulse-provider.md): hourly stock pulse scanner.
-- [`../features/14-market-intel-provider.md`](../features/14-market-intel-provider.md): CN/US market intelligence provider and forecast calibration loop.
-- [`../features/18-stock-watchlist-research-provider.md`](../features/18-stock-watchlist-research-provider.md): watchlist-only research provider.
+
+Stock legacy compatibility stubs:
+
+- [`../features/06-futu-stock.md`](../features/06-futu-stock.md): moved into [`stock/README.md`](stock/README.md#futu-stock-provider).
+- [`../features/10-stock-portfolio-provider.md`](../features/10-stock-portfolio-provider.md): merged into [`stock/research.md`](stock/research.md#stock-portfolio).
+- [`../features/11-stock-pulse-provider.md`](../features/11-stock-pulse-provider.md): merged into [`stock/research.md`](stock/research.md#stock-pulse).
+- [`../features/14-market-intel-provider.md`](../features/14-market-intel-provider.md): merged into [`stock/research.md`](stock/research.md#market-intel).
+- [`../features/18-stock-watchlist-research-provider.md`](../features/18-stock-watchlist-research-provider.md): merged into [`stock/research.md`](stock/research.md#stock-watchlist-research).
 
 ## Content Providers
 
-- [`content.md`](content.md): content ingestion provider family and dedupe/data-flow boundary.
-- [`../features/02-wechat-mp-provider.md`](../features/02-wechat-mp-provider.md): WeChat MP article metadata provider.
+- [`content.md`](content.md): content ingestion provider family, currently the WeChat MP metadata provider and dedupe/data-flow boundary.
+
+Content legacy compatibility stub:
+
+- [`../features/02-wechat-mp-provider.md`](../features/02-wechat-mp-provider.md): merged into [`content.md`](content.md#wechat-mp-provider).
 
 ## Email Providers
 
