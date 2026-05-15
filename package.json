@@ -25,6 +25,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "build": "tsc",
+    "website:build": "tsx scripts/build-website.ts",
     "start": "node dist/index.js",
     "setup": "tsx scripts/setup.ts",
     "safe-restart": "tsx scripts/safe-restart.ts",

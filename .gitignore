@@ -1,5 +1,6 @@
 node_modules/
 dist/
+website-dist/
 coverage/
 artifacts/e2e/
 .ralph/

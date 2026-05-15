@@ -64,6 +64,7 @@ source code -> canonical docs -> website
 7. 新增 `quality:website-docs` 检查 frontmatter、`source_docs`、private/archive source 禁用规则和 affected page reporting。
 8. 新增 `quality:docs-i18n` 检查 migration map inventory completeness、translation pairing、heading parity、ignored-path detection 和 missing translation reporting；migration map 漏收 tracked source doc 是 blocking error，missing / pending translation 在迁移期可以先作为 warning。
 9. Phase 2 分类迁移先增加 taxonomy entrypoints，不立即删除 legacy `docs/features/*`。当前入口包括 `docs/runtime/README.md`、`docs/providers/README.md`、`docs/providers/provider-framework.md`、`docs/providers/content.md`、`docs/providers/email.md`、`docs/providers/stock/eastmoney.md`、`docs/providers/stock/research.md` 和 `docs/experiments/README.md`。
+10. 新增 GitHub Pages build / deploy path：`scripts/build-website.ts` 把 `website/**/*.md(x)` 构建成 `website-dist/**/*.html`，`pnpm run website:build` 做本地验证，`.github/workflows/pages.yml` 先跑 `quality:website-docs` 再发布 Pages artifact。
 
 ```mermaid
 flowchart LR
@@ -110,3 +111,4 @@ flowchart LR
 - 2026-05-15: 已在 `main` 开始 Phase 2 分类，不删除 legacy feature docs。新增 runtime/providers/experiments taxonomy 入口、Eastmoney provider family、content/email provider family 和 stock research pipeline，并同步 migration map、website `source_docs` 与 D1 docs drift patterns。
 - 2026-05-15: 在 `main` 完成 migration-map inventory slice：`docs/documentation-migration-map.md` 覆盖所有 tracked canonical `docs/**/*.md` source（排除 `docs/zh/**`），`quality:docs-i18n` 会把 migration map 漏收 tracked source doc 判为 blocking error。Focused verification 已通过：`pnpm exec vitest run src/quality/__tests__/docs-i18n.test.ts` 和 `pnpm run quality:docs-i18n`，后者报告 73 个 migration map entries。
 - 2026-05-15: inventory slice 的 broader verification 已通过：`pnpm run typecheck`、`pnpm run lint`、`pnpm run build`、`pnpm test`（185 files / 903 tests）和 `MINICLAW_DOCS_DRIFT_ALLOW=1 pnpm run quality:docs`。当前 raw `pnpm run quality:docs` 被同一 worktree 中并行的 Agent Run Manager runtime/store 改动挡住，不是本 inventory slice 导致。
+- 2026-05-15: 新增 GitHub Pages deployment path：`scripts/build-website.ts` 从 `website/**/*.md(x)` 构建 `website-dist/**/*.html`，`package.json` 暴露 `website:build`，`.github/workflows/pages.yml` 在发布前运行 `quality:website-docs` 并上传 Pages artifact；workflow 也监听 website docs gate implementation 和 frontmatter parser，避免校验逻辑变化时绕过 Pages build。`website-dist/` 是生成物，已加入 `.gitignore`。

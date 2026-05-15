@@ -19,10 +19,11 @@ MiniClaw 不是普通 TypeScript library。它同时包含：
 
 当前已经具备的基础：
 
-- `package.json` 已有 `build`、`lint`、`typecheck`、`test`、`test:cov`、`quality:commit`、`quality:push`、`quality:g0`、`quality:docs`、`quality:docs:drift`、`quality:docs-i18n`、`quality:website-docs`、`quality:secrets`、`quality:deps`、`quality:coverage`、`e2e:cron` 和 `e2e:discord`。
+- `package.json` 已有 `build`、`website:build`、`lint`、`typecheck`、`test`、`test:cov`、`quality:commit`、`quality:push`、`quality:g0`、`quality:docs`、`quality:docs:drift`、`quality:docs-i18n`、`quality:website-docs`、`quality:secrets`、`quality:deps`、`quality:coverage`、`e2e:cron` 和 `e2e:discord`。
 - `scripts/git-hooks/pre-commit` 调用 `pnpm run quality:commit`；实际顺序是 staged G0、staged secret scan、D1 docs drift + i18n + website docs、lint、typecheck、Vitest。
 - `scripts/git-hooks/pre-push` 调用 `pnpm run quality:push`；实际顺序是 build、coverage、coverage ratchet、D1 docs drift + i18n + website docs、lint、cron E2E、full-tree G0、full-tree secret scan、dependency scan，并可用 `MINICLAW_RUN_DISCORD_E2E=1` 显式开启真实 Discord E2E。
 - `.github/workflows/quality.yml` 在 push / pull request 上运行 Node 22、frozen install、G0、gitleaks、typecheck、lint、coverage、coverage ratchet、D1 docs drift、cron E2E、dependency scan 和 build；website/docs-i18n gate 进入 `quality:docs` 后由同一入口覆盖。
+- `.github/workflows/pages.yml` 是 GitHub Pages workflow；它只从 `website/` presentation layer 构建发布 artifact，并在 website source、website build script、website docs gate、frontmatter parser、package metadata 或自身 workflow 变化时触发；发布前先跑 `quality:website-docs`，再跑 `pnpm run website:build` 输出 `website-dist/`，最后通过 Pages artifact 部署。它不把 repo 的 canonical `docs/` 目录直接发布。
 - `.github/workflows/discord-e2e.yml` 是独立 manual/nightly workflow；默认 fake agent，可通过 input/nightly 配置扩展 cases 或跑真实 agent。
 - `.github/workflows/release.yml` 是 Release workflow；推荐通过 push `vX.Y.Z` tag 自动发版，也保留从 `main` 手动输入 SemVer 的入口。它要求 `package.json` version 和 `CHANGELOG.md` 版本段一致，先跑 `quality:push`，再创建 GitHub Release 和源码/dist artifact。
 - `eslint.config.js` 对 `src/**/*.ts` 强制 `no-console` 和 `@typescript-eslint/no-floating-promises`，CLI/stdio 入口按例外处理。
@@ -256,6 +257,7 @@ MiniClaw 是 docs-first 项目，长期维护依赖 `docs/architecture.md`、`do
 - `quality:docs:drift` 运行 `scripts/quality-docs.ts`，从 `src/store/schema.ts` 检查 DB schema version，并检查 Smart Router ER 字段、`docs/features/*.md` / `docs/runtime/*.md` / `docs/providers/**/*.md` / `docs/experiments/*.md` source index，以及 changed-path 到 source-of-truth docs 的映射。
 - `quality:docs-i18n` 读取 `docs/documentation-migration-map.md`，检查每个 tracked canonical `docs/**/*.md` source（排除 `docs/zh/**`）是否已进入 migration map，并检查中文 pairing、`docs/zh/` 是否仍被 git ignore 或通过 `.gitattributes` 禁用 text diff、frontmatter、`translation_of`、`doc_id`，并只对 `translation_status: current` 的文档检查 heading level shape；migration map 漏收 tracked source doc 是 blocking error，初期 missing/pending translation 以 warning 为主。
 - `quality:website-docs` 扫描 `website/**/*.md(x)`，要求非 landing page 声明 language-aware `source_docs`，禁止引用 `docs/private/**`，并报告 canonical docs 变更影响到哪些 website pages。
+- `website:build` 运行 `scripts/build-website.ts`，把 `website/**/*.md(x)` 转成 `website-dist/**/*.html`，复制 `website/llms.txt`，保留 Mermaid block 的浏览器渲染入口，并写入 `.nojekyll`；`website-dist/` 是本地/CI 生成物，不进入 git。
 - 默认模式先看 staged paths；如果没有 staged paths，则检查 `git diff HEAD` 加 untracked non-ignored files。也可显式使用 `--staged`、`--tree` 或 `--base <ref> [--head <ref>]`。
 - `docs/plans/**`、`docs/archive/**`、`docs/private/**`、tests 和 fixtures 不作为 source trigger；`docs/plans/**` 和 `docs/archive/**` 也不能替代当前 source-of-truth docs。
 - 对紧急本地修复可用 `MINICLAW_DOCS_DRIFT_ALLOW=1 pnpm run quality:docs` 只绕过 changed-path 映射；DB schema、Smart Router ER 和 feature index invariant 仍会失败。
