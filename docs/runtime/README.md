@@ -218,20 +218,9 @@ Runtime boundary:
 - Final synthesis should cite child outcomes and preserve failed/partial child state.
 - Sweeper and guardrails must prevent stuck runs and unbounded child-runtime growth.
 
-## Legacy Compatibility
+## Legacy Cleanup
 
-The previous feature-level runtime docs are compatibility stubs for one migration cycle:
-
-- [`../archive/features/03-discord-task-output.md`](../archive/features/03-discord-task-output.md)
-- [`../archive/features/04-smart-task-router.md`](../archive/features/04-smart-task-router.md)
-- [`../archive/features/05-smart-task-router.en.md`](../archive/features/05-smart-task-router.en.md)
-- [`../archive/features/12-connectivity-monitor.md`](../archive/features/12-connectivity-monitor.md)
-- [`../archive/features/13-auto-doctor.md`](../archive/features/13-auto-doctor.md)
-- [`../archive/features/19-agent-prompt-context-audit.md`](../archive/features/19-agent-prompt-context-audit.md)
-- [`../archive/features/20-memory-curation-lifecycle.md`](../archive/features/20-memory-curation-lifecycle.md)
-- [`../archive/features/21-agent-run-manager.md`](../archive/features/21-agent-run-manager.md)
-
-New implementation facts should be added here or to the linked top-level runtime docs, not to the stubs.
+The previous feature-level runtime stubs have been removed after migration. This file is now the canonical runtime source for the migrated runtime topics.
 
 ## Development Checklist
 

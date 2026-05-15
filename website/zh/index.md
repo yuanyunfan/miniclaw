@@ -42,7 +42,7 @@ flowchart LR
 - **Runtime boundary**：MiniClaw 负责 routing、context、progress、trace events 和 delivery；Claude/Codex 负责 agent execution。
 - **Provider-first reports**：WeChat、email、stock、market providers 先生成结构化上下文，再交给 LLM 汇总。
 - **Local-first state**：用户配置、secrets、provider sessions、cron state 和 SQLite 数据都留在公开 repo 之外。
-- **Docs-driven governance**：repo docs 是实现记录；website 是面向人的入口，并回链到 source docs。
+- **Docs-driven governance**：repo docs 是实现记录；website 是面向人的入口，并回链到 current source docs。
 - **Quality as architecture**：docs drift、website drift、i18n parity、coverage、secrets 和 cron E2E 都是可执行 gate。
 
 ## Runtime Loop

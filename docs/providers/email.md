@@ -265,14 +265,9 @@ Skip behavior:
 - Skip reasons include no matching CMB email, no newly parsed transactions, or all parsed transactions being duplicates.
 - This supports frequent polling without sending repeated "zero transaction" Discord summaries.
 
-## Legacy Compatibility
+## Legacy Cleanup
 
-The previous feature-level docs are compatibility stubs for one migration cycle:
-
-- [`../archive/features/07-email-capability.md`](../archive/features/07-email-capability.md)
-- [`../archive/features/08-cmb-credit-card-email-provider.md`](../archive/features/08-cmb-credit-card-email-provider.md)
-
-New implementation facts should be added to this provider-family doc. Private mailbox, credential, or account-specific setup details should stay out of public docs.
+The previous feature-level email stubs have been removed after migration. New implementation facts should be added to this provider-family doc. Private mailbox, credential, or account-specific setup details should stay out of public docs.
 
 ## Development Checklist
 

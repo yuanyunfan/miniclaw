@@ -35,30 +35,19 @@ flowchart LR
 - [`../../providers/stock/eastmoney.md`](../../providers/stock/eastmoney.md): Eastmoney provider family，合并 JYWG readonly holdings 和 MyFavor watchlist 边界。
 - [`../../providers/stock/research.md`](../../providers/stock/research.md): 串联 portfolio、pulse、market-intel 和 watchlist research 的 stock research pipeline。
 
-Stock legacy compatibility stubs:
-
-- [`../../archive/features/06-futu-stock.md`](../../archive/features/06-futu-stock.md): moved into [`../../providers/stock/README.md`](../../providers/stock/README.md#futu-stock-provider).
-- [`../../archive/features/10-stock-portfolio-provider.md`](../../archive/features/10-stock-portfolio-provider.md): merged into [`../../providers/stock/research.md`](../../providers/stock/research.md#stock-portfolio).
-- [`../../archive/features/11-stock-pulse-provider.md`](../../archive/features/11-stock-pulse-provider.md): merged into [`../../providers/stock/research.md`](../../providers/stock/research.md#stock-pulse).
-- [`../../archive/features/14-market-intel-provider.md`](../../archive/features/14-market-intel-provider.md): merged into [`../../providers/stock/research.md`](../../providers/stock/research.md#market-intel).
-- [`../../archive/features/18-stock-watchlist-research-provider.md`](../../archive/features/18-stock-watchlist-research-provider.md): merged into [`../../providers/stock/research.md`](../../providers/stock/research.md#stock-watchlist-research).
+Stock provider feature stubs 已合并并删除；当前 stock source docs 是 [`../../providers/stock/README.md`](../../providers/stock/README.md) 和 [`../../providers/stock/research.md`](../../providers/stock/research.md)。
 
 ## Content Providers
 
 - [`../../providers/content.md`](../../providers/content.md): content ingestion provider family，当前是 WeChat MP metadata provider 和 dedupe/data-flow boundary。
 
-Content legacy compatibility stub:
-
-- [`../../archive/features/02-wechat-mp-provider.md`](../../archive/features/02-wechat-mp-provider.md): merged into [`../../providers/content.md`](../../providers/content.md#wechat-mp-provider).
+Content provider feature stub 已合并并删除；当前 content source doc 是 [`../../providers/content.md`](../../providers/content.md)。
 
 ## Email Providers
 
 - [`../../providers/email.md`](../../providers/email.md): Email provider family，合并 shared read-only Email capability、generic `email-query` 和 CMB credit-card email parser 边界。
 
-Email legacy compatibility stubs:
-
-- [`../../archive/features/07-email-capability.md`](../../archive/features/07-email-capability.md): merged into [`../../providers/email.md`](../../providers/email.md#shared-read-only-email-capability).
-- [`../../archive/features/08-cmb-credit-card-email-provider.md`](../../archive/features/08-cmb-credit-card-email-provider.md): merged into [`../../providers/email.md`](../../providers/email.md#cmb-credit-card-email-provider).
+Email provider feature stubs 已合并并删除；当前 email source doc 是 [`../../providers/email.md`](../../providers/email.md)。
 
 ## Maintenance Rules
 

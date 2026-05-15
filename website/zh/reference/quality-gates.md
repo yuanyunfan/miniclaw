@@ -31,7 +31,7 @@ flowchart LR
 ## Drift Controls
 
 - **`quality:docs:drift`** 检查 implementation-to-docs invariants。
-- **`quality:docs-i18n`** 检查 bilingual doc pairing、metadata 和 current translation parity。
+- **`quality:docs-i18n`** 检查现存 canonical docs 的 bilingual doc pairing、metadata 和 current translation parity。
 - **`quality:website-docs`** 检查 website `source_docs` traceability 和 affected-page updates。
 - **`quality:commit`** 是本地 commit 前的 staged gate。
 - **`quality:push`** 扩展到 build、coverage、cron E2E、full-tree safety、secrets 和 dependency checks。

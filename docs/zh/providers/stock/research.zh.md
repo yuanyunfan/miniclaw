@@ -229,16 +229,9 @@ pre_provider_preflight: health
 - Market-intel probabilities 是 research inputs，不是 trading instructions。
 - 本 pipeline 中没有任何 provider 可以解锁交易、下单、改单或转移资金。
 
-## Legacy Compatibility
+## Legacy Cleanup
 
-上一轮 feature-level stock research docs 会作为兼容 stub 保留一个迁移周期：
-
-- [`../../../archive/features/10-stock-portfolio-provider.md`](../../../archive/features/10-stock-portfolio-provider.md)
-- [`../../../archive/features/11-stock-pulse-provider.md`](../../../archive/features/11-stock-pulse-provider.md)
-- [`../../../archive/features/14-market-intel-provider.md`](../../../archive/features/14-market-intel-provider.md)
-- [`../../../archive/features/18-stock-watchlist-research-provider.md`](../../../archive/features/18-stock-watchlist-research-provider.md)
-
-新的实现事实应写到这里，或写到 [`../../../providers/stock/eastmoney.md`](../../../providers/stock/eastmoney.md) 这样的 stock source family docs。
+上一轮 stock research feature-level stubs 已在迁移完成后删除。新的实现事实应写到本文件，或写到 [`eastmoney.zh.md`](eastmoney.zh.md) 等 stock source family docs。
 
 Verification owner:
 

@@ -42,7 +42,7 @@ flowchart LR
 - **Runtime boundary**: MiniClaw owns routing, context, progress, trace events, and delivery; Claude/Codex own agent execution.
 - **Provider-first reports**: WeChat, email, stock, and market providers produce structured context before the LLM summarizes anything.
 - **Local-first state**: user config, secrets, provider sessions, cron state, and SQLite data live outside the public repo.
-- **Docs-driven governance**: repo docs are the implementation record; this website is a curated human portal linked back to source docs.
+- **Docs-driven governance**: repo docs are the implementation record; this website is a curated human portal linked back to current source docs.
 - **Quality as architecture**: docs drift, website drift, i18n parity, coverage, secrets, and cron E2E are executable gates.
 
 ## Runtime Loop

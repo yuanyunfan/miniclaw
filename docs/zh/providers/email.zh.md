@@ -272,14 +272,9 @@ Skip behavior:
 - Skip reasons 包括没有匹配的 CMB email、没有新解析出的 transactions，或所有 parsed transactions 都是 duplicates。
 - 这样可以支持高频 polling，而不会反复发送 "zero transaction" Discord summaries。
 
-## Legacy Compatibility
+## Legacy Cleanup
 
-上一轮 feature-level docs 会作为兼容 stub 保留一个迁移周期：
-
-- [`../../archive/features/07-email-capability.md`](../../archive/features/07-email-capability.md)
-- [`../../archive/features/08-cmb-credit-card-email-provider.md`](../../archive/features/08-cmb-credit-card-email-provider.md)
-
-新的实现事实应写到本 provider-family doc。Private mailbox、credential 或 account-specific setup details 不应进入 public docs。
+上一轮 feature-level email stubs 已在迁移完成后删除。新的实现事实应写到这个 provider-family 文档。Private mailbox、credential 和 account-specific setup details 不应进入 public docs。
 
 ## Development Checklist
 

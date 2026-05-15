@@ -124,13 +124,9 @@ Provider failures 应保留足够信息给 cron 和 Auto Doctor，同时不能�
 - 为迁移到 framework 的 providers 增加 replay/no-data/format-drift fixtures。
 - 如果 public provider summary 提到变化行为，更新 website `source_docs`。
 
-## Legacy Compatibility
+## Legacy Cleanup
 
-上一轮 feature-level framework doc 会作为兼容 stub 保留一个迁移周期：
-
-- [`../../archive/features/16-provider-framework.md`](../../archive/features/16-provider-framework.md)
-
-旧中文 feature placeholder 是历史文档；当前中文 pair 是 [`provider-framework.zh.md`](provider-framework.zh.md)。
+上一轮 feature-level framework stub 已在迁移完成后删除。当前实现事实写在本文件对应的英文 source 和本中文 mirror 中。
 
 Verification owner:
 

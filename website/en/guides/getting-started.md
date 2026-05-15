@@ -42,4 +42,4 @@ flowchart LR
   Runtime --> Providers[Providers]
 ```
 
-Use `~/.miniclaw/` for personal config and state. Keep repo files reusable, reviewable, and free of credentials.
+Use `~/.miniclaw/` for personal config and state. Keep repo files reusable, reviewable, and free of credentials; deeper provider examples now live in provider docs.

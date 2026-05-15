@@ -189,7 +189,7 @@ agent:
   max_concurrent_tasks: 1
 ```
 
-高级 provider 示例可以留在同一个 example 文件底部注释区，或拆到 `docs/archive/features/*.md`。首次安装不应该要求用户理解微信、邮箱、股票和 cron。
+高级 provider 示例可以留在同一个 example 文件底部注释区，或拆到 `docs/providers/**/*.md`。首次安装不应该要求用户理解微信、邮箱、股票和 cron。
 
 ### 6. Release artifact 优先于 npm publish
 

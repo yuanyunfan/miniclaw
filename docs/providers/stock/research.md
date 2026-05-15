@@ -222,16 +222,9 @@ pre_provider_preflight: health
 - Market-intel probabilities are research inputs, not trading instructions.
 - No provider in this pipeline may unlock trading, place orders, modify orders, or move funds.
 
-## Legacy Compatibility
+## Legacy Cleanup
 
-The previous feature-level stock research docs are compatibility stubs for one migration cycle:
-
-- [`../../archive/features/10-stock-portfolio-provider.md`](../../archive/features/10-stock-portfolio-provider.md)
-- [`../../archive/features/11-stock-pulse-provider.md`](../../archive/features/11-stock-pulse-provider.md)
-- [`../../archive/features/14-market-intel-provider.md`](../../archive/features/14-market-intel-provider.md)
-- [`../../archive/features/18-stock-watchlist-research-provider.md`](../../archive/features/18-stock-watchlist-research-provider.md)
-
-New implementation facts should be added here or to stock source family docs such as [`eastmoney.md`](eastmoney.md).
+The previous stock research feature-level stubs have been removed after migration. New implementation facts should be added here or to stock source family docs such as [`eastmoney.md`](eastmoney.md).
 
 Verification owner:
 

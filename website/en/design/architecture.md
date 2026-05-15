@@ -77,4 +77,4 @@ flowchart TD
   Recover --> Persist
 ```
 
-Legacy feature docs now live under `docs/archive/features/`. Current implementation facts belong in runtime, provider, experiment, and reference docs, then flow into this website through `source_docs`.
+Legacy feature stubs have been merged and removed. Current implementation facts belong in runtime, provider, experiment, and reference docs, then flow into this website through `source_docs`.

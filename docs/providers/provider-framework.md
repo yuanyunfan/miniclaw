@@ -117,13 +117,9 @@ Provider failures should preserve enough information for cron and Auto Doctor wi
 - Add replay/no-data/format-drift fixtures for migrated framework providers.
 - Update website `source_docs` if the public provider summary mentions the changed behavior.
 
-## Legacy Compatibility
+## Legacy Cleanup
 
-The previous feature-level framework doc is a compatibility stub for one migration cycle:
-
-- [`../archive/features/16-provider-framework.md`](../archive/features/16-provider-framework.md)
-
-The old Chinese feature placeholder is historical; the current Chinese pair is [`../zh/providers/provider-framework.zh.md`](../zh/providers/provider-framework.zh.md).
+The previous feature-level framework stub has been removed after migration. Current implementation facts live in this page; the Chinese pair is [`../zh/providers/provider-framework.zh.md`](../zh/providers/provider-framework.zh.md).
 
 Verification owner:
 

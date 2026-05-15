@@ -225,20 +225,9 @@ Runtime boundary:
 - Final synthesis 应引用 child outcomes，并保留 failed/partial child state。
 - Sweeper 和 guardrails 必须防止 stuck run 和无界 child-runtime 增长。
 
-## Legacy Compatibility
+## Legacy Cleanup
 
-上一轮 feature-level runtime docs 会作为兼容 stub 保留一个迁移周期：
-
-- [`../../archive/features/03-discord-task-output.md`](../../archive/features/03-discord-task-output.md)
-- [`../../archive/features/04-smart-task-router.md`](../../archive/features/04-smart-task-router.md)
-- [`../../archive/features/05-smart-task-router.en.md`](../../archive/features/05-smart-task-router.en.md)
-- [`../../archive/features/12-connectivity-monitor.md`](../../archive/features/12-connectivity-monitor.md)
-- [`../../archive/features/13-auto-doctor.md`](../../archive/features/13-auto-doctor.md)
-- [`../../archive/features/19-agent-prompt-context-audit.md`](../../archive/features/19-agent-prompt-context-audit.md)
-- [`../../archive/features/20-memory-curation-lifecycle.md`](../../archive/features/20-memory-curation-lifecycle.md)
-- [`../../archive/features/21-agent-run-manager.md`](../../archive/features/21-agent-run-manager.md)
-
-新的实现事实应写到这里或链接的顶层 runtime docs，而不是写到 stub。
+上一轮 feature-level runtime stubs 已在迁移完成后删除。本文件现在是这些 runtime 主题的 canonical 中文 mirror。
 
 ## Development Checklist
 

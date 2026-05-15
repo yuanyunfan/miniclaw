@@ -84,14 +84,9 @@ Boundary contract:
 - `ralph:loop --merge-main --push-main` must fetch/rebase/reverify and use lease-aware push behavior.
 - Ralph is an automation controller, not a Discord-facing feature.
 
-## Legacy Compatibility
+## Legacy Cleanup
 
-The previous feature-level experiment docs are compatibility stubs for one migration cycle:
-
-- [`../archive/features/01-stage.md`](../archive/features/01-stage.md)
-- [`../archive/features/15-ralph-controller.md`](../archive/features/15-ralph-controller.md)
-
-New implementation facts should be added here or to `docs/ralph/**`, not to the stubs.
+The previous feature-level experiment stubs have been removed after migration. This file and `docs/ralph/**` now own the experiment source-of-truth content.
 
 ## Graduation Rule
 

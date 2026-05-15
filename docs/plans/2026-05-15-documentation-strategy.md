@@ -56,7 +56,7 @@ The current `docs/` tree already contains current design docs, feature/provider 
   - `docs/plans/**`, `docs/archive/**`, and `docs/private/**` are intentionally not user-facing website content.
   - Current docs drift checks treat repo docs as canonical, not presentation pages.
   - A future website should live under `website/` or `docs-site/`, not under the canonical `docs/` tree.
-  - `docs/archive/features/` is now a migration-period compatibility-stub directory; current source-of-truth docs live under `docs/runtime/`, `docs/providers/`, and `docs/experiments/`.
+  - `docs/archive/features/` was the migration-period compatibility-stub directory; it has now been removed after current source-of-truth content moved under `docs/runtime/`, `docs/providers/`, and `docs/experiments/`.
   - Current language layout is inconsistent: most source docs are English, some feature docs use ad hoc `.en.md` suffixes, and Chinese copies live under a gitignored local-review directory.
 
 Current docs drift direction:
@@ -127,7 +127,7 @@ Phase 3: migrate and leave traceability.
 
 - Move or merge docs in small docs-only slices.
 - Update `docs/README.md`, `docs/zh/README.md`, docs drift mappings, and all links in the same slice as each move.
-- For merged docs, leave a short moved/merged stub for one release cycle or maintain a redirect index in `docs/README.md`.
+- For merged docs, leave a short moved/merged stub for one release cycle or maintain a redirect index in `docs/README.md`; after the cleanup cycle, remove the stub directory and keep the migration map focused on existing canonical docs.
 - Update both English and Chinese versions in the same slice. Required Chinese pairs must stay `translation_status: current`; if a source truly does not need Chinese documentation, mark it `translation_status: not_required` in the migration map.
 
 Phase 4: expose only curated material to the website.
@@ -418,3 +418,4 @@ The Pages workflow should build from `website/` and publish a static site artifa
 - 2026-05-15: Completed the remaining Phase 3/4 migration work. `docs/runtime/README.md`, `docs/experiments/README.md`, `docs/providers/content.md`, `docs/providers/provider-framework.md`, `docs/providers/stock/README.md`, and `docs/providers/stock/research.md` now own the current implementation facts for their migrated feature groups; all `docs/archive/features/*.md` files are compatibility stubs for one migration cycle. Added Chinese mirror summaries for runtime, experiments, content, stock, and stock research docs; updated docs drift rules so legacy feature stubs no longer satisfy future source-code changes; added the website runtime page and refreshed provider `source_docs`. The later hardening follow-up promoted required Chinese mirrors to current parity. The English root docs remain the canonical English tree for this completed phase; no `docs/en/**` move is planned without a separate migration.
 - 2026-05-15: Completed the bilingual and website drift hardening follow-up. Required Chinese pairs are now `translation_status: current` and `quality:docs-i18n` blocks missing/pending required translations. `quality:website-docs` now blocks canonical-doc changes that affect website pages unless the website page is changed in the same patch, the page declares an explicit `website_docs_drift: unaffected` reason, or `MINICLAW_WEBSITE_DOCS_DRIFT_ALLOW=1` is used for emergency bypass.
 - 2026-05-15: Completed the feature-stub archive and zh cleanup follow-up. All legacy `docs/features/*.md` files moved to `docs/archive/features/`, `quality:docs:drift` no longer treats archived feature docs as current source index material, and early flat Chinese translations were either moved to `docs/zh/plans/` with standard frontmatter or archived under `docs/zh/archive/**`. The Pages workflow now checks repository Pages configuration before deployment; when Pages is not enabled yet, CI keeps the website build/artifact path green instead of failing at `actions/configure-pages`.
+- 2026-05-15: Removed the migration-period feature stubs after the compatibility cycle. `docs/archive/features/` and the matching `docs/zh/archive/features/` translations are gone, current docs no longer link to those stub paths, `docs/documentation-migration-map.md` tracks only existing canonical source docs, and website pages were refreshed to reflect the cleanup.

@@ -280,14 +280,9 @@ pnpm run typecheck
 - Bootstrap 不是 manual data export。成功 bootstrap 后，cron/provider runs 应使用自动 readonly requests。
 - Bootstrap sessions 相互独立。JYWG cookies 不应满足 MyFavor 行为，MyFavor cookies 也不应满足 JYWG 行为。
 
-## Legacy Compatibility
+## Legacy Cleanup
 
-上一轮 feature-level docs 会作为兼容 stub 保留一个迁移周期：
-
-- [`../../../archive/features/09-eastmoney-jywg-readonly-provider.md`](../../../archive/features/09-eastmoney-jywg-readonly-provider.md)
-- [`../../../archive/features/17-eastmoney-myfavor-watchlist.md`](../../../archive/features/17-eastmoney-myfavor-watchlist.md)
-
-新的实现事实应写到本 family doc；敏感内容写到 `docs/private/eastmoney/**`。
+上一轮 Eastmoney feature-level stubs 已在迁移完成后删除。新的实现事实应写入这个 family doc；敏感内容写入 `docs/private/eastmoney/**`。
 
 ## Development Checklist
 

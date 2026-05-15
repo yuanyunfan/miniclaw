@@ -46,7 +46,7 @@ flowchart TD
 - **Structured before summarized**：providers 负责采集事实；LLM 负责解释和写报告。
 - **Session isolation**：cookies、app passwords、brokerage sessions 和 account state 留在 `~/.miniclaw/`。
 - **Replayable failures**：no-data、auth-expired、format-drift 场景需要 fixture 或 dry-run 覆盖。
-- **Family docs over legacy stubs**：provider contract 现在维护在 `docs/providers/`，不是 archived feature-stub 目录。
+- **Family docs over legacy stubs**：provider contract 现在维护在 `docs/providers/`；旧 feature stubs 已完成合并并删除。
 
 ## Context Shape
 

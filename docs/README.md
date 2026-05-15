@@ -16,16 +16,7 @@
 
 - [`runtime/README.md`](runtime/README.md): Discord intake、routing、chat/task/cron runtime、memory/context、operations 的当前 source-of-truth 入口。
 
-Archived runtime feature records:
-
-- [`archive/features/03-discord-task-output.md`](archive/features/03-discord-task-output.md): moved into [`runtime/README.md`](runtime/README.md#task-output-and-trace-ux).
-- [`archive/features/04-smart-task-router.md`](archive/features/04-smart-task-router.md): merged into [`runtime/README.md`](runtime/README.md#intake-and-routing), [`bot-routing.md`](bot-routing.md), and [`chat-router-current-logic.md`](chat-router-current-logic.md).
-- [`archive/features/05-smart-task-router.en.md`](archive/features/05-smart-task-router.en.md): merged into [`runtime/README.md`](runtime/README.md#intake-and-routing), [`bot-routing.md`](bot-routing.md), and [`chat-router-current-logic.md`](chat-router-current-logic.md).
-- [`archive/features/12-connectivity-monitor.md`](archive/features/12-connectivity-monitor.md): moved into [`runtime/README.md`](runtime/README.md#connectivity-and-recovery).
-- [`archive/features/13-auto-doctor.md`](archive/features/13-auto-doctor.md): moved into [`runtime/README.md`](runtime/README.md#auto-doctor).
-- [`archive/features/19-agent-prompt-context-audit.md`](archive/features/19-agent-prompt-context-audit.md): moved into [`runtime/README.md`](runtime/README.md#memory-and-prompt-context).
-- [`archive/features/20-memory-curation-lifecycle.md`](archive/features/20-memory-curation-lifecycle.md): moved into [`runtime/README.md`](runtime/README.md#memory-and-prompt-context).
-- [`archive/features/21-agent-run-manager.md`](archive/features/21-agent-run-manager.md): moved into [`runtime/README.md`](runtime/README.md#agent-run-manager).
+Runtime feature-level compatibility stubs have been removed after their content was merged into `runtime/README.md` and the top-level routing docs.
 
 ## Providers
 
@@ -37,31 +28,12 @@ Archived runtime feature records:
 - [`providers/stock/eastmoney.md`](providers/stock/eastmoney.md): Eastmoney provider family，是 JYWG readonly 和 MyFavor watchlist 的当前 source of truth。
 - [`providers/stock/research.md`](providers/stock/research.md): Stock research provider pipeline，串联 portfolio、pulse、market-intel 和 watchlist research。
 
-Archived provider feature records:
-
-- [`archive/features/02-wechat-mp-provider.md`](archive/features/02-wechat-mp-provider.md): merged into [`providers/content.md`](providers/content.md#wechat-mp-provider).
-- [`archive/features/06-futu-stock.md`](archive/features/06-futu-stock.md): moved into [`providers/stock/README.md`](providers/stock/README.md#futu-stock-provider).
-- [`archive/features/10-stock-portfolio-provider.md`](archive/features/10-stock-portfolio-provider.md): merged into [`providers/stock/research.md`](providers/stock/research.md#stock-portfolio).
-- [`archive/features/11-stock-pulse-provider.md`](archive/features/11-stock-pulse-provider.md): merged into [`providers/stock/research.md`](providers/stock/research.md#stock-pulse).
-- [`archive/features/14-market-intel-provider.md`](archive/features/14-market-intel-provider.md): merged into [`providers/stock/research.md`](providers/stock/research.md#market-intel).
-- [`archive/features/16-provider-framework.md`](archive/features/16-provider-framework.md): moved into [`providers/provider-framework.md`](providers/provider-framework.md).
-- [`archive/features/18-stock-watchlist-research-provider.md`](archive/features/18-stock-watchlist-research-provider.md): merged into [`providers/stock/research.md`](providers/stock/research.md#stock-watchlist-research).
-
-Archived email feature records:
-
-- [`archive/features/07-email-capability.md`](archive/features/07-email-capability.md): merged into [`providers/email.md`](providers/email.md#shared-read-only-email-capability).
-- [`archive/features/08-cmb-credit-card-email-provider.md`](archive/features/08-cmb-credit-card-email-provider.md): merged into [`providers/email.md`](providers/email.md#cmb-credit-card-email-provider).
-
-Archived Eastmoney feature records:
-
-- [`archive/features/09-eastmoney-jywg-readonly-provider.md`](archive/features/09-eastmoney-jywg-readonly-provider.md): merged into [`providers/stock/eastmoney.md`](providers/stock/eastmoney.md#jywg-readonly-provider).
-- [`archive/features/17-eastmoney-myfavor-watchlist.md`](archive/features/17-eastmoney-myfavor-watchlist.md): merged into [`providers/stock/eastmoney.md`](providers/stock/eastmoney.md#myfavor-watchlist-provider).
+Provider feature-level compatibility stubs have been removed after their content was merged into the provider-family docs above.
 
 ## Experiments
 
 - [`experiments/README.md`](experiments/README.md): 实验性控制面总入口。
-- [`archive/features/01-stage.md`](archive/features/01-stage.md): moved into [`experiments/README.md`](experiments/README.md#stage).
-- [`archive/features/15-ralph-controller.md`](archive/features/15-ralph-controller.md): moved into [`experiments/README.md`](experiments/README.md#ralph-controller) and [`ralph/README.md`](ralph/README.md).
+Experiment feature-level compatibility stubs have been removed after Stage and Ralph content was merged into `experiments/README.md` and `ralph/README.md`.
 
 ## Plans
 
@@ -88,7 +60,6 @@ Website pages must stay presentation-only and declare language-aware `source_doc
 ## Archive
 
 - [`archive/2026-05-11-continuous-improvement-report.md`](archive/2026-05-11-continuous-improvement-report.md): 2026-05-11 架构审计和持续优化历史报告；不再作为当前 source of truth。
-- [`archive/features/`](archive/features/): 旧 `docs/features/*.md` 兼容 stub 的统一归档位置；当前实现事实已经迁移到 runtime/providers/experiments 文档。
 
 ## Runbooks
 
@@ -103,7 +74,7 @@ Website pages must stay presentation-only and declare language-aware `source_doc
 
 - 全局架构、路由、工程治理和 framework-level prompt 文档放在 `docs/` 顶层。
 - Runtime 文档放在 `docs/runtime/`，provider 文档放在 `docs/providers/`，实验控制面放在 `docs/experiments/`。
-- `docs/archive/features/` 是旧 feature 兼容 stub 的统一归档位置；当前 source-of-truth 文档已经进入 runtime/providers/experiments 分类目录。
+- 不再新增 feature-level compatibility stub；当前 source-of-truth 文档已经进入 runtime/providers/experiments 分类目录。
 - 实施计划只放 `docs/plans/`，不要与当前设计文档混放。
 - 过期审计报告、历史复盘和不再维护的全局路线图放在 `docs/archive/`，不能替代当前 source-of-truth 文档。
 - 可执行运维流程放在 `docs/runbooks/`。

@@ -243,7 +243,7 @@ MiniClaw 特有 lint 规则：
 
 目标：防止 AI 基于过期文档继续改错。
 
-MiniClaw 是 docs-first 项目，长期维护依赖 `docs/architecture.md`、`docs/bot-routing.md`、`docs/prompts.md`、`docs/runtime/*.md`、`docs/providers/**/*.md`、`docs/experiments/*.md` 和 plan 文档。`docs/archive/features/*.md` 只保留历史 feature 记录和旧链接，不再作为当前 source index 或新增实现事实的落点。代码改了但 docs 不变，是后续 AI 误判的主要来源。
+MiniClaw 是 docs-first 项目，长期维护依赖 `docs/architecture.md`、`docs/bot-routing.md`、`docs/prompts.md`、`docs/runtime/*.md`、`docs/providers/**/*.md`、`docs/experiments/*.md` 和 plan 文档。历史 feature compatibility stubs 已完成迁移并删除，不再作为当前 source index 或新增实现事实的落点。代码改了但 docs 不变，是后续 AI 误判的主要来源。
 
 脚本化规则：
 
@@ -261,7 +261,7 @@ MiniClaw 是 docs-first 项目，长期维护依赖 `docs/architecture.md`、`do
 当前执行方式：
 
 - `pnpm run quality:docs` 依次运行 `quality:docs:drift`、`quality:docs-i18n` 和 `quality:website-docs`。
-- `quality:docs:drift` 运行 `scripts/quality-docs.ts`，从 `src/store/schema.ts` 检查 DB schema version，并检查 Smart Router ER 字段、`docs/runtime/*.md` / `docs/providers/**/*.md` / `docs/experiments/*.md` source index，以及 changed-path 到 source-of-truth docs 的映射；`docs/archive/features/*.md` 已不再满足 source-of-truth docs 要求。
+- `quality:docs:drift` 运行 `scripts/quality-docs.ts`，从 `src/store/schema.ts` 检查 DB schema version，并检查 Smart Router ER 字段、`docs/runtime/*.md` / `docs/providers/**/*.md` / `docs/experiments/*.md` source index，以及 changed-path 到 source-of-truth docs 的映射；已删除的 feature compatibility stubs 不再满足 source-of-truth docs 要求。
 - `quality:docs-i18n` 读取 `docs/documentation-migration-map.md`，检查每个 tracked canonical `docs/**/*.md` source（排除 `docs/zh/**`）是否已进入 migration map，并检查中文 pairing、`docs/zh/` 是否仍被 git ignore 或通过 `.gitattributes` 禁用 text diff、frontmatter、`translation_of`、`doc_id` 和 heading level shape；migration map 漏收 tracked source doc、required 中文 pair 缺失或 `translation_status: pending` 都是 blocking error。
 - `quality:website-docs` 扫描 `website/**/*.md(x)`，要求非 landing page 声明 language-aware `source_docs`，禁止引用 `docs/private/**`，并在 canonical docs 变更影响 website pages 但对应 page 没有同 patch 更新、也没有 frontmatter unaffected reason 时 blocking fail。紧急绕过必须显式设置 `MINICLAW_WEBSITE_DOCS_DRIFT_ALLOW=1`。
 - `website:build` 运行 `scripts/build-website.ts`，把 `website/**/*.md(x)` 转成 `website-dist/**/*.html`，复制 `website/llms.txt`，保留 Mermaid block 的浏览器渲染入口，并写入 `.nojekyll`；`website-dist/` 是本地/CI 生成物，不进入 git。

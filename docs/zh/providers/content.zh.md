@@ -147,13 +147,9 @@ cron task
 - Frequency control 或 invalid-session errors 应作为带 redacted diagnostics 的 provider failures 暴露。
 - Website pages 可以总结 WeChat ingestion，但实现事实应把本页作为 `source_docs`。
 
-## Legacy Compatibility
+## Legacy Cleanup
 
-上一轮 feature-level doc 会作为兼容 stub 保留一个迁移周期：
-
-- [`../../archive/features/02-wechat-mp-provider.md`](../../archive/features/02-wechat-mp-provider.md)
-
-新的实现事实应写到这里，而不是写到 stub。
+上一轮 feature-level content stub 已在迁移完成后删除。新的实现事实应写到本文件。
 
 Verification owner:
 

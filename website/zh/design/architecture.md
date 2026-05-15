@@ -77,4 +77,4 @@ flowchart TD
   Recover --> Persist
 ```
 
-历史 feature docs 已迁入 `docs/archive/features/`。当前实现事实应写入 runtime、provider、experiment 和 reference docs，再通过 `source_docs` 流入 website。
+历史 feature stubs 已完成合并并删除。当前实现事实应写入 runtime、provider、experiment 和 reference docs，再通过 `source_docs` 流入 website。

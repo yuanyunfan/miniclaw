@@ -115,13 +115,9 @@ Futu watchlist rows 是 observation-universe symbols。除非它们同时来自 
 - Provider code 应在 LLM interpretation 前计算 deterministic evidence。
 - Public website pages 可以总结 stock capabilities，但实现事实应通过 `source_docs` 回链到本目录。
 
-## Legacy Compatibility
+## Legacy Cleanup
 
-旧 Futu feature doc 会作为兼容 stub 保留一个迁移周期：
-
-- [`../../../archive/features/06-futu-stock.md`](../../../archive/features/06-futu-stock.md)
-
-Stock research legacy stubs 列在 [`../../../providers/stock/research.md`](../../../providers/stock/research.md#legacy-compatibility)。
+旧 Futu feature stub 已在迁移完成后删除。Stock research 主题记录在 [`research.zh.md`](research.zh.md)。
 
 Verification owner:
 

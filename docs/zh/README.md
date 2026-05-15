@@ -15,7 +15,7 @@ translation_status: not_required
 - 每个中文文档应包含 `doc_id`、`lang: zh`、`translation_of` 和 `translation_status` frontmatter。
 - `translation_status: current` 表示中文内容应与英文 source 保持结构同步。
 - `translation_status: pending` 不再允许用于 `translation_required=true` 的文档；确实不需要中文 pair 的 source doc 应在 migration map 中标为 `translation_status: not_required`。
-- 早期平铺 `.zh.md` 翻译已经清理：计划翻译迁移到 `docs/zh/plans/`，历史 feature 翻译迁移到 `docs/zh/archive/features/`，平铺 legacy redirect 迁移到 `docs/zh/archive/legacy/`。
+- 早期平铺 `.zh.md` 翻译已经清理：计划翻译迁移到 `docs/zh/plans/`，历史 feature 翻译已随英文 compatibility stubs 一起删除，平铺 legacy redirect 迁移到 `docs/zh/archive/legacy/`。
 
 ## Current Chinese Docs
 
@@ -36,7 +36,6 @@ translation_status: not_required
 ## Historical Chinese Docs
 
 - [`plans/`](plans/): 早期中文 plan 翻译已经迁移到英文 `docs/plans/` 的镜像路径；除 documentation strategy 外，这些历史计划翻译不作为 required current parity pair。
-- [`archive/features/`](archive/features/): 早期 feature 中文翻译归档位置；当前实现事实应以 `runtime/`、`providers/`、`experiments/` 下的 current 中文 mirror 为准。
 - [`archive/legacy/`](archive/legacy/): 早期平铺中文入口的兼容归档位置。
 
 ## Maintenance

@@ -273,14 +273,9 @@ pnpm run typecheck
 - Bootstrap is not a manual data export. After a successful bootstrap, cron/provider runs should use automated readonly requests.
 - Bootstrap sessions are separate. JYWG cookies should not satisfy MyFavor behavior, and MyFavor cookies should not satisfy JYWG behavior.
 
-## Legacy Compatibility
+## Legacy Cleanup
 
-The previous feature-level docs are compatibility stubs for one migration cycle:
-
-- [`../../archive/features/09-eastmoney-jywg-readonly-provider.md`](../../archive/features/09-eastmoney-jywg-readonly-provider.md)
-- [`../../archive/features/17-eastmoney-myfavor-watchlist.md`](../../archive/features/17-eastmoney-myfavor-watchlist.md)
-
-New implementation facts should be added to this family doc and, when sensitive, to `docs/private/eastmoney/**`.
+The previous Eastmoney feature-level stubs have been removed after migration. New implementation facts should be added to this family doc and, when sensitive, to `docs/private/eastmoney/**`.
 
 ## Development Checklist
 

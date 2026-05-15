@@ -42,4 +42,4 @@ flowchart LR
   Runtime --> Providers[Providers]
 ```
 
-个人配置和运行态放在 `~/.miniclaw/`。repo 文件保持 reusable、reviewable，并且不包含 credentials。
+个人配置和运行态放在 `~/.miniclaw/`。repo 文件保持 reusable、reviewable，并且不包含 credentials；更深入的 provider 示例现在维护在 provider docs 中。

@@ -7,7 +7,7 @@ This file is the machine-readable inventory for the documentation strategy in
 [`docs/plans/2026-05-15-documentation-strategy.md`](plans/2026-05-15-documentation-strategy.md).
 It covers every tracked canonical Markdown doc under `docs/` except `docs/zh/**`,
 which are tracked through `zh_path` pairs. `quality:docs-i18n` enforces this
-inventory before large file moves begin.
+inventory after the legacy feature-stub cleanup.
 
 Field meanings:
 
@@ -155,30 +155,6 @@ Field meanings:
     "translation_status": "current"
   },
   {
-    "doc_id": "stage-experiment",
-    "source_path": "docs/archive/features/01-stage.md",
-    "target_path": "docs/experiments/README.md",
-    "zh_path": null,
-    "category": "experiment",
-    "status": "move",
-    "merge_group": "experiments/stage",
-    "website_exposure": "internal",
-    "translation_required": false,
-    "translation_status": "not_required"
-  },
-  {
-    "doc_id": "ralph-controller",
-    "source_path": "docs/archive/features/15-ralph-controller.md",
-    "target_path": "docs/experiments/README.md",
-    "zh_path": null,
-    "category": "experiment",
-    "status": "move",
-    "merge_group": "experiments/ralph",
-    "website_exposure": "internal",
-    "translation_required": false,
-    "translation_status": "not_required"
-  },
-  {
     "doc_id": "ralph-index",
     "source_path": "docs/ralph/README.md",
     "zh_path": null,
@@ -234,102 +210,6 @@ Field meanings:
     "translation_status": "not_required"
   },
   {
-    "doc_id": "discord-task-output",
-    "source_path": "docs/archive/features/03-discord-task-output.md",
-    "target_path": "docs/runtime/README.md",
-    "zh_path": null,
-    "category": "runtime",
-    "status": "move",
-    "merge_group": "runtime",
-    "website_exposure": "internal",
-    "translation_required": false,
-    "translation_status": "not_required"
-  },
-  {
-    "doc_id": "smart-task-router-legacy-zh",
-    "source_path": "docs/archive/features/04-smart-task-router.md",
-    "target_path": "docs/runtime/README.md",
-    "zh_path": null,
-    "category": "runtime",
-    "status": "merge",
-    "merge_group": "runtime/smart-router",
-    "website_exposure": "internal",
-    "translation_required": false,
-    "translation_status": "not_required"
-  },
-  {
-    "doc_id": "smart-task-router-en",
-    "source_path": "docs/archive/features/05-smart-task-router.en.md",
-    "target_path": "docs/runtime/README.md",
-    "zh_path": null,
-    "category": "runtime",
-    "status": "merge",
-    "merge_group": "runtime/smart-router",
-    "website_exposure": "internal",
-    "translation_required": false,
-    "translation_status": "not_required"
-  },
-  {
-    "doc_id": "connectivity-monitor",
-    "source_path": "docs/archive/features/12-connectivity-monitor.md",
-    "target_path": "docs/runtime/README.md",
-    "zh_path": null,
-    "category": "runtime",
-    "status": "move",
-    "merge_group": "runtime",
-    "website_exposure": "internal",
-    "translation_required": false,
-    "translation_status": "not_required"
-  },
-  {
-    "doc_id": "auto-doctor",
-    "source_path": "docs/archive/features/13-auto-doctor.md",
-    "target_path": "docs/runtime/README.md",
-    "zh_path": null,
-    "category": "runtime",
-    "status": "move",
-    "merge_group": "runtime",
-    "website_exposure": "internal",
-    "translation_required": false,
-    "translation_status": "not_required"
-  },
-  {
-    "doc_id": "agent-prompt-context-audit",
-    "source_path": "docs/archive/features/19-agent-prompt-context-audit.md",
-    "target_path": "docs/runtime/README.md",
-    "zh_path": null,
-    "category": "runtime",
-    "status": "move",
-    "merge_group": "runtime",
-    "website_exposure": "internal",
-    "translation_required": false,
-    "translation_status": "not_required"
-  },
-  {
-    "doc_id": "memory-curation-lifecycle",
-    "source_path": "docs/archive/features/20-memory-curation-lifecycle.md",
-    "target_path": "docs/runtime/README.md",
-    "zh_path": null,
-    "category": "runtime",
-    "status": "move",
-    "merge_group": "runtime",
-    "website_exposure": "internal",
-    "translation_required": false,
-    "translation_status": "not_required"
-  },
-  {
-    "doc_id": "agent-run-manager-feature",
-    "source_path": "docs/archive/features/21-agent-run-manager.md",
-    "target_path": "docs/runtime/README.md",
-    "zh_path": null,
-    "category": "runtime",
-    "status": "move",
-    "merge_group": "runtime",
-    "website_exposure": "internal",
-    "translation_required": false,
-    "translation_status": "not_required"
-  },
-  {
     "doc_id": "provider-framework",
     "source_path": "docs/providers/provider-framework.md",
     "zh_path": "docs/zh/providers/provider-framework.zh.md",
@@ -341,66 +221,6 @@ Field meanings:
     "translation_status": "current"
   },
   {
-    "doc_id": "wechat-mp-provider",
-    "source_path": "docs/archive/features/02-wechat-mp-provider.md",
-    "target_path": "docs/providers/content.md",
-    "zh_path": null,
-    "category": "provider",
-    "status": "merge",
-    "merge_group": "providers/content",
-    "website_exposure": "internal",
-    "translation_required": false,
-    "translation_status": "not_required"
-  },
-  {
-    "doc_id": "futu-stock-provider",
-    "source_path": "docs/archive/features/06-futu-stock.md",
-    "target_path": "docs/providers/stock/README.md",
-    "zh_path": null,
-    "category": "provider",
-    "status": "move",
-    "merge_group": "providers/stock",
-    "website_exposure": "internal",
-    "translation_required": false,
-    "translation_status": "not_required"
-  },
-  {
-    "doc_id": "email-capability",
-    "source_path": "docs/archive/features/07-email-capability.md",
-    "target_path": "docs/providers/email.md",
-    "zh_path": null,
-    "category": "provider",
-    "status": "merge",
-    "merge_group": "providers/email",
-    "website_exposure": "internal",
-    "translation_required": false,
-    "translation_status": "not_required"
-  },
-  {
-    "doc_id": "cmb-credit-card-email-provider",
-    "source_path": "docs/archive/features/08-cmb-credit-card-email-provider.md",
-    "target_path": "docs/providers/email.md",
-    "zh_path": null,
-    "category": "provider",
-    "status": "merge",
-    "merge_group": "providers/email",
-    "website_exposure": "internal",
-    "translation_required": false,
-    "translation_status": "not_required"
-  },
-  {
-    "doc_id": "provider-framework-legacy",
-    "source_path": "docs/archive/features/16-provider-framework.md",
-    "target_path": "docs/providers/provider-framework.md",
-    "zh_path": null,
-    "category": "provider",
-    "status": "move",
-    "merge_group": "providers",
-    "website_exposure": "internal",
-    "translation_required": false,
-    "translation_status": "not_required"
-  },
-  {
     "doc_id": "eastmoney-provider-family",
     "source_path": "docs/providers/stock/eastmoney.md",
     "zh_path": "docs/zh/providers/stock/eastmoney.zh.md",
@@ -410,78 +230,6 @@ Field meanings:
     "website_exposure": "public",
     "translation_required": true,
     "translation_status": "current"
-  },
-  {
-    "doc_id": "eastmoney-jywg-readonly",
-    "source_path": "docs/archive/features/09-eastmoney-jywg-readonly-provider.md",
-    "target_path": "docs/providers/stock/eastmoney.md",
-    "zh_path": null,
-    "category": "provider",
-    "status": "merge",
-    "merge_group": "providers/eastmoney",
-    "website_exposure": "internal",
-    "translation_required": false,
-    "translation_status": "not_required"
-  },
-  {
-    "doc_id": "eastmoney-myfavor-watchlist",
-    "source_path": "docs/archive/features/17-eastmoney-myfavor-watchlist.md",
-    "target_path": "docs/providers/stock/eastmoney.md",
-    "zh_path": null,
-    "category": "provider",
-    "status": "merge",
-    "merge_group": "providers/eastmoney",
-    "website_exposure": "internal",
-    "translation_required": false,
-    "translation_status": "not_required"
-  },
-  {
-    "doc_id": "stock-portfolio-provider",
-    "source_path": "docs/archive/features/10-stock-portfolio-provider.md",
-    "target_path": "docs/providers/stock/research.md",
-    "zh_path": null,
-    "category": "provider",
-    "status": "merge",
-    "merge_group": "providers/stock/research",
-    "website_exposure": "internal",
-    "translation_required": false,
-    "translation_status": "not_required"
-  },
-  {
-    "doc_id": "stock-pulse-provider",
-    "source_path": "docs/archive/features/11-stock-pulse-provider.md",
-    "target_path": "docs/providers/stock/research.md",
-    "zh_path": null,
-    "category": "provider",
-    "status": "merge",
-    "merge_group": "providers/stock/research",
-    "website_exposure": "internal",
-    "translation_required": false,
-    "translation_status": "not_required"
-  },
-  {
-    "doc_id": "market-intel-provider",
-    "source_path": "docs/archive/features/14-market-intel-provider.md",
-    "target_path": "docs/providers/stock/research.md",
-    "zh_path": null,
-    "category": "provider",
-    "status": "merge",
-    "merge_group": "providers/stock/research",
-    "website_exposure": "internal",
-    "translation_required": false,
-    "translation_status": "not_required"
-  },
-  {
-    "doc_id": "stock-watchlist-research-provider",
-    "source_path": "docs/archive/features/18-stock-watchlist-research-provider.md",
-    "target_path": "docs/providers/stock/research.md",
-    "zh_path": null,
-    "category": "provider",
-    "status": "merge",
-    "merge_group": "providers/stock/research",
-    "website_exposure": "internal",
-    "translation_required": false,
-    "translation_status": "not_required"
   },
   {
     "doc_id": "install-distribution-strategy",

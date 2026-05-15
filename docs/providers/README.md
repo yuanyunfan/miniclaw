@@ -28,30 +28,19 @@ flowchart LR
 - [`stock/eastmoney.md`](stock/eastmoney.md): Eastmoney provider family, merging JYWG readonly holdings and MyFavor watchlist boundaries.
 - [`stock/research.md`](stock/research.md): stock research pipeline across portfolio, pulse, market-intel, and watchlist research.
 
-Stock legacy compatibility stubs:
-
-- [`../archive/features/06-futu-stock.md`](../archive/features/06-futu-stock.md): moved into [`stock/README.md`](stock/README.md#futu-stock-provider).
-- [`../archive/features/10-stock-portfolio-provider.md`](../archive/features/10-stock-portfolio-provider.md): merged into [`stock/research.md`](stock/research.md#stock-portfolio).
-- [`../archive/features/11-stock-pulse-provider.md`](../archive/features/11-stock-pulse-provider.md): merged into [`stock/research.md`](stock/research.md#stock-pulse).
-- [`../archive/features/14-market-intel-provider.md`](../archive/features/14-market-intel-provider.md): merged into [`stock/research.md`](stock/research.md#market-intel).
-- [`../archive/features/18-stock-watchlist-research-provider.md`](../archive/features/18-stock-watchlist-research-provider.md): merged into [`stock/research.md`](stock/research.md#stock-watchlist-research).
+Stock provider feature stubs have been merged and removed; use `stock/README.md` and `stock/research.md` as the current stock source docs.
 
 ## Content Providers
 
 - [`content.md`](content.md): content ingestion provider family, currently the WeChat MP metadata provider and dedupe/data-flow boundary.
 
-Content legacy compatibility stub:
-
-- [`../archive/features/02-wechat-mp-provider.md`](../archive/features/02-wechat-mp-provider.md): merged into [`content.md`](content.md#wechat-mp-provider).
+Content provider feature stubs have been merged and removed; use `content.md` as the current content source doc.
 
 ## Email Providers
 
 - [`email.md`](email.md): Email provider family, merging the shared read-only Email capability, generic `email-query`, and CMB credit-card email parser boundaries.
 
-Email legacy compatibility stubs:
-
-- [`../archive/features/07-email-capability.md`](../archive/features/07-email-capability.md): merged into [`email.md`](email.md#shared-read-only-email-capability).
-- [`../archive/features/08-cmb-credit-card-email-provider.md`](../archive/features/08-cmb-credit-card-email-provider.md): merged into [`email.md`](email.md#cmb-credit-card-email-provider).
+Email provider feature stubs have been merged and removed; use `email.md` as the current email source doc.
 
 ## Maintenance Rules
 

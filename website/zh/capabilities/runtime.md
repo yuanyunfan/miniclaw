@@ -36,6 +36,7 @@ flowchart TD
 - **Task lifecycle**：task threads、progress cards、tool traces、final Markdown output、cancellation 和 resume 都属于 runtime。
 - **Cron execution**：cron jobs 可以先收集 provider output，再创建 agent prompt。
 - **Recovery loop**：connectivity 和 doctor repair 复用 stored incidents 与 trace evidence。
+- **Merged runtime docs**：feature-level runtime notes 已合并到 runtime source docs。
 
 ## Context Assembly
 

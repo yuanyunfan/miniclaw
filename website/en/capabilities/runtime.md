@@ -36,6 +36,7 @@ flowchart TD
 - **Task lifecycle**: task threads, progress cards, tool traces, final Markdown output, cancellation, and resume behavior are runtime concerns.
 - **Cron execution**: cron jobs can collect provider output before creating the agent prompt.
 - **Recovery loop**: connectivity and doctor repair paths reuse stored incidents and trace evidence.
+- **Merged runtime docs**: feature-level runtime notes have been folded into the runtime source docs.
 
 ## Context Assembly
 

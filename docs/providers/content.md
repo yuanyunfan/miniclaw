@@ -140,13 +140,9 @@ cron task
 - Frequency control or invalid-session errors should surface as provider failures with redacted diagnostics.
 - Website pages may summarize WeChat ingestion, but implementation facts should use this page as `source_docs`.
 
-## Legacy Compatibility
+## Legacy Cleanup
 
-The previous feature-level doc is a compatibility stub for one migration cycle:
-
-- [`../archive/features/02-wechat-mp-provider.md`](../archive/features/02-wechat-mp-provider.md)
-
-New implementation facts should be added here instead of the stub.
+The previous feature-level content stub has been removed after migration. New implementation facts should be added here.
 
 Verification owner:
 

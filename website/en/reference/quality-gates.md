@@ -31,7 +31,7 @@ flowchart LR
 ## Drift Controls
 
 - **`quality:docs:drift`** checks implementation-to-docs invariants.
-- **`quality:docs-i18n`** checks bilingual doc pairing, metadata, and current translation parity.
+- **`quality:docs-i18n`** checks bilingual doc pairing, metadata, and current translation parity for existing canonical docs.
 - **`quality:website-docs`** checks website `source_docs` traceability and affected-page updates.
 - **`quality:commit`** is the staged gate for normal local commits.
 - **`quality:push`** expands into build, coverage, cron E2E, full-tree safety, secrets, and dependency checks.

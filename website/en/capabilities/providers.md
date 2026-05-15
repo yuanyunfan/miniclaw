@@ -46,7 +46,7 @@ flowchart TD
 - **Structured before summarized**: providers gather facts; the LLM interprets and writes the report.
 - **Session isolation**: cookies, app passwords, brokerage sessions, and account state stay in `~/.miniclaw/`.
 - **Replayable failures**: no-data, auth-expired, and format-drift cases need fixture or dry-run coverage.
-- **Family docs over legacy stubs**: provider contracts now live in `docs/providers/`, not the archived feature-stub directory.
+- **Family docs over legacy stubs**: provider contracts now live in `docs/providers/`; the old feature stubs have been merged and removed.
 
 ## Context Shape
 

@@ -108,13 +108,9 @@ Futu watchlist rows are observation-universe symbols. They must not be rendered 
 - Provider code should compute deterministic evidence before LLM interpretation.
 - Public website pages may summarize stock capabilities, but implementation facts should link back to this directory through `source_docs`.
 
-## Legacy Compatibility
+## Legacy Cleanup
 
-The previous Futu feature doc is a compatibility stub for one migration cycle:
-
-- [`../../archive/features/06-futu-stock.md`](../../archive/features/06-futu-stock.md)
-
-Stock research legacy stubs are listed in [`research.md`](research.md#legacy-compatibility).
+The previous Futu feature stub has been removed after migration. Stock research topics are documented in [`research.md`](research.md).
 
 Verification owner:
 
