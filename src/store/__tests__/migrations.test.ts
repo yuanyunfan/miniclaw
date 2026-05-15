@@ -73,16 +73,16 @@ describe("store schema migrations", () => {
       expect(getSchemaVersion(db)).toBe(SCHEMA_VERSION);
       expect(columnExists(db, "schema_version_history", "migration_name")).toBe(true);
       const history = listSchemaVersionHistory(db);
-      expect(history.map((row) => row.to_version)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+      expect(history.map((row) => row.to_version)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
       expect(history[0]).toMatchObject({
         from_version: 0,
         to_version: 1,
         migration_name: "001_progress_message_id",
       });
       expect(history.at(-1)).toMatchObject({
-        from_version: 11,
-        to_version: 12,
-        migration_name: "012_recovery_outbox",
+        from_version: 12,
+        to_version: 13,
+        migration_name: "013_agent_run_manager",
       });
     });
   });
@@ -100,7 +100,7 @@ describe("store schema migrations", () => {
       expect(columnExists(db, "market_forecasts", "payload_json")).toBe(true);
       expect(columnExists(db, "cron_runs", "metadata_json")).toBe(true);
       expect(columnExists(db, "recovery_outbox", "payload_json")).toBe(true);
-      expect(listSchemaVersionHistory(db).map((row) => row.to_version)).toEqual([5, 6, 7, 8, 9, 10, 11, 12]);
+      expect(listSchemaVersionHistory(db).map((row) => row.to_version)).toEqual([5, 6, 7, 8, 9, 10, 11, 12, 13]);
     });
   });
 

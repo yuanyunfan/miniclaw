@@ -17,6 +17,7 @@ import type { AgentRuntime, AgentRuntimeTraceOptions, AgentTaskResult } from "..
 import { createTaskRunnerRuntime } from "./runtimes/task-runner-runtime.js";
 import { getDefaultAgentRuntime, isAgentRuntimeId, type DefaultAgentRuntimeConfig } from "./runtimes/registry.js";
 import type { TaskViewEvent } from "./task-view-events.js";
+import { AgentRunManager } from "./run-manager/manager.js";
 
 const log = createLogger("task");
 
@@ -339,26 +340,43 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
   try {
     await viewReporter.start();
 
-    const runtimeResult = await selectedRuntime.runtime.startTask({
-      taskId: params.taskId,
-      prompt: params.prompt,
-      cwd: params.cwd,
-      ...(params.resumeSessionId ? { resumeSessionId: params.resumeSessionId } : {}),
-      ...((params.attachmentBlocks || params.attachmentCodexInputs)
-        ? {
-            attachments: {
-              ...(params.attachmentBlocks ? { contentBlocks: params.attachmentBlocks } : {}),
-              ...(params.attachmentCodexInputs ? { inputEntries: params.attachmentCodexInputs } : {}),
-            },
-          }
-        : {}),
-      signal: abortController.signal,
-      onViewEvent: async (event: TaskViewEvent) => {
-        if (event.type === "session_started") updateTask(params.taskId, { session_id: event.sessionId });
-        await viewReporter.handle(event);
-      },
-      onTraceEvent: (eventType, options) => recordRuntimeTrace(reporter, eventType, options),
-    });
+    const runtimeResult = config.agentRunManager.enabled && config.e2e.fakeAgent
+      ? await new AgentRunManager({
+          taskId: params.taskId,
+          cwd: params.cwd,
+          provider: "fake",
+          reporter,
+          channel: params.channel,
+          ...(params.statusMessage ? { statusMessage: params.statusMessage } : {}),
+          ...(params.deliveryChannelId ? { deliveryChannelId: params.deliveryChannelId } : {}),
+        }).runFakePlannerGeneratorEvaluator({
+          prompt: params.prompt,
+          signal: abortController.signal,
+          onViewEvent: async (event: TaskViewEvent) => {
+            if (event.type === "session_started") updateTask(params.taskId, { session_id: event.sessionId });
+            await viewReporter.handle(event);
+          },
+        })
+      : await selectedRuntime.runtime.startTask({
+          taskId: params.taskId,
+          prompt: params.prompt,
+          cwd: params.cwd,
+          ...(params.resumeSessionId ? { resumeSessionId: params.resumeSessionId } : {}),
+          ...((params.attachmentBlocks || params.attachmentCodexInputs)
+            ? {
+                attachments: {
+                  ...(params.attachmentBlocks ? { contentBlocks: params.attachmentBlocks } : {}),
+                  ...(params.attachmentCodexInputs ? { inputEntries: params.attachmentCodexInputs } : {}),
+                },
+              }
+            : {}),
+          signal: abortController.signal,
+          onViewEvent: async (event: TaskViewEvent) => {
+            if (event.type === "session_started") updateTask(params.taskId, { session_id: event.sessionId });
+            await viewReporter.handle(event);
+          },
+          onTraceEvent: (eventType, options) => recordRuntimeTrace(reporter, eventType, options),
+        });
     const lastResult = normalizeRuntimeResult(params.taskId, abortController, runtimeResult);
     const progressSnapshot = viewReporter.snapshot();
     const toolCallLog = lastResult.progressLines ?? progressSnapshot.lines;

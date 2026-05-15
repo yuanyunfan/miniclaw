@@ -14,6 +14,7 @@ const ENV_KEYS = [
   "MINICLAW_CONFIG",
   "MINICLAW_AGENT_PROVIDER",
   "MINICLAW_RUNTIME_DEFAULT_AGENT",
+  "MINICLAW_AGENT_RUN_MANAGER_ENABLED",
   "MINICLAW_MODEL_DEFAULT_CLIENT",
   "MINICLAW_IM_DEFAULT_TRANSPORT",
   "MINICLAW_IM_DISCORD_ENABLED",
@@ -212,6 +213,8 @@ agent:
   register_commands_on_start: true
 runtime:
   default_agent: claude
+agent_run_manager:
+  enabled: true
 model:
   default_client: openai
 im:
@@ -328,6 +331,7 @@ notifications:
     expect(config.allowedUserId).toBe("user-yaml");
     expect(config.agentProvider).toBe("codex");
     expect(config.runtime.defaultAgent).toBe("claude");
+    expect(config.agentRunManager.enabled).toBe(true);
     expect(config.model).toBe("claude-test");
     expect(config.modelClient.defaultClient).toBe("openai");
     expect(config.im).toEqual({
@@ -488,6 +492,7 @@ storage:
       minEventCount: 0,
       maxBytes: 120000,
     });
+    expect(config.agentRunManager.enabled).toBe(false);
     expect(config.state.retention).toEqual({
       chatHistoryDays: 90,
       taskEventsDays: 90,
@@ -609,6 +614,31 @@ storage:
       minEventCount: 42,
       maxBytes: 32768,
     });
+  });
+
+  it("supports Agent Run Manager env override", async () => {
+    const cfg = join(tmpDir, "config.yaml");
+    writeFileSync(cfg, `
+discord:
+  client_id: "client-yaml"
+  guild_id: "guild-yaml"
+  allowed_user_id: "user-yaml"
+agent:
+  provider: codex
+  default_cwd: "${tmpDir}"
+agent_run_manager:
+  enabled: false
+storage:
+  db_path: "${join(tmpDir, "data.db")}"
+  memory_path: "${join(tmpDir, "MEMORY.md")}"
+`);
+    process.env.MINICLAW_CONFIG = cfg;
+    process.env.DISCORD_TOKEN = "token-env";
+    process.env.MINICLAW_AGENT_RUN_MANAGER_ENABLED = "true";
+
+    const { config } = await import("../config.js");
+
+    expect(config.agentRunManager.enabled).toBe(true);
   });
 
   it("supports state retention env overrides", async () => {

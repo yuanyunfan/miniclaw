@@ -580,7 +580,7 @@ classify by mime + ext
 
 ## 9. 数据库 schema
 
-`~/.miniclaw/data.db`（SQLite WAL 模式）。schema 版本使用 SQLite `PRAGMA user_version` 管理，当前版本由 `src/store/schema.ts` 的 `SCHEMA_VERSION = 12` 定义。`src/store/db.ts` 仍是 public facade，初始化时调用 `ensureBaseSchema()` 和 `runMigrations()`；live connection 由 `src/store/connection.ts` 持有，`tasks`、`chat_history`、`smart_router_decisions` 的 table-specific helper 位于 `src/store/repositories/*`，`cron_runs` 的 helper 位于 `src/store/cron-runs.ts`，并继续通过 facade re-export 兼容既有 imports。版本迁移函数位于 `src/store/migrations/*`，每次成功升级会写入 `schema_version_history`。
+`~/.miniclaw/data.db`（SQLite WAL 模式）。schema 版本使用 SQLite `PRAGMA user_version` 管理，当前版本由 `src/store/schema.ts` 的 `SCHEMA_VERSION = 13` 定义。`src/store/db.ts` 仍是 public facade，初始化时调用 `ensureBaseSchema()` 和 `runMigrations()`；live connection 由 `src/store/connection.ts` 持有，`tasks`、`chat_history`、`smart_router_decisions` 的 table-specific helper 位于 `src/store/repositories/*`，`cron_runs` 的 helper 位于 `src/store/cron-runs.ts`，Agent Run Manager 的 `agent_runs` / `agent_messages` / `blackboard_facts` / `agent_artifacts` typed helper 位于 `src/store/agent-run-manager.ts`，并继续通过 facade re-export 兼容既有 imports。版本迁移函数位于 `src/store/migrations/*`，每次成功升级会写入 `schema_version_history`。
 
 state lifecycle 由 `state.retention.*` 配置控制，默认保留 `chat_history`/`task_events` 90 天、`smart_router_decisions` 180 天、incidents/repair runs 365 天、market forecasts 730 天。`pnpm run state:cleanup -- --dry-run` 会按配置列出候选删除行并使用 SQLite savepoint 回滚模拟结果；`--execute` 才会在事务中删除。`--table task_events --older-than-days 30` 可做单 scope 临时清理，market forecast scope 会先删 item/evaluation 子表再删 parent forecast，incident cleanup 只会清 closed/orphan child rows，并且只删除 child rows 已清空的 closed incident parent。
 

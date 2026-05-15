@@ -3,6 +3,7 @@ import { createConfigReader } from "./env.js";
 import { assertE2eIsolation, assertE2eRuntimePath } from "./e2e-guard.js";
 import { loadRuntimeConfigSource } from "./load.js";
 import { buildAgentRuntimeConfig } from "./domains/agent.js";
+import { buildAgentRunManagerRuntimeConfig } from "./domains/agent-run-manager.js";
 import { buildAttachmentRuntimeConfig } from "./domains/attachments.js";
 import { buildE2eRuntimeConfig } from "./domains/e2e.js";
 import { buildIMRuntimeConfig } from "./domains/im.js";
@@ -40,6 +41,7 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
   const reader = createConfigReader(configSource.data, env);
 
   const agent = buildAgentRuntimeConfig(reader);
+  const agentRunManager = buildAgentRunManagerRuntimeConfig(reader);
   const model = buildModelRuntimeConfig(reader);
   const provider = buildProviderRuntimeConfig(reader, agent.agentProvider);
   const routing = buildRoutingRuntimeConfig(reader, model.modelClient.defaultClient);
@@ -66,6 +68,7 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
       guildId: reader.requiredString(["discord", "guild_id"], "DISCORD_GUILD_ID"),
     },
     ...agent,
+    agentRunManager,
     ...model,
     ...im,
     ...provider,

@@ -181,6 +181,15 @@ describe("schema migrations", () => {
     expect(__testables.columnExists("recovery_outbox", "channel_id")).toBe(true);
     expect(__testables.columnExists("recovery_outbox", "payload_json")).toBe(true);
   });
+
+  it("ensures Agent Run Manager tables exist", () => {
+    expect(__testables.columnExists("agent_runs", "task_id")).toBe(true);
+    expect(__testables.columnExists("agent_runs", "can_send_kinds_json")).toBe(true);
+    expect(__testables.columnExists("agent_messages", "artifact_ids_json")).toBe(true);
+    expect(__testables.columnExists("agent_messages", "delivered_at")).toBe(true);
+    expect(__testables.columnExists("blackboard_facts", "source_message_id")).toBe(true);
+    expect(__testables.columnExists("agent_artifacts", "content_hash")).toBe(true);
+  });
 });
 
 describe("updateTask", () => {

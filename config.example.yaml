@@ -61,6 +61,11 @@ runtime:
   # Preferred task runtime selector. Keep values aligned with implemented AgentRuntime ids.
   default_agent: codex # claude | codex
 
+agent_run_manager:
+  # First-phase managed multi-agent path. Disabled by default; when enabled,
+  # current verified support is the fake runtime skeleton used by E2E tests.
+  enabled: false
+
 model:
   # Preferred short-call ModelClient default for router/doctor-style calls.
   # routing.smart_router.llm_classifier.provider overrides this when set.

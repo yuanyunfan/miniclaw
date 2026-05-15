@@ -10,6 +10,7 @@ import { migration009RouterEvaluationFields } from "./009-router-evaluation-fiel
 import { migration010SchemaVersionHistory } from "./010-schema-version-history.js";
 import { migration011CronRuns } from "./011-cron-runs.js";
 import { migration012RecoveryOutbox } from "./012-recovery-outbox.js";
+import { migration013AgentRunManager } from "./013-agent-run-manager.js";
 import type { SchemaMigration } from "./types.js";
 
 export const migrations: SchemaMigration[] = [
@@ -25,4 +26,5 @@ export const migrations: SchemaMigration[] = [
   migration010SchemaVersionHistory,
   migration011CronRuns,
   migration012RecoveryOutbox,
+  migration013AgentRunManager,
 ];
