@@ -35,6 +35,7 @@ flowchart TD
 - **Intake normalization**: Discord events become a consistent route input before any agent runtime is called.
 - **Routing semantics**: the hard route decides ignore/thread continuation/task channel/chat; Smart Router separates chat, suggested task, confirmed task, and trusted auto-task channels.
 - **Task lifecycle**: task threads, progress cards, tool traces, final Markdown output, cancellation, and resume behavior are runtime concerns.
+- **Discord delivery**: long Markdown results are chunked into Discord-sized messages; `<https://...>` links keep Discord's no-preview behavior so link-heavy cron reports can stay readable.
 - **Cron execution**: cron jobs can collect provider output before creating the agent prompt.
 - **Recovery loop**: connectivity and doctor repair paths reuse stored incidents and trace evidence.
 - **Merged runtime docs**: feature-level runtime notes have been folded into the runtime source docs.

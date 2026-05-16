@@ -71,6 +71,9 @@ export function extractPreviewLinks(text: string): string[] {
   const seen = new Set<string>();
   const links: string[] = [];
   for (const match of text.matchAll(URL_RE)) {
+    const start = match.index ?? -1;
+    const end = start + match[0].length;
+    if (start > 0 && text[start - 1] === "<" && text[end] === ">") continue;
     const url = trimUrlCandidate(match[0]);
     if (!url || seen.has(url)) continue;
     seen.add(url);

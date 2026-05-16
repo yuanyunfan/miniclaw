@@ -24,6 +24,9 @@
 ### Changed
 - 以 English canonical 重写当前核心 docs：`docs/README.md`、`docs/architecture.md`、`docs/bot-routing.md`、`docs/chat-router-current-logic.md`、`docs/install-distribution-strategy.md`、`docs/prompts.md` 和 `docs/quality-gates.md`；对应中文 mirror 同步为 `docs/zh/**`。
 
+### Fixed
+- Discord 消息分块现在会保留 `<https://...>` no-embed 链接语义，不再把 browser tabs cron 的 no-embed 链接重新收集成裸 URL 预览区。
+
 ---
 
 ## [1.0.0] — 2026-05-13

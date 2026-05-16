@@ -151,6 +151,8 @@ sequenceDiagram
 
 Chat is intentionally read-oriented. Workspace writes, shell execution, Git operations, durable output, and multi-file coding work should go through task runtime.
 
+Final Discord Markdown delivery uses the shared 2000-character chunker. Bare `https://...` links are collected into a final link-preview footer while body chunks suppress embeds, but Discord no-embed links wrapped as `<https://...>` keep their no-preview semantics and are not copied into that footer. Cron prompts that publish many links should prefer the angle-bracket form when they want clickable links without preview cards.
+
 ## Safe Change Map
 
 | Goal | Change Area |

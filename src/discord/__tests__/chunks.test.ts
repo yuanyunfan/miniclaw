@@ -54,11 +54,28 @@ describe("chunkMessage", () => {
     expect(extractPreviewLinks([
       "A [link](https://example.com/a).",
       "B https://example.com/b,",
+      "No embed <https://example.com/no-preview>",
       "Again https://example.com/a",
     ].join("\n"))).toEqual([
       "https://example.com/a",
       "https://example.com/b",
     ]);
+  });
+
+  it("does not create preview footer for Discord no-embed angle bracket links", () => {
+    const chunks = chunkMessageWithDeferredLinkPreviews(
+      [
+        "- **A** · <https://example.com/a>",
+        "- **B** · <https://example.com/b>",
+      ].join("\n"),
+    );
+
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]).toMatchObject({
+      kind: "body",
+      suppressEmbeds: false,
+    });
+    expect(chunks[0]?.content).not.toContain("链接预览集中区");
   });
 
   it("defers link previews to a final footer chunk", () => {
