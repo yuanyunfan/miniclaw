@@ -11,7 +11,7 @@ import type {
 
 const CONFIG_DIR_DEFAULT = join(homedir(), ".miniclaw/providers/stock-portfolio");
 const RESERVED_PROVIDER_CONFIG_NAMES = new Set(["config"]);
-const SOURCE_NAMES = new Set<StockPortfolioSourceName>(["futu-stock", "eastmoney-jywg-readonly"]);
+const SOURCE_NAMES = new Set<StockPortfolioSourceName>(["futu-stock", "eastmoney-jywg-readonly", "eastmoney-etf-premium"]);
 const MARKET_SCOPES = new Set<StockPortfolioMarketScope>(["all", "us", "cn"]);
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

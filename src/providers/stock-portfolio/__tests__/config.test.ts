@@ -50,6 +50,10 @@ sources:
     config: daily-stock-market
     label: Eastmoney
     required: false
+  - provider: eastmoney-etf-premium
+    config: cn-stock
+    label: Eastmoney ETF premium
+    include_asset_totals: false
 `);
 
     const config = loadStockPortfolioProviderConfig("daily-stock-market");
@@ -83,6 +87,15 @@ sources:
         enabled: true,
         required: false,
         include_asset_totals: true,
+      },
+      {
+        provider: "eastmoney-etf-premium",
+        config: "cn-stock",
+        label: "Eastmoney ETF premium",
+        asset_account_label: undefined,
+        enabled: true,
+        required: false,
+        include_asset_totals: false,
       },
     ]);
   });

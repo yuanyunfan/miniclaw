@@ -2,6 +2,7 @@ import type { PreProviderResult, PreProviderRunArgs } from "./types.js";
 import type { ProviderDryRunResult, ProviderHealthResult, ProviderManifest, ProviderModule } from "./framework.js";
 import { providerContextFromPreProviderArgs, runProviderModuleAsPreProvider } from "./framework.js";
 import { runCmbCreditCardEmailProvider } from "./cmb-credit-card-email/index.js";
+import { eastmoneyEtfPremiumProvider, runEastmoneyEtfPremiumProvider } from "./eastmoney-etf-premium/index.js";
 import { eastmoneyJywgProvider, runEastmoneyJywgProvider } from "./eastmoney-jywg-readonly/index.js";
 import { runEmailQueryProvider } from "./email-query/index.js";
 import { runFutuStockProvider } from "./futu-stock/index.js";
@@ -14,6 +15,7 @@ import { runWechatMpProvider } from "./wechat-mp/index.js";
 
 const PRE_PROVIDERS = {
   "cmb-credit-card-email": runCmbCreditCardEmailProvider,
+  "eastmoney-etf-premium": runEastmoneyEtfPremiumProvider,
   "eastmoney-jywg-readonly": runEastmoneyJywgProvider,
   "email-query": runEmailQueryProvider,
   "futu-stock": runFutuStockProvider,
@@ -28,6 +30,7 @@ const PRE_PROVIDERS = {
 export type PreProviderName = keyof typeof PRE_PROVIDERS;
 
 const PROVIDER_MODULES: Partial<Record<PreProviderName, ProviderModule<any>>> = {
+  "eastmoney-etf-premium": eastmoneyEtfPremiumProvider,
   "eastmoney-jywg-readonly": eastmoneyJywgProvider,
   "stock-pulse": stockPulseProvider,
   "stock-watchlist-research": stockWatchlistResearchProvider,

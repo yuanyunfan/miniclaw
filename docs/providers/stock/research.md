@@ -8,6 +8,7 @@
 flowchart LR
   Futu[Futu readonly account] --> Portfolio[stock-portfolio]
   JYWG[Eastmoney JYWG holdings] --> Portfolio
+  EtfPremium[Eastmoney public ETF selector] --> Portfolio
   MyFavor[Eastmoney MyFavor watchlist] --> Universe[watchlist universe]
   FutuWatchlist[Futu watchlist] --> Universe
   Portfolio --> Pulse[stock-pulse alerts]
@@ -61,6 +62,11 @@ sources:
     config: cn-stock
     label: Eastmoney CN
     required: false
+  - provider: eastmoney-etf-premium
+    config: cn-stock
+    label: Eastmoney ETF premium
+    include_asset_totals: false
+    required: false
   - provider: futu-stock
     config: cn-stock
     label: Futu HK
@@ -72,7 +78,9 @@ Contract:
 - `cny_summary` is the reporting source for CNY P&L; LLM reports should not recalculate missing values.
 - `asset_summary` is private-channel only and may include exact total assets, cash, market value, holdings amount, and allocation categories.
 - `include_asset_totals: false` prevents double-counting integrated broker accounts queried through multiple market profiles.
-- Eastmoney premium fields are accepted only from the JYWG holding payload; `stock-portfolio` does not infer premium data from public websites.
+- Eastmoney ETF premium rows are anchored to JYWG holding rows. When configured, `eastmoney-etf-premium` may enrich a held ETF by matching the same six-digit code from Eastmoney's public fund selector.
+- Public fund selector values use `data_source=eastmoney_fund_selector`; `PREMIUM_DISCOUNT_RATIO` is retained as `eastmoney_discount_ratio`, while `premium_rate = 0 - PREMIUM_DISCOUNT_RATIO`.
+- Public ETF premium data never proves that a symbol is held. If the JYWG holding row is absent, `stock-portfolio` must not emit a position premium row from the public source alone.
 - If no source succeeds and `fail_if_all_sources_fail=true`, do not call the LLM.
 
 ## Stock Pulse

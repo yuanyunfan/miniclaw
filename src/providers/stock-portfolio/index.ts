@@ -1,4 +1,5 @@
 import type { PreProviderResult, PreProviderRunArgs } from "../types.js";
+import { runEastmoneyEtfPremiumProvider } from "../eastmoney-etf-premium/index.js";
 import { runEastmoneyJywgProvider } from "../eastmoney-jywg-readonly/index.js";
 import { runFutuStockProvider } from "../futu-stock/index.js";
 import { loadStockPortfolioProviderConfig } from "./config.js";
@@ -12,6 +13,7 @@ import type {
 } from "./types.js";
 
 const SOURCE_RUNNERS: Record<string, StockPortfolioSourceRunner> = {
+  "eastmoney-etf-premium": runEastmoneyEtfPremiumProvider,
   "futu-stock": runFutuStockProvider,
   "eastmoney-jywg-readonly": runEastmoneyJywgProvider,
 };

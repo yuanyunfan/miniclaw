@@ -1,6 +1,6 @@
 # Eastmoney Provider Family
 
-> Conclusion: Eastmoney is now documented as one provider family with two separate runtime boundaries. `eastmoney-jywg-readonly` reads JYWG account evidence from `jywg.18.cn`; `eastmoney-myfavor` reads watchlist securities from `myfavor.eastmoney.com`. They share a docs family, but they must not share sessions, endpoints, or business semantics.
+> Conclusion: Eastmoney is now documented as one provider family with separate runtime boundaries. `eastmoney-jywg-readonly` reads JYWG account evidence from `jywg.18.cn`; `eastmoney-etf-premium` reads public ETF premium data from Eastmoney's fund selector; `eastmoney-myfavor` reads watchlist securities from `myfavor.eastmoney.com`. They share a docs family, but they must not share sessions, endpoints, or business semantics.
 
 ## Family Map
 
@@ -8,10 +8,13 @@
 flowchart TD
   Eastmoney[Eastmoney provider family]
   Eastmoney --> JYWG[JYWG readonly account evidence]
+  Eastmoney --> EtfPremium[Public ETF premium selector]
   Eastmoney --> MyFavor[MyFavor watchlist universe]
 
   JYWG --> Portfolio[stock-portfolio]
-  JYWG --> Premium[ETF premium / holding evidence]
+  EtfPremium --> Premium[ETF premium by code]
+  JYWG --> Premium[Holding anchor]
+  Premium --> Portfolio
   MyFavor --> PulseUniverse[stock-pulse universe source]
   MyFavor --> WatchlistResearch[stock-watchlist-research]
 
@@ -37,6 +40,16 @@ MyFavor watchlist:
 - Business meaning: observation universe only, not holdings.
 - Downstream use: `stock-pulse.universe.sources` and watchlist-only research.
 - Session scope: `~/.miniclaw/secrets/eastmoney-myfavor-session.json`, saved from a separate visible browser bootstrap.
+
+Public ETF premium:
+
+- Runtime name: `eastmoney-etf-premium`.
+- Trusted source: Eastmoney public fund selector endpoint, queried by six-digit ETF code.
+- Business meaning: public ETF discount/premium evidence only. It does not expose or prove account holdings.
+- Downstream use: `stock-portfolio` may merge it into JYWG-held ETF rows by exact code when JYWG did not return `premium_rate`.
+- Session scope: none; this provider is public and has no account cookies.
+- Field contract: raw `PREMIUM_DISCOUNT_RATIO` is emitted as `eastmoney_discount_ratio`; MiniClaw emits `premium_rate = 0 - PREMIUM_DISCOUNT_RATIO`.
+- Non-goal: per-share NAV/IOPV enrichment. Eastmoney's raw `DEC_NAV` field is preserved when returned but is not treated as per-share NAV.
 
 ## JYWG Readonly Provider
 

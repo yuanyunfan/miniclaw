@@ -33,7 +33,7 @@ flowchart TD
   Email --> Query[Email Query]
   Email --> CMB[CMB Credit Card Email]
   Stock --> Futu[Futu Stock]
-  Stock --> Eastmoney[Eastmoney JYWG / MyFavor]
+  Stock --> Eastmoney[Eastmoney JYWG / ETF Premium / MyFavor]
   Stock --> Research[Portfolio / Pulse / Market Intel]
   Research --> Cron[Cron Reports]
   Query --> Cron
@@ -60,3 +60,5 @@ flowchart LR
 ```
 
 website 展示 provider map；实现 contract、provider-specific setup 和容易漂移的细节继续留在 linked source docs。
+
+股票组合报告可以把 Eastmoney JYWG 的持仓证据和 Eastmoney fund selector 的 public ETF premium evidence 合并使用。public premium source 只按代码 enrich 已持仓 ETF，不能被当成 account holdings proof。

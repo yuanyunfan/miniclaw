@@ -64,6 +64,69 @@ describe("runStockPortfolioProvider", () => {
     expect(committed).toBe(true);
   });
 
+  it("runs configured Eastmoney ETF premium source and merges it into held premium rows", async () => {
+    const runners: Record<string, StockPortfolioSourceRunner> = {
+      "eastmoney-jywg-readonly": async () => ({
+        text: JSON.stringify({
+          source: "eastmoney-jywg-readonly",
+          positions_summary: {
+            position_premiums: [
+              { code: "159632", name: "纳斯达克", currency: "CNY", status: "missing_from_eastmoney_position" },
+            ],
+          },
+        }),
+      }),
+      "eastmoney-etf-premium": async () => ({
+        text: JSON.stringify({
+          source: "eastmoney-etf-premium",
+          premium_summary: {
+            source: "eastmoney_fund_selector",
+            items: [
+              {
+                code: "159632",
+                name: "纳斯达克ETF华安",
+                status: "ok",
+                data_source: "eastmoney_fund_selector",
+                captured_at: "2026-05-16T07:30:02.000Z",
+                premium_rate: 1.51,
+                eastmoney_discount_ratio: -1.51,
+                latest_price: 2.326,
+              },
+            ],
+          },
+        }),
+      }),
+    };
+
+    const result = await runStockPortfolioProvider({
+      configName: "cn-stock",
+      jobName: "cn-stock-ing-market",
+      channelId: "channel",
+      runAt: new Date("2026-05-16T07:30:02.000Z"),
+    }, {
+      loadProviderConfig: () => ({
+        ...config,
+        sources: [
+          { provider: "eastmoney-jywg-readonly", config: "cn-stock", label: "Eastmoney A", enabled: true, required: false, include_asset_totals: true },
+          { provider: "eastmoney-etf-premium", config: "cn-stock", label: "Eastmoney ETF premium", enabled: true, required: false, include_asset_totals: false },
+        ],
+      }),
+      runners,
+    });
+
+    const parsed = JSON.parse(result.text);
+
+    expect(parsed.ok_count).toBe(2);
+    expect(parsed.position_premium_summary.items[0]).toMatchObject({
+      code: "159632",
+      data_source: "eastmoney_fund_selector",
+      status: "ok",
+      premium_rate: 1.51,
+      eastmoney_discount_ratio: -1.51,
+      premium_source_provider: "eastmoney-etf-premium",
+    });
+  });
+
   it("keeps partial data when a non-required source fails", async () => {
     const runners: Record<string, StockPortfolioSourceRunner> = {
       "futu-stock": async () => ({ text: JSON.stringify({ source: "futu-opend-readonly" }) }),

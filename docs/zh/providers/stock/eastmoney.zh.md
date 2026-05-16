@@ -3,11 +3,11 @@ doc_id: eastmoney-provider-family
 lang: zh
 translation_of: docs/providers/stock/eastmoney.md
 translation_status: current
-source_sha256: 398a94395c796e397f3182a91a6daac35c8032ef04a227d943eea600127c3853
+source_sha256: f81e744c1f9eeab597614c548dc8449ab65adb975aa784e0b7e6fc56784e1ac9
 ---
 # Eastmoney Provider Family
 
-> 结论：Eastmoney 现在作为一个 provider family 维护，但包含两个独立 runtime boundaries。`eastmoney-jywg-readonly` 从 `jywg.18.cn` 读取 JYWG account evidence；`eastmoney-myfavor` 从 `myfavor.eastmoney.com` 读取 watchlist securities。它们共享文档 family，但不能共享 sessions、endpoints 或 business semantics。
+> 结论：Eastmoney 现在作为一个 provider family 维护，但包含多个独立 runtime boundaries。`eastmoney-jywg-readonly` 从 `jywg.18.cn` 读取 JYWG account evidence；`eastmoney-etf-premium` 从 Eastmoney fund selector 读取 public ETF premium data；`eastmoney-myfavor` 从 `myfavor.eastmoney.com` 读取 watchlist securities。它们共享文档 family，但不能共享 sessions、endpoints 或 business semantics。
 
 ## Family Map
 
@@ -15,10 +15,13 @@ source_sha256: 398a94395c796e397f3182a91a6daac35c8032ef04a227d943eea600127c3853
 flowchart TD
   Eastmoney[Eastmoney provider family]
   Eastmoney --> JYWG[JYWG readonly account evidence]
+  Eastmoney --> EtfPremium[Public ETF premium selector]
   Eastmoney --> MyFavor[MyFavor watchlist universe]
 
   JYWG --> Portfolio[stock-portfolio]
-  JYWG --> Premium[ETF premium / holding evidence]
+  EtfPremium --> Premium[ETF premium by code]
+  JYWG --> Premium[Holding anchor]
+  Premium --> Portfolio
   MyFavor --> PulseUniverse[stock-pulse universe source]
   MyFavor --> WatchlistResearch[stock-watchlist-research]
 
@@ -44,6 +47,16 @@ MyFavor watchlist:
 - Business meaning: 仅 observation universe，不是 holdings。
 - Downstream use: `stock-pulse.universe.sources` 和 watchlist-only research。
 - Session scope: `~/.miniclaw/secrets/eastmoney-myfavor-session.json`，来自独立 visible browser bootstrap。
+
+Public ETF premium:
+
+- Runtime name: `eastmoney-etf-premium`。
+- Trusted source: Eastmoney public fund selector endpoint，按六位 ETF code 查询。
+- Business meaning: 仅 public ETF discount/premium evidence。它不会暴露也不能证明 account holdings。
+- Downstream use: 当 JYWG 没有返回 `premium_rate` 时，`stock-portfolio` 可以按 exact code 把它合并到 JYWG-held ETF rows。
+- Session scope: 无；该 provider 是 public source，不使用 account cookies。
+- Field contract: 原始 `PREMIUM_DISCOUNT_RATIO` 输出为 `eastmoney_discount_ratio`；MiniClaw 输出 `premium_rate = 0 - PREMIUM_DISCOUNT_RATIO`。
+- Non-goal: per-share NAV/IOPV enrichment。Eastmoney 返回的 raw `DEC_NAV` field 会被保留，但不会被当成 per-share NAV。
 
 ## JYWG Readonly Provider
 

@@ -18,11 +18,25 @@ import { assetCategoryLabel, type AssetAllocationCategory } from "../asset-alloc
 
 export function sanitizeStockPortfolioError(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err);
+  const safeTokens = [
+    "eastmoney_fund_selector",
+    "eastmoney_position",
+    "eastmoney_position_with_fund_selector",
+    "missing_from_eastmoney_position",
+    "missing_from_eastmoney_fund_selector",
+  ];
+  const protectedRaw = safeTokens.reduce(
+    (text, token, index) => text.replaceAll(token, `@@${index}@@`),
+    raw,
+  );
   return raw
+    ? protectedRaw
     .replace(/(validatekey=)[^&\s"']+/gi, "$1[redacted]")
     .replace(/(password|token|cookie|secret|session|account|customer|acc_id)\s*[:=]\s*[^,\s}]+/gi, "$1=[redacted]")
     .replace(/([A-Za-z0-9+/=_-]{24,})/g, "[redacted]")
-    .slice(0, 800);
+    .slice(0, 800)
+    .replace(/@@(\d+)@@/g, (_match, index: string) => safeTokens[Number(index)] ?? _match)
+    : "";
 }
 
 function redactJsonStringValues(value: unknown): unknown {
@@ -307,6 +321,7 @@ function buildAssetSummary(
   for (const [sourceIndex, source] of okSources.entries()) {
     const summary = sourceAssetSummary(source);
     if (!summary) {
+      if (source.provider === "eastmoney-etf-premium") continue;
       warnings.add(`${source.provider}/${source.config} has no asset_summary; asset allocation may be incomplete`);
       continue;
     }
@@ -604,6 +619,7 @@ function sourcePositionPremiums(source: StockPortfolioSourceOk): StockPortfolioP
       status,
       captured_at: str(row.captured_at) || undefined,
       premium_rate: premiumRate,
+      eastmoney_discount_ratio: num(row.eastmoney_discount_ratio),
       reference_nav: num(row.reference_nav),
       iopv: num(row.iopv),
       last_price: num(row.last_price),
@@ -612,24 +628,93 @@ function sourcePositionPremiums(source: StockPortfolioSourceOk): StockPortfolioP
   });
 }
 
+interface PublicEtfPremium {
+  provider: "eastmoney-etf-premium";
+  config: string;
+  label?: string;
+  code: string;
+  name: string;
+  captured_at?: string;
+  premium_rate: number;
+  eastmoney_discount_ratio?: number;
+  latest_price?: number;
+}
+
+function sourcePublicEtfPremiums(source: StockPortfolioSourceOk): PublicEtfPremium[] {
+  if (source.provider !== "eastmoney-etf-premium") return [];
+  const premiumSummary = isRecord(source.payload.premium_summary) ? source.payload.premium_summary : undefined;
+  const rows = Array.isArray(premiumSummary?.items) ? premiumSummary.items.filter(isRecord) : [];
+  return rows
+    .map((row) => {
+      const premiumRate = num(row.premium_rate);
+      if (str(row.status) !== "ok" || premiumRate === undefined) return undefined;
+      const item: PublicEtfPremium = {
+        provider: "eastmoney-etf-premium" as const,
+        config: source.config,
+        code: str(row.code, "UNKNOWN"),
+        name: str(row.name, "UNKNOWN"),
+        premium_rate: premiumRate,
+      };
+      if (source.label) item.label = source.label;
+      const capturedAt = str(row.captured_at);
+      if (capturedAt) item.captured_at = capturedAt;
+      const discountRatio = num(row.eastmoney_discount_ratio);
+      if (discountRatio !== undefined) item.eastmoney_discount_ratio = discountRatio;
+      const latestPrice = num(row.latest_price);
+      if (latestPrice !== undefined) item.latest_price = latestPrice;
+      return item;
+    })
+    .filter((item): item is PublicEtfPremium => item !== undefined);
+}
+
+function mergePublicEtfPremiums(
+  items: StockPortfolioPositionPremium[],
+  publicPremiums: PublicEtfPremium[],
+): StockPortfolioPositionPremium[] {
+  const byCode = new Map(publicPremiums.map((item) => [normalizeHoldingCode(item.code), item]));
+  return items.map((item) => {
+    if (item.status === "ok") return item;
+    const publicPremium = byCode.get(normalizeHoldingCode(item.code));
+    if (!publicPremium) return item;
+    return {
+      ...item,
+      data_source: "eastmoney_fund_selector",
+      status: "ok",
+      captured_at: publicPremium.captured_at ?? item.captured_at,
+      premium_rate: publicPremium.premium_rate,
+      eastmoney_discount_ratio: publicPremium.eastmoney_discount_ratio,
+      last_price: publicPremium.latest_price ?? item.last_price,
+      premium_source_provider: publicPremium.provider,
+      premium_source_config: publicPremium.config,
+      premium_source_label: publicPremium.label,
+      premium_source_name: publicPremium.name,
+      note: "Eastmoney JYWG position payload did not include premium_rate; premium_rate came from Eastmoney public fund selector for the same held ETF code.",
+    };
+  });
+}
+
 function buildPositionPremiumSummary(
   sources: StockPortfolioSourceResult[],
 ): StockPortfolioPositionPremiumSummary | undefined {
   const okSources = sources.filter((source): source is StockPortfolioSourceOk => source.status === "ok");
-  const items = okSources.flatMap(sourcePositionPremiums)
+  const publicPremiums = okSources.flatMap(sourcePublicEtfPremiums);
+  const items = mergePublicEtfPremiums(okSources.flatMap(sourcePositionPremiums), publicPremiums)
     .sort((a, b) => a.code.localeCompare(b.code));
   if (!items.length) return undefined;
   const missingCount = items.filter((item) => item.status !== "ok").length;
+  const fundSelectorCount = items.filter((item) => item.data_source === "eastmoney_fund_selector").length;
   return {
-    source: "eastmoney_position",
+    source: fundSelectorCount > 0 ? "eastmoney_position_with_fund_selector" : "eastmoney_position",
     items,
     warnings: missingCount > 0
-      ? [`${missingCount} Eastmoney held position(s) did not return premium_rate; use per-item status and do not fill via web search.`]
+      ? [`${missingCount} Eastmoney held position(s) still do not have premium_rate after configured provider enrichment; use per-item status and do not fill via ad hoc web search.`]
       : [],
     usage_notes: [
-      "Position premium data in this summary comes only from Eastmoney account position payloads for all held positions.",
+      "Position premium rows in this summary are anchored to Eastmoney account held-position rows.",
+      "premium_rate may come from Eastmoney JYWG position payloads or, when configured by ETF code, Eastmoney public fund selector data_source=eastmoney_fund_selector.",
+      "For data_source=eastmoney_fund_selector, Eastmoney exposes PREMIUM_DISCOUNT_RATIO as a discount-rate field; MiniClaw maps premium_rate = 0 - PREMIUM_DISCOUNT_RATIO.",
       "The provider layer does not classify overseas/cross-border ETFs; cron prompts must decide which rows to display based on code, name, and report context.",
-      "Do not fill missing premium_rate values via web search in cron reports; if status is missing_from_eastmoney_position, say Eastmoney did not return the premium rate.",
+      "Do not fill missing premium_rate values via ad hoc web search in cron reports; if status is missing_from_eastmoney_position, say configured Eastmoney sources did not return the premium rate.",
       "premium_rate is a premium/discount percentage signal for trading crowding and creation/redemption risk; do not treat it as ETF price return.",
     ],
   };

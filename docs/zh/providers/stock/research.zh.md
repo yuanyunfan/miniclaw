@@ -3,7 +3,7 @@ doc_id: stock-research-provider-pipeline
 lang: zh
 translation_of: docs/providers/stock/research.md
 translation_status: current
-source_sha256: ca4b6c100cc3829c8250756e5342a4383f944841555c28a07f999b5ffd47b1f1
+source_sha256: b2ee0cc4c6bae2dfd18e2e67e46d9b188dbd43696916fb19a61b004637416b6e
 ---
 # Stock Research Provider Pipeline
 
@@ -15,6 +15,7 @@ source_sha256: ca4b6c100cc3829c8250756e5342a4383f944841555c28a07f999b5ffd47b1f1
 flowchart LR
   Futu[Futu readonly account] --> Portfolio[stock-portfolio]
   JYWG[Eastmoney JYWG holdings] --> Portfolio
+  EtfPremium[Eastmoney public ETF selector] --> Portfolio
   MyFavor[Eastmoney MyFavor watchlist] --> Universe[watchlist universe]
   FutuWatchlist[Futu watchlist] --> Universe
   Portfolio --> Pulse[stock-pulse alerts]
@@ -68,6 +69,11 @@ sources:
     config: cn-stock
     label: Eastmoney CN
     required: false
+  - provider: eastmoney-etf-premium
+    config: cn-stock
+    label: Eastmoney ETF premium
+    include_asset_totals: false
+    required: false
   - provider: futu-stock
     config: cn-stock
     label: Futu HK
@@ -79,7 +85,9 @@ Contract:
 - `cny_summary` 是 CNY P&L 的 reporting source；LLM report 不应重新计算 missing values。
 - `asset_summary` 只用于 private-channel，可能包含 exact total assets、cash、market value、holdings amount 和 allocation categories。
 - `include_asset_totals: false` 防止通过多个 market profiles 查询 integrated broker accounts 时重复计数。
-- Eastmoney premium fields 只能来自 JYWG holding payload；`stock-portfolio` 不从 public websites 推断 premium data。
+- Eastmoney ETF premium rows 必须以 JYWG holding rows 为锚点。配置后，`eastmoney-etf-premium` 可以用相同六位代码从 Eastmoney public fund selector enrich 已持有 ETF。
+- Public fund selector values 使用 `data_source=eastmoney_fund_selector`；`PREMIUM_DISCOUNT_RATIO` 保留为 `eastmoney_discount_ratio`，同时 `premium_rate = 0 - PREMIUM_DISCOUNT_RATIO`。
+- Public ETF premium data 不能证明某个 symbol 被持有。如果没有 JYWG holding row，`stock-portfolio` 不得仅凭 public source 输出 position premium row。
 - 如果没有 source 成功且 `fail_if_all_sources_fail=true`，不要调用 LLM。
 
 ## Stock Pulse

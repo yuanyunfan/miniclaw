@@ -4,6 +4,14 @@ import { getProviderManifest, listProviderManifests, listPreProviderNames } from
 describe("provider registry", () => {
   it("keeps legacy pre-provider names while exposing framework manifests", () => {
     expect(listPreProviderNames()).toContain("stock-pulse");
+    expect(getProviderManifest("eastmoney-etf-premium")).toMatchObject({
+      name: "eastmoney-etf-premium",
+      kind: "stock",
+      privacy: "public",
+      supportsDryRun: true,
+      supportsHealthCheck: true,
+      outputSchemaVersion: "eastmoney-etf-premium.payload.v1",
+    });
     expect(getProviderManifest("stock-pulse")).toMatchObject({
       name: "stock-pulse",
       kind: "stock",
@@ -20,6 +28,7 @@ describe("provider registry", () => {
       outputSchemaVersion: "eastmoney-jywg-readonly.payload.v1",
     });
     expect(listProviderManifests().map((manifest) => manifest.name)).toEqual([
+      "eastmoney-etf-premium",
       "eastmoney-jywg-readonly",
       "stock-pulse",
       "stock-watchlist-research",

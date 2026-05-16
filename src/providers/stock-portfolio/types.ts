@@ -1,7 +1,7 @@
 import type { PreProviderResult, PreProviderRunArgs } from "../types.js";
 import type { AssetAllocationCategory, AssetAllocationHolding } from "../asset-allocation.js";
 
-export type StockPortfolioSourceName = "futu-stock" | "eastmoney-jywg-readonly";
+export type StockPortfolioSourceName = "futu-stock" | "eastmoney-jywg-readonly" | "eastmoney-etf-premium";
 export type StockPortfolioMarketScope = "all" | "us" | "cn";
 
 export interface StockPortfolioSourceConfig {
@@ -194,18 +194,23 @@ export interface StockPortfolioPositionPremium {
   code: string;
   name: string;
   source_currency: string;
-  data_source: "eastmoney_position";
+  data_source: "eastmoney_position" | "eastmoney_fund_selector";
   status: "ok" | "missing_from_eastmoney_position";
   captured_at?: string;
   premium_rate?: number;
+  eastmoney_discount_ratio?: number;
   reference_nav?: number;
   iopv?: number;
   last_price?: number;
+  premium_source_provider?: "eastmoney-etf-premium";
+  premium_source_config?: string;
+  premium_source_label?: string;
+  premium_source_name?: string;
   note?: string;
 }
 
 export interface StockPortfolioPositionPremiumSummary {
-  source: "eastmoney_position";
+  source: "eastmoney_position" | "eastmoney_position_with_fund_selector";
   items: StockPortfolioPositionPremium[];
   warnings: string[];
   usage_notes: string[];

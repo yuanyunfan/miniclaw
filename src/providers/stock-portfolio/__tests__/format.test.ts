@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildStockPortfolioPayload, formatStockPortfolioPayload } from "../format.js";
+import { buildStockPortfolioPayload, formatStockPortfolioPayload, sanitizeStockPortfolioError } from "../format.js";
 import type { StockPortfolioProviderConfig } from "../types.js";
 
 const config: StockPortfolioProviderConfig = {
@@ -178,6 +178,103 @@ describe("stock-portfolio formatter", () => {
         }),
       ],
     });
+  });
+
+  it("enriches held Eastmoney ETF premium rows from the public fund selector source by code", () => {
+    const payload = buildStockPortfolioPayload({
+      generatedAt: new Date("2026-05-16T07:30:02.000Z"),
+      profile: "cn-stock",
+      config,
+      sources: [
+        {
+          provider: "eastmoney-jywg-readonly",
+          config: "cn-stock",
+          label: "Eastmoney A",
+          status: "ok",
+          payload: {
+            positions_summary: {
+              position_premiums: [
+                {
+                  code: "159513",
+                  name: "纳指大成",
+                  currency: "CNY",
+                  data_source: "eastmoney_position",
+                  status: "missing_from_eastmoney_position",
+                  captured_at: "2026-05-16T07:30:02.000Z",
+                  last_price: 1.733,
+                },
+                {
+                  code: "600000",
+                  name: "浦发银行",
+                  currency: "CNY",
+                  data_source: "eastmoney_position",
+                  status: "missing_from_eastmoney_position",
+                  captured_at: "2026-05-16T07:30:02.000Z",
+                },
+              ],
+            },
+          },
+        },
+        {
+          provider: "eastmoney-etf-premium",
+          config: "cn-stock",
+          label: "Eastmoney ETF premium",
+          status: "ok",
+          payload: {
+            premium_summary: {
+              source: "eastmoney_fund_selector",
+              items: [
+                {
+                  code: "159513",
+                  name: "纳斯达克100ETF大成",
+                  data_source: "eastmoney_fund_selector",
+                  status: "ok",
+                  captured_at: "2026-05-16T07:30:02.000Z",
+                  premium_rate: 2.51,
+                  eastmoney_discount_ratio: -2.51,
+                  latest_price: 1.733,
+                },
+              ],
+            },
+          },
+        },
+      ],
+    });
+
+    expect(payload.position_premium_summary).toMatchObject({
+      source: "eastmoney_position_with_fund_selector",
+      items: [
+        expect.objectContaining({
+          code: "159513",
+          name: "纳指大成",
+          data_source: "eastmoney_fund_selector",
+          status: "ok",
+          premium_rate: 2.51,
+          eastmoney_discount_ratio: -2.51,
+          last_price: 1.733,
+          premium_source_provider: "eastmoney-etf-premium",
+          premium_source_config: "cn-stock",
+          premium_source_label: "Eastmoney ETF premium",
+          premium_source_name: "纳斯达克100ETF大成",
+        }),
+        expect.objectContaining({
+          code: "600000",
+          status: "missing_from_eastmoney_position",
+        }),
+      ],
+    });
+    expect(payload.position_premium_summary?.warnings).toEqual([
+      "1 Eastmoney held position(s) still do not have premium_rate after configured provider enrichment; use per-item status and do not fill via ad hoc web search.",
+    ]);
+  });
+
+  it("keeps premium status enum strings while redacting real secrets", () => {
+    const text = sanitizeStockPortfolioError("status=missing_from_eastmoney_position source=eastmoney_position_with_fund_selector data=eastmoney_fund_selector token=abcabcabcabcabcabcabcabcabcabc");
+
+    expect(text).toContain("missing_from_eastmoney_position");
+    expect(text).toContain("eastmoney_position_with_fund_selector");
+    expect(text).toContain("eastmoney_fund_selector");
+    expect(text).toContain("token=[redacted]");
   });
 
   it("formats summaries before verbose source payloads for cron prompt truncation", () => {

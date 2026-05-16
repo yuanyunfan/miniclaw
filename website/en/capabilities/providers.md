@@ -33,7 +33,7 @@ flowchart TD
   Email --> Query[Email Query]
   Email --> CMB[CMB Credit Card Email]
   Stock --> Futu[Futu Stock]
-  Stock --> Eastmoney[Eastmoney JYWG / MyFavor]
+  Stock --> Eastmoney[Eastmoney JYWG / ETF Premium / MyFavor]
   Stock --> Research[Portfolio / Pulse / Market Intel]
   Research --> Cron[Cron Reports]
   Query --> Cron
@@ -60,3 +60,5 @@ flowchart LR
 ```
 
 The website exposes the provider map. Implementation contracts, provider-specific setup, and drift-prone details remain in the linked source docs.
+
+Stock portfolio reports can combine held-position evidence from Eastmoney JYWG with public ETF premium evidence from Eastmoney's fund selector. The public premium source is code-matched enrichment only; it is never treated as proof of account holdings.
