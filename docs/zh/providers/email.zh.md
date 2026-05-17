@@ -5,11 +5,11 @@ translation_of: docs/providers/email.md
 translation_status: current
 source_sha256: 3888295aa15c092fc00f213f9f7a043061f6dc3a339b3e90618f1593f3d38a93
 ---
-# Email Provider Family
+# Email Provider 系列
 
 > 结论：Email 是 shared read-only capability 加上若干 provider consumers。`email-query` 暴露受控的通用 mailbox context，`cmb-credit-card-email` 把招商信用卡通知邮件解析成结构化消费记录。它们共享邮箱访问能力，但 parser-specific 行为和业务语义属于 consumer provider。
 
-## Family Map
+## 系列地图
 
 ```mermaid
 flowchart TD
@@ -27,7 +27,7 @@ flowchart TD
   Agent --> Discord[Discord delivery]
 ```
 
-## Runtime Boundaries
+## Runtime 边界
 
 Shared email capability:
 
@@ -57,7 +57,7 @@ SMTP fallback notifier:
 - Business meaning: Discord 或 connectivity path 失败时的 operations fallback notification。
 - Boundary: 该 notifier 发送 system alerts，不属于 read-only Email capability。
 
-## Shared Read-only Email Capability
+## 共享只读 Email 能力
 
 Owner code paths:
 
@@ -124,7 +124,7 @@ Safety contract:
 - Forbidden: send、delete、move、mark-read、reply、forward、mailbox rule edits、把 secret 持久化进 repo docs/config、超过 `raw_body_retention: none` 的 raw body retention，或在 logs/Discord/LLM prompts 中输出未 redacted addresses/tokens。
 - State: capability state 存储 message hashes、provider UID、optional subject hash、received time 和 seen time。它不能存 raw body 或 credentials。
 
-## Generic Email Query Provider
+## 通用 Email 查询 Provider
 
 Config shape:
 
@@ -179,7 +179,7 @@ Provider contract:
 - `include_attachments` 默认是 `false`；attachment content extraction 仍取决于 capability profile policy。
 - `dedupe: true` 会延迟 state writes，直到 cron task 成功，从而保留 retry 行为。
 
-## CMB Credit-card Email Provider
+## 招行信用卡 Email Provider
 
 Config shape:
 
@@ -272,11 +272,11 @@ Skip behavior:
 - Skip reasons 包括没有匹配的 CMB email、没有新解析出的 transactions，或所有 parsed transactions 都是 duplicates。
 - 这样可以支持高频 polling，而不会反复发送 "zero transaction" Discord summaries。
 
-## Legacy Cleanup
+## 历史遗留清理
 
 上一轮 feature-level email stubs 已在迁移完成后删除。新的实现事实应写到这个 provider-family 文档。Private mailbox、credential 和 account-specific setup details 不应进入 public docs。
 
-## Development Checklist
+## 开发检查清单
 
 - 如果 mailbox config、redaction、attachment extraction、dedupe state 或 read-only boundaries 变化，更新 Shared Email Capability section。
 - 如果 `email-query` query config、body/attachment behavior 或 commit semantics 变化，更新 Generic Email Query Provider section。

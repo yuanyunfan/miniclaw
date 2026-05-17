@@ -5,11 +5,11 @@ translation_of: docs/providers/stock/research.md
 translation_status: current
 source_sha256: b2ee0cc4c6bae2dfd18e2e67e46d9b188dbd43696916fb19a61b004637416b6e
 ---
-# Stock Research Provider Pipeline
+# 股票研究 Provider 流水线
 
 > 结论：stock research docs 应作为一个 provider pipeline 阅读。`stock-portfolio` 创建 redacted account/asset view，`stock-pulse` 检测盘中异动，`market-intel` 增加 macro/evidence context 和 forecast persistence，`stock-watchlist-research` 产出仅面向 watchlist 的 buy-timing research。
 
-## Pipeline
+## 流水线
 
 ```mermaid
 flowchart LR
@@ -28,7 +28,7 @@ flowchart LR
   Portfolio --> StockReports[stock account reports]
 ```
 
-## Stock Portfolio
+## 股票组合
 
 Runtime name: `stock-portfolio`.
 
@@ -90,7 +90,7 @@ Contract:
 - Public ETF premium data 不能证明某个 symbol 被持有。如果没有 JYWG holding row，`stock-portfolio` 不得仅凭 public source 输出 position premium row。
 - 如果没有 source 成功且 `fail_if_all_sources_fail=true`，不要调用 LLM。
 
-## Stock Pulse
+## 股票脉冲
 
 Runtime name: `stock-pulse`.
 
@@ -150,7 +150,7 @@ Universe sources:
 
 Universe rows 是 observation candidates。它们不能被描述为 account holdings。
 
-## Market Intel
+## 市场情报
 
 Runtime names:
 
@@ -192,7 +192,7 @@ Horizon contract:
 - Same-day hit/miss 和 Brier score 需要显式 same-day `index_probability`。
 - Horizon-only forecasts 应报告 `status=horizon_only` 并跳过 same-day evaluation。
 
-## Stock Watchlist Research
+## 自选股研究
 
 Runtime name: `stock-watchlist-research`.
 
@@ -230,14 +230,14 @@ pre_provider_config: us-pre-market
 pre_provider_preflight: health
 ```
 
-## Report Boundaries
+## 报告边界
 
 - 当目标是可信 private stock channels 时，portfolio/account reports 可以提及 held positions 和 P&L。
 - Watchlist research 不能暗示 watchlist symbols 是 holdings。
 - Market-intel probabilities 是 research inputs，不是 trading instructions。
 - 本 pipeline 中没有任何 provider 可以解锁交易、下单、改单或转移资金。
 
-## Legacy Cleanup
+## 历史遗留清理
 
 上一轮 stock research feature-level stubs 已在迁移完成后删除。新的实现事实应写到本文件，或写到 [`eastmoney.zh.md`](eastmoney.zh.md) 等 stock source family docs。
 

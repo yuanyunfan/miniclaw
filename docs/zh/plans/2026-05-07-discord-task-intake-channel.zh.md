@@ -8,9 +8,9 @@ source_sha256: 5cbd52a26bc1283fbba0d2df06b6f89a22bc0f21fe547164dd2cbec79a021115
 # Discord 任务摄入通道
 
 现况:已完成
-日期:2026-05-07
+日期: 2026-05-07
 
-## 背景情况
+## 背景
 
 用户想要一个专用的 Discord 频道, MiniClaw 可以在不需要的情况下接收任务请求`@MiniClaw`.
 
@@ -35,9 +35,9 @@ source_sha256: 5cbd52a26bc1283fbba0d2df06b6f89a22bc0f21fe547164dd2cbec79a021115
 - 不要删除`/task`.
 - 不要改变克伦处决。
 - 不允许其他Discord用户触发任务.
-- 不要改变提供者选择、沙盒或模型行为。
+- 不要改变Provider选择、沙盒或模型行为。
 
-## 现有建筑证据
+## 现有架构证据
 
 - `src/bot.ts`:消息路由,线程延续,自动重回聊天路径.
 - `src/commands/handlers.ts`: `/task`创建公共线程和呼叫`executeTask()`.
@@ -50,7 +50,7 @@ source_sha256: 5cbd52a26bc1283fbba0d2df06b6f89a22bc0f21fe547164dd2cbec79a021115
 1. 添加`MINICLAW_TASK_CHANNELS`配置为逗号分隔的 Discord 通道 ID 。
 2. In `MessageCreate`,在线程继续后,在自动重读聊天之前,从任务频道发送到新任务的路由信息。
 3. 对于每个任务渠道的信息:
-- 执行允许的用户和最大货币;
+- 执行允许的用户和最大并发;
 - 使用信件内容或附件作为任务提示;
 - 从信息中创建一条公共线索;
 - 创建任务DB行;
@@ -59,9 +59,9 @@ source_sha256: 5cbd52a26bc1283fbba0d2df06b6f89a22bc0f21fe547164dd2cbec79a021115
 4. 最新情况`.env.example`, README, 英语README, 架构文件, 机器人路由文件, 和更改日志 。
 5. 创建 Discord 频道并将其ID添加到本地`.env`.
 6. 重建和重新启动MiniClaw。
-7. 在新通道中触发一个烟雾测试信息,并核查任务创建/产出。
+7. 在新通道中触发一个烟雾测试信息,并验证任务创建/产出。
 
-## 核查计划
+## 验证计划
 
 - 类型检查:`pnpm build`.
 - 单位测试:如果提取到任何配置/路由辅助器,则进行定向测试;否则,要依靠类型检查和活烟测试。
@@ -72,7 +72,7 @@ source_sha256: 5cbd52a26bc1283fbba0d2df06b6f89a22bc0f21fe547164dd2cbec79a021115
 - 确认完成数据库任务状态;
 - 确认Discord输出使用正常的任务状态/进度/最终的Markdown结构.
 
-## 风险 倒车
+## 风险与回滚
 
 - 风险:一个频道不慎在聊天自动检索和任务频道上市。
 - 缓解:在聊天自动复制之前检查任务频道;记录该任务获胜。
@@ -90,11 +90,11 @@ source_sha256: 5cbd52a26bc1283fbba0d2df06b6f89a22bc0f21fe547164dd2cbec79a021115
 - Docs/bot-routing.md:添加路由路径.
 - ChangeGELOG.md:录制该功能.
 
-## 执行笔记
+## 执行记录
 
 - 已经添加了`MINICLAW_TASK_CHANNELS`和路由匹配`MessageCreate`在聊天自动复制路由之前的任务线程创建事件。
 - 创建的Discord 频道`#task`在现有的AI类之下。
 - 添加任务频道ID到本地`MINICLAW_TASK_CHANNELS`并重新启动 PM2 与`--update-env`.
 - 烟雾测试信息`#task`创建任务和任务线索。
 - 通过Codex完成烟雾测试`tools=0`持续时间`26.8s`,以及最终的Discord输出,确认任务通道有效.
-- 通过核查命令:`pnpm build`* 目标测试附件/材料/任务帮助者,以及`git diff --check`.
+- 通过验证命令:`pnpm build`* 目标测试附件/材料/任务helper,以及`git diff --check`.

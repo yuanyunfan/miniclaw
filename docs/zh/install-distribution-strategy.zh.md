@@ -5,11 +5,11 @@ translation_of: docs/install-distribution-strategy.md
 translation_status: current
 source_sha256: 6fcff18ae4e196c8e8c40ecfafadf64bd85b0c5cdb71626d494a2305e402763e
 ---
-# MiniClaw Install And Distribution Strategy
+# MiniClaw 安装与分发策略
 
 > 结论：MiniClaw 1.0 应使用 GitHub Releases 加 repo installer 作为稳定分发路径，暂时不应定位为直接 public npm runtime。目标用户是 technical user：能 clone repo、创建 Discord application、配置 credentials、运行 `pnpm`，并维护本地 PM2 常驻进程。
 
-## Product Boundary
+## 产品边界
 
 MiniClaw 是 local-first、Discord-native integration hub。它运行在用户自己的 Mac 上，通过 Discord 交互，并把 configuration、secrets、cron state、SQLite state、provider sessions 和 logs 存在 `~/.miniclaw/`。
 
@@ -23,7 +23,7 @@ MiniClaw 是 local-first、Discord-native integration hub。它运行在用户�
 
 安装体验应该分层：先跑通 minimal bot，再按需启用 cron、providers、Auto Doctor 和 private-data capabilities。
 
-## Target First-Run Flow
+## 目标首次运行流程
 
 ```bash
 git clone https://github.com/yuanyunfan/miniclaw.git
@@ -44,7 +44,7 @@ curl -fsSL https://raw.githubusercontent.com/yuanyunfan/miniclaw/main/install.sh
 
 在 installer 更成熟前，clone-and-review path 仍应作为默认文档路径，因为用户可以先检查脚本再执行。
 
-## Installer Requirements
+## 安装器要求
 
 `install.sh` 只应自动化环境准备。
 
@@ -69,7 +69,7 @@ curl -fsSL https://raw.githubusercontent.com/yuanyunfan/miniclaw/main/install.sh
 - 未经明确确认就启动 PM2
 - 把 provider account setup 放入 first-run blocker path
 
-## Setup Wizard
+## 设置向导
 
 `pnpm run setup` 只应收集最小必要数据：
 
@@ -95,7 +95,7 @@ curl -fsSL https://raw.githubusercontent.com/yuanyunfan/miniclaw/main/install.sh
 - 修改已有文件前 backup 或展示 diff
 - Discord IDs 必须作为字符串写入 YAML，避免大整数被 unsafe number coercion
 
-## Setup Doctor
+## 设置诊断器
 
 `pnpm run doctor:setup` 应把安装失败转换成可读 diagnostics。
 
@@ -126,7 +126,7 @@ Next:
 3. Run pnpm run build
 ```
 
-## README Installation Layers
+## README 安装层次
 
 README installation docs 应保持分层：
 
@@ -153,7 +153,7 @@ README installation docs 应保持分层：
    - Auto Doctor
    - Stage and Ralph experiments
 
-## Config Example Shape
+## 配置示例形态
 
 `config.example.yaml` 应把 minimal runnable config 和 advanced examples 分开。
 
@@ -181,7 +181,7 @@ tasks:
 
 advanced provider 和 cron examples 应放在后续注释区或 `docs/providers/**/*.md`，不应进入 first-run path。
 
-## Release Boundary
+## 发布边界
 
 GitHub Releases 应作为 1.0 release boundary，因为 MiniClaw 仍是 repo-first local runtime。
 
@@ -197,6 +197,6 @@ release artifacts 应包括：
 
 npm package 应等待 MiniClaw 具备稳定 CLI surface、`bin`/`exports` boundary 和更清楚的用户预期后再推进。
 
-## Docker Position
+## Docker 定位
 
 Docker 可以作为后续 deployment option，但不是 first-stage install path。MiniClaw 当前依赖本地 Discord、Claude/Codex、MCP、provider sessions、PM2 和 `~/.miniclaw/` state。过早 containerize 这些边界会让 first-run setup 更难，而不是更简单。

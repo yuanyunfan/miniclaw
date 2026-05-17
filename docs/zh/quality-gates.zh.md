@@ -5,11 +5,11 @@ translation_of: docs/quality-gates.md
 translation_status: current
 source_sha256: 71a8989681f3febb37c94dbfd79ba04bf0af766505c9b3a70c77b94632f78777
 ---
-# MiniClaw Quality Gates
+# MiniClaw 质量门禁
 
 > MiniClaw 使用分层 gates：`L*` 验证行为，`G*` 阻止 unsafe commits/pushes，`D*` 阻止 documentation drift。真实 Discord E2E 已存在，但日常 gates 优先使用 deterministic fake/fixture path。真实网络和真实 LLM path 保留为 manual 或 scheduled。
 
-## Current Baseline
+## 当前基线
 
 `package.json` 暴露主要 gate entrypoints：
 
@@ -31,7 +31,7 @@ source_sha256: 71a8989681f3febb37c94dbfd79ba04bf0af766505c9b3a70c77b94632f78777
 
 `scripts/git-hooks/pre-commit` 调用 `pnpm run quality:commit`。`scripts/git-hooks/pre-push` 调用 `pnpm run quality:push`。CI 通过 `.github/workflows/quality.yml` 运行同类 gates。
 
-## Naming Rules
+## 命名规则
 
 - `L*` 表示 test layer：行为是否正确？
 - `G*` 表示 quality gate：这次 commit、push 或 CI job 是否允许通过？
@@ -39,7 +39,7 @@ source_sha256: 71a8989681f3febb37c94dbfd79ba04bf0af766505c9b3a70c77b94632f78777
 
 不要混用这些概念。例如 `pnpm test` 是 `L1` test suite；只有 commit/push/CI entrypoint 调用它时，它才成为 `G1` gate 的一部分。
 
-## G0: Repository Safety
+## G0：仓库安全
 
 目的：在错误进入 Git 前阻止高破坏性问题。
 
@@ -58,7 +58,7 @@ source_sha256: 71a8989681f3febb37c94dbfd79ba04bf0af766505c9b3a70c77b94632f78777
 - CI
 - 通过 `pnpm run quality:g0` 做 local tree verification
 
-## G1: Static Correctness
+## G1：静态正确性
 
 目的：不接触真实外部系统，只验证代码可 typecheck、build、lint。
 
@@ -82,7 +82,7 @@ pnpm run lint
 - pre-push：build 和 lint
 - CI：typecheck、lint 和 build
 
-## L1: Fast Unit And Component Tests
+## L1：快速单元与组件测试
 
 目的：deterministic、本地、无网络、无真实 Discord、无真实 LLM。
 
@@ -106,7 +106,7 @@ pnpm test
 - pre-commit
 - CI
 
-## L2: Internal Integration Tests
+## L2：内部集成测试
 
 目的：连接 MiniClaw modules，同时用 fakes 或 fixtures 替换外部系统。
 
@@ -124,7 +124,7 @@ pnpm test
 - pre-push
 - CI
 
-## L3: Real Discord E2E With Fake Agent
+## L3：真实 Discord E2E 与 Fake Agent
 
 目的：验证真实 Discord Gateway、真实 channels、真实 threads 和真实 message output，但不调用 Claude/Codex。
 
@@ -142,7 +142,7 @@ pnpm test
 pnpm run e2e:discord
 ```
 
-## L4: Real Provider Or Real LLM Smoke
+## L4：真实 Provider 或真实 LLM Smoke
 
 目的：证明选定外部集成仍可工作。
 
@@ -160,7 +160,7 @@ pnpm run e2e:discord
 - traces 必须 redact
 - 不让 volatile networks 阻塞普通 local pre-commit
 
-## D1: Docs Drift
+## D1：Docs Drift 文档漂移
 
 目的：防止 source changes 在没有 durable docs 更新的情况下落地。
 
@@ -173,7 +173,7 @@ pnpm run e2e:discord
 
 changed-path map 故意保守。source behavior 变化时，同一个 patch 必须包含相关 docs update。
 
-## D2: Bilingual Docs Parity
+## D2：双语文档一致性
 
 目的：以 English 为 canonical source，保持 `docs/` 和 `docs/zh/` 对齐。
 
@@ -191,13 +191,13 @@ changed-path map 故意保守。source behavior 变化时，同一个 patch 必�
 
 archive 和 private docs 默认排除在 required bilingual parity 外，除非 migration map 另行标记。
 
-## D3: Website Docs Drift
+## D3：网站文档 Drift
 
 目的：保持 GitHub Pages presentation content 与 canonical repo docs 绑定。
 
 `pnpm run quality:website-docs` 检查 website frontmatter 和 `source_docs` references。website pages 只是 presentation layer；不能替代 `docs/` 作为 implementation source of truth。
 
-## G2: Secrets And Dependencies
+## G2：Secrets 与依赖
 
 目的：阻止 secrets、unsafe local files 和 dependency issues。
 
@@ -210,7 +210,7 @@ pnpm run quality:deps
 
 CI 也运行 gitleaks。
 
-## Changelog Drift
+## Changelog Drift 变更日志漂移
 
 目的：防止 release-visible changes 在没有更新 `CHANGELOG.md` 的情况下落地。
 
@@ -218,7 +218,7 @@ CI 也运行 gitleaks。
 
 这个 gate 不自动生成 release notes。它把缺失 changelog update 变成 blocking，让 changelog 留在开发 workflow 内。
 
-## Default Gate Entry Points
+## 默认 Gate 入口
 
 Pre-commit：
 

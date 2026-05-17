@@ -5,7 +5,7 @@ translation_of: docs/plans/2026-05-11-docs-drift-gate.md
 translation_status: current
 source_sha256: 0c16c880f22ce6a5d3ccda5e7b067afc6a18b0782b88f8e03d1e23ab6b7db81e
 ---
-# Docs Drift Quality Gate 扩展
+# Docs Drift 质量门禁扩展
 
 状态：`draft`
 日期：2026-05-11

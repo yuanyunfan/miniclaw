@@ -1,5 +1,7 @@
 ---
 status: landing
+website_docs_drift: unaffected
+website_docs_drift_reason: Chinese source docs received translation polish only; website summary semantics are unchanged.
 source_docs:
   en:
     - README.en.md

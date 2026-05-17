@@ -5,11 +5,11 @@ translation_of: docs/chat-router-current-logic.md
 translation_status: current
 source_sha256: 48a573e2d943bc48ec8d0becb73dac454d52c06632442da252734139808d1122
 ---
-# MiniClaw Chat Router Current Logic
+# MiniClaw Chat Router 当前逻辑
 
 > Snapshot: 2026-05-15。本文档描述当前代码路径如何判断 inbound Discord message 是 ignore、chat、转成 task，还是在已有 task thread 中 resume。
 
-## Conclusion
+## 结论
 
 MiniClaw router 有两层：
 
@@ -18,7 +18,7 @@ MiniClaw router 有两层：
 
 当前策略是 LLM-first 但保守。regex task/chat signals 不再拥有决策权。attachments、URL-only messages、empty messages 等 objective facts 在 classifier disabled 或 unavailable 时仍作为 fallback facts。
 
-## Route Flow
+## 路由流程
 
 ```mermaid
 flowchart TD
@@ -68,7 +68,7 @@ flowchart TD
   V -->|cancel| V2[Cancel]
 ```
 
-## Code Map
+## 代码地图
 
 - `src/bot.ts`：Discord event registration、client lifecycle 和 outer message-route delegation。
 - `src/bot/message-chat.ts`：memory commands、Smart Router、attachment processing 和 chat response。
@@ -84,27 +84,27 @@ flowchart TD
 - `src/agent/chat.ts`：真实 chat runtime execution。
 - `src/routing/context.ts`、`src/routing/task-context.ts`、`src/routing/chat-context.ts`：recent context 和 source metadata。
 
-## Layer 1: Discord Message Route
+## 第 1 层：Discord 消息路由
 
-### Author Gate
+### 发送者 Gate
 
 production mode 只接受 `config.allowedUserId`。bot-authored messages 和其他用户会被 ignored。E2E mode 可以允许配置好的 test sender IDs。
 
-### Thread Continuation
+### Thread 续跑
 
 只有当前 channel 是 thread、thread 映射到已有 task、task 有 `session_id` 且 task 不是 cron 创建时，才返回 `thread_continuation`。MiniClaw 随后创建新 task row 并调用 `executeTask({ resumeSessionId })`。
 
-### Task Channel
+### Task Channel 判定
 
 当前 channel ID 位于 `config.taskChannelIds` 时返回 `task_channel`。消息会成为 task prompt。attachment-only prompts 使用默认 attachment handling prompt。handler 检查 concurrency、创建 thread、写 DB state、发送 start embed，并启动 `executeTask()`。
 
-### Chat Eligible
+### Chat Eligible 判定
 
 bot 被 mention，或当前 channel 被 `config.autoReplyChannelIds` 允许时，返回 `chat`。否则返回 `ignore`。
 
 常见本机配置使用 wildcard auto-reply channels、启用 Smart Router、没有 auto-task channels，并配置 confirmation channels。这意味着很多消息会先成为 chat candidate，再由 Smart Router 判断是否显示 task confirmation。
 
-## Layer 2: Chat Entry Prechecks
+## 第 2 层：Chat 入口预检
 
 route 进入 `chat` 后，`src/bot/message-chat.ts` 继续做本地短路判断：
 
@@ -118,7 +118,7 @@ route 进入 `chat` 后，`src/bot/message-chat.ts` 继续做本地短路判断�
 
 attachments 对 classifier 只呈现为 objective facts；附件内容会在已选择的 runtime path 中后续处理。
 
-## Smart Router Capability Classification
+## Smart Router 能力分类
 
 `classifySmartRoute()` 先提取 objective facts，再在 policy 允许时调用 LLM classifier。
 
@@ -144,7 +144,7 @@ classifier：
 - 询问贡献者如何达成大量 contributions 的 prompt，应设置 `needs_current_info=true` 和 `needs_multi_step_research=true`。
 - 要求给 `stock-pulse` 增加并排序字段的 prompt，应设置 `needs_file_write=true`。
 
-## Provider Selection For The Classifier
+## 分类器的 Provider 选择
 
 classifier 使用 lightweight model client layer，而不是 task runtime：
 
@@ -157,7 +157,7 @@ classifier 使用 lightweight model client layer，而不是 task runtime：
 
 classifier failure 会 fallback 到 objective facts，并记录失败原因。classifier 不可用不应导致 routing 失败。
 
-## Route Mapping
+## 路由映射
 
 | Capability | Default Intent |
 |---|---|
@@ -168,7 +168,7 @@ classifier failure 会 fallback 到 objective facts，并记录失败原因。cl
 
 channel policy 决定 task intent 最终是 automatic task、confirmation buttons，还是 fallback chat。
 
-## Known Boundaries
+## 已知边界
 
 - Smart Router 在 route 前不会读取 attachment content。
 - confirmation state 是 process-local 且短生命周期。

@@ -8,9 +8,9 @@ source_sha256: b4c863df24ef6992e0b0c214f28bdd78d4d37b417800f08684d2df5ba4b728cb
 # Cron 失败重试提醒
 
 现况:已完成
-日期:2026-05-08
+日期: 2026-05-08
 
-## 背景情况
+## 背景
 
 MiniClaw cron 任务已经在调度层重试:一次失败的预定运行重试最多5次,总尝试为10米,20米,40米,80米反转. 缺少的作品是预定任务失败时Discord的能见度,加上允许用户立即从该失败消息中重试的安全方式.
 
@@ -24,12 +24,12 @@ MiniClaw cron 任务已经在调度层重试:一次失败的预定运行重试�
 
 ## 非目标
 
-- 不在 Discord 按钮中显示 cron 即时文本、 提供者配置、 脚本参数、 cookie、 令牌、 账户 ID 或 原始提供者 JSON 。
+- 不在 Discord 按钮中显示 cron 即时文本、 Provider配置、 脚本参数、 cookie、 token、 账户 ID 或 原始Provider JSON 。
 - 不要让Discord用户通过重试按钮提供任意命令或提示.
 - 不更改 cron YAML 格式。
 - 不改变排程器级故障警报以外的特定输出行为。
 
-## 现有建筑证据
+## 现有架构证据
 
 - `src/cron/scheduler.ts`拥有发送、重试尝试计数、重试延迟和`runningJobs`.
 - `src/cron/state.ts`持续`~/.miniclaw/cron/state.json`.
@@ -45,21 +45,21 @@ MiniClaw cron 任务已经在调度层重试:一次失败的预定运行重试�
 5. 更新提醒发送/编辑/恢复行为的调度器测试和可觉醒的重复。
 6. 更新结构和路径文件。
 
-## 核查计划
+## 验证计划
 
 - 单位测试:`pnpm vitest run src/cron/__tests__/scheduler.test.ts src/cron/__tests__/failure-notifier.test.ts src/cron/__tests__/state.test.ts`
 - 类型检查:`pnpm run typecheck`
 - 林特: - 莱特:`pnpm run lint`
 - 如果时间允许,则扩大推门:`pnpm run quality:push`
 
-## 风险 倒车
+## 风险与回滚
 
 - 风险:一个失败的警报发送可以掩盖原始的cron失败.
 - 缓解:发现并记录了通知错误;继续重复试验行为。
 - 风险:在任务积极运行时单击重试可能会产生重复执行.
 - 缓解:调度器只有在没有当前运行时才会唤醒回试或启动新的单试运行。
 - 风险:错误信息可能包括敏感文本。
-- 缓解:总结和消毒错误文本,从不在按钮标识中包含即时/提供/标语配置。
+- 缓解:总结和消毒错误文本,从不在按钮标识中包含prompt/provider/script 配置。
 - 回滚:删除新的按钮处理器和失败通知器调用;调度器重试行为只恢复到当前状态记录.
 
 ## 文档同步
@@ -68,13 +68,13 @@ MiniClaw cron 任务已经在调度层重试:一次失败的预定运行重试�
 - 文件:更新`docs/architecture.md`颅部和`docs/bot-routing.md`按钮路由部分。
 - 变身:不在场。
 
-## 执行笔记
+## 执行记录
 
 - 添加带有Discord重试按钮的调度器级故障提醒 。
-- 添加可觉醒重试后退, 因此立即重试不会产生并行运行 。
+- 添加可觉醒重试 backoff, 因此立即重试不会产生并行运行 。
 - 已经添加了`state.json`运行 ID、 尝试、 下次重试 和提醒消息/ 频道 ID 的失败元数据 。
 - 在智能路由器按钮前添加 cron 重试按钮路由。
-- 核查:
+- 验证:
   - `pnpm vitest run src/cron/__tests__/scheduler.test.ts src/cron/__tests__/failure-notifier.test.ts src/cron/__tests__/state.test.ts`
   - `pnpm run typecheck`
   - `pnpm run lint`

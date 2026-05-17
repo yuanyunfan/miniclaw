@@ -5,11 +5,11 @@ translation_of: docs/providers/provider-framework.md
 translation_status: current
 source_sha256: 739895b2c803a74226d5fdecaf0c339e83f612069ee68a676a5982d8ef6e88ae
 ---
-# MiniClaw Provider Framework
+# MiniClaw Provider Framework 框架
 
 > 结论：provider framework docs 负责 manifest metadata、health checks、dry-run previews、structured output、fixture coverage、failure taxonomy，以及安全 state/session commit semantics 的 contract。Provider-specific docs 负责各 provider 的 trusted source 和 business payload。
 
-## Runtime Shape
+## Runtime 形态
 
 ```mermaid
 flowchart TD
@@ -28,7 +28,7 @@ flowchart TD
   Payload --> Fixtures[Replay / no-data / format-drift fixtures]
 ```
 
-## Owner Code Paths
+## Owner 代码路径
 
 ```text
 src/providers/framework.ts
@@ -42,7 +42,7 @@ src/providers/*/__tests__/**
 
 实现 framework path 的 provider modules 通过 `ProviderModule` 暴露 `manifest`、`healthCheck`、`dryRun` 和 `run`。Legacy providers 在迁移期间仍可通过 `runProviderModuleAsPreProvider()` 适配。
 
-## Contract
+## 契约
 
 Provider framework invariants:
 
@@ -54,7 +54,7 @@ Provider framework invariants:
 - Sensitive providers 遇到 expired sessions、login challenges、captchas、unexpected response shapes 或 redaction failures 时必须 fail closed。
 - Provider failures 应使用稳定 categories，方便 cron 和 Auto Doctor report。
 
-## Cron Preflight
+## Cron 预检
 
 `pre_provider_preflight` 支持实际 task creation 前的 runtime gate：
 
@@ -72,7 +72,7 @@ Expected behavior:
 
 Provider docs 必须说明支持哪些 preflight modes，以及这些 modes 是否需要 network/session access。
 
-## Structured Output
+## 结构化输出
 
 Provider output 应分离：
 
@@ -84,7 +84,7 @@ Provider output 应分离：
 
 Provider formatter 可以为 task prompts 生成 text block，但 canonical provider behavior 应仍能表达为 structured JSON，以支持 tests 和未来 generated references。
 
-## Fixture Coverage
+## Fixture 覆盖
 
 迁移到 framework 的 providers 应保留以下 fixtures：
 
@@ -101,7 +101,7 @@ src/providers/<provider>/__tests__/*.test.ts
 
 当 fixture expectations 成为 provider quality gates 的一部分时，`quality:docs` 和 provider docs 应保持一致。
 
-## Failure Taxonomy
+## 失败分类
 
 Provider failures 应保留足够信息给 cron 和 Auto Doctor，同时不能泄露敏感细节：
 
@@ -113,7 +113,7 @@ Provider failures 应保留足够信息给 cron 和 Auto Doctor，同时不能�
 - `no_data`: source 没有返回 eligible data，provider 将其视为 controlled skip.
 - `partial_data`: optional source failed，但 provider 可以带 warnings 继续。
 
-## Provider Author Checklist
+## Provider 作者检查清单
 
 - 定义 trusted upstream source，以及它是 public、account-bound 还是 private。
 - 定义 read/write boundaries，并明确禁止 unsafe operations。
@@ -124,7 +124,7 @@ Provider failures 应保留足够信息给 cron 和 Auto Doctor，同时不能�
 - 为迁移到 framework 的 providers 增加 replay/no-data/format-drift fixtures。
 - 如果 public provider summary 提到变化行为，更新 website `source_docs`。
 
-## Legacy Cleanup
+## 历史遗留清理
 
 上一轮 feature-level framework stub 已在迁移完成后删除。当前实现事实写在本文件对应的英文 source 和本中文 mirror 中。
 

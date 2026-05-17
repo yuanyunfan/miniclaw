@@ -5,7 +5,7 @@ translation_of: docs/plans/2026-05-11-task-view-boundary.md
 translation_status: current
 source_sha256: c44479ddf526d5c72788a88d6627fddeb42f2fd571cb01eee958008f16e23585
 ---
-# Task View Boundary 与 Runner 重构
+# Task View 边界与 Runner 重构
 
 状态：`draft`
 日期：2026-05-11
@@ -74,7 +74,7 @@ export type TaskViewEvent =
 - Raw provider payloads 只属于 redaction 后的 trace payloads，不属于 Discord view events。
 - `TaskViewEvent` 不应 import Discord types 或 SQLite types。
 
-### Runner Contract
+### Runner 契约
 
 创建 `src/agent/runners/types.ts`。
 
@@ -97,7 +97,7 @@ export interface TaskRunner {
 
 Runner 应负责 SDK-specific event parsing。它不负责 Discord message mutation、task DB row updates 或 thread creation。
 
-### Discord View Reporter
+### Discord View Reporter 报告器
 
 创建 `src/discord/task-view-reporter.ts`。
 
@@ -115,7 +115,7 @@ Runner 应负责 SDK-specific event parsing。它不负责 Discord message mutat
 
 Ralph 应把下面每个 target 当成一个 coherent reviewable phase。不要只落一个 helper、type 或 test，除非选中的 target 明确说这就是整个 phase。
 
-### Target 1：Contracts And Characterization
+### Target 1：契约与特征化测试
 
 状态：已在 slices 1-4 中落地；除非后续 targets 需要 cleanup，否则不要重复。
 
@@ -125,7 +125,7 @@ Ralph 应把下面每个 target 当成一个 coherent reviewable phase。不要�
 - 在 `executeTask` 中增加 runner selection boundary。
 - 保持当前 task behavior，并保持 production runtime wiring 最小。
 
-### Target 2：Runner Extraction
+### Target 2：Runner 提取
 
 下一个 Ralph phase target。
 
@@ -135,7 +135,7 @@ Ralph 应把下面每个 target 当成一个 coherent reviewable phase。不要�
 - 保持 `executeTask(params)` public shape、DB lifecycle writes、abort ownership 和当前 session id formats 稳定。
 - 在同一 phase 中增加 runner-focused tests 和 fake-runtime regression coverage。
 
-### Target 3：Discord View Reporter And Docs
+### Target 3：Discord View Reporter 与文档
 
 本计划最终 Ralph phase target。
 
@@ -169,7 +169,7 @@ Ralph 应把下面每个 target 当成一个 coherent reviewable phase。不要�
    - 将 Codex SDK setup 和 event parsing 移入 `src/agent/runners/codex-task-runner.ts`。
    - 保持 Codex sandbox/web search/network config behavior 不变。
 7. 仅在需要时抽取 fake/E2E runtime handling。
-   - 如果 fake logic 已经足够隔离，就用同一个 runner contract 包裹它。
+   - 如果 fake logic 已经足够隔离，就用同一个 runner contract 包装它。
    - 不破坏 `MINICLAW_E2E_FAKE_AGENT`。
 8. 增加 `src/discord/task-view-reporter.ts`。
    - 先用最小 text changes 移动现有 progress/final formatting functions。
@@ -236,7 +236,7 @@ Ralph 应把下面每个 target 当成一个 coherent reviewable phase。不要�
 
 实现时在这里记录 final module boundary、changed files 和 verification commands。
 
-### 2026-05-12 Slice 1：Rendering Behavior Tests
+### 2026-05-12 Slice 1：渲染行为测试
 
 - 范围：第一个可独立交付 slice。移动 runner/view code 前，围绕当前 rendering behavior 增加测试。未修改 production runtime code。
 - `src/agent/__tests__/e2e-fake-runtime.test.ts`：增加 recorded fake Discord channel test，锁定当前 embed-mode fake task output：start embed send、初始 `### Realtime Progress` message、`### Execution Summary` progress edit、completion embed edit、final Markdown result、DB completion fields，以及 persisted `progress_message_id`。
@@ -247,7 +247,7 @@ Ralph 应把下面每个 target 当成一个 coherent reviewable phase。不要�
   - `pnpm run lint` 通过。
   - `pnpm run quality:docs` 通过。
 
-### 2026-05-12 Slice 2：TaskViewEvent Boundary Types
+### 2026-05-12 Slice 2：TaskViewEvent 边界类型
 
 - 范围：Slice 1 tests 后第一个剩余可独立交付 boundary slice。只增加 provider-neutral `TaskViewEvent` contract 和 helper builders；未改变 runner、Discord reporter、DB lifecycle 或 `executeTask` wiring。
 - `src/agent/task-view-events.ts`：增加 task/session/turn/progress/error/completion/failure events 的 minimal view-event union，一个用于 user-visible event text 的 bounded text redaction helper，以及会对 progress/error/result text 脱敏且不 import Discord 或 SQLite types 的 builder helpers。
@@ -261,7 +261,7 @@ Ralph 应把下面每个 target 当成一个 coherent reviewable phase。不要�
   - `pnpm run lint` 通过。
   - `pnpm ralph:verify -- --task task-view-boundary` 通过，profile 为 `task-runtime`，其中包含 `pnpm run quality:docs`。
 
-### 2026-05-12 Slice 3：Runner Contract Types
+### 2026-05-12 Slice 3：Runner 契约类型
 
 - 范围：Slice 2 后第一个剩余可独立交付 boundary slice。只增加 runner contract types；未改变 provider execution、Discord reporter、DB lifecycle 或 `executeTask` wiring。
 - `src/agent/runners/types.ts`：增加 `TaskRunnerProvider`、`TaskRunnerInput` 和 `TaskRunner`，让未来 Claude/Codex/fake runners 能 emit redacted `TaskViewEvent` values、分离 trace facts，并返回现有 `TaskResult`。
@@ -272,7 +272,7 @@ Ralph 应把下面每个 target 当成一个 coherent reviewable phase。不要�
   - `pnpm run lint` 通过。
   - `pnpm ralph:verify -- --task task-view-boundary` 通过，profile 为 `task-runtime`，包含 fake runtime、trace reporter、task event store、typecheck、lint 和 `pnpm run quality:docs`。
 
-### 2026-05-12 Slice 4：Runner Selection Boundary
+### 2026-05-12 Slice 4：Runner 选择边界
 
 - 范围：Slice 3 后第一个剩余可独立交付 orchestration slice。只在 `executeTask` 中增加 local runner selection boundary；未改变 provider execution code、Discord rendering、DB lifecycle writes 或 public `executeTask(params)` shape。
 - `src/agent/task.ts`：增加 `selectTaskRunner(agentProvider, fakeAgent)`，将已配置 Claude/Codex provider 加 E2E fake override 规范化为现有 runner provider union，并通过该 selection result 路由当前 fake/Codex/Claude execution branches。
@@ -283,10 +283,10 @@ Ralph 应把下面每个 target 当成一个 coherent reviewable phase。不要�
   - `pnpm run lint` 通过。
   - `pnpm ralph:verify -- --task task-view-boundary` 通过，profile 为 `task-runtime`，包含 fake runtime、trace reporter、task event store、typecheck、lint 和 `pnpm run quality:docs`。
 
-### 2026-05-12 Slice 5：Runner Extraction
+### 2026-05-12 Slice 5：Runner 提取
 
 - 范围：完成 Target 2。将 fake、Codex 和 Claude runtime execution 抽到 `TaskRunner` modules 后面，同时保留 `executeTask(params)` 作为 public orchestration shell。Discord rendering 保留在 `src/agent/task.ts`，留给下一个 target。
-- `src/agent/runners/fake-task-runner.ts`：在 `TaskRunner` 后面包裹 deterministic E2E fake task execution，emit provider-neutral view events，emit trace facts，并返回现有 Discord renderer 使用的 final progress metadata。
+- `src/agent/runners/fake-task-runner.ts`：在 `TaskRunner` 后面包装 deterministic E2E fake task execution，emit provider-neutral view events，emit trace facts，并返回现有 Discord renderer 使用的 final progress metadata。
 - `src/agent/runners/codex-task-runner.ts`：将 Codex SDK thread setup、timeout handling、stream event parsing、Codex session id formatting、token summary extraction 和 Codex tool progress conversion 从 `task.ts` 移出。
 - `src/agent/runners/claude-task-runner.ts`：将 Claude SDK query setup、MCP/subagent/tool permission wiring、stream event parsing、Claude session id formatting、usage formatting 和 Claude tool progress conversion 从 `task.ts` 移出。
 - `src/agent/task.ts`：现在选择一个 `TaskRunner`，把 abort `signal`、attachments、view callbacks 和 trace callbacks 传给 runner，从 `session_started` view events 更新 `session_id`，在 runner completion 后执行 final DB lifecycle writes，并保持现有 raw/embed Discord output behavior。
@@ -303,7 +303,7 @@ Ralph 应把下面每个 target 当成一个 coherent reviewable phase。不要�
   - `pnpm ralph:verify -- --task task-view-boundary` 通过，profile 为 `task-runtime`，包含 fake runtime、trace reporter、task event store、typecheck、lint 和 `pnpm run quality:docs`。
   - `pnpm run build` 通过；验证后删除了生成的 ignored `dist/` artifacts。
 
-### 2026-05-12 Slice 6：Discord View Reporter And Docs
+### 2026-05-12 Slice 6：Discord View Reporter 与文档
 
 - 范围：完成 Target 3 和完整计划。将 Discord status/progress/final output rendering 从 `src/agent/task.ts` 移出，同时保持 public `executeTask(params)` shape、DB lifecycle writes、abort ownership、runner selection、trace persistence、fake-runtime behavior、raw output transform behavior，以及现有 embed/raw output modes。
 - `src/discord/task-view-reporter.ts`：增加 `DiscordTaskViewReporter`，用于 start status embed creation、progress message updates、final `Execution Summary`、completion/error embeds、final Markdown/raw output delivery、delivery-failure callback routing 和 progress snapshot state。将 `rawTaskMessages`、`buildRealtimeProgress` 和 `buildExecutionSummary` 移入这个 Discord boundary。

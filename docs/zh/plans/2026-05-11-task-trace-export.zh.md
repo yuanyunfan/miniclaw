@@ -5,7 +5,7 @@ translation_of: docs/plans/2026-05-11-task-trace-export.md
 translation_status: current
 source_sha256: f24b918b08a54fe3085804ce8d103866adebdddab4eefa575bf275a9b7114ded
 ---
-# Task Trace Export 与 Discord Task Log
+# Task Trace 导出与 Discord Task Log
 
 状态：`draft`
 日期：2026-05-11

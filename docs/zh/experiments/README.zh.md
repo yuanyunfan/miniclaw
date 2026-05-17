@@ -5,11 +5,11 @@ translation_of: docs/experiments/README.md
 translation_status: current
 source_sha256: b01d6dfcfdce2f5e7ace638d4f6ea924e417577ae25b93c8b3f90401a7bb63d5
 ---
-# MiniClaw Experiments
+# MiniClaw 实验区
 
 > 结论：experiments 用来验证未来 runtime pattern，但它们不是默认 MiniClaw product behavior。本目录把实验性 control planes 与稳定 runtime/provider docs 分离。
 
-## Experiment Map
+## 实验地图
 
 ```mermaid
 flowchart LR
@@ -22,7 +22,7 @@ flowchart LR
   Experiments[Experiments] -. graduate only with coverage and rollback .-> Runtime[Runtime docs]
 ```
 
-## Stage
+## Stage 实验区
 
 Owner code paths:
 
@@ -53,7 +53,7 @@ Boundary contract:
 - Stage promotion 需要 normal runtime coverage、rollback semantics，以及位于 `docs/plans/**` 之外的 docs。
 - Stage smoke/e2e checks 应与默认 bot startup 分离。
 
-## Ralph Controller
+## Ralph 控制器
 
 Owner docs and code paths:
 
@@ -91,11 +91,11 @@ Boundary contract:
 - `ralph:loop --merge-main --push-main` 必须 fetch/rebase/reverify，并使用 lease-aware push behavior。
 - Ralph 是 automation controller，不是 Discord-facing feature。
 
-## Legacy Cleanup
+## 历史遗留清理
 
 上一轮 feature-level experiment stubs 已在迁移完成后删除。本文件和 `docs/ralph/**` 现在承载 experiment source-of-truth 内容。
 
-## Graduation Rule
+## 毕业规则
 
 只有当 experiment code path 已在正常 MiniClaw execution 中启用、有 rollback semantics、有 quality coverage，并且有位于 `docs/plans/**` 之外的 source-of-truth docs 时，它才能移动到 runtime docs。
 

@@ -5,11 +5,11 @@ translation_of: docs/runbooks/install.md
 translation_status: current
 source_sha256: acf53226f9a9e4144544f9ea492cb709e014d2823162c3f3e33a347c7840490b
 ---
-# MiniClaw Install Runbook
+# MiniClaw 安装 Runbook
 
 > 结论：MiniClaw 1.0 的安装路径面向技术用户。先 clone repo，再用 `install.sh` 初始化依赖和本机目录，用 `pnpm run setup` 写入最小 Discord/provider 配置，最后用 `doctor:setup` 验证环境。
 
-## Prerequisites
+## 前置条件
 
 - macOS 或 Linux shell environment。
 - Node.js 22+。
@@ -19,7 +19,7 @@ source_sha256: acf53226f9a9e4144544f9ea492cb709e014d2823162c3f3e33a347c7840490b
 - 使用 Claude 时，需要 Anthropic API key。
 - PM2 只用于 production local long-running mode。
 
-## Fresh Install
+## 全新安装
 
 ```bash
 git clone https://github.com/yuanyunfan/miniclaw.git
@@ -40,7 +40,7 @@ Expected results:
 - `pnpm run doctor:setup` 没有 `FAIL` rows。
 - Bot 启动后 Discord `/health` 可用。
 
-## Production Local Run
+## 本地生产运行
 
 ```bash
 pnpm run build
@@ -50,7 +50,7 @@ pm2 status miniclaw
 
 MiniClaw 默认把 PM2 logs 写到 `~/.miniclaw/logs/`。
 
-## Safe Reconfiguration
+## 安全重配置
 
 当 Discord ids、provider choice、Smart Router 或 PM2 preference 变化时，重新运行 `pnpm run setup`。已有 `.env` 和 `~/.miniclaw/config.yaml` 会在 rewrite 前备份。
 
@@ -66,7 +66,7 @@ Runtime config 变化后，通过安全边界 restart：
 pnpm safe-restart
 ```
 
-## Troubleshooting
+## 故障排查
 
 Run:
 
@@ -82,7 +82,7 @@ Common failures:
 - `Codex provider auth WARN`: 运行本机 `codex login` 或设置 `OPENAI_API_KEY`。
 - `PM2 not installed`: 只有需要 production local run 时才安装 PM2。
 
-## Non-Goals
+## 非目标
 
 - Installer 不创建 Discord application。
 - Installer 不复制 private provider sessions。

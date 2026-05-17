@@ -5,11 +5,11 @@ translation_of: docs/providers/stock/README.md
 translation_status: current
 source_sha256: a0444d867923616152229a9cc15575d2ed244eabeb4369c0512d525cbcd2e5f9
 ---
-# Stock Provider Family
+# 股票 Provider 系列
 
 > 结论：stock provider docs 描述只读券商/account source、watchlist source、market evidence 和 research workflow。账户专属 session 和私有券商细节不能出现在 public website pages。
 
-## Data Flow
+## 数据流
 
 ```mermaid
 flowchart LR
@@ -26,12 +26,12 @@ flowchart LR
   Research --> Discord[Discord stock channels]
 ```
 
-## Canonical Docs
+## Canonical 文档
 
 - [`../../../providers/stock/eastmoney.md`](../../../providers/stock/eastmoney.md): JYWG holdings 和 MyFavor watchlist 的 Eastmoney family boundary。
 - [`../../../providers/stock/research.md`](../../../providers/stock/research.md): 横跨 portfolio、pulse、market-intel 和 watchlist research 的 stock research provider pipeline。
 
-## Futu Stock Provider
+## 富途股票 Provider
 
 Runtime names:
 
@@ -108,14 +108,14 @@ universe:
 
 Futu watchlist rows 是 observation-universe symbols。除非它们同时来自 portfolio/account provider payload，否则不能渲染为 account holdings。
 
-## Provider Boundaries
+## Provider 边界
 
 - Holdings 和 watchlists 是不同 source types。
 - Account providers 可以 feed `stock-portfolio`；watchlist sources 可以 feed `stock-pulse` 和 watchlist research。
 - Provider code 应在 LLM interpretation 前计算 deterministic evidence。
 - Public website pages 可以总结 stock capabilities，但实现事实应通过 `source_docs` 回链到本目录。
 
-## Legacy Cleanup
+## 历史遗留清理
 
 旧 Futu feature stub 已在迁移完成后删除。Stock research 主题记录在 [`research.zh.md`](research.zh.md)。
 

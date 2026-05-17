@@ -5,7 +5,7 @@ translation_of: docs/plans/2026-05-11-smart-router-evaluation-loop.md
 translation_status: current
 source_sha256: dfa493772b9232a2a7e836e8bf6eb8c84de64b436e2ec9f56f8042b650e79eab
 ---
-# Smart Router Evaluation Loop
+# Smart Router 评估循环
 
 状态：`draft`
 日期：2026-05-11

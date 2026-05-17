@@ -5,7 +5,7 @@ translation_of: docs/plans/2026-05-11-provider-framework-sdk.md
 translation_status: current
 source_sha256: c64b43614e81e962fb4750bbdc1016175e5fa07bf6d174e3842a26c4d0f8e789
 ---
-# Provider Framework SDK
+# Provider Framework SDK 设计
 
 状态：`draft`
 日期：2026-05-11
@@ -66,7 +66,7 @@ export interface ProviderManifest {
 }
 ```
 
-## 拟议 Lifecycle Contract
+## 拟议生命周期契约
 
 ```ts
 export interface ProviderContext {
@@ -140,7 +140,7 @@ export interface ProviderModule<TStructured = unknown> {
 3. 增加 compatibility adapter。
    - `runProviderAsPreProvider(name, args)`：
      - 如果 provider 实现新 lifecycle，则调用 `run()` 后再调用 `format()`；
-     - 包裹 `commit()`，保证它仍只在 downstream task success 后运行；
+     - 包装 `commit()`，保证它仍只在 downstream task success 后运行；
      - 保留 `skipTask`。
    - 现有 providers 可以继续作为 `PreProviderRunner`。
 4. 实现 pilot provider。
@@ -168,7 +168,7 @@ export interface ProviderModule<TStructured = unknown> {
    - 新 feature doc candidate：`docs/archive/features/15-provider-framework.md`。
    - 包含 provider author checklist。
 
-## Provider Author Checklist
+## Provider 作者检查清单
 
 每个新 provider 都应说明：
 

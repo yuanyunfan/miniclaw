@@ -8,9 +8,9 @@ source_sha256: 31df635e1b47f17c4ba1911ec32de89e6dc0c22f53ab2ce4038c23b26019dfb5
 # 智能任务路由器执行
 
 现况:已完成
-日期:2026-05-07
+日期: 2026-05-07
 
-## 背景情况
+## 背景
 
 MiniClaw 目前通过表面路径 Discord 消息 :
 
@@ -25,7 +25,7 @@ MiniClaw 目前通过表面路径 Discord 消息 :
 - 保留现有`/task`,任务线索恢复,任务通道,和聊天行为,除非明确启用智能路由.
 - 在下面添加结构化的智能路由配置`routing.smart_router`.
 - 在下方增加每个通道的清晰cwd覆盖`routing.channel_defaults`.
-- 为路由决定添加经编辑的SQLite决定日志。
+- 为路由决定添加已脱敏的SQLite决定日志。
 - 增加确定路线的分类,加上对模棱两可的案件要求的LLM分类管道。
 - 添加Discord按钮用于`task_suggest`和`task_confirm`.
 - 重新使用相同的任务创建和`executeTask()`流动为`/task`.
@@ -39,31 +39,31 @@ MiniClaw 目前通过表面路径 Discord 消息 :
 - 不执行 OpenClaw 风格的持久信道/会话绑定。
 - 不在明确配置的自动任务通道外自动运行任务。
 
-## 现有建筑证据
+## 现有架构证据
 
 - `src/bot.ts`: 拥有`MessageCreate`和`InteractionCreate`发送。
 - `src/commands/handlers.ts`: `/task`创建线程、 写任务行、 发送嵌入状态和调用`executeTask`.
 - `src/agent/task.ts`:任务执行,进度更新,最终Markdown输出.
 - `src/agent/chat.ts`: 面向阅读的聊天路径和聊天历史持续.
 - `src/config.ts`: YAML + 嵌入层配置,包括`routing.auto_reply_channels`和`routing.task_channels`.
-- `src/store/db.ts`: SQLite schema and task/chat-history students. 互联网档案馆的存檔,存档日期2013-03-02. 互联网档案馆的存檔,存档日期2014-09-02. 互联网档案馆的存檔,存档日期2014-09-02.
+- `src/store/db.ts`: SQLite schema and task/chat-history students. 互联网文件馆的存檔,存档日期2013-03-02. 互联网文件馆的存檔,存档日期2014-09-02. 互联网文件馆的存檔,存档日期2014-09-02.
 
 ## 执行计划
 
 1. 为智能路由器设置和频道 cwd 覆盖添加配置解析。
-2. 添加 SQLite 表格和助手`smart_router_decisions`.
+2. 添加 SQLite 表和助手`smart_router_decisions`.
 3. 增加纯路由模块:
 - 确定血压分类器;
 - 行动解决器;
 - 上下文参考探测器和不可信上下文构建器;
 - 启用时用于模棱两可的可选LLM分类器适配器。
-4. 将任务录入创建提取到共享的 Discord 帮助器中`/task`,任务通道,自动升级,确认升级使用一个任务启动路径.
+4. 将任务录入创建提取到共享的 Discord helper中`/task`,任务通道,自动升级,确认升级使用一个任务启动路径.
 5. 添加10分钟的TTL和Discord按钮自定义标识,只带一个短符号/动作。
 6. 整合`MessageCreate`内存命令处理后和聊天前的智能路由.
-7. 扩展`InteractionCreate`在命令发送前按下按钮。
+7. 扩展`InteractionCreate`在命令发送前push按钮。
 8. 更新文件和配置示例,以匹配运出的行为。
 
-## 核查计划
+## 验证计划
 
 - 类型检查:`pnpm build`.
 - 单位测试:
@@ -82,7 +82,7 @@ MiniClaw 目前通过表面路径 Discord 消息 :
 - 继续聊天按钮使用聊天路径。
 - 任务频道仍然绕过智能路由确认
 
-## 风险 倒车
+## 风险与回滚
 
 - 风险:假阳性任务路由中断正常聊天.
 - 缓解:智能路由器默认为禁用,仅在启用时在符合条件的通道中运行,需要在自动任务通道外进行确认。
@@ -102,13 +102,13 @@ MiniClaw 目前通过表面路径 Discord 消息 :
 - 最新情况`docs/architecture.md`只有在架构图需要可见的路由/配置/schema注释时。
 - 最新情况`config.example.yaml`有智能路由器和频道默认示例。
 
-## 执行笔记
+## 执行记录
 
 - 审查后开始执行`docs/archive/features/05-smart-task-router.en.md`, `src/bot.ts`, `src/commands/handlers.ts`, `src/config.ts`,以及`src/store/db.ts`.
 - 添加结构化的智能路由器配置、明确的通道 cwd 默认, SQLite`smart_router_decisions`,定型路由,LLM分类器适配器,内存确认状态,共享Discord任务接收,以及bot消息/按钮集成.
-- 通过重点核查:
+- 通过重点验证:
   - `pnpm build`
   - `pnpm test src/routing/__tests__/intent.test.ts src/routing/__tests__/context.test.ts src/routing/__tests__/confirmations.test.ts src/__tests__/config.test.ts src/store/__tests__/db.test.ts`
 - 完全回归:
-  - `pnpm test`- 39份档案,通过了277项测试
+  - `pnpm test`- 39份文件,通过了277项测试
   - `pnpm build`

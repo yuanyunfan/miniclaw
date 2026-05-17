@@ -92,7 +92,7 @@ MiniClaw 当前在 chat、task、Smart Router、cron、provider、memory 和 run
 
 8. 更新 docs 和 tests。
    - 更新 `docs/prompts.md`。
-   - 更新本 plan 的 Execution Notes。
+   - 更新本 plan 的 执行记录。
    - 为 chat / task / cron envelope rendering 增加 prompt snapshots。
 
 ## 验证计划

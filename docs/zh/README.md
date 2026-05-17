@@ -19,13 +19,13 @@ source_sha256: 65702341101c1a1ee0fbb3c0cf2c35b5a0bc8e6f67b7c792e1cd6920a45d7aa7
 - [`quality-gates.md`](../quality-gates.md)：测试分层、质量门禁、docs drift gate、双语 docs gate 和 Discord E2E 策略。
 - [`documentation-migration-map.md`](../documentation-migration-map.md)：docs 迁移、双语 pairing、website exposure、private/archive 边界的 machine-readable 地图。
 
-## Runtime
+## Runtime 文档
 
 - [`runtime/README.md`](runtime/README.zh.md)：Discord intake、routing、chat/task/cron runtime、memory/context 和 operations 的 runtime 真相源。
 
 runtime compatibility stub 已移除，内容已经合并到 `runtime/README.md` 和顶层 routing docs。
 
-## Providers
+## Provider 文档
 
 - [`providers/README.md`](providers/README.zh.md)：provider 文档索引和维护规则。
 - [`providers/provider-framework.md`](providers/provider-framework.zh.md)：provider framework 的 manifest、health check、dry run、structured output、fixture 和 failure taxonomy。
@@ -37,13 +37,13 @@ runtime compatibility stub 已移除，内容已经合并到 `runtime/README.md`
 
 provider compatibility stub 已移除，内容已经合并到上面的 provider-family docs。
 
-## Experiments
+## 实验
 
 - [`experiments/README.md`](experiments/README.zh.md)：实验性 control plane 索引。
 
 experiment compatibility stub 已移除，Stage 和 Ralph 内容已经合并到 `experiments/README.md` 和 Ralph docs。
 
-## Plans
+## 计划
 
 - [`plans/README.md`](plans/README.zh.md)：非平凡开发任务的 plan 文档规则。
 - [`plans/2026-05-15-documentation-strategy.md`](plans/2026-05-15-documentation-strategy.zh.md)：已完成的文档策略；`docs/` 是 docs-driven source of truth，GitHub Pages 是 human portal。
@@ -56,7 +56,7 @@ experiment compatibility stub 已移除，Stage 和 Ralph 内容已经合并到 
 
 中文文档不再是本地 review copy，而是 repo docs 的一等语言层。required mirror 必须保持 `translation_status: current`，并且 `source_sha256` 必须匹配英文 source。
 
-## Website
+## 网站
 
 - `../website/en/`：英文 GitHub Pages source。
 - `../website/zh/`：中文 GitHub Pages source。
@@ -64,16 +64,16 @@ experiment compatibility stub 已移除，Stage 和 Ralph 内容已经合并到 
 
 website pages 只能作为 presentation layer，并通过 `source_docs` frontmatter 指向 canonical docs。website 不能替代 `docs/` 作为实现真相源。
 
-## Archive
+## 归档
 
 - [`archive/2026-05-11-continuous-improvement-report.md`](../archive/2026-05-11-continuous-improvement-report.md)：历史架构审计和持续优化报告；不是当前真相源。
 
-## Runbooks
+## Runbook 文档
 
 - [`runbooks/install.md`](runbooks/install.zh.md)：MiniClaw 1.0 的安装、配置和故障排查流程。
 - [`runbooks/local-deploy.md`](runbooks/local-deploy.zh.md)：本地 PM2 runtime 的 safe deploy、safe restart、rollback 和验证流程。
 
-## Private
+## Private 文档
 
 - `private/eastmoney/`：Eastmoney 私有研究和敏感设计边界。该目录故意排除在 public website exposure 和 bilingual parity gate 之外。
 

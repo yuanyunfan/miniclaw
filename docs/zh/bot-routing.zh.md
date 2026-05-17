@@ -5,11 +5,11 @@ translation_of: docs/bot-routing.md
 translation_status: current
 source_sha256: 35fb8e934a0c79c1fa17fbebed8f1f8e7236f25d6dc691e4e6b7ad043614567f
 ---
-# Discord Bot Routing
+# Discord Bot 路由
 
 > `src/bot.ts` 只注册少量 Discord event listeners，并把业务路由委托给 `src/bot/*`。本文档记录当前 message intake、slash commands、button interactions 和 task-thread continuation 的 routing map。
 
-## Event Panorama
+## 事件全景
 
 ```mermaid
 flowchart TD
@@ -48,7 +48,7 @@ flowchart TD
   Ready --> Startup[index.ts startup schedulers]
 ```
 
-## Listener Responsibilities
+## 监听器职责
 
 | Location | Event | Responsibility |
 |---|---|---|
@@ -57,9 +57,9 @@ flowchart TD
 | `createBot()` | `ClientReady` | 登录后恢复 interrupted tasks。 |
 | `src/index.ts` | `ClientReady` | 启动 connectivity monitor、Auto Doctor scheduler 和 cron scheduler。 |
 
-## MessageCreate Decision Chain
+## MessageCreate 决策链
 
-### Gate 1: Author
+### Gate 1：发送者
 
 ```ts
 if (message.author.bot) return;
@@ -68,7 +68,7 @@ if (message.author.id !== config.allowedUserId) return;
 
 E2E mode 可以允许配置好的 test sender IDs；production mode 默认仍是 single-user。
 
-### Path 1: Task Thread Continuation
+### 路径 1：任务 Thread 续跑
 
 thread continuation 的优先级高于 task-channel 和 chat routing。只有以下条件全部满足时才进入：
 
@@ -81,13 +81,13 @@ thread continuation 的优先级高于 task-channel 和 chat routing。只有以
 
 handler 会加 reaction、创建新 task row，并在同一个 Discord thread 中调用 `executeTask({ resumeSessionId })`。
 
-### Path 2: Task Intake Channel
+### 路径 2：任务入口 Channel
 
 如果 channel 在 `config.taskChannelIds` 中，普通消息就按 `/task` input 处理，不需要 mention。handler 会按 `message.id` 去重、解析 prompt 和 attachments、检查 concurrency、创建 thread、写入 task row、发送 start embed，并调用 `executeTask()`。
 
 如果一个 channel 同时是 task channel 和 auto-reply channel，task-channel path 优先，避免 double processing。
 
-### Path 3: Chat Candidate
+### 路径 3：Chat 候选消息
 
 当 channel 位于 `config.autoReplyChannelIds`、`config.autoReplyChannelIds` 包含 `*`，或 bot 被 mention 时，消息成为 chat-eligible。chat handler 随后：
 
@@ -99,7 +99,7 @@ handler 会加 reaction、创建新 task row，并在同一个 Discord thread �
 6. 启用时运行 Smart Router。
 7. 最终 route 为 chat 时进入 `agent/chat.ts`。
 
-## Smart Router Actions
+## Smart Router 动作
 
 | Priority | Decision | Result |
 |---|---|---|
@@ -110,7 +110,7 @@ handler 会加 reaction、创建新 task row，并在同一个 Discord thread �
 
 Smart Router button custom ID 只包含短 token，不包含 prompt。confirmation state 有短期过期时间，并且不跨进程重启保存。
 
-## InteractionCreate
+## InteractionCreate 事件
 
 button dispatch 先于 slash command dispatch：
 
@@ -136,7 +136,7 @@ button dispatch 先于 slash command dispatch：
 - `/forget`
 - `/memories`
 
-## Chat Runtime Feedback
+## Chat Runtime 反馈
 
 ```mermaid
 sequenceDiagram
@@ -160,7 +160,7 @@ chat 故意保持 read-oriented。workspace writes、shell execution、Git opera
 
 最终 Discord Markdown 投递会使用共享的 2000 字符 chunker。裸 `https://...` 链接会被集中到最后的 link-preview footer，正文 chunk 会 suppress embeds；但用 `<https://...>` 包起来的 Discord no-embed 链接会保留 no-preview 语义，不会被复制到 preview footer。发布大量链接的 cron prompt 如果希望链接可点击但不出现预览卡片，应优先使用 angle-bracket 形式。
 
-## Safe Change Map
+## 安全变更地图
 
 | Goal | Change Area |
 |---|---|

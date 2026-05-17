@@ -5,11 +5,11 @@ translation_of: docs/architecture.md
 translation_status: current
 source_sha256: e408c210a0da0929ee98969cc678cb4db7179dbe706a078b69fa343be6d541ca
 ---
-# MiniClaw Architecture
+# MiniClaw 架构
 
 > MiniClaw 是 local-first、Discord-native 的 agent runtime。Discord 是用户交互面；Node 22 是进程 runtime；`~/.miniclaw/` 是用户数据边界；SQLite 记录 durable task、routing、incident、provider 和 Agent Run Manager 状态。
 
-## System View
+## 系统视图
 
 ```mermaid
 flowchart LR
@@ -85,7 +85,7 @@ flowchart LR
   Ops --> SMTP
 ```
 
-## Runtime Boundaries
+## Runtime 边界
 
 MiniClaw 把 code、user state 和 public docs 做硬边界隔离：
 
@@ -96,7 +96,7 @@ MiniClaw 把 code、user state 和 public docs 做硬边界隔离：
 
 runtime registry 把 agent execution 和 routing 分离。`src/runtime/agent-runtime.ts` 定义统一 runtime interface，`src/agent/runtimes/registry.ts` 把配置映射到 Claude、Codex 或 fake task runner。`runtime.default_agent` 是推荐配置键；legacy `agent.provider` 仍作为兼容 fallback。
 
-## Message And Task Flow
+## 消息与任务流程
 
 ```mermaid
 sequenceDiagram
@@ -130,7 +130,7 @@ sequenceDiagram
   B-->>D: status, progress, final output
 ```
 
-## Smart Router
+## Smart Router 路由器
 
 Smart Router 是 chat-eligible path 内的第二层决策。第一层仍然负责 Discord hard routing：ignore、thread continuation、task channel 或 chat candidate。第二层决定 chat candidate 应继续 chat、显示 task confirmation，还是在配置过的 channel 中自动转 task。
 
@@ -158,7 +158,7 @@ flowchart TD
   ACT -->|confirmation not allowed| C
 ```
 
-## Agent Run Manager
+## Agent Run Manager 管理器
 
 Agent Run Manager 是 `executeTask()` 和 `AgentRuntime` 之间的可选 controlled insertion layer。`agent_run_manager.enabled=false` 且 `agent_run_manager.auto_enabled=false` 时，系统保持 single-agent runtime path。启用后，MiniClaw 会创建 root supervisor run 和 managed child runs，并提供 typed messages、artifacts、blackboard facts、policy checks、sweeper recovery 和可选 ACP-style access。
 
@@ -189,7 +189,7 @@ flowchart TD
 - sweeper 处理 stale active runs、waiting scheduler timeout、orphan children、terminal cleanup 和 restart recovery。
 - ACP server 是 localhost、task-scoped、bearer-token protected，默认关闭。
 
-## Providers And Cron
+## Provider 与 Cron
 
 ```mermaid
 flowchart LR
@@ -211,7 +211,7 @@ flowchart LR
 
 provider collection 默认 read-only，除非 provider 明确记录 commit phase。`commit()` 延迟到 downstream task success 后执行。provider docs 放在 `docs/providers/`；private account/session details 放在 `docs/private/` 或 `~/.miniclaw/`，不得进入 public docs。
 
-## Storage Model
+## 存储模型
 
 MiniClaw 使用 `~/.miniclaw/data.db`，SQLite WAL mode。schema migration 通过 `PRAGMA user_version` 管理；当前 schema 由 `src/store/schema.ts` 定义为 `SCHEMA_VERSION = 14`。
 
@@ -251,11 +251,11 @@ erDiagram
 
 state retention 通过 `state.retention.*` 配置。cleanup 先 dry-run：`pnpm run state:cleanup -- --dry-run`；破坏性清理必须显式传入 `--execute`。
 
-## Delivery And Recovery
+## 投递与恢复
 
 `recovery_outbox` 把本地执行结果和 IM delivery 分离。`cron_failure_alert` 保存 Discord delivery 不可用时可重试的 cron failure alert；`task_result_delivery` 保存 task result fragments 以便后续 delivery recovery。Discord 仍是唯一完整 interactive gateway；Feishu 目前是 outbound-only。
 
-## Observability And Operations
+## 可观测性与运维
 
 - `task_events` 记录 lifecycle、protocol/tool events 和 Discord status transitions。
 - `src/store/task-trace-export.ts` 与 `src/store/agent-run-trace-export.ts` 生成 redacted Markdown traces，供 `/task-log`、incident view 和本地 CLI review 使用。
@@ -263,7 +263,7 @@ state retention 通过 `state.retention.*` 配置。cleanup 先 dry-run：`pnpm 
 - guarded repair/ship flow 必须经过 operator approval，并先通过 repair branch，不能直接碰 `main`。
 - `safe-restart` 会在 active task/chat work 存在时阻止 unsafe restart。
 
-## Design Invariants
+## 设计不变量
 
 - Discord routing 决定入口；agent runtimes 不决定 Discord event 是否允许处理。
 - chat 是 read-oriented。file writes、shell execution、Git changes、durable output 和 multi-step coding 属于 task runtime。

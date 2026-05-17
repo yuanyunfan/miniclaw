@@ -25,6 +25,7 @@
 
 ### Changed
 - 以 English canonical 重写当前核心 docs：`docs/README.md`、`docs/architecture.md`、`docs/bot-routing.md`、`docs/chat-router-current-logic.md`、`docs/install-distribution-strategy.md`、`docs/prompts.md` 和 `docs/quality-gates.md`；对应中文 mirror 同步为 `docs/zh/**`。
+- 润色 `docs/zh/**` 中文 mirror 的章节标题和高频机器翻译术语，并标记受影响中文 website summary 为语义未变。
 - App Trending 默认频道从 `daily-app-trending` 改为 `weekly-app-trending`，频道初始化脚本会把旧频道原地重命名并清理旧 channel-map key。
 
 ### Fixed

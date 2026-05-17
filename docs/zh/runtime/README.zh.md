@@ -5,11 +5,11 @@ translation_of: docs/runtime/README.md
 translation_status: current
 source_sha256: 192396badc6baaddbac546b9100d90ceaecfdcec7f62ff236c4c641bee288a6d
 ---
-# MiniClaw Runtime
+# MiniClaw Runtime 文档
 
 > 结论：runtime 文档说明 MiniClaw 如何接收 Discord / IM 输入、路由 chat/task 工作、执行 cron 和 agent task、管理 memory/context，以及处理运行态恢复。Provider 文档负责外部数据采集 contract；runtime 文档负责执行、持久化、投递和修复行为。
 
-## Runtime Map
+## Runtime 地图
 
 ```mermaid
 flowchart TD
@@ -30,7 +30,7 @@ flowchart TD
   Manager --> AgentBus[Agent Bus / ACP lifecycle]
 ```
 
-## Intake And Routing
+## 入口与路由
 
 Owner docs:
 
@@ -68,7 +68,7 @@ flowchart LR
   Policy --> Ignore[ignore / no-op]
 ```
 
-## Task Output And Trace UX
+## 任务输出与 Trace UX
 
 Owner code paths:
 
@@ -96,7 +96,7 @@ Current delivery shape:
 - Final result: 普通 Markdown message，必要时 chunking。
 - Trace view: task events 和 trace-export command 提供 operator 级细节。
 
-## Cron Runtime
+## Cron Runtime 执行时
 
 Owner code paths:
 
@@ -131,7 +131,7 @@ Runtime contract:
 - Cron run record 是 Auto Doctor 和 recovery workflow 的运维证据。
 - Script job 和 task job 共享 delivery semantics，但不共享 prompt/provider handling。
 
-## Memory And Prompt Context
+## Memory 与 Prompt 上下文
 
 Owner code paths:
 
@@ -161,7 +161,7 @@ flowchart LR
   Store --> Maintenance[Maintenance / archive / metadata]
 ```
 
-## Connectivity And Recovery
+## 连接性与恢复
 
 Owner code paths:
 
@@ -180,7 +180,7 @@ Operations contract:
 - Recovery outbox 应在 Discord connectivity 恢复后回填失败的 cron/task delivery。
 - Pre-clientReady watchdog failure 应在本机可见，并且输出经过 redaction。
 
-## Auto Doctor
+## Auto Doctor 诊断器
 
 Owner code paths:
 
@@ -210,7 +210,7 @@ Safety boundary:
 - Ship flow 不能绕过 review、verification 或 restart policy。
 - Secrets、cookies、tokens、account IDs 和 raw private provider payloads 必须从 report 中 redacted。
 
-## Agent Run Manager
+## Agent Run Manager 管理器
 
 Owner code paths:
 
@@ -229,11 +229,11 @@ Runtime boundary:
 - Final synthesis 应引用 child outcomes，并保留 failed/partial child state。
 - Sweeper 和 guardrails 必须防止 stuck run 和无界 child-runtime 增长。
 
-## Legacy Cleanup
+## 历史遗留清理
 
 上一轮 feature-level runtime stubs 已在迁移完成后删除。本文件现在是这些 runtime 主题的 canonical 中文 mirror。
 
-## Development Checklist
+## 开发检查清单
 
 - Routing 或 Smart Router 行为变化：更新本文件、[`../../bot-routing.md`](../../bot-routing.md) 和 [`../../chat-router-current-logic.md`](../../chat-router-current-logic.md)。
 - Task output、task events 或 trace 行为变化：更新 Task Output section。

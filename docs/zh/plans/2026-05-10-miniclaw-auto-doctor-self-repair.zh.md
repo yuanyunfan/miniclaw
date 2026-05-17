@@ -43,7 +43,7 @@ MiniClaw 现在已经作为一个长期运行的 Discord task runner 使用。�
 - `src/agent/task.ts` 负责进程内 active task tracking、cancellation、graceful drain wait 和 interrupted-task persistence。
 - `src/agent/recovery.ts` 在启动时把 stale running tasks 标记为 interrupted，并把 recovery guidance 发到 Discord threads。
 - `src/runtime/shutdown.ts` 是共享 draining-state holder；drain 激活后会拒绝新 work。
-- `src/index.ts` 负责 graceful shutdown 路径：停止 monitor/scheduler、等待 task drain、只在 timeout 后 interrupt remaining tasks，然后退出。
+- `src/index.ts` 负责 graceful shutdown 路径：停止 monitor/scheduler、等待 task drain、只在 timeout 后 interrupt remaining tasks，然backoff出。
 - `src/cron/scheduler.ts` 记录 cron run status、retry failures，并可以发送或更新 Discord failure alerts。
 - `src/monitoring/connectivity-monitor.ts` 和 `src/monitoring/connectivity-core.ts` probe Discord、general network 和 SMTP reachability，然后持久化 runtime connectivity state。
 - `src/ops/safe-restart.ts` 会在 MiniClaw SQLite DB 中存在 `status='running'` tasks 时拒绝 PM2 restart，除非显式提供 `--force`。
@@ -52,7 +52,7 @@ MiniClaw 现在已经作为一个长期运行的 Discord task runner 使用。�
 
 ## 提议架构
 
-### 1. Incident Detector
+### 1. Incident 检测器
 
 增加一个 detector layer，定期扫描 runtime sources，并把症状标准化为 incidents。
 
@@ -76,7 +76,7 @@ MiniClaw 现在已经作为一个长期运行的 Discord task runner 使用。�
 - `pm2_restart_loop`
 - `quality_gate_failed`
 
-### 2. Auto Doctor
+### 2. Auto Doctor 诊断器
 
 Auto Doctor 是只读的。它应该收集证据、分类故障，并把诊断发送到 Discord。
 
@@ -93,7 +93,7 @@ Auto Doctor 是只读的。它应该收集证据、分类故障，并把诊断�
 
 这一层应该先启用，因为它不会修改代码或 runtime state，安全性最高。
 
-### 3. Self-Repair Worker
+### 3. 自修复 Worker
 
 Self-Repair Worker 是一个独立 CLI/script，不应该嵌入长期运行的 Discord bot 逻辑中。
 
@@ -118,7 +118,7 @@ Worker responsibilities：
 6. 运行 verification gates。
 7. 产出 repair report，包含 changed files、diff summary、tests 和 remaining risks。
 
-### 4. Ship Controller
+### 4. 发布控制器
 
 Ship Controller 决定一个 repair 是否可以 commit、push 和 deploy。
 
@@ -209,7 +209,7 @@ Incident statuses：
 
 ## 实施计划
 
-### Phase 1: Read-Only Doctor
+### 阶段 1：只读 Doctor
 
 1. 增加 `src/ops/doctor/` modules 来收集 evidence：
    - task DB collector
@@ -229,7 +229,7 @@ Incident statuses：
    - cron failure alert button：`诊断`
 4. 在 Discord 中渲染简洁诊断，不产生修改。
 
-### Phase 2: Incident Persistence
+### 阶段 2：Incident 持久化
 
 1. 增加 `incidents` 和 `incident_events` tables。
 2. 按 source 和 time window deduplicate incidents。
@@ -237,7 +237,7 @@ Incident statuses：
 4. 在 `/health` 中展示 open incident counts。
 5. 如有用，增加 `/incidents` 和 `/incident id:<id>` read-only commands。
 
-### Phase 3: Controlled Repair Worker
+### 阶段 3：受控修复 Worker
 
 1. 增加 `scripts/doctor-repair.ts`。
 2. 创建 isolated repair worktrees。
@@ -251,7 +251,7 @@ Incident statuses：
 5. 把 repair report 发送到 Discord。
 6. 本阶段不 auto-push 到 `main`。
 
-### Phase 4: Guarded Auto Ship
+### 阶段 4：受保护的自动发布
 
 1. 增加 config：
    - `doctor.enabled`
@@ -314,7 +314,7 @@ Phase 4：
 - Auto Doctor 默认保持 read-only。
 - Self-Repair Worker 默认禁用，除非显式配置。
 
-## Discord UX
+## Discord UX 体验
 
 推荐 commands/buttons：
 
@@ -412,7 +412,7 @@ Recommended action:
   - 增加 `/incident retry-repair`，在不绕过 repair policy 或 approval gates 的前提下，把 eligible incidents 重新开放给 hourly scheduler。
   - 增加 `/incident ship-preview`，运行 guarded `doctor:ship` dry-run path，并记录 preview event。
 
-## 下一阶段开发计划：Hourly Doctor And Self-Repair
+## 下一阶段开发计划：Hourly Doctor 与自我修复
 
 ### 目标行为
 
@@ -443,7 +443,7 @@ MiniClaw 应该每小时自动运行一次 Auto Doctor，检测 actionable incid
 
 Hourly trigger 应实现为 built-in runtime scheduler，而不是 user YAML cron job。Doctor loop 是 MiniClaw operations infrastructure，需要访问 incident persistence、repair policy 和 alert state；不应混进普通 user cron jobs。
 
-### Phase 2A: Incident Persistence And Deduplication
+### 阶段 2A：Incident 持久化与去重
 
 在任何 repair logic 之前增加 DB-backed incident storage：
 
@@ -470,7 +470,7 @@ Exit criteria：
 - `/health` 报告 open incident count。
 - 此时仍没有 code repair path。
 
-### Phase 2B: Hourly Auto Doctor Loop
+### 阶段 2B：每小时 Auto Doctor 循环
 
 增加 `src/ops/doctor-scheduler.ts`，并在 Discord `clientReady` 后从 `src/index.ts` 启动。
 
@@ -491,7 +491,7 @@ Exit criteria：
 - Clean scans 不会 spam Discord。
 - Drain state 会阻止 doctor loop 开始新的 repair work。
 
-### Phase 3A: Self-Repair Worker
+### 阶段 3A：自修复 Worker
 
 增加独立 worker CLI：
 
@@ -540,7 +540,7 @@ Exit criteria：
 - 安全的 fixture bug 可以在 isolated worktree 中生成 patch。
 - Verification 失败时保留 repair branch 和 report 供检查。
 
-### Phase 3B: Verification And Commit Policy
+### 阶段 3B：验证与提交策略
 
 增加 repair verifier，按成本递增顺序运行 staged gates：
 
@@ -566,7 +566,7 @@ Exit criteria：
 - Failing repair 会记录准确 failed gate，且不会 commit。
 - Forbidden path changes 会在 commit 前被拒绝。
 
-### Phase 4: Guarded Ship And Live Update
+### 阶段 4：受保护发布与在线更新
 
 该阶段应该在 Phase 3 有真实 successful runs 之后 opt-in。
 
@@ -591,11 +591,11 @@ Exit criteria：
 - `#monitor-github` 会为每次 repair attempt 收到完整 audit summary。
 - Operator 可以从 repair report approve 或手动 merge/restart。
 
-### Phase 5: Reliability, Observability, And Operator UX
+### 阶段 5：可靠性、可观测性与 Operator UX
 
 Phase 5 还不应该放松 `main` update 或 live restart approval boundary。Phase 4B 之后，系统已经能 produce、push 和 ship guarded repair branches。下一目标是让 repair loop 更容易理解、审计、retry 和改进，然后再考虑更自动化的 production updates。
 
-#### Phase 5A: Incident Detail And Lifecycle Operations
+#### 阶段 5A：Incident 详情与生命周期操作
 
 把 incidents 变成 Discord 中的一等 operator surface：
 
@@ -615,7 +615,7 @@ Exit criteria：
 - Resolved 和 ignored incidents 不再出现在默认 open incident list。
 - Retry actions 不绕过 repair policy、dirty-worktree checks 或 approval gates。
 
-#### Phase 5B: TaskReporter And Normalized Trace
+#### 阶段 5B：TaskReporter 与标准化 Trace
 
 通过记录 structured task events 来提升 Auto Doctor diagnosis quality，而不是主要依赖 log text：
 
@@ -638,7 +638,7 @@ Exit criteria：
 - Auto Doctor reports 能更可靠地区分 MiniClaw bugs 与 provider data/auth/network/user-prompt failures。
 - Discord progress/final-message rendering 成为 task events 的 consumer，而不是 runtime logic 的来源。
 
-#### Phase 5C: Repair Quality Metrics And Promotion Policy
+#### 阶段 5C：修复质量指标与晋级策略
 
 在放松 approval settings 之前增加 reliability metrics：
 
@@ -659,7 +659,7 @@ Exit criteria：
 - 在削弱任何 approval gate 之前，有文档化、可度量的原因。
 - Blind automatic `main` update 或 forced restart 继续被禁止。
 
-#### Phase 5D: Discord Operator Actions
+#### 阶段 5D：Discord Operator 动作
 
 让现有 guarded flow 更容易从 `#monitor-github` 执行：
 
@@ -678,7 +678,7 @@ Exit criteria：
 - 对 routine cases，operator 可以在不离开 Discord 的情况下，从 alert 走到 diagnosis、repair preview 和 guarded ship。
 - Main update 和 restart 仍要求 explicit action，并且在 tasks running 时仍尊重 safe restart refusal。
 
-#### 后续：Incident Board 或 Dashboard
+#### 后续：Incident 看板或 Dashboard
 
 Web dashboard 不是下一优先级。只有在 Discord incident operations 和 structured trace data 已存在，并且跨 incident search、provider health boards 或更长 repair history views 在 Discord 中变得痛苦时，才增加 dashboard。
 

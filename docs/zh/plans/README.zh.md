@@ -29,50 +29,50 @@ docs/plans/YYYY-MM-DD-short-slug.md
 Status: draft | in_progress | completed | superseded
 Date: YYYY-MM-DD
 
-## Background
+## 背景
 
 What problem is being solved, and which existing behavior matters?
 
-## Goals
+## 目标
 
 What must be true when this work is done?
 
-## Non-Goals
+## 非目标
 
 What is intentionally out of scope?
 
-## Existing Architecture Evidence
+## 现有架构证据
 
 - Relevant files:
 - Relevant commands:
 - Relevant data/config:
 
-## Implementation Plan
+## 实施计划
 
 1. ...
 2. ...
 3. ...
 
-## Verification Plan
+## 验证计划
 
 - Type check:
 - Unit tests:
 - Integration/E2E checks:
 - Manual checks:
 
-## Risks And Rollback
+## 风险与回滚
 
 - Risk:
 - Mitigation:
 - Rollback:
 
-## Documentation Sync
+## 文档同步
 
 - README:
 - docs:
 - CHANGELOG:
 
-## Execution Notes
+## 执行记录
 
 Record material deviations from the plan and final verification evidence here.
 ```

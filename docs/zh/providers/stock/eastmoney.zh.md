@@ -5,11 +5,11 @@ translation_of: docs/providers/stock/eastmoney.md
 translation_status: current
 source_sha256: f81e744c1f9eeab597614c548dc8449ab65adb975aa784e0b7e6fc56784e1ac9
 ---
-# Eastmoney Provider Family
+# 东方财富 Provider 系列
 
 > 结论：Eastmoney 现在作为一个 provider family 维护，但包含多个独立 runtime boundaries。`eastmoney-jywg-readonly` 从 `jywg.18.cn` 读取 JYWG account evidence；`eastmoney-etf-premium` 从 Eastmoney fund selector 读取 public ETF premium data；`eastmoney-myfavor` 从 `myfavor.eastmoney.com` 读取 watchlist securities。它们共享文档 family，但不能共享 sessions、endpoints 或 business semantics。
 
-## Family Map
+## 系列地图
 
 ```mermaid
 flowchart TD
@@ -30,7 +30,7 @@ flowchart TD
   WatchlistResearch -. excludes holdings .-> Research[Watchlist research]
 ```
 
-## Runtime Boundaries
+## Runtime 边界
 
 JYWG readonly:
 
@@ -58,7 +58,7 @@ Public ETF premium:
 - Field contract: 原始 `PREMIUM_DISCOUNT_RATIO` 输出为 `eastmoney_discount_ratio`；MiniClaw 输出 `premium_rate = 0 - PREMIUM_DISCOUNT_RATIO`。
 - Non-goal: per-share NAV/IOPV enrichment。Eastmoney 返回的 raw `DEC_NAV` field 会被保留，但不会被当成 per-share NAV。
 
-## JYWG Readonly Provider
+## JYWG 只读 Provider
 
 Purpose:
 
@@ -175,7 +175,7 @@ pnpm run build
 pnpm test
 ```
 
-## MyFavor Watchlist Provider
+## MyFavor 自选股 Provider
 
 Purpose:
 
@@ -287,17 +287,17 @@ pnpm run quality:docs
 pnpm run typecheck
 ```
 
-## Bootstrap Rules
+## Bootstrap 规则
 
 - 两个 integrations 都使用 visible browser bootstraps，因为 login 和 account checks 由用户控制。
 - Bootstrap 不是 manual data export。成功 bootstrap 后，cron/provider runs 应使用自动 readonly requests。
 - Bootstrap sessions 相互独立。JYWG cookies 不应满足 MyFavor 行为，MyFavor cookies 也不应满足 JYWG 行为。
 
-## Legacy Cleanup
+## 历史遗留清理
 
 上一轮 Eastmoney feature-level stubs 已在迁移完成后删除。新的实现事实应写入这个 family doc；敏感内容写入 `docs/private/eastmoney/**`。
 
-## Development Checklist
+## 开发检查清单
 
 - 如果 JYWG holding payloads、redaction、asset gap handling 或 premium field mapping 变化，更新这里的 JYWG section。
 - 如果 MyFavor group/list behavior、appkey handling、market mapping 或 watchlist-source semantics 变化，更新这里的 MyFavor section。

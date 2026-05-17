@@ -5,11 +5,11 @@ translation_of: docs/providers/content.md
 translation_status: current
 source_sha256: 6befa522d8cae1cf79a9a877e10e595c687c866222ec6c7f2afe4787e9cb6825
 ---
-# Content Provider Family
+# 内容 Provider 系列
 
 > 结论：content providers 采集外部文章/内容 metadata、做 dedupe，并把可进入 prompt 的 context 格式化给 cron tasks。当前 content provider 是 `wechat-mp`；它通过用户控制的 web session 读取微信公众号后台文章 metadata，并且必须把 session file 当作敏感凭据。
 
-## Data Flow
+## 数据流
 
 ```mermaid
 flowchart LR
@@ -23,7 +23,7 @@ flowchart LR
   Cron --> Discord[Discord delivery]
 ```
 
-## WeChat MP Provider
+## 微信公众号 Provider
 
 Runtime name: `wechat-mp`.
 
@@ -57,7 +57,7 @@ Non-goals:
 - 不抓取或总结完整私有文章正文，除非未来 provider 显式增加安全的 body contract。
 - 不把 WeChat session token/cookies 暴露到 Discord、logs、repo docs 或 LLM prompts。
 
-## Config Shape
+## 配置形态
 
 User config lives under `~/.miniclaw/providers/wechat-mp/<name>.yaml`:
 
@@ -93,7 +93,7 @@ Fixed window semantics:
 - 北京时间 17:00 run：当天 09:00 到当天 17:00。
 - Window 左闭右开：`start <= publish_time < end`。
 
-## Session Refresh
+## Session 刷新
 
 Commands:
 
@@ -110,7 +110,7 @@ Session contract:
 - Check 和 collect commands 必须 redact token/cookie values。
 - Dry run 不能提交 dedupe state。
 
-## Cron Usage
+## Cron 使用方式
 
 Example cron job:
 
@@ -139,7 +139,7 @@ cron task
   -> commit dedupe state only after downstream task success
 ```
 
-## Safety Contract
+## 安全契约
 
 - `auth_path` 等价于 Official Account backend web session credential。
 - Provider output 只能包含 article metadata、account names、titles、digests、publish times 和 links。
@@ -147,7 +147,7 @@ cron task
 - Frequency control 或 invalid-session errors 应作为带 redacted diagnostics 的 provider failures 暴露。
 - Website pages 可以总结 WeChat ingestion，但实现事实应把本页作为 `source_docs`。
 
-## Legacy Cleanup
+## 历史遗留清理
 
 上一轮 feature-level content stub 已在迁移完成后删除。新的实现事实应写到本文件。
 

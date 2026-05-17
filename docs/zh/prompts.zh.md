@@ -22,7 +22,7 @@ MiniClaw 把较长的 framework-owned system prompt 放在 repo 级 `prompts/` �
 
 prompt 资产不同于 `agents/*.md` role definition、`personas/*.md` Stage persona 和 `~/.miniclaw/memories/MEMORY.md` 长期记忆。那些是 domain 或 user asset；`prompts/` 是 framework-level runtime contract。
 
-## Code-Owned Prompt Fragments
+## 代码内置 Prompt 片段
 
 有些 prompt fragment 仍故意保留在代码里，因为它们很短、很动态，或和 runtime contract 强耦合。修改它们时必须同步 tests 和 docs。
 
@@ -46,7 +46,7 @@ Prompt body can use {{name}} and {{count}}.
 Built-in variables do not need declaration: {{date}} {{time}} {{iso}} {{weekday}}
 ```
 
-## Template Syntax
+## Template 语法
 
 prompt template 复用 `src/cron/template.ts:renderTemplate`。
 
@@ -61,7 +61,7 @@ prompt template 复用 `src/cron/template.ts:renderTemplate`。
 | `{{iso}}` | `2026-04-30T06:30:00.000Z` |
 | `{{weekday}}` | `Wednesday` |
 
-## Loader Validation
+## Loader 校验
 
 loader 读取 prompt 文件时会做两类校验：
 
@@ -70,7 +70,7 @@ loader 读取 prompt 文件时会做两类校验：
 
 这样可以在 prompt 到达 LLM 前发现 missing variable 和拼写错误。
 
-## User-Level Overrides
+## 用户级 Override
 
 用户可以把文件复制到 `~/.miniclaw/prompts/<name>.md` 来 override repo prompt。loader 优先级：
 
@@ -81,13 +81,13 @@ loader 读取 prompt 文件时会做两类校验：
 
 修改 `prompts/supervisor.md` 会影响全部 `/task` 行为。override 前必须先理解它的设计意图。
 
-## Cache And Hot Reload
+## Cache 与热重载
 
 loader 按 file mtime 缓存每个 prompt。编辑 prompt 文件后不需要重启进程；下一次加载会检测 mtime 变化并重新读取。
 
 `MINICLAW_PROMPT_CACHE=strict` 会禁用 mtime invalidation，适合 prompt 内容只应通过进程重启变更的长期生产运行。
 
-## Failure Output
+## 失败输出
 
 prompt 加载失败会报告：
 
@@ -105,7 +105,7 @@ Example：
   hint: add the missing var to frontmatter vars, or remove the placeholder from the body
 ```
 
-## Prompt Change Workflow
+## Prompt 变更流程
 
 修改 `prompts/*.md` 时：
 

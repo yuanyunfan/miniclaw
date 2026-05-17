@@ -5,11 +5,11 @@ translation_of: docs/runbooks/local-deploy.md
 translation_status: current
 source_sha256: e57654d56f60903444c437951062a5a0211e58064fa8a3de4d9e3faa467ef8c4
 ---
-# MiniClaw Local Deploy Runbook
+# MiniClaw 本地部署 Runbook
 
 > 结论：MiniClaw deploy 的目标是让本机 PM2 runtime 安全切到一个已验证版本。不要把 GitHub push 直接绑定到自动 restart；deploy 必须经过 build、safe restart 和 health verification。
 
-## Standard Deploy
+## 标准部署
 
 ```bash
 git fetch origin
@@ -28,7 +28,7 @@ Then verify in Discord:
 /agent-config
 ```
 
-## Release Deploy
+## Release 部署
 
 To deploy a specific release:
 
@@ -43,7 +43,7 @@ pnpm run doctor
 
 Use a detached release checkout only when you intentionally want the runtime pinned to a release tag. For normal development and Auto Doctor repair flow, deploy from `main`.
 
-## Safe Restart Boundary
+## 安全重启边界
 
 `pnpm safe-restart` refuses to restart when active MiniClaw tasks or active chats exist. Do not use `pm2 restart miniclaw` as the default deploy command.
 
@@ -55,7 +55,7 @@ If safe restart is deferred:
 
 Use `--force` only for an explicit operator decision where interrupting work is acceptable.
 
-## Rollback
+## 回滚
 
 Rollback to the previous release tag:
 
@@ -70,7 +70,7 @@ pnpm run doctor
 
 If the bad release already changed persisted state, inspect `CHANGELOG.md` and the release notes for schema/config migration notes before rollback.
 
-## Verification
+## 验证
 
 Deploy is complete only after:
 

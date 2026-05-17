@@ -50,7 +50,7 @@ source_sha256: edef43fa70207b10f689a55e9f8d80b950cdaba1b2303db171a0f861b8f57f18
 9. `2026-05-11-provider-framework-sdk.md`
    - 将当前 pre-provider conventions 变成 manifest、health、dry-run、structured output、replay fixture 和 commit protocol。
 
-### Track D：Operations Surface
+### Track D：运维表面
 
 10. `2026-05-11-incident-center-ops-view.md`
     - 将现有 Auto Doctor incident paths 扩展成真正的 operator view。
@@ -74,7 +74,7 @@ source_sha256: edef43fa70207b10f689a55e9f8d80b950cdaba1b2303db171a0f861b8f57f18
 
 这些计划是 draft execution plans，不是永久 source of truth。当任务实现后：
 
-- 更新 plan `Status` 和 `Execution Notes`。
+- 更新 plan `Status` 和 `执行记录`。
 - 更新相关 source-of-truth doc，通常是 `docs/architecture.md`、`docs/bot-routing.md`、`docs/quality-gates.md` 或 `docs/archive/features/*.md`。
 - 如果行为实质上偏离计划，在关闭 session 前把新决策记录到计划中。
 

@@ -247,7 +247,7 @@ interface AgentSchedulerState {
 }
 ```
 
-### Required Indexes
+### 必要索引
 
 - `agent_runs(task_id, status, created_at)`
 - `agent_runs(parent_run_id, status)`
@@ -282,7 +282,7 @@ subagent A
 - **Speed**：live messages 不需要 DB polling 就能唤醒 waiting runs。
 - **Visibility**：每个 run 都收到 roster、allowed message kinds 和 bus usage instructions。
 
-### Direct JSON Message
+### 直接 JSON 消息
 
 每条 message 必须包含 `from`、`to`、`kind`、`task_id` 和 typed content。
 
@@ -300,7 +300,7 @@ subagent A
 }
 ```
 
-### Bus Tools / API
+### Bus 工具 / API
 
 - `list_agents()`
 - `send_message(to, kind, payload, artifacts?)`
@@ -311,7 +311,7 @@ subagent A
 - `list_blackboard()`
 - `upsert_blackboard_fact(key, content, confidence, source_message_id)`
 
-### Durable Envelope
+### 持久 Envelope
 
 没有 live bus access 的 runtime 可以返回 turn-end envelope 作为兼容 fallback。这不是目标体验。
 
@@ -361,11 +361,11 @@ Claude native `Agent` 继续作为 compatibility path，但 Manager-owned `agent
 
 每个 Codex child 是 managed child thread。Planner/evaluator 默认 read-only policy；generator 可以在明确允许时获得 workspace-write policy。由于 Codex 不提供 Claude SDK 的 per-subagent tool registration，Manager 必须强制 sandbox、prompt、execution policy 和 artifact/message 边界。
 
-### ACP Server And External Agents
+### ACP Server 与外部 Agent
 
 ACP 是进入 Agent Bus 的 protocol adapter，不是 scheduler。第一阶段默认 local、bearer-token protected、task-scoped，并且不暴露为 public marketplace。
 
-## Context Management
+## Context 管理
 
 Agent Run Manager 应减少 prompt growth：
 
@@ -385,7 +385,7 @@ Agent Run Manager 应减少 prompt growth：
 - Agents 不能直接写入彼此的 prompts、sessions 或 SQLite state。
 - 只有 redacted、user-facing conclusions 应进入 Discord。
 
-## Discord And Trace UX
+## Discord 与 Trace UX
 
 只暴露一个 Discord bot account。Child agent presence 以 compact task progress 表达：
 
@@ -424,7 +424,7 @@ Agent Run Manager 应减少 prompt growth：
 
 Snapshot date: 2026-05-15.
 
-### Completed
+### 已完成
 
 - Schema tables 和 required indexes 已落地。
 - Runs、messages、mailbox、blackboard、artifacts 和 scheduler state 的 typed store APIs 已落地。
@@ -445,75 +445,75 @@ Snapshot date: 2026-05-15.
 - C8 evidence-rich final synthesizer 已落地。
 - C9 multi-agent trace UX 已为 `/task-log` 和 incident views 落地。
 
-### Partially Implemented
+### 部分实现
 
 - LLM-generated DAG admission 仍然 gated。C7 支持 controlled opt-in DAG plans，但 Planner auto-generated plans 不会自动准入。
 - Per-node DAG replay 仍通过 `agent_scheduler_state.plan_json` 做 snapshot-based 恢复；还没有独立 node-state table。
 
-### Not Yet Implemented
+### 尚未实现
 
 - Managed traces 的独立 visual timeline UI。
 - DAG executor 中 per-node `repeat_policy` execution。
 
 ## 下一阶段计划
 
-### C0 - Status and Slice Planning
+### C0 - 状态与 Slice 规划
 
 - 保持本计划作为当前 implementation/status record。
 - 后续工作继续拆 slice，避免把 runtime injection、scheduler changes、sweeper behavior 和 ACP hardening 混在一个 review 单元。
 - Verification: `pnpm run quality:docs`.
 
-### C1 - Guardrails and Policy Enforcement
+### C1 - Guardrails 与策略执行
 
 - 按需扩展 `agent_run_manager` policy config 和 env overrides。
 - 保持 Manager spawn path 和 Bus path 的 guardrails enforcement。
 - Verification: config tests、Agent Bus tests、managed runtime tests 和 `pnpm run build`.
 
-### C2 - Live MCP Bus Injection
+### C2 - Live MCP Bus 注入
 
 - Completed 2026-05-15.
 - live bus 不可用时，继续保留 turn-end envelope fallback。
 - Verification: fake MCP bus fixture、Codex/Claude runner unit tests 和 managed runtime fallback regression。
 
-### C3 - Dynamic Scheduler and Yield/Resume
+### C3 - 动态 Scheduler 与 Yield/Resume
 
 - Completed 2026-05-15.
 - 当前默认仍是 planner -> generator -> evaluator 加 bounded fix loop。
 - Verification: dynamic spawn fixture、direct wake without polling、cancel during waiting 和 fan-out regression。
 
-### C4 - Role Policy Enforcement at Runtime Boundary
+### C4 - Runtime 边界的角色策略执行
 
 - Completed 2026-05-15.
 - 继续保留 read-only planner/evaluator negative tests 和 generator write positive tests。
 - Verification: per-role runner config tests 和 dangerous-command denial fixtures。
 
-### C5 - Sweeper and Restart Recovery
+### C5 - Sweeper 与重启恢复
 
 - Completed 2026-05-15.
 - Sweeper 处理 stale runs、orphan children、waiting scheduler timeout 和 manager-owned artifact cleanup。
 - Verification: stale run fixture、orphan child fixture、restart recovery simulation 和 state cleanup dry run。
 
-### C6 - ACP Lifecycle, Classifier Routing, and Docs Promotion
+### C6 - ACP 生命周期、分类器路由与文档晋级
 
 - Completed 2026-05-15.
 - ACP 默认保持 localhost/token protected。
 - Verification: ACP lifecycle tests、classifier routing tests、docs quality gate 和 single-agent regression。
 
-### C7 - Arbitrary DAG Scheduler
+### C7 - 任意 DAG Scheduler
 
 - Completed 2026-05-15.
 - `managed-runtime-dag-v1` 校验 nodes、dependencies、depth、width、parallelism 和 fail policy。
 - 除非显式传入 scheduler plan，默认 managed path 仍保持固定 planner/generator/evaluator flow。
 - Verification: scheduler and managed-runtime tests plus `pnpm run build`.
 
-### C8 - Evidence-Rich Final Synthesizer
+### C8 - 证据充分的最终 Synthesizer
 
 - Completed 2026-05-15.
 - Final output 使用 child run status、blackboard facts、artifact metadata、messages、verdicts 和 verification signals。
 - 没有 verification evidence 时，synthesizer 必须明确说明。
 - Verification: managed-runtime and final-synthesizer tests plus `pnpm run build`.
 
-### C9 - Dedicated Multi-Agent Trace UX
+### C9 - 专用 Multi-Agent Trace UX
 
 - Completed 2026-05-15.
 - `/task-log` 只在 managed tasks 中包含 managed section。

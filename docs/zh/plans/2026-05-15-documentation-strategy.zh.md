@@ -10,13 +10,13 @@ source_sha256: 33803ba223bc3584953d488a372735c72edcde6f0217ca4689d841396e643dbe
 Status: completed
 Date: 2026-05-15
 
-## Background
+## 背景
 
 MiniClaw 需要两个文档表面：repo 内 `docs/` 继续作为 LLM 和维护者使用的 docs-driven development source of truth，另建 GitHub Pages 网站作为面向人的项目门户。
 
 `docs/` 需要保留当前实现事实、计划、contract、runbook 和 drift checks。网站负责总结、可视化和引导阅读，并通过 `source_docs` 回链到 canonical repo docs，不能变成第二套 source of truth。
 
-## Goals
+## 目标
 
 - 保持 `docs/` 对 LLM 开发、实施计划和维护友好。
 - 创建适合人类读者快速理解 MiniClaw 的公开网站。
@@ -25,7 +25,7 @@ MiniClaw 需要两个文档表面：repo 内 `docs/` 继续作为 LLM 和维护�
 - 把 English 和 Chinese docs 都作为 first-class repo documentation 维护。
 - 增加 `quality:website-docs` 和 `quality:docs-i18n`，降低 website/docs/i18n drift。
 
-## Non-Goals
+## 非目标
 
 - 不直接把 repo 的 `docs/` 发布成 GitHub Pages。
 - 不公开 `docs/private/**`。
@@ -33,7 +33,7 @@ MiniClaw 需要两个文档表面：repo 内 `docs/` 继续作为 LLM 和维护�
 - 不让 `website/**` 替代 code-to-docs drift gate 所要求的 canonical docs。
 - 不在最初的 plan-only 设计 slice 中一次性移动所有 `docs/archive/features/` 文件。
 
-## Existing Architecture Evidence
+## 现有架构证据
 
 - `docs/README.md`: 当前 docs index 和 placement rules。
 - `docs/plans/README.md`: plan 文档模板。
@@ -53,7 +53,7 @@ source code -> canonical docs
 source code -> canonical docs -> website
 ```
 
-## Implementation Plan
+## 实施计划
 
 1. 保留 `docs/` 作为 canonical docs-driven development layer。
 2. 定义 `en` / `zh` 维护模型：短期保留 root `docs/` 作为 English canonical tree，`docs/zh/` 作为 tracked Chinese mirror。
@@ -70,21 +70,21 @@ source code -> canonical docs -> website
 
 ```mermaid
 flowchart LR
-  Current[Current mixed docs tree] --> Inventory[Inventory and migration map]
-  Inventory --> I18n[en/zh mirror and parity gate]
-  I18n --> Classify[Classify runtime / providers / reference / runbooks / experiments]
-  Classify --> Merge[Move or merge docs in small slices]
-  Merge --> Website[Curated website pages with source_docs]
+  Current[当前混合文档树] --> Inventory[清单与迁移地图]
+  Inventory --> I18n[en/zh 镜像与一致性 Gate]
+  I18n --> Classify[分类 runtime / providers / reference / runbooks / experiments]
+  Classify --> Merge[小 slice 移动或合并文档]
+  Merge --> Website[带 source_docs 的精选网站页面]
 ```
 
-## Verification Plan
+## 验证计划
 
 - plan-only 变更不需要 typecheck。
 - 实现 quality scripts 时需要运行 focused Vitest、`pnpm run typecheck` 和 `pnpm run quality:docs`。
 - `quality:docs-i18n` 对 migration map 漏收 tracked canonical source doc、required 中文 pair 缺失和 pending translation 都必须 blocking。
 - website scaffolding 存在后运行 `pnpm run quality:website-docs`。
 
-## Risks And Rollback
+## 风险与回滚
 
 - Risk: website 变成第二套 source of truth。
   - Mitigation: `source_docs` metadata 和 website docs gate。
@@ -98,7 +98,7 @@ flowchart LR
   - Mitigation: `doc_id`、`translation_of`、`translation_status` 和 `quality:docs-i18n`。
   - Rollback: 只有在中文文档确实不需要时，才在 migration map 中标为 `translation_status: not_required`；否则必须同 patch 修复中文 pair。
 
-## Documentation Sync
+## 文档同步
 
 - `docs/README.md`: 增加 migration map、bilingual policy 和 website policy。
 - `docs/zh/README.md`: 从 local review copy 改成 tracked Chinese docs index。
@@ -106,7 +106,7 @@ flowchart LR
 - `docs/quality-gates.md`: 补充 `quality:docs-i18n` 和 `quality:website-docs`。
 - `package.json`: 增加质量脚本并接入 `quality:docs`。
 
-## Execution Notes
+## 执行记录
 
 - 2026-05-15: 首批实现落地为独立 worktree slice，范围包括 migration map、tracked `docs/zh`、i18n/website docs gates、website skeleton 和 docs index 同步。
 - 2026-05-15: 本 slice 位于 branch `codex/documentation-strategy` 的独立 worktree；大规模 `docs/archive/features/` 分类、移动和合并仍保留为后续 docs-only slices。
