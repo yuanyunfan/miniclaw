@@ -3,7 +3,7 @@ doc_id: stock-providers-index
 lang: zh
 translation_of: docs/providers/stock/README.md
 translation_status: current
-source_sha256: a0444d867923616152229a9cc15575d2ed244eabeb4369c0512d525cbcd2e5f9
+source_sha256: 0546d883bf078264b9aa9fe09622c3bef5032fb211a10c9a2493d534d3a62f97
 ---
 # 股票 Provider 系列
 
@@ -28,6 +28,7 @@ flowchart LR
 
 ## Canonical 文档
 
+- [`../../../plans/2026-05-17-stock-provider-data-layer-migration.md`](../../../plans/2026-05-17-stock-provider-data-layer-migration.md): data-layer-first stock architecture 目标迁移计划，cron providers 保留为 orchestration layer。
 - [`../../../providers/stock/eastmoney.md`](../../../providers/stock/eastmoney.md): JYWG holdings 和 MyFavor watchlist 的 Eastmoney family boundary。
 - [`../../../providers/stock/research.md`](../../../providers/stock/research.md): 横跨 portfolio、pulse、market-intel 和 watchlist research 的 stock research provider pipeline。
 

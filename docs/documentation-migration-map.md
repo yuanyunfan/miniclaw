@@ -36,6 +36,17 @@ Field meanings:
     "translation_status": "current"
   },
   {
+    "doc_id": "stock-provider-data-layer-migration",
+    "source_path": "docs/plans/2026-05-17-stock-provider-data-layer-migration.md",
+    "zh_path": "docs/zh/plans/2026-05-17-stock-provider-data-layer-migration.zh.md",
+    "category": "plan",
+    "status": "keep",
+    "merge_group": "providers/stock",
+    "website_exposure": "internal",
+    "translation_required": true,
+    "translation_status": "current"
+  },
+  {
     "doc_id": "docs-index",
     "source_path": "docs/README.md",
     "zh_path": "docs/zh/README.md",

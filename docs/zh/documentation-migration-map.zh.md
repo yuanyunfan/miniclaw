@@ -3,7 +3,7 @@ doc_id: documentation-migration-map
 lang: zh
 translation_of: docs/documentation-migration-map.md
 translation_status: current
-source_sha256: 1fb004d0f6d127ad6146a92ef2d8d8e884a05eca5274f1bc38eb041d2934e435
+source_sha256: 4a6db63d20308fcefe96a304b74d9cc62a38641d32c68292126fe5fc010eb3f9
 ---
 # MiniClaw 文档迁移地图
 
@@ -37,6 +37,17 @@ source_sha256: 1fb004d0f6d127ad6146a92ef2d8d8e884a05eca5274f1bc38eb041d2934e435
     "category": "plan",
     "status": "keep",
     "merge_group": null,
+    "website_exposure": "internal",
+    "translation_required": true,
+    "translation_status": "current"
+  },
+  {
+    "doc_id": "stock-provider-data-layer-migration",
+    "source_path": "docs/plans/2026-05-17-stock-provider-data-layer-migration.md",
+    "zh_path": "docs/zh/plans/2026-05-17-stock-provider-data-layer-migration.zh.md",
+    "category": "plan",
+    "status": "keep",
+    "merge_group": "providers/stock",
     "website_exposure": "internal",
     "translation_required": true,
     "translation_status": "current"

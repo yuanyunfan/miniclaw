@@ -3,7 +3,7 @@ doc_id: plans-index
 lang: zh
 translation_of: docs/plans/README.md
 translation_status: current
-source_sha256: 618b3b920347c03dfce89ff9bb483c66cd90e37e67840811973629871adabcd0
+source_sha256: c5e3a44a1b2bb0e8d54b535d20d7d5085253632f6045b1065cbc9b8a4d835f16
 ---
 # 发展计划文件
 
@@ -13,6 +13,7 @@ source_sha256: 618b3b920347c03dfce89ff9bb483c66cd90e37e67840811973629871adabcd0
 
 ## 当前规划说明
 
+- [`2026-05-17-stock-provider-data-layer-migration.md`](../../plans/2026-05-17-stock-provider-data-layer-migration.md): draft；stock providers 的 data-layer-first 迁移计划，并保留 cron providers 作为 orchestration layer。
 - [`2026-05-15-documentation-strategy.md`](2026-05-15-documentation-strategy.md):完成;分层文件政策,`docs/`Docs-driving development source of truth, GitHub Pages 作为人造门户.
 
 文件命名 :

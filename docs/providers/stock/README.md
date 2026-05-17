@@ -21,6 +21,7 @@ flowchart LR
 
 ## Canonical Docs
 
+- [`../../plans/2026-05-17-stock-provider-data-layer-migration.md`](../../plans/2026-05-17-stock-provider-data-layer-migration.md): target migration plan for a data-layer-first stock architecture with cron providers as the orchestration layer.
 - [`eastmoney.md`](eastmoney.md): Eastmoney family boundary for JYWG holdings and MyFavor watchlist.
 - [`research.md`](research.md): stock research provider pipeline across portfolio, pulse, market-intel, and watchlist research.
 
