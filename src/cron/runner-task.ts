@@ -5,6 +5,7 @@ import { AttachmentBuilder, type Client, type SendableChannels } from "discord.j
 import { config } from "../config.js";
 import { sendTextFanout } from "../im/delivery.js";
 import { createTask } from "../store/db.js";
+import { recordMarketContextFromReport, stripMarketContextJsonForDisplay } from "../store/market-context.js";
 import { recordMarketForecastFromPayload, stripMarketForecastJsonForDisplay, updateMarketForecastReport } from "../store/market-forecasts.js";
 import { executeTask, getActiveTaskCount, type TaskResult } from "../agent/task.js";
 import { TaskReporter } from "../agent/task-reporter.js";
@@ -17,6 +18,7 @@ import { runPreProvider, runProviderDryRun, runProviderHealthCheck } from "../pr
 import type { PreProviderAttachment } from "../providers/types.js";
 import { categorizeProviderError, type ProviderDryRunResult, type ProviderHealthResult } from "../providers/framework.js";
 import type { MarketIntelPayload } from "../providers/market-intel/types.js";
+import type { MarketContextProviderPayload } from "../providers/market-context/types.js";
 import { DRAINING_MESSAGE, isDraining } from "../runtime/shutdown.js";
 
 const log = createLogger("cron");
@@ -172,6 +174,24 @@ function parseMarketIntelPayload(providerText: string): MarketIntelPayload {
     throw new Error("market-intel provider did not return a valid MarketIntelPayload JSON object");
   }
   return parsed as MarketIntelPayload;
+}
+
+function parseMarketContextProviderPayload(providerText: string): MarketContextProviderPayload {
+  const parsed = JSON.parse(providerText) as Partial<MarketContextProviderPayload>;
+  if (
+    parsed?.source !== "market-context" ||
+    typeof parsed.generated_at !== "string" ||
+    typeof parsed.profile !== "string" ||
+    typeof parsed.mode !== "string" ||
+    !parsed.run_context
+  ) {
+    throw new Error("market-context provider did not return a valid MarketContextProviderPayload JSON object");
+  }
+  return parsed as MarketContextProviderPayload;
+}
+
+function stripMachineJsonForDisplay(reportText: string): string {
+  return stripMarketContextJsonForDisplay(stripMarketForecastJsonForDisplay(reportText));
 }
 
 function buildCronSkillPrompt(jobName: string, skillName: string, skillArgs?: Record<string, string | number | boolean>): string {
@@ -342,6 +362,75 @@ async function runPreProviderPreflight(job: CronJobTask, runAt: Date, signal?: A
   log.info(`${job.name} pre_provider ${job.pre_provider} dry-run preflight ok`);
 }
 
+async function runPreContextProviders(
+  job: CronJobTask,
+  channel: SendableChannels,
+  runAt: Date,
+  signal?: AbortSignal,
+): Promise<{ prependedContext: string; commits: Array<() => Promise<void>> }> {
+  if (!job.pre_context_providers?.length) return { prependedContext: "", commits: [] };
+  let prependedContext = "";
+  const commits: Array<() => Promise<void>> = [];
+
+  for (const contextProvider of job.pre_context_providers) {
+    try {
+      throwIfAborted(signal);
+      const result = await runPreProvider(contextProvider.provider, {
+        configName: contextProvider.config,
+        jobName: job.name,
+        channelId: job.channel,
+        runAt,
+      });
+      if (result.skipTask) {
+        const message = result.skipTask.message
+          ? `${result.skipTask.reason}: ${result.skipTask.message}`
+          : result.skipTask.reason;
+        if (contextProvider.required) {
+          await channel.send(`⏰ cron \`${job.name}\` ❌ context provider ${contextProvider.provider} skipped: ${message.slice(0, 1200)}`);
+          throw new CronTaskRunError(`context provider ${contextProvider.provider} skipped: ${message}`, {
+            providerName: contextProvider.provider,
+            providerStatus: "skipped",
+            providerCategory: result.skipTask.reason,
+            errorCategory: result.skipTask.reason,
+          });
+        }
+        log.warn(`${job.name} optional context provider ${contextProvider.provider} skipped: ${message}`);
+        prependedContext += buildCronPreProviderBlock(
+          contextProvider.provider,
+          JSON.stringify({ source: contextProvider.provider, status: "skipped", reason: message }, null, 2)
+        );
+      } else {
+        prependedContext += buildCronPreProviderBlock(contextProvider.provider, result.text);
+      }
+      if (result.commit) commits.push(result.commit);
+    } catch (err) {
+      if (err instanceof CronTaskRunError) throw err;
+      const msg = err instanceof Error ? err.message : String(err);
+      if (contextProvider.required) {
+        await channel.send(`⏰ cron \`${job.name}\` ❌ context provider ${contextProvider.provider} 失败: ${msg.slice(0, 1200)}`);
+        throw new CronTaskRunError(`context provider ${contextProvider.provider} failed: ${msg}`, {
+          providerName: contextProvider.provider,
+          providerStatus: "failed",
+          providerCategory: categorizeProviderError(err),
+          errorCategory: categorizeProviderError(err),
+        });
+      }
+      log.warn(`${job.name} optional context provider ${contextProvider.provider} failed:`, err);
+      prependedContext += buildCronPreProviderBlock(
+        contextProvider.provider,
+        JSON.stringify({
+          source: contextProvider.provider,
+          status: "failed",
+          warning: "Optional context provider failed; continue with the primary cron provider.",
+          error: msg.slice(0, 500),
+        }, null, 2)
+      );
+    }
+  }
+
+  return { prependedContext, commits };
+}
+
 export async function runTask(job: CronJobTask, client: Client, context: CronJobRunContext = {}): Promise<CronJobRunOutcome> {
   throwIfAborted(context.signal);
   assertNotDraining(job.name);
@@ -358,9 +447,14 @@ export async function runTask(job: CronJobTask, client: Client, context: CronJob
 
   // 如果配了 pre_script，先跑它，把 stdout 拼到 prompt 顶部
   let prependedContext = "";
+  const preContextProviderCommits: Array<() => Promise<void>> = [];
   let preProviderCommit: (() => Promise<void>) | undefined;
   const preProviderAttachments: PreProviderAttachment[] = [];
   let marketIntelPayload: MarketIntelPayload | undefined;
+  let marketContextPayload: MarketContextProviderPayload | undefined;
+  const contextProviderResult = await runPreContextProviders(job, channel, runAt, context.signal);
+  prependedContext += contextProviderResult.prependedContext;
+  preContextProviderCommits.push(...contextProviderResult.commits);
   if (job.pre_script) {
     try {
       const stdout = await runPreScript(
@@ -372,7 +466,7 @@ export async function runTask(job: CronJobTask, client: Client, context: CronJob
         runAt,
         context.signal,
       );
-      prependedContext = buildCronPreScriptBlock(job.pre_script, stdout);
+      prependedContext += buildCronPreScriptBlock(job.pre_script, stdout);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       await channel.send(`⏰ cron \`${job.name}\` ❌ pre_script 失败: ${msg.slice(0, 1500)}`);
@@ -407,6 +501,9 @@ export async function runTask(job: CronJobTask, client: Client, context: CronJob
       prependedContext += buildCronPreProviderBlock(job.pre_provider, result.text);
       if (job.pre_provider === "market-intel") {
         marketIntelPayload = parseMarketIntelPayload(result.text);
+      }
+      if (job.pre_provider === "market-context") {
+        marketContextPayload = parseMarketContextProviderPayload(result.text);
       }
       preProviderCommit = result.commit;
       if (result.attachments?.length) {
@@ -469,6 +566,7 @@ export async function runTask(job: CronJobTask, client: Client, context: CronJob
     channel_id: job.channel,
     has_pre_script: Boolean(job.pre_script),
     has_pre_provider: Boolean(job.pre_provider),
+    pre_context_provider_count: job.pre_context_providers?.length ?? 0,
   });
   reporter.contextCaptured({
     source_route_type: "cron_task",
@@ -486,7 +584,9 @@ export async function runTask(job: CronJobTask, client: Client, context: CronJob
       signal: context.signal,
       deliveryChannelId: job.channel,
       deliveryContext: { route: "cron_task", jobName: job.name },
-      ...(marketForecastId ? { rawOutputTextTransform: stripMarketForecastJsonForDisplay } : {}),
+      ...(marketForecastId || marketContextPayload?.mode === "update"
+        ? { rawOutputTextTransform: stripMachineJsonForDisplay }
+        : {}),
     });
   } catch (err) {
     throw attachCronTaskRunMetadata(err, {
@@ -503,6 +603,31 @@ export async function runTask(job: CronJobTask, client: Client, context: CronJob
       llm_forecast_items: extraction.insertedItemCount,
     });
   }
+  if (marketContextPayload?.mode === "update") {
+    const targetScope = marketContextPayload.run_context.target_market_scope;
+    if (!targetScope) {
+      throw new CronTaskRunError(`${job.name} market-context update missing target_market_scope`, { taskId });
+    }
+    const update = recordMarketContextFromReport({
+      taskId,
+      jobName: job.name,
+      channelId: job.channel,
+      marketScope: targetScope,
+      generatedAt: marketContextPayload.generated_at,
+      tradeDate: marketContextPayload.run_context.trade_date,
+      sourcePayload: marketContextPayload,
+      reportText: result.result,
+    });
+    reporter.contextCaptured({
+      source_route_type: "market_context_persistence",
+      market_context_daily_id: update.dailyId,
+      market_context_json: update.hasJson,
+      market_context_items: update.upsertedItemCount,
+    });
+    if (!update.hasJson) {
+      throw new CronTaskRunError(`${job.name} market-context update did not include a valid <market_context_json> block`, { taskId });
+    }
+  }
   assertTaskResultOk(job.name, result, {
     taskId,
     ...(job.pre_provider ? { providerName: job.pre_provider, providerStatus: "failed" } : {}),
@@ -510,9 +635,14 @@ export async function runTask(job: CronJobTask, client: Client, context: CronJob
   await sendExtraCronResultDelivery(
     client,
     job,
-    marketForecastId ? stripMarketForecastJsonForDisplay(result.result) : result.result,
+    marketForecastId || marketContextPayload?.mode === "update"
+      ? stripMachineJsonForDisplay(result.result)
+      : result.result,
   );
   await sendPreProviderAttachments(channel, job.name, preProviderAttachments);
+  for (const commit of preContextProviderCommits) {
+    await commit();
+  }
   if (preProviderCommit) {
     await preProviderCommit();
   }

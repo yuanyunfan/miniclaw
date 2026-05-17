@@ -4,6 +4,7 @@ import {
   isPreProviderName,
   runProviderDryRun,
 } from "../src/providers/index.js";
+import { initDb } from "../src/store/db.js";
 
 interface ProviderDryRunCliArgs {
   provider?: string;
@@ -66,6 +67,7 @@ async function main(): Promise<void> {
   if (!manifest?.supportsDryRun) {
     throw new Error(`provider ${options.provider} does not support dry-run`);
   }
+  initDb();
   const result = await runProviderDryRun(options.provider, cliRunArgs(options, options.provider));
   const report = {
     provider: options.provider,

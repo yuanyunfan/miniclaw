@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   runPreProvider: vi.fn(),
   runProviderHealthCheck: vi.fn(),
   runProviderDryRun: vi.fn(),
+  recordMarketContextFromReport: vi.fn(() => ({ hasJson: true, dailyId: "market-context-1", upsertedItemCount: 2 })),
   recordMarketForecastFromPayload: vi.fn(() => "forecast-1"),
   updateMarketForecastReport: vi.fn(() => ({ hasJson: true, insertedItemCount: 4 })),
 }));
@@ -24,6 +25,11 @@ vi.mock("../../store/market-forecasts.js", () => ({
   recordMarketForecastFromPayload: mocks.recordMarketForecastFromPayload,
   stripMarketForecastJsonForDisplay: (text: string) => text.replace(/<market_forecast_json>[\s\S]*?<\/market_forecast_json>/g, "").trim(),
   updateMarketForecastReport: mocks.updateMarketForecastReport,
+}));
+
+vi.mock("../../store/market-context.js", () => ({
+  recordMarketContextFromReport: mocks.recordMarketContextFromReport,
+  stripMarketContextJsonForDisplay: (text: string) => text.replace(/<market_context_json>[\s\S]*?<\/market_context_json>/g, "").trim(),
 }));
 
 vi.mock("../../agent/task.js", () => ({
@@ -75,6 +81,8 @@ beforeEach(() => {
   mocks.runPreProvider.mockReset();
   mocks.runProviderHealthCheck.mockReset();
   mocks.runProviderDryRun.mockReset();
+  mocks.recordMarketContextFromReport.mockReset();
+  mocks.recordMarketContextFromReport.mockReturnValue({ hasJson: true, dailyId: "market-context-1", upsertedItemCount: 2 });
   mocks.recordMarketForecastFromPayload.mockReset();
   mocks.recordMarketForecastFromPayload.mockReturnValue("forecast-1");
   mocks.updateMarketForecastReport.mockReset();
@@ -391,6 +399,122 @@ describe("cron task runner", () => {
     const taskInput = mocks.executeTask.mock.calls[0]?.[0] as { prompt?: string } | undefined;
     expect(taskInput?.prompt).toContain("\"real_provider_payload\":true");
     expect(taskInput?.prompt).not.toContain("\"position_count\":2");
+  });
+
+  it("prepends optional pre_context_providers before the primary pre_provider", async () => {
+    const { runTask } = await import("../runner-task.js");
+    mocks.runPreProvider.mockImplementation(async (provider: string) => {
+      if (provider === "market-context") {
+        return {
+          text: JSON.stringify({
+            source: "market-context",
+            generated_at: "2026-05-17T12:00:00.000Z",
+            profile: "us-inject",
+            mode: "inject",
+            run_context: {
+              job_name: "us-stock-hourly-pulse",
+              channel_id: "1000000000000000000",
+              timezone: "America/New_York",
+              trade_date: "2026-05-17",
+              requested_market_scopes: ["us", "cross-market"],
+            },
+            previous_contexts: [],
+            active_items: [{ topic: "Fed", fact: "FOMC risk remains active" }],
+            usage_notes: [],
+          }),
+        };
+      }
+      return { text: "{\"real_provider_payload\":true}" };
+    });
+    mocks.executeTask.mockResolvedValue({
+      success: true,
+      sessionId: "codex:thread-1",
+      costUsd: 0,
+      durationMs: 1000,
+      turns: 1,
+      result: "ok",
+    });
+
+    await expect(runTask({
+      ...taskJob(),
+      name: "us-stock-hourly-pulse",
+      pre_context_providers: [{ provider: "market-context", config: "us-inject" }],
+      pre_provider: "stock-pulse",
+      pre_provider_config: "us-hourly",
+    }, client())).resolves.toMatchObject({
+      status: "success",
+      providerName: "stock-pulse",
+    });
+
+    expect(mocks.runPreProvider).toHaveBeenNthCalledWith(1, "market-context", expect.objectContaining({
+      configName: "us-inject",
+      jobName: "us-stock-hourly-pulse",
+    }));
+    expect(mocks.runPreProvider).toHaveBeenNthCalledWith(2, "stock-pulse", expect.objectContaining({
+      configName: "us-hourly",
+      jobName: "us-stock-hourly-pulse",
+    }));
+    const taskInput = mocks.executeTask.mock.calls[0]?.[0] as { prompt?: string } | undefined;
+    expect(taskInput?.prompt).toContain("FOMC risk remains active");
+    expect(taskInput?.prompt).toContain("\"real_provider_payload\":true");
+  });
+
+  it("persists market-context update reports and strips machine JSON from raw delivery", async () => {
+    const { runTask } = await import("../runner-task.js");
+    const providerPayload = {
+      source: "market-context",
+      generated_at: "2026-05-17T22:30:00.000Z",
+      profile: "us-update",
+      mode: "update",
+      run_context: {
+        job_name: "us-market-context-daily",
+        channel_id: "1000000000000000000",
+        timezone: "America/New_York",
+        trade_date: "2026-05-17",
+        target_market_scope: "us",
+        requested_market_scopes: ["us"],
+      },
+      previous_contexts: [],
+      active_items: [],
+      usage_notes: [],
+    };
+    mocks.runPreProvider.mockResolvedValue({ text: JSON.stringify(providerPayload) });
+    mocks.executeTask.mockResolvedValue({
+      success: true,
+      sessionId: "codex:thread-1",
+      costUsd: 0,
+      durationMs: 1000,
+      turns: 1,
+      result: [
+        "## Rolling market context",
+        "Fed repricing remains the dominant driver.",
+        "<market_context_json>{\"market_scope\":\"us\",\"trade_date\":\"2026-05-17\",\"digest_text\":\"Fed repricing remains dominant\",\"active_items\":[{\"stable_key\":\"fed-policy\",\"topic\":\"Fed policy\",\"fact\":\"Rates remain the main risk\",\"market_impact\":\"higher yield volatility\",\"confidence\":0.7}]}</market_context_json>",
+      ].join("\n"),
+    });
+
+    await expect(runTask({
+      ...taskJob(),
+      name: "us-market-context-daily",
+      pre_provider: "market-context",
+      pre_provider_config: "us-update",
+    }, client())).resolves.toMatchObject({
+      status: "success",
+      providerName: "market-context",
+    });
+
+    const createdTask = mocks.createTask.mock.calls[0]?.[0] as { id?: string } | undefined;
+    expect(mocks.recordMarketContextFromReport).toHaveBeenCalledWith({
+      taskId: createdTask?.id,
+      jobName: "us-market-context-daily",
+      channelId: "1000000000000000000",
+      marketScope: "us",
+      generatedAt: "2026-05-17T22:30:00.000Z",
+      tradeDate: "2026-05-17",
+      sourcePayload: providerPayload,
+      reportText: expect.stringContaining("market_context_json"),
+    });
+    const taskInput = mocks.executeTask.mock.calls[0]?.[0] as { rawOutputTextTransform?: (text: string) => string } | undefined;
+    expect(taskInput?.rawOutputTextTransform?.("<market_context_json>{}</market_context_json>\nvisible")).toBe("visible");
   });
 
   it("stops before provider collection and annotates dry-run preflight failures", async () => {

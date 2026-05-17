@@ -189,7 +189,9 @@ flowchart LR
   Job["cron/*.yaml"] --> Scheduler["cron/scheduler.ts"]
   Config["config.yaml<br/>cron.active_window"] --> Scheduler
   Scheduler --> Runner["runner-task / runner-script / runner-message"]
+  Runner --> ContextProvider["pre_context_providers"]
   Runner --> PreProvider["pre_provider"]
+  ContextProvider --> Framework["providers/framework.ts"]
   PreProvider --> Framework["providers/framework.ts"]
   Framework --> Stock["stock providers"]
   Framework --> Content["content providers"]
@@ -202,11 +204,11 @@ flowchart LR
 
 `cron.active_window` in `config.yaml` is a scheduler-level guard. When enabled, scheduled cron dispatches and missed-run catch-ups are recorded as skipped outside the configured local-time window before runners or providers execute. Manual `pnpm cron:test` remains an explicit operator path for troubleshooting.
 
-Provider collection is read-only unless a provider explicitly documents a commit phase. `commit()` is delayed until downstream task success. Provider docs live under `docs/providers/`; private account/session details live under `docs/private/` or `~/.miniclaw/` and must not enter public docs.
+`pre_context_providers` are optional, non-blocking background providers that run before `pre_script` and the primary `pre_provider`; they prepend durable context such as rolling market memory without replacing the task's source-of-truth provider. Provider collection is read-only unless a provider explicitly documents a commit phase. `commit()` is delayed until downstream task success. Provider docs live under `docs/providers/`; private account/session details live under `docs/private/` or `~/.miniclaw/` and must not enter public docs.
 
 ## Storage Model
 
-MiniClaw uses `~/.miniclaw/data.db` in SQLite WAL mode. Schema migrations are managed through `PRAGMA user_version`; the current schema is defined by `src/store/schema.ts` as `SCHEMA_VERSION = 14`.
+MiniClaw uses `~/.miniclaw/data.db` in SQLite WAL mode. Schema migrations are managed through `PRAGMA user_version`; the current schema is defined by `src/store/schema.ts` as `SCHEMA_VERSION = 15`.
 
 ```mermaid
 erDiagram
@@ -217,9 +219,11 @@ erDiagram
   tasks ||--o{ blackboard_facts : scopes
   tasks ||--o{ agent_scheduler_state : schedules
   tasks ||--o{ recovery_outbox : delivers
+  tasks ||--o{ market_context_daily : writes
   cron_runs ||--o{ recovery_outbox : alerts
   incidents ||--o{ repair_runs : repairs
   chat_history ||--o{ smart_router_decisions : informs
+  market_context_daily ||--o{ market_context_items : updates
 
   smart_router_decisions {
     TEXT id
@@ -240,9 +244,35 @@ erDiagram
     TEXT correction_note
     TEXT resolved_at
   }
+
+  market_context_daily {
+    TEXT id
+    TEXT market_scope
+    TEXT trade_date
+    TEXT generated_at
+    TEXT digest_text
+    TEXT active_items_json
+    TEXT new_items_json
+    TEXT resolved_items_json
+    TEXT previous_context_id
+  }
+
+  market_context_items {
+    TEXT id
+    TEXT market_scope
+    TEXT stable_key
+    TEXT topic
+    TEXT fact
+    TEXT market_impact
+    TEXT horizon
+    TEXT status
+    TEXT last_updated_at
+  }
 ```
 
 State retention is configured through `state.retention.*`. Cleanup is dry-run first through `pnpm run state:cleanup -- --dry-run`; destructive cleanup requires `--execute`.
+
+`market_context_daily` stores one rolling digest per market scope and trade date. `market_context_items` stores deduplicated long-lived market facts keyed by `(market_scope, stable_key)` so daily update cron jobs can resolve stale items and ordinary stock cron jobs can inject only active context.
 
 ## Delivery And Recovery
 

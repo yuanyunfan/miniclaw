@@ -9,6 +9,7 @@ import type {
   CronJobCooldownConfig,
   CronJobLoadResult,
   CronJobMissedRunConfig,
+  CronJobPreContextProvider,
   CronJobType,
   PreProviderPreflightMode,
 } from "./types.js";
@@ -204,6 +205,54 @@ function parseMissedRunConfig(value: unknown, file: string): CronJobMissedRunCon
   };
 }
 
+function parseProviderName(value: unknown, file: string, field: string): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`${file}: '${field}' 必须是 provider 名称`);
+  }
+  const provider = value.trim();
+  if (provider.includes("/") || provider.includes("..")) {
+    throw new Error(`${file}: '${field}' 必须是 provider 名称（不含路径分隔符）`);
+  }
+  if (!isPreProviderName(provider)) {
+    throw new Error(`${file}: unknown ${field} '${provider}'`);
+  }
+  return provider;
+}
+
+function parseProviderConfigName(value: unknown, file: string, field: string): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`${file}: '${field}' 必须是配置名`);
+  }
+  const config = value.trim();
+  if (config.includes("/") || config.includes("..")) {
+    throw new Error(`${file}: '${field}' 必须是配置名（不含路径分隔符）`);
+  }
+  return config;
+}
+
+function parsePreContextProviders(value: unknown, file: string): CronJobPreContextProvider[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw new Error(`${file}: 'pre_context_providers' 必须是数组`);
+  const providers = value.map((item, index) => {
+    if (!isPlainObject(item)) {
+      throw new Error(`${file}: 'pre_context_providers[${index}]' 必须是对象`);
+    }
+    const provider = parseProviderName(item.provider, file, `pre_context_providers[${index}].provider`);
+    const config = parseProviderConfigName(item.config, file, `pre_context_providers[${index}].config`);
+    if (item.required !== undefined && typeof item.required !== "boolean") {
+      throw new Error(`${file}: 'pre_context_providers[${index}].required' 必须是 boolean`);
+    }
+    return {
+      provider,
+      ...(config ? { config } : {}),
+      ...(item.required !== undefined ? { required: item.required } : {}),
+    };
+  });
+  if (!providers.length) throw new Error(`${file}: 'pre_context_providers' 不能为空数组`);
+  return providers;
+}
+
 function validateJob(raw: unknown, file: string): CronJob {
   if (!isPlainObject(raw)) throw new Error(`${file}: top-level must be a YAML object`);
   const r = raw as Record<string, unknown>;
@@ -254,17 +303,10 @@ function validateJob(raw: unknown, file: string): CronJob {
       throw new Error(`${file}: 'pre_script' 必须是单一文件名（不含路径分隔符）`);
     }
     if (preProvider) {
-      if (preProvider.includes("/") || preProvider.includes("..")) {
-        throw new Error(`${file}: 'pre_provider' 必须是 provider 名称（不含路径分隔符）`);
-      }
-      if (!isPreProviderName(preProvider)) {
-        throw new Error(`${file}: unknown pre_provider '${preProvider}'`);
-      }
+      parseProviderName(preProvider, file, "pre_provider");
     }
-    const preProviderConfig = typeof r.pre_provider_config === "string" ? r.pre_provider_config.trim() : undefined;
-    if (preProviderConfig && (preProviderConfig.includes("/") || preProviderConfig.includes(".."))) {
-      throw new Error(`${file}: 'pre_provider_config' 必须是配置名（不含路径分隔符）`);
-    }
+    const preProviderConfig = parseProviderConfigName(r.pre_provider_config, file, "pre_provider_config");
+    const preContextProviders = parsePreContextProviders(r.pre_context_providers, file);
     let preProviderPreflight: PreProviderPreflightMode | undefined;
     if (r.pre_provider_preflight !== undefined) {
       if (typeof r.pre_provider_preflight !== "string") {
@@ -286,6 +328,7 @@ function validateJob(raw: unknown, file: string): CronJob {
       type: "task",
       prompt: r.prompt.trim(),
       cwd: typeof r.cwd === "string" ? r.cwd : undefined,
+      ...(preContextProviders ? { pre_context_providers: preContextProviders } : {}),
       ...(preScript ? {
         pre_script: preScript,
         pre_script_args: Array.isArray(r.pre_script_args) ? r.pre_script_args.map(String) : undefined,

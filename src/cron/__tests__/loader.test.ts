@@ -120,6 +120,36 @@ prompt: "盘前市场分析"
     }
   });
 
+  it("解析 type=task + pre_context_providers", () => {
+    write("stock-with-context.yaml", `
+name: us-stock-hourly-pulse
+schedule: "30 21-23 * * 1-5"
+enabled: true
+type: task
+channel: "${VALID_CHANNEL}"
+pre_context_providers:
+  - provider: market-context
+    config: us-inject
+  - provider: market-context
+    config: cross-market-inject
+    required: true
+pre_provider: stock-pulse
+pre_provider_config: us-hourly
+prompt: "总结盘中异动"
+`);
+    const r = loadCronJobs();
+    expect(r.errors).toEqual([]);
+    expect(r.jobs.length).toBe(1);
+    const j = r.jobs[0];
+    expect(j.type).toBe("task");
+    if (j.type === "task") {
+      expect(j.pre_context_providers).toEqual([
+        { provider: "market-context", config: "us-inject" },
+        { provider: "market-context", config: "cross-market-inject", required: true },
+      ]);
+    }
+  });
+
   it("解析 type=task + market-forecast-evaluation pre_provider", () => {
     write("market-forecast-evaluation.yaml", `
 name: us-stock-post-market
@@ -324,6 +354,35 @@ prompt: hi
 `);
     const r = loadCronJobs();
     expect(r.errors[0].error).toMatch(/unknown pre_provider/);
+  });
+
+  it("未知 pre_context provider → 拒绝", () => {
+    write("bad-context-provider.yaml", `
+name: x
+schedule: "0 9 * * *"
+type: task
+channel: "${VALID_CHANNEL}"
+pre_context_providers:
+  - provider: unknown
+prompt: hi
+`);
+    const r = loadCronJobs();
+    expect(r.errors[0].error).toMatch(/unknown pre_context_providers\[0\]\.provider/);
+  });
+
+  it("pre_context provider config 含路径分隔符 → 拒绝", () => {
+    write("bad-context-provider-config.yaml", `
+name: x
+schedule: "0 9 * * *"
+type: task
+channel: "${VALID_CHANNEL}"
+pre_context_providers:
+  - provider: market-context
+    config: ../secret
+prompt: hi
+`);
+    const r = loadCronJobs();
+    expect(r.errors[0].error).toMatch(/路径分隔符/);
   });
 
   it("未知 pre_provider_preflight → 拒绝", () => {

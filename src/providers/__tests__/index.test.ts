@@ -27,9 +27,18 @@ describe("provider registry", () => {
       supportsHealthCheck: true,
       outputSchemaVersion: "eastmoney-jywg-readonly.payload.v1",
     });
+    expect(getProviderManifest("market-context")).toMatchObject({
+      name: "market-context",
+      kind: "stock",
+      privacy: "private",
+      supportsDryRun: true,
+      supportsHealthCheck: true,
+      outputSchemaVersion: "market-context.payload.v1",
+    });
     expect(listProviderManifests().map((manifest) => manifest.name)).toEqual([
       "eastmoney-etf-premium",
       "eastmoney-jywg-readonly",
+      "market-context",
       "stock-pulse",
       "stock-watchlist-research",
     ]);

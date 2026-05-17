@@ -39,6 +39,16 @@ export interface CronJobMissedRunConfig {
   max_catch_up?: number;
 }
 
+export interface CronJobPreContextProvider {
+  provider: string;
+  config?: string;
+  /**
+   * Defaults to false. Optional context providers should not block the primary
+   * cron report when their context is absent or temporarily unavailable.
+   */
+  required?: boolean;
+}
+
 export interface CronJobBase {
   name: string;
   schedule: string | string[];
@@ -95,6 +105,12 @@ export interface CronJobTask extends CronJobBase {
    */
   pre_provider?: string;
   pre_provider_config?: string;
+  /**
+   * Optional low-priority context providers that run before pre_script/pre_provider
+   * and prepend additional background. They can coexist with the primary
+   * pre_provider and are intended for rolling context such as market memory.
+   */
+  pre_context_providers?: CronJobPreContextProvider[];
   /**
    * Optional provider framework preflight before the legacy pre_provider run.
    * Defaults to off to preserve existing cron behavior.

@@ -3,11 +3,11 @@ doc_id: stock-research-provider-pipeline
 lang: zh
 translation_of: docs/providers/stock/research.md
 translation_status: current
-source_sha256: b2ee0cc4c6bae2dfd18e2e67e46d9b188dbd43696916fb19a61b004637416b6e
+source_sha256: 63b81ab147f49cd4c741b3a75a721b1d6fb0d92cca84ccbb00ee55ee0849bd0e
 ---
 # 股票研究 Provider 流水线
 
-> 结论：stock research docs 应作为一个 provider pipeline 阅读。`stock-portfolio` 创建 redacted account/asset view，`stock-pulse` 检测盘中异动，`market-intel` 增加 macro/evidence context 和 forecast persistence，`stock-watchlist-research` 产出仅面向 watchlist 的 buy-timing research。
+> 结论：stock research docs 应作为一个 provider pipeline 阅读。`stock-portfolio` 创建 redacted account/asset view，`stock-pulse` 检测盘中异动，`market-intel` 增加 macro/evidence context 和 forecast persistence，`market-context` 保留跨日 rolling market memory，`stock-watchlist-research` 产出仅面向 watchlist 的 buy-timing research。
 
 ## 流水线
 
@@ -22,6 +22,10 @@ flowchart LR
   Universe --> Pulse
   Pulse --> WatchlistResearch[stock-watchlist-research]
   Portfolio --> MarketIntel[market-intel evidence]
+  MarketIntel --> MarketContext[market-context rolling memory]
+  MarketContext --> ContextStore[(market_context_daily / items)]
+  MarketContext --> StockReports
+  MarketContext --> WatchlistResearch
   MarketIntel --> WatchlistResearch
   MarketIntel --> Forecasts[(market_forecasts / items / evaluations)]
   WatchlistResearch --> Discord[daily-watchlist-stock]
@@ -191,6 +195,74 @@ Horizon contract:
 - `horizon_probabilities`、`horizon_sector_opportunities` 和 `horizon_risk_alerts` 是 medium/long horizon items（`1m`、`3m`、`6m`、`1y`）。
 - Same-day hit/miss 和 Brier score 需要显式 same-day `index_probability`。
 - Horizon-only forecasts 应报告 `status=horizon_only` 并跳过 same-day evaluation。
+
+## 市场上下文
+
+Runtime name: `market-context`.
+
+Owner code paths:
+
+```text
+src/providers/market-context/
+  config.ts
+  index.ts
+  types.ts
+src/store/market-context.ts
+```
+
+Purpose:
+
+- 为 `us`、`cn-a`、`hk` 和 `cross-market` scopes 维护每日 rolling market memory。
+- 把 active macro/news/regime context 注入股票 cron task，但不替代 primary provider payload。
+- 把 LLM 维护的 summary 和稳定长期事项持久化到 SQLite，让明天的更新能从昨天的记忆开始。
+- 保持 broad-market memory 与账户持仓、quotes 和 trading actions 分离。
+
+Runtime modes:
+
+- `mode: update`: 用于每日 market-context cron jobs。provider 会加载最近 daily digests、active items 和可选的最新 `market_forecasts` data；下游 LLM 必须以有效 `<market_context_json>` block 结尾。`runner-task` 会把这个 block 持久化到 `market_context_daily` 并 upsert `market_context_items`。
+- `mode: inject`: 通过 `pre_context_providers` 用于普通股票 cron jobs。它会按配置 scopes 加载最新 daily digests 和 active items，并在 task 的主 `pre_provider` 前注入。
+
+Config examples:
+
+```yaml
+# ~/.miniclaw/providers/market-context/us-update.yaml
+mode: update
+market_scope: us
+timezone: America/New_York
+forecast_market_scope: us
+forecast_session: pre_market
+max_items: 24
+max_digest_chars: 3000
+```
+
+```yaml
+# ~/.miniclaw/providers/market-context/cn-hk-inject.yaml
+mode: inject
+market_scopes:
+  - cn-a
+  - hk
+  - cross-market
+timezone: Asia/Shanghai
+max_items: 20
+max_digest_chars: 2500
+```
+
+Cron injection example:
+
+```yaml
+pre_context_providers:
+  - provider: market-context
+    config: cn-hk-inject
+pre_provider: market-intel
+pre_provider_config: cn-pre-market
+```
+
+Persistence contract:
+
+- `market_context_daily` 按 `(market_scope, trade_date)` 存储一份 digest，并在可用时链接到上一份 daily context。
+- `market_context_items` 按 `(market_scope, stable_key)` 存储稳定的 active/stale/resolved items。
+- `resolved_items` 默认写成 `status=resolved`；active injection 只返回未过期的 `status=active` items。
+- `market-context` 不是 quote source。它和更新鲜的 provider evidence 冲突时，下游 report 必须优先使用更新鲜的 provider，并说明冲突。
 
 ## 自选股研究
 

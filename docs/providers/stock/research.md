@@ -1,6 +1,6 @@
 # Stock Research Provider Pipeline
 
-> Conclusion: stock research docs should be read as one provider pipeline. `stock-portfolio` creates a redacted account/asset view, `stock-pulse` detects intraday movement, `market-intel` adds macro/evidence context and forecast persistence, and `stock-watchlist-research` produces watchlist-only buy-timing research.
+> Conclusion: stock research docs should be read as one provider pipeline. `stock-portfolio` creates a redacted account/asset view, `stock-pulse` detects intraday movement, `market-intel` adds macro/evidence context and forecast persistence, `market-context` preserves rolling multi-day market memory, and `stock-watchlist-research` produces watchlist-only buy-timing research.
 
 ## Pipeline
 
@@ -15,6 +15,10 @@ flowchart LR
   Universe --> Pulse
   Pulse --> WatchlistResearch[stock-watchlist-research]
   Portfolio --> MarketIntel[market-intel evidence]
+  MarketIntel --> MarketContext[market-context rolling memory]
+  MarketContext --> ContextStore[(market_context_daily / items)]
+  MarketContext --> StockReports
+  MarketContext --> WatchlistResearch
   MarketIntel --> WatchlistResearch
   MarketIntel --> Forecasts[(market_forecasts / items / evaluations)]
   WatchlistResearch --> Discord[daily-watchlist-stock]
@@ -184,6 +188,74 @@ Horizon contract:
 - `horizon_probabilities`, `horizon_sector_opportunities`, and `horizon_risk_alerts` are medium/long horizon items (`1m`, `3m`, `6m`, `1y`).
 - Same-day hit/miss and Brier score require an explicit same-day `index_probability`.
 - Horizon-only forecasts should report `status=horizon_only` and skip same-day evaluation.
+
+## Market Context
+
+Runtime name: `market-context`.
+
+Owner code paths:
+
+```text
+src/providers/market-context/
+  config.ts
+  index.ts
+  types.ts
+src/store/market-context.ts
+```
+
+Purpose:
+
+- Maintain rolling daily market memory for `us`, `cn-a`, `hk`, and `cross-market` scopes.
+- Inject active macro/news/regime context into stock cron tasks without replacing the primary provider payload.
+- Persist the LLM-maintained summary and stable long-lived items in SQLite so tomorrow's update starts from yesterday's memory.
+- Keep broad-market memory separate from account holdings, quotes, and trading actions.
+
+Runtime modes:
+
+- `mode: update`: used by daily market-context cron jobs. The provider loads recent daily digests, active items, and optional latest `market_forecasts` data; the downstream LLM must end with a valid `<market_context_json>` block. `runner-task` persists that block to `market_context_daily` and upserts `market_context_items`.
+- `mode: inject`: used by ordinary stock cron jobs through `pre_context_providers`. It loads the latest daily digests and active items for configured scopes and prepends them before the task's main `pre_provider`.
+
+Config examples:
+
+```yaml
+# ~/.miniclaw/providers/market-context/us-update.yaml
+mode: update
+market_scope: us
+timezone: America/New_York
+forecast_market_scope: us
+forecast_session: pre_market
+max_items: 24
+max_digest_chars: 3000
+```
+
+```yaml
+# ~/.miniclaw/providers/market-context/cn-hk-inject.yaml
+mode: inject
+market_scopes:
+  - cn-a
+  - hk
+  - cross-market
+timezone: Asia/Shanghai
+max_items: 20
+max_digest_chars: 2500
+```
+
+Cron injection example:
+
+```yaml
+pre_context_providers:
+  - provider: market-context
+    config: cn-hk-inject
+pre_provider: market-intel
+pre_provider_config: cn-pre-market
+```
+
+Persistence contract:
+
+- `market_context_daily` stores one digest per `(market_scope, trade_date)` and links to the previous daily context when available.
+- `market_context_items` stores stable active/stale/resolved items by `(market_scope, stable_key)`.
+- `resolved_items` default to `status=resolved`; active injection only returns non-expired `status=active` items.
+- `market-context` is not a quote source. If it conflicts with fresher provider evidence, the downstream report must prefer the fresher provider and call out the conflict.
 
 ## Stock Watchlist Research
 

@@ -7,6 +7,7 @@ import { eastmoneyJywgProvider, runEastmoneyJywgProvider } from "./eastmoney-jyw
 import { runEmailQueryProvider } from "./email-query/index.js";
 import { runFutuStockProvider } from "./futu-stock/index.js";
 import { runMarketForecastEvaluationProvider } from "./market-forecast-evaluation/index.js";
+import { marketContextProvider, runMarketContextProvider } from "./market-context/index.js";
 import { runMarketIntelProvider } from "./market-intel/index.js";
 import { runStockPulseProvider, stockPulseProvider } from "./stock-pulse/index.js";
 import { runStockWatchlistResearchProvider, stockWatchlistResearchProvider } from "./stock-watchlist-research/index.js";
@@ -20,6 +21,7 @@ const PRE_PROVIDERS = {
   "email-query": runEmailQueryProvider,
   "futu-stock": runFutuStockProvider,
   "market-forecast-evaluation": runMarketForecastEvaluationProvider,
+  "market-context": runMarketContextProvider,
   "market-intel": runMarketIntelProvider,
   "stock-pulse": runStockPulseProvider,
   "stock-watchlist-research": runStockWatchlistResearchProvider,
@@ -32,6 +34,7 @@ export type PreProviderName = keyof typeof PRE_PROVIDERS;
 const PROVIDER_MODULES: Partial<Record<PreProviderName, ProviderModule<any>>> = {
   "eastmoney-etf-premium": eastmoneyEtfPremiumProvider,
   "eastmoney-jywg-readonly": eastmoneyJywgProvider,
+  "market-context": marketContextProvider,
   "stock-pulse": stockPulseProvider,
   "stock-watchlist-research": stockWatchlistResearchProvider,
 };

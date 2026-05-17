@@ -3,7 +3,7 @@ doc_id: architecture
 lang: zh
 translation_of: docs/architecture.md
 translation_status: current
-source_sha256: e408c210a0da0929ee98969cc678cb4db7179dbe706a078b69fa343be6d541ca
+source_sha256: 3300d3c6ad8f908e4cb6e0e586be0ebc55a2712ae555e5c9733a8783e55b9cf5
 ---
 # MiniClaw 架构
 
@@ -196,7 +196,9 @@ flowchart LR
   Job["cron/*.yaml"] --> Scheduler["cron/scheduler.ts"]
   Config["config.yaml<br/>cron.active_window"] --> Scheduler
   Scheduler --> Runner["runner-task / runner-script / runner-message"]
+  Runner --> ContextProvider["pre_context_providers"]
   Runner --> PreProvider["pre_provider"]
+  ContextProvider --> Framework["providers/framework.ts"]
   PreProvider --> Framework["providers/framework.ts"]
   Framework --> Stock["stock providers"]
   Framework --> Content["content providers"]
@@ -209,11 +211,11 @@ flowchart LR
 
 `config.yaml` 中的 `cron.active_window` 是 scheduler-level guard。启用后，scheduled cron dispatch 和 missed-run catch-up 会在配置的本地时间窗口外记录为 skipped，不进入 runner 或 provider。手动 `pnpm cron:test` 仍保留为显式 operator troubleshooting 路径。
 
-provider collection 默认 read-only，除非 provider 明确记录 commit phase。`commit()` 延迟到 downstream task success 后执行。provider docs 放在 `docs/providers/`；private account/session details 放在 `docs/private/` 或 `~/.miniclaw/`，不得进入 public docs。
+`pre_context_providers` 是 optional、non-blocking 的 background providers，会在 `pre_script` 和 primary `pre_provider` 前运行；它们用于注入 rolling market memory 这类 durable context，但不替代 task 的 source-of-truth provider。provider collection 默认 read-only，除非 provider 明确记录 commit phase。`commit()` 延迟到 downstream task success 后执行。provider docs 放在 `docs/providers/`；private account/session details 放在 `docs/private/` 或 `~/.miniclaw/`，不得进入 public docs。
 
 ## 存储模型
 
-MiniClaw 使用 `~/.miniclaw/data.db`，SQLite WAL mode。schema migration 通过 `PRAGMA user_version` 管理；当前 schema 由 `src/store/schema.ts` 定义为 `SCHEMA_VERSION = 14`。
+MiniClaw 使用 `~/.miniclaw/data.db`，SQLite WAL mode。schema migration 通过 `PRAGMA user_version` 管理；当前 schema 由 `src/store/schema.ts` 定义为 `SCHEMA_VERSION = 15`。
 
 ```mermaid
 erDiagram
@@ -224,9 +226,11 @@ erDiagram
   tasks ||--o{ blackboard_facts : scopes
   tasks ||--o{ agent_scheduler_state : schedules
   tasks ||--o{ recovery_outbox : delivers
+  tasks ||--o{ market_context_daily : writes
   cron_runs ||--o{ recovery_outbox : alerts
   incidents ||--o{ repair_runs : repairs
   chat_history ||--o{ smart_router_decisions : informs
+  market_context_daily ||--o{ market_context_items : updates
 
   smart_router_decisions {
     TEXT id
@@ -247,9 +251,35 @@ erDiagram
     TEXT correction_note
     TEXT resolved_at
   }
+
+  market_context_daily {
+    TEXT id
+    TEXT market_scope
+    TEXT trade_date
+    TEXT generated_at
+    TEXT digest_text
+    TEXT active_items_json
+    TEXT new_items_json
+    TEXT resolved_items_json
+    TEXT previous_context_id
+  }
+
+  market_context_items {
+    TEXT id
+    TEXT market_scope
+    TEXT stable_key
+    TEXT topic
+    TEXT fact
+    TEXT market_impact
+    TEXT horizon
+    TEXT status
+    TEXT last_updated_at
+  }
 ```
 
 state retention 通过 `state.retention.*` 配置。cleanup 先 dry-run：`pnpm run state:cleanup -- --dry-run`；破坏性清理必须显式传入 `--execute`。
+
+`market_context_daily` 按 market scope 和 trade date 存储一份 rolling digest。`market_context_items` 用 `(market_scope, stable_key)` 存储去重后的长期市场事实，让每日 update cron 可以解决过期事项，也让普通股票 cron 只注入 active context。
 
 ## 投递与恢复
 
