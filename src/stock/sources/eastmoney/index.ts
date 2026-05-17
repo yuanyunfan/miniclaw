@@ -42,5 +42,5 @@ export type {
   EastmoneyMyfavorSession,
 } from "../../../mcp/eastmoney-myfavor/types.js";
 
-export { EastmoneyFundSelectorPremiumClient } from "../../../providers/eastmoney-etf-premium/client.js";
+export { EastmoneyFundSelectorPremiumClient } from "./etf-premium-client.js";
 export type { EastmoneyEtfPremiumClient } from "../../../providers/eastmoney-etf-premium/types.js";

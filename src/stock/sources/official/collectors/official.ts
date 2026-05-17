@@ -1,5 +1,5 @@
-import type { PreProviderRunArgs } from "../../types.js";
-import type { MarketIntelEvidenceCollection, MarketIntelProviderConfig } from "../types.js";
+import type { PreProviderRunArgs } from "../../../../providers/types.js";
+import type { MarketIntelEvidenceCollection, MarketIntelProviderConfig } from "../../../../providers/market-intel/types.js";
 import { collectOfficialEventEvidence } from "./events.js";
 import { collectOfficialMacroEvidence } from "./macro.js";
 import { collectOfficialNewsEvidence } from "./news.js";

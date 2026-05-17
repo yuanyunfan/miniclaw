@@ -3,7 +3,7 @@ doc_id: stock-research-provider-pipeline
 lang: zh
 translation_of: docs/providers/stock/research.md
 translation_status: current
-source_sha256: 63b81ab147f49cd4c741b3a75a721b1d6fb0d92cca84ccbb00ee55ee0849bd0e
+source_sha256: d48e5e1dfe27ab7754ef1d456f03495e2075e442a2dcd7b9944a64b7b571be21
 ---
 # 股票研究 Provider 流水线
 
@@ -102,14 +102,17 @@ Owner code paths:
 
 ```text
 src/providers/stock-pulse/
-  analyzer.ts
   config.ts
   index.ts
-  market.ts
-  symbols.ts
-  watchlist-sources.ts
-  yahoo-client.ts
+  types.ts
   fixtures/*.json
+
+src/stock/data/calendar.ts
+src/stock/data/universe.ts
+src/stock/sources/watchlists.ts
+src/stock/sources/yahoo/stock-pulse-client.ts
+src/stock/signals/pulse.ts
+src/stock/reports/stock-pulse.ts
 ```
 
 Purpose:
@@ -165,8 +168,20 @@ Runtime names:
 Owner code paths:
 
 ```text
-src/providers/market-intel/**
+src/providers/market-intel/
+  config.ts
+  index.ts
+  types.ts
+  format.ts
+  calibration.ts
 src/providers/market-forecast-evaluation/**
+src/stock/data/market-calendar.ts
+src/stock/data/market-quotes.ts
+src/stock/data/market-portfolio.ts
+src/stock/sources/official/collectors/**
+src/stock/sources/yahoo/market-intel-client.ts
+src/stock/signals/market-intel.ts
+src/stock/reports/market-intel.ts
 src/store/market-forecasts.ts
 ```
 
@@ -274,8 +289,9 @@ Owner code paths:
 src/providers/stock-watchlist-research/
   config.ts
   index.ts
-  research-client.ts
   types.ts
+src/stock/sources/yahoo/watchlist-research-client.ts
+src/stock/reports/watchlist-research.ts
 ```
 
 Purpose:

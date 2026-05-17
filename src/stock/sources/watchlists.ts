@@ -5,7 +5,7 @@ import type { EastmoneyMyfavorSecurity } from "../../mcp/eastmoney-myfavor/types
 import { loadFutuStockConfig, resolveFutuStockProfile } from "../../mcp/futu-stock/config.js";
 import { getFutuWatchlistSecurities } from "../../mcp/futu-stock/futu-client.js";
 import type { FutuWatchlistSecurity } from "../../mcp/futu-stock/types.js";
-import type { StockPulseMarket, StockPulseUniverseSourceConfig, StockPulseUniverseSymbol } from "./types.js";
+import type { StockPulseMarket, StockPulseUniverseSourceConfig, StockPulseUniverseSymbol } from "../../providers/stock-pulse/types.js";
 
 function marketFromFutuCode(code: string): StockPulseMarket | undefined {
   const upper = code.trim().toUpperCase();

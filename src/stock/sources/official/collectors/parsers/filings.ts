@@ -1,4 +1,4 @@
-import type { MarketIntelEvidenceItem } from "../../types.js";
+import type { MarketIntelEvidenceItem } from "../../../../../providers/market-intel/types.js";
 import {
   absoluteUrl,
   asArray,

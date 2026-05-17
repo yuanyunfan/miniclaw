@@ -1,6 +1,6 @@
 # Stock Provider Data-Layer Migration
 
-Status: completed (compatibility migration)
+Status: in progress (compatibility + source/data cleanup completed)
 Date: 2026-05-17
 
 ## Background
@@ -178,3 +178,4 @@ Layer responsibilities:
 - 2026-05-17: Implemented the compatibility migration slice. `src/providers/*/index.ts` remains the cron-facing compatibility layer for all stock provider names, while reusable stock implementation now lives under `src/stock/`.
 - 2026-05-17: Added `src/stock/types.ts`, source adapter modules for Futu, Eastmoney, Yahoo, and official evidence, data-domain bridge modules for calendar, universe, quotes, portfolio, ETF premium, market evidence, and market memory, signal modules for pulse, market-intel scoring, forecast evaluation, and context synthesis, plus report composers for every existing stock cron provider.
 - 2026-05-17: Verified compatibility with `pnpm run typecheck`, stock provider focused Vitest coverage, and Futu/Eastmoney MCP focused Vitest coverage.
+- 2026-05-17: Completed the source/data cleanup slice after the compatibility migration. Moved `stock-pulse` universe/source mapping into `src/stock/data/universe.ts` and `src/stock/sources/watchlists.ts`; moved market-intel calendar, quote snapshot, portfolio context, redaction, and official evidence collectors into `src/stock/data/*` and `src/stock/sources/official/collectors/*`; moved Eastmoney ETF premium and Yahoo watchlist research clients into `src/stock/sources/*`. `src/providers/*` still owns cron-facing config/type compatibility and some report-format helpers, so the final report/config cleanup remains a separate slice.

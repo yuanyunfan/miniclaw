@@ -3,7 +3,7 @@ doc_id: eastmoney-provider-family
 lang: zh
 translation_of: docs/providers/stock/eastmoney.md
 translation_status: current
-source_sha256: f81e744c1f9eeab597614c548dc8449ab65adb975aa784e0b7e6fc56784e1ac9
+source_sha256: 2456906f149dbca2051501dc61896ce6d6c8730255ba592b9055e15d157fce44
 ---
 # 东方财富 Provider 系列
 
@@ -194,8 +194,10 @@ src/mcp/eastmoney-myfavor/
   types.ts
 
 scripts/eastmoney-myfavor-login.ts
-src/providers/stock-pulse/**
-src/providers/stock-watchlist-research/**
+src/stock/sources/watchlists.ts
+src/stock/data/universe.ts
+src/stock/sources/yahoo/watchlist-research-client.ts
+src/stock/reports/watchlist-research.ts
 ```
 
 Command:

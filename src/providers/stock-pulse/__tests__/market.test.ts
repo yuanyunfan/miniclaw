@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isActiveWindow, isMarketOpen, openMarketsAt } from "../market.js";
+import { isActiveWindow, isMarketOpen, openMarketsAt } from "../../../stock/data/calendar.js";
 import type { StockPulseMarketConfig } from "../types.js";
 
 describe("stock-pulse market guard", () => {

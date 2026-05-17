@@ -6,7 +6,7 @@ import type {
   MarketIntelMarket,
   MarketIntelMarketConfig,
   MarketIntelTimeWindow,
-} from "./types.js";
+} from "../../providers/market-intel/types.js";
 
 const WEEKDAY_TO_NUMBER: Record<string, number> = {
   Mon: 1,

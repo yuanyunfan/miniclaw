@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractPortfolioSymbols, toYahooSymbol } from "../symbols.js";
+import { extractPortfolioSymbols, toYahooSymbol } from "../../../stock/data/universe.js";
 
 describe("stock-pulse symbol mapping", () => {
   it("maps US class-share dots to Yahoo hyphen symbols", () => {

@@ -3,7 +3,7 @@ import {
   __testables,
   mapEastmoneyMyfavorSymbols,
   mapFutuWatchlistSymbols,
-} from "../watchlist-sources.js";
+} from "../../../stock/sources/watchlists.js";
 import type { StockPulseUniverseSourceConfig } from "../types.js";
 
 function source(market: StockPulseUniverseSourceConfig["market"]): StockPulseUniverseSourceConfig {

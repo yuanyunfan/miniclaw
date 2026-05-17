@@ -3,11 +3,11 @@ import type {
   MarketIntelEvidenceCollection,
   MarketIntelEvidenceItem,
   MarketIntelProviderConfig,
-} from "../types.js";
+} from "../../../../providers/market-intel/types.js";
 import { riskKeyword } from "./parsers/risk.js";
 import type { CollectorResult } from "./official-shared.js";
 import { dedupeEvidence, emptySection, section, source } from "./official-shared.js";
-import type { PreProviderRunArgs } from "../../types.js";
+import type { PreProviderRunArgs } from "../../../../providers/types.js";
 
 function deriveRiskEvidence(params: {
   runAt: Date;

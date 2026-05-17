@@ -3,7 +3,7 @@ doc_id: stock-providers-index
 lang: zh
 translation_of: docs/providers/stock/README.md
 translation_status: current
-source_sha256: 787b00d06cc131e23b1a6ab6d78036abeeab8a99537fb16f5db866c823b23954
+source_sha256: 6339a06d23eb62ac48dbb446512600ef26a2625ca84d45a8ed6f35e2899226f1
 ---
 # 股票 Provider 系列
 
@@ -48,6 +48,8 @@ src/stock/
 ```
 
 这是一次兼容迁移：`pre_provider`、`pre_provider_config` 和 `pre_context_providers` 等 cron YAML 字段不变。
+
+`src/providers/*` 不应该拥有 stock source/data 实现。source/data cleanup slice 之后，stock provider 目录保留 cron 注册、runtime config loader、provider-specific types、fixtures 和部分 report-format helper；可复用 source/data 逻辑位于 `src/stock/sources/*` 和 `src/stock/data/*`。
 
 ## 富途股票 Provider
 

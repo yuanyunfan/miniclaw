@@ -2,7 +2,7 @@ export {
   buildEmptyMarketIntelSnapshot,
   collectMarketIntelMarketSnapshot,
   YahooMarketIntelQuoteClient,
-} from "../../providers/market-intel/quotes.js";
+} from "./market-quotes.js";
 export type {
   MarketIntelMarketSnapshot,
   MarketIntelQuoteClient,

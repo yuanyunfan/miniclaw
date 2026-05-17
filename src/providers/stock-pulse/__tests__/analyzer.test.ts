@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyzeStockPulseSeries } from "../analyzer.js";
+import { analyzeStockPulseSeries } from "../../../stock/signals/pulse.js";
 import type { StockPulseQuoteBar, StockPulseThresholdConfig } from "../types.js";
 
 const thresholds: StockPulseThresholdConfig = {

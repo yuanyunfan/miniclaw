@@ -14,9 +14,9 @@ import type {
 import type { MarketIntelScoringCalibrationConfig } from "./calibration.js";
 import { buildMarketIntelScores } from "../../stock/signals/market-intel.js";
 import type { PreProviderRunArgs } from "../types.js";
-import { buildNotConfiguredPortfolioContext } from "./portfolio.js";
-import { buildEmptyMarketIntelSnapshot } from "./quotes.js";
-import { sanitizeMarketIntelError } from "./redaction.js";
+import { buildNotConfiguredPortfolioContext } from "../../stock/data/market-portfolio.js";
+import { buildEmptyMarketIntelSnapshot } from "../../stock/data/market-quotes.js";
+import { sanitizeMarketIntelError } from "../../stock/data/redaction.js";
 
 export { sanitizeMarketIntelError };
 

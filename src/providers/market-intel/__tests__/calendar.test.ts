@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildMarketIntelCalendarSnapshot, marketCalendarAt, parseTimeToMinutes } from "../calendar.js";
+import { buildMarketIntelCalendarSnapshot, marketCalendarAt, parseTimeToMinutes } from "../../../stock/data/market-calendar.js";
 import type { MarketIntelMarketConfig } from "../types.js";
 
 describe("market-intel calendar guard", () => {

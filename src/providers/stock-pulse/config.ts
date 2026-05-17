@@ -16,7 +16,7 @@ import type {
   StockPulseUniverseConfig,
   StockPulseUniverseSourceConfig,
 } from "./types.js";
-import { parseTimeToMinutes } from "./market.js";
+import { parseTimeToMinutes } from "../../stock/data/calendar.js";
 
 const CONFIG_DIR_DEFAULT = join(homedir(), ".miniclaw/providers/stock-pulse");
 const RESERVED_PROVIDER_CONFIG_NAMES = new Set(["config"]);

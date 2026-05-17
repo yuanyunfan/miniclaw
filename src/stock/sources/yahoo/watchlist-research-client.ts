@@ -1,11 +1,11 @@
-import type { StockPulseSymbol } from "../stock-pulse/types.js";
+import type { StockPulseSymbol } from "../../../providers/stock-pulse/types.js";
 import type {
   StockWatchlistFinancialPoint,
   StockWatchlistFinancials,
   StockWatchlistNewsItem,
   StockWatchlistResearchClient,
   StockWatchlistResearchProfile,
-} from "./types.js";
+} from "../../../providers/stock-watchlist-research/types.js";
 
 const USER_AGENT = "MiniClaw/1.0 stock-watchlist-research";
 const FINANCIAL_TYPES = [

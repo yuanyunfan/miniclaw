@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   collectMarketIntelOfficialEvidence,
   type MarketIntelOfficialHttpClient,
-} from "../collectors/official.js";
-import { collectOfficialEventEvidence } from "../collectors/events.js";
-import { collectOfficialMacroEvidence } from "../collectors/macro.js";
-import { collectOfficialNewsEvidence } from "../collectors/news.js";
+} from "../../../stock/sources/official/collectors/official.js";
+import { collectOfficialEventEvidence } from "../../../stock/sources/official/collectors/events.js";
+import { collectOfficialMacroEvidence } from "../../../stock/sources/official/collectors/macro.js";
+import { collectOfficialNewsEvidence } from "../../../stock/sources/official/collectors/news.js";
 import type { MarketIntelProviderConfig } from "../types.js";
 
 function usConfig(overrides: Partial<MarketIntelProviderConfig> = {}): MarketIntelProviderConfig {

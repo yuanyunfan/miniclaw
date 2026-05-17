@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { extractDatedHtmlLinks } from "../collectors/parsers/shared.js";
+import { extractDatedHtmlLinks } from "../../../stock/sources/official/collectors/parsers/shared.js";
 import {
   parseBlsEvidence,
   parseFederalReserveRssEvidence,
   parseTreasuryYieldCurveEvidence,
-} from "../collectors/parsers/macro.js";
+} from "../../../stock/sources/official/collectors/parsers/macro.js";
 import {
   parseHkexAnnouncements,
   parseJsonp,
@@ -13,8 +13,8 @@ import {
   parseSseAnnouncements,
   parseSzseAnnouncements,
   secTickerCandidates,
-} from "../collectors/parsers/filings.js";
-import { riskKeyword } from "../collectors/parsers/risk.js";
+} from "../../../stock/sources/official/collectors/parsers/filings.js";
+import { riskKeyword } from "../../../stock/sources/official/collectors/parsers/risk.js";
 
 const runAt = new Date("2026-05-08T12:45:00.000Z");
 

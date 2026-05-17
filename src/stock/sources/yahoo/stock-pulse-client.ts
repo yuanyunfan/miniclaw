@@ -9,7 +9,7 @@ import type {
 import {
   getEastmoneyMyfavorUniverseSymbols,
   getFutuWatchlistUniverseSymbols,
-} from "../../data/universe.js";
+} from "../watchlists.js";
 import {
   fetchYahooChartSeries,
   fetchYahooJson,

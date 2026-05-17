@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collectMarketIntelMarketSnapshot } from "../quotes.js";
+import { collectMarketIntelMarketSnapshot } from "../../../stock/data/market-quotes.js";
 import type {
   MarketIntelProviderConfig,
   MarketIntelQuoteClient,

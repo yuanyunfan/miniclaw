@@ -1,5 +1,5 @@
-import type { PreProviderRunArgs } from "../../types.js";
-import { sanitizeMarketIntelError } from "../redaction.js";
+import type { PreProviderRunArgs } from "../../../../providers/types.js";
+import { sanitizeMarketIntelError } from "../../../data/redaction.js";
 import type {
   MarketIntelDataQualitySource,
   MarketIntelEvidenceItem,
@@ -7,7 +7,7 @@ import type {
   MarketIntelProviderConfig,
   MarketIntelSourceStatus,
   MarketIntelSourceTier,
-} from "../types.js";
+} from "../../../../providers/market-intel/types.js";
 
 export interface MarketIntelOfficialHttpClient {
   getText(url: string, init?: { headers?: Record<string, string> }): Promise<string>;

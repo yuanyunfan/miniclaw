@@ -42,6 +42,8 @@ src/stock/
 
 This is a compatibility migration: cron YAML fields such as `pre_provider`, `pre_provider_config`, and `pre_context_providers` do not change.
 
+`src/providers/*` should not own stock source/data implementations. After the source/data cleanup slice, stock provider folders keep cron registration, runtime config loaders, provider-specific types, fixtures, and some report-format helpers; reusable source/data logic lives under `src/stock/sources/*` and `src/stock/data/*`.
+
 ## Futu Stock Provider
 
 Runtime names:

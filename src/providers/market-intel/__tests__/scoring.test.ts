@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildMarketIntelScores } from "../scoring.js";
+import { buildMarketIntelScores } from "../../../stock/signals/market-intel.js";
 import type { MarketIntelEvidenceItem, MarketIntelMarketSnapshot } from "../types.js";
 
 describe("buildMarketIntelScores", () => {

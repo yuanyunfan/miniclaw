@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { __testables } from "../research-client.js";
+import { __testables } from "../../../stock/sources/yahoo/watchlist-research-client.js";
 import type { StockPulseSymbol } from "../../stock-pulse/types.js";
 
 const symbol: StockPulseSymbol = {

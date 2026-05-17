@@ -10,9 +10,9 @@ import type {
   MarketIntelSnapshotItem,
   MarketIntelSnapshotSection,
   MarketIntelSnapshotSectionStatus,
-} from "./types.js";
+} from "../../providers/market-intel/types.js";
 import { sanitizeMarketIntelError } from "./redaction.js";
-export { YahooMarketIntelQuoteClient } from "../../stock/sources/yahoo/market-intel-client.js";
+export { YahooMarketIntelQuoteClient } from "../sources/yahoo/market-intel-client.js";
 
 const PROVIDER_SYMBOL_MAP: Record<string, string> = {
   DXY: "DX-Y.NYB",

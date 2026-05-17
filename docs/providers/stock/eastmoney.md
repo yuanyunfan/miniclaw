@@ -187,8 +187,10 @@ src/mcp/eastmoney-myfavor/
   types.ts
 
 scripts/eastmoney-myfavor-login.ts
-src/providers/stock-pulse/**
-src/providers/stock-watchlist-research/**
+src/stock/sources/watchlists.ts
+src/stock/data/universe.ts
+src/stock/sources/yahoo/watchlist-research-client.ts
+src/stock/reports/watchlist-research.ts
 ```
 
 Command:

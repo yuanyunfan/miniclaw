@@ -3,11 +3,11 @@ doc_id: stock-provider-data-layer-migration
 lang: zh
 translation_of: docs/plans/2026-05-17-stock-provider-data-layer-migration.md
 translation_status: current
-source_sha256: 09c8ecf27561e0e6db4439887c37b4b9641eb7c2ef4dfb1fc648359d466e1a6a
+source_sha256: 070584b222402f295c2ad64d794e9ee09b76a1e33bb640ce2ac363620a3f83fa
 ---
 # Stock Provider 数据层迁移
 
-Status: completed (compatibility migration)
+Status: in progress (compatibility + source/data cleanup completed)
 Date: 2026-05-17
 
 ## 背景
@@ -185,3 +185,4 @@ src/stock/
 - 2026-05-17：完成兼容迁移切片。`src/providers/*/index.ts` 对所有 stock provider 名称继续作为 cron-facing compatibility layer，可复用 stock 实现迁入 `src/stock/`。
 - 2026-05-17：新增 `src/stock/types.ts`，以及 Futu、Eastmoney、Yahoo、official evidence 的 source adapter 模块；新增 calendar、universe、quotes、portfolio、ETF premium、market evidence、market memory 的 data-domain bridge；新增 pulse、market-intel scoring、forecast evaluation、context synthesis signal 模块；并为所有现有 stock cron provider 增加 report composer。
 - 2026-05-17：已用 `pnpm run typecheck`、stock provider focused Vitest、Futu/Eastmoney MCP focused Vitest 验证兼容性。
+- 2026-05-17：在 compatibility migration 后完成 source/data cleanup slice。`stock-pulse` 的 universe/source mapping 已迁入 `src/stock/data/universe.ts` 和 `src/stock/sources/watchlists.ts`；market-intel calendar、quote snapshot、portfolio context、redaction 和 official evidence collectors 已迁入 `src/stock/data/*` 与 `src/stock/sources/official/collectors/*`；Eastmoney ETF premium 与 Yahoo watchlist research client 已迁入 `src/stock/sources/*`。`src/providers/*` 仍保留 cron-facing config/type compatibility 和部分 report-format helper，最终 report/config cleanup 仍是单独切片。

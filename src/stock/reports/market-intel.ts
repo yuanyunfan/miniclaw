@@ -5,7 +5,7 @@ import { loadMarketIntelScoringCalibrationConfig } from "../../providers/market-
 import { buildEmptyMarketIntelEvidenceCollection, collectMarketIntelOfficialEvidence } from "../data/market-evidence.js";
 import { loadMarketIntelProviderConfig } from "../../providers/market-intel/config.js";
 import { buildMarketIntelPayload, formatMarketIntelPayload } from "../../providers/market-intel/format.js";
-import { buildNotConfiguredPortfolioContext, collectMarketIntelPortfolio } from "../../providers/market-intel/portfolio.js";
+import { buildNotConfiguredPortfolioContext, collectMarketIntelPortfolio } from "../data/market-portfolio.js";
 import { buildEmptyMarketIntelSnapshot, collectMarketIntelMarketSnapshot } from "../data/quotes.js";
 import { YahooMarketIntelQuoteClient } from "../sources/yahoo/market-intel-client.js";
 import type {

@@ -95,14 +95,17 @@ Owner code paths:
 
 ```text
 src/providers/stock-pulse/
-  analyzer.ts
   config.ts
   index.ts
-  market.ts
-  symbols.ts
-  watchlist-sources.ts
-  yahoo-client.ts
+  types.ts
   fixtures/*.json
+
+src/stock/data/calendar.ts
+src/stock/data/universe.ts
+src/stock/sources/watchlists.ts
+src/stock/sources/yahoo/stock-pulse-client.ts
+src/stock/signals/pulse.ts
+src/stock/reports/stock-pulse.ts
 ```
 
 Purpose:
@@ -158,8 +161,20 @@ Runtime names:
 Owner code paths:
 
 ```text
-src/providers/market-intel/**
+src/providers/market-intel/
+  config.ts
+  index.ts
+  types.ts
+  format.ts
+  calibration.ts
 src/providers/market-forecast-evaluation/**
+src/stock/data/market-calendar.ts
+src/stock/data/market-quotes.ts
+src/stock/data/market-portfolio.ts
+src/stock/sources/official/collectors/**
+src/stock/sources/yahoo/market-intel-client.ts
+src/stock/signals/market-intel.ts
+src/stock/reports/market-intel.ts
 src/store/market-forecasts.ts
 ```
 
@@ -267,8 +282,9 @@ Owner code paths:
 src/providers/stock-watchlist-research/
   config.ts
   index.ts
-  research-client.ts
   types.ts
+src/stock/sources/yahoo/watchlist-research-client.ts
+src/stock/reports/watchlist-research.ts
 ```
 
 Purpose:

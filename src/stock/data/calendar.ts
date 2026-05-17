@@ -91,7 +91,7 @@ export function openMarketsAt<TMarket extends string>(
     .map(([market]) => market);
 }
 
-export { buildMarketIntelCalendarSnapshot } from "../../providers/market-intel/calendar.js";
+export { buildMarketIntelCalendarSnapshot } from "./market-calendar.js";
 export type {
   MarketIntelCalendarSnapshot,
   MarketIntelMarketConfig,

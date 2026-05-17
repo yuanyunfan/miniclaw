@@ -1,12 +1,12 @@
-import type { PreProviderResult, PreProviderRunArgs } from "../types.js";
+import type { PreProviderResult, PreProviderRunArgs } from "../../providers/types.js";
 import type {
   MarketIntelPortfolioContext,
   MarketIntelPortfolioRunner,
   MarketIntelPortfolioSourceSummary,
   MarketIntelProviderConfig,
-} from "./types.js";
+} from "../../providers/market-intel/types.js";
 import { sanitizeMarketIntelError } from "./redaction.js";
-import type { StockPortfolioAssetSummary, StockPortfolioCnySummary } from "../stock-portfolio/types.js";
+import type { StockPortfolioAssetSummary, StockPortfolioCnySummary } from "../../providers/stock-portfolio/types.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
