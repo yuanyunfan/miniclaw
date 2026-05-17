@@ -73,5 +73,5 @@ sequenceDiagram
 - **Architecture** 展示系统边界和数据流动。
 - **Runtime** 解释 intake、routing、task execution、memory、cron 和 recovery。
 - **Providers** 描述只读数据采集层以及 provider families。
-- **Getting Started** 保持首次本地运行足够短，深入配置继续回到 repo docs。
+- **Getting Started** 保持首次本地运行足够短，深入配置继续回到 repo docs，包括 `weekly-app-trending` 这类默认 Discord 频道布局。
 - **Quality Gates** 展示 MiniClaw 如何防止 docs、website、tests 和 release checks 漂移。

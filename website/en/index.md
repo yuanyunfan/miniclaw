@@ -73,5 +73,5 @@ sequenceDiagram
 - **Architecture** maps the system boundaries and data movement.
 - **Runtime** explains intake, routing, task execution, memory, cron, and recovery.
 - **Providers** describes the readonly data collection layer and provider families.
-- **Getting Started** keeps the first local run short and points deeper setup back to repo docs.
+- **Getting Started** keeps the first local run short and points deeper setup back to repo docs, including the default Discord channel layout such as `weekly-app-trending`.
 - **Quality Gates** shows how MiniClaw prevents docs, website, tests, and release checks from drifting.

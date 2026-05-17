@@ -222,7 +222,7 @@ python3 scripts/update-cron-channels.py
 
 | 分类 | 频道 |
 |---|---|
-| 🤖 AI | daily-ai-news / daily-ai-frontier / daily-tech-radar / daily-github-trending / daily-app-trending |
+| 🤖 AI | daily-ai-news / daily-ai-frontier / daily-tech-radar / daily-github-trending / weekly-app-trending |
 | 👤 PERSONAL | daily-token-dashboard |
 | 💹 STOCK | daily-stock-market（基础模板）；股票日报推荐按需拆为 daily-us-stock / daily-cn-stock |
 | 📰 NEWS | news-domestic / news-international / trending / tldr / monitor-github-repo |

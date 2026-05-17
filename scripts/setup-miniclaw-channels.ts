@@ -10,7 +10,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 const GUILD_ID = process.env.MINICLAW_GUILD_ID ?? config.discord.guildId;
-type ChannelSpec = string | { name: string; private?: boolean };
+type ChannelSpec = string | { name: string; private?: boolean; previousNames?: readonly string[] };
 
 const STRUCTURE = [
   {
@@ -20,7 +20,7 @@ const STRUCTURE = [
       "daily-ai-frontier",
       "daily-tech-radar",
       "daily-github-trending",
-      "daily-app-trending",
+      { name: "weekly-app-trending", previousNames: ["daily-app-trending"] },
       { name: "miniclaw-third-part", private: true },
     ],
   },
@@ -57,6 +57,10 @@ function channelName(spec: ChannelSpec): string {
   return typeof spec === "string" ? spec : spec.name;
 }
 
+function previousChannelNames(spec: ChannelSpec): readonly string[] {
+  return typeof spec === "string" ? [] : spec.previousNames ?? [];
+}
+
 function privateOverwrites(guild: Guild): OverwriteResolvable[] {
   const allow = [
     PermissionFlagsBits.ViewChannel,
@@ -89,9 +93,20 @@ async function applyPrivateOverwrites(guild: Guild, channelId: string): Promise<
 async function ensureTextChannel(guild: Guild, spec: ChannelSpec, parentId: string): Promise<string> {
   const name = channelName(spec);
   const isPrivate = typeof spec !== "string" && spec.private === true;
-  const existing = guild.channels.cache.find(
+  let existing = guild.channels.cache.find(
     (c) => c.type === ChannelType.GuildText && c.name === name
   );
+  if (!existing) {
+    const previous = guild.channels.cache.find(
+      (c) => c.type === ChannelType.GuildText && previousChannelNames(spec).includes(c.name)
+    );
+    if (previous) {
+      const oldName = previous.name;
+      await previous.setName(name);
+      console.log(`  [rename] #${oldName} → #${name} (${previous.id})`);
+      existing = previous;
+    }
+  }
   if (existing) {
     if (existing.parentId !== parentId) {
       await existing.setParent(parentId);
@@ -147,6 +162,9 @@ client.once("ready", async (c) => {
     for (const ch of group.channels) {
       const id = await ensureTextChannel(guild, ch, categoryId);
       channelMap[channelName(ch)] = id;
+      for (const previousName of previousChannelNames(ch)) {
+        delete channelMap[previousName];
+      }
     }
   }
 

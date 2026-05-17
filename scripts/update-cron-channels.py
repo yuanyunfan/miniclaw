@@ -13,7 +13,7 @@ JOB_TO_CHANNEL = {
     "daily-ai-frontier":            "daily-ai-frontier",
     "daily-tech-radar":             "daily-tech-radar",
     "daily-arxiv-papers":           "daily-tech-radar",       # 论文也归 tech radar
-    "daily-app-trending":           "daily-app-trending",
+    "weekly-app-trending":          "weekly-app-trending",
     "hourly-token-report":          "daily-token-dashboard",
     "us-stock-pre-market":          "daily-us-stock",
     "us-stock-post-market":         "daily-us-stock",

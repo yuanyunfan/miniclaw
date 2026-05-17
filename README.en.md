@@ -227,7 +227,7 @@ Default channel layout:
 
 | Category | Channels |
 | --- | --- |
-| AI | daily-ai-news / daily-ai-frontier / daily-tech-radar / daily-github-trending / daily-app-trending |
+| AI | daily-ai-news / daily-ai-frontier / daily-tech-radar / daily-github-trending / weekly-app-trending |
 | PERSONAL | daily-token-dashboard |
 | STOCK | daily-stock-market for the base template; stock reports can be split into daily-us-stock / daily-cn-stock |
 | NEWS | news-domestic / news-international / trending / tldr / monitor-github-repo |
