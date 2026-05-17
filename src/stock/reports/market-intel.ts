@@ -1,10 +1,10 @@
 import type { PreProviderResult, PreProviderRunArgs } from "../../providers/types.js";
 import { runStockPortfolioProvider } from "./stock-portfolio.js";
 import { buildMarketIntelCalendarSnapshot } from "../data/calendar.js";
-import { loadMarketIntelScoringCalibrationConfig } from "../../providers/market-intel/calibration.js";
+import { loadMarketIntelScoringCalibrationConfig } from "../signals/market-intel-calibration.js";
 import { buildEmptyMarketIntelEvidenceCollection, collectMarketIntelOfficialEvidence } from "../data/market-evidence.js";
 import { loadMarketIntelProviderConfig } from "../../providers/market-intel/config.js";
-import { buildMarketIntelPayload, formatMarketIntelPayload } from "../../providers/market-intel/format.js";
+import { buildMarketIntelPayload, formatMarketIntelPayload } from "./market-intel-format.js";
 import { buildNotConfiguredPortfolioContext, collectMarketIntelPortfolio } from "../data/market-portfolio.js";
 import { buildEmptyMarketIntelSnapshot, collectMarketIntelMarketSnapshot } from "../data/quotes.js";
 import { YahooMarketIntelQuoteClient } from "../sources/yahoo/market-intel-client.js";
@@ -13,7 +13,7 @@ import type {
   MarketIntelQuoteClient,
   MarketIntelPortfolioRunner,
   MarketIntelProviderConfig,
-} from "../../providers/market-intel/types.js";
+} from "../data/market-intel-types.js";
 
 export interface MarketIntelProviderDeps {
   loadProviderConfig?: (name?: string) => MarketIntelProviderConfig;

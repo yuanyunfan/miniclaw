@@ -4,13 +4,13 @@ import { runEastmoneyJywgProvider } from "./eastmoney-jywg-readonly.js";
 import { runFutuStockProvider } from "./futu-stock.js";
 import { loadStockPortfolioProviderConfig } from "../../providers/stock-portfolio/config.js";
 import { buildStockPortfolioPayload, formatStockPortfolioPayload, sanitizeStockPortfolioError } from "../data/portfolio.js";
-import { buildAssetPieChartModel, renderAssetPieChartPng } from "../../providers/stock-portfolio/pie-chart.js";
+import { buildAssetPieChartModel, renderAssetPieChartPng } from "./portfolio-pie-chart.js";
 import type {
   StockPortfolioProviderConfig,
   StockPortfolioSourceConfig,
   StockPortfolioSourceResult,
   StockPortfolioSourceRunner,
-} from "../../providers/stock-portfolio/types.js";
+} from "../data/portfolio-types.js";
 
 const SOURCE_RUNNERS: Record<string, StockPortfolioSourceRunner> = {
   "eastmoney-etf-premium": runEastmoneyEtfPremiumProvider,

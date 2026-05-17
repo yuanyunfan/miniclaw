@@ -4,4 +4,4 @@ export type {
   EastmoneyEtfPremiumItem,
   EastmoneyEtfPremiumPayload,
   EastmoneyEtfPremiumSymbolConfig,
-} from "../../providers/eastmoney-etf-premium/types.js";
+} from "./etf-premium-types.js";

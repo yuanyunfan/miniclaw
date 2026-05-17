@@ -2,14 +2,14 @@ import type { PreProviderResult, PreProviderRunArgs } from "../../providers/type
 import type { ProviderContext, ProviderDryRunResult, ProviderManifest, ProviderModule } from "../../providers/framework.js";
 import { providerDryRunFromError, providerHealthFromError, runProviderModuleAsPreProvider, safeProviderErrorMessage } from "../../providers/framework.js";
 import { buildMarketIntelCalendarSnapshot } from "../data/calendar.js";
-import { loadMarketIntelScoringCalibrationConfig } from "../../providers/market-intel/calibration.js";
+import { loadMarketIntelScoringCalibrationConfig } from "../signals/market-intel-calibration.js";
 import { collectMarketIntelOfficialEvidence } from "../data/market-evidence.js";
 import { loadMarketIntelProviderConfig } from "../../providers/market-intel/config.js";
-import { buildMarketIntelPayload } from "../../providers/market-intel/format.js";
+import { buildMarketIntelPayload } from "./market-intel-format.js";
 import { buildNotConfiguredPortfolioContext } from "../data/market-portfolio.js";
 import { collectMarketIntelMarketSnapshot } from "../data/quotes.js";
 import { YahooMarketIntelQuoteClient } from "../sources/yahoo/market-intel-client.js";
-import type { MarketIntelPayload, MarketIntelProviderConfig } from "../../providers/market-intel/types.js";
+import type { MarketIntelPayload, MarketIntelProviderConfig } from "../data/market-intel-types.js";
 import { runStockPortfolioProvider } from "./stock-portfolio.js";
 import { buildStockPulsePositionSnapshot } from "../signals/pulse.js";
 import { loadStockPulseProviderConfig } from "../../providers/stock-pulse/config.js";
@@ -24,7 +24,7 @@ import type {
   StockPulseSymbol,
   StockPulseUniverseSourceConfig,
   StockPulseUniverseSymbol,
-} from "../../providers/stock-pulse/types.js";
+} from "../data/pulse-types.js";
 import { loadStockWatchlistResearchConfig } from "../../providers/stock-watchlist-research/config.js";
 import { YahooStockWatchlistResearchClient } from "../sources/yahoo/watchlist-research-client.js";
 import type {
@@ -34,7 +34,7 @@ import type {
   StockWatchlistResearchConfig,
   StockWatchlistResearchPayload,
   StockWatchlistResearchSymbol,
-} from "../../providers/stock-watchlist-research/types.js";
+} from "./watchlist-research-types.js";
 
 export interface StockWatchlistResearchProviderDeps {
   loadProviderConfig?: (name?: string) => StockWatchlistResearchConfig;

@@ -31,7 +31,7 @@ import type {
   MarketContextForecastSummary,
   MarketContextProviderConfig,
   MarketContextProviderPayload,
-} from "../../providers/market-context/types.js";
+} from "../data/market-context-types.js";
 
 export interface MarketContextProviderDeps {
   loadProviderConfig?: (name?: string) => MarketContextProviderConfig;

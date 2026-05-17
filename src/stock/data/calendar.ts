@@ -95,4 +95,4 @@ export { buildMarketIntelCalendarSnapshot } from "./market-calendar.js";
 export type {
   MarketIntelCalendarSnapshot,
   MarketIntelMarketConfig,
-} from "../../providers/market-intel/types.js";
+} from "./market-intel-types.js";

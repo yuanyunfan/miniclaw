@@ -3,11 +3,11 @@ import type {
   MarketIntelEvidenceCollection,
   MarketIntelEvidenceItem,
   MarketIntelProviderConfig,
-} from "../../../../providers/market-intel/types.js";
+} from "../../../data/market-intel-types.js";
 import { riskKeyword } from "./parsers/risk.js";
 import type { CollectorResult } from "./official-shared.js";
 import { dedupeEvidence, emptySection, section, source } from "./official-shared.js";
-import type { PreProviderRunArgs } from "../../../../providers/types.js";
+import type { StockProviderRunArgs } from "../../../types.js";
 
 function deriveRiskEvidence(params: {
   runAt: Date;
@@ -69,7 +69,7 @@ function deriveRiskEvidence(params: {
 }
 
 export function splitOfficialEvidenceCollection(
-  args: PreProviderRunArgs,
+  args: StockProviderRunArgs,
   config: MarketIntelProviderConfig,
   results: CollectorResult[],
 ): MarketIntelEvidenceCollection {

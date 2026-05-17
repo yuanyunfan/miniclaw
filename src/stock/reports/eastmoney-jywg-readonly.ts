@@ -33,13 +33,13 @@ import {
 import {
   buildEastmoneyJywgProviderPayload,
   formatEastmoneyJywgProviderPayload,
-} from "../../providers/eastmoney-jywg-readonly/format.js";
+} from "./eastmoney-jywg-readonly-format.js";
 import type {
   EastmoneyJywgDryRunSummary,
   EastmoneyJywgProviderConfig,
   EastmoneyJywgProviderPayload,
   EastmoneyJywgProviderRunResult,
-} from "../../providers/eastmoney-jywg-readonly/types.js";
+} from "./eastmoney-jywg-readonly-types.js";
 
 export interface EastmoneyJywgProviderDeps {
   client?: EastmoneyJywgClient;

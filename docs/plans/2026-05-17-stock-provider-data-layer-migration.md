@@ -1,6 +1,6 @@
 # Stock Provider Data-Layer Migration
 
-Status: in progress (compatibility + source/data cleanup completed; ownership cleanup pending)
+Status: completed (stock ownership migrated; provider config/facade compatibility retained)
 Date: 2026-05-17
 
 ## Background
@@ -423,3 +423,7 @@ Each commit should keep the runtime provider names stable and include the focuse
 - 2026-05-17: Added `src/stock/types.ts`, source adapter modules for Futu, Eastmoney, Yahoo, and official evidence, data-domain bridge modules for calendar, universe, quotes, portfolio, ETF premium, market evidence, and market memory, signal modules for pulse, market-intel scoring, forecast evaluation, and context synthesis, plus report composers for every existing stock cron provider.
 - 2026-05-17: Verified compatibility with `pnpm run typecheck`, stock provider focused Vitest coverage, and Futu/Eastmoney MCP focused Vitest coverage.
 - 2026-05-17: Completed the source/data cleanup slice after the compatibility migration. Moved `stock-pulse` universe/source mapping into `src/stock/data/universe.ts` and `src/stock/sources/watchlists.ts`; moved market-intel calendar, quote snapshot, portfolio context, redaction, and official evidence collectors into `src/stock/data/*` and `src/stock/sources/official/collectors/*`; moved Eastmoney ETF premium and Yahoo watchlist research clients into `src/stock/sources/*`. `src/providers/*` still owns cron-facing config/type compatibility and some report-format helpers, so the final report/config cleanup remains a separate slice.
+- 2026-05-17: Completed the ownership cleanup slice. Provider-owned stock `types.ts` files now re-export from stock-owned modules such as `src/stock/data/portfolio-types.ts`, `src/stock/data/market-intel-types.ts`, `src/stock/data/pulse-types.ts`, `src/stock/data/market-context-types.ts`, `src/stock/signals/forecast-evaluation-types.ts`, and report-specific type modules under `src/stock/reports/*`.
+- 2026-05-17: Moved remaining stock implementation ownership out of provider folders: asset allocation and portfolio payload assembly into `src/stock/data/*`; portfolio pie chart rendering and broker payload formatters into `src/stock/reports/*`; market-intel payload formatting into `src/stock/reports/market-intel-format.ts`; market-intel and forecast calibration into `src/stock/signals/*`.
+- 2026-05-17: Provider stock folders now retain cron config loaders, `index.ts` compatibility exports, small re-export facades, and tests. `src/stock/sources`, `src/stock/data`, and `src/stock/signals` no longer import stock-specific provider modules; report composers still import provider config loaders and generic provider framework contracts for cron compatibility.
+- 2026-05-17: Re-verified with `pnpm run typecheck`, `pnpm vitest run src/providers/stock-portfolio src/providers/stock-pulse src/providers/market-intel src/providers/market-context src/providers/market-forecast-evaluation src/providers/stock-watchlist-research`, and `pnpm vitest run src/mcp/futu-stock src/mcp/eastmoney-jywg src/mcp/eastmoney-myfavor src/providers/futu-stock src/providers/eastmoney-jywg-readonly src/providers/eastmoney-etf-premium`.

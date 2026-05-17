@@ -14,7 +14,7 @@ import {
 } from "./parsers/filings.js";
 import type { CollectorResult, OfficialCollectorParams } from "./official-shared.js";
 import { failureResult, skippedResult, source } from "./official-shared.js";
-import type { MarketIntelEvidenceItem } from "../../../../providers/market-intel/types.js";
+import type { MarketIntelEvidenceItem } from "../../../data/market-intel-types.js";
 
 const SEC_USER_AGENT = process.env.MINICLAW_SEC_USER_AGENT ?? "MiniClaw/0.4 market-intel yuan@example.invalid";
 

@@ -5,6 +5,32 @@ export type StockSourceTier = "official" | "broker_readonly" | "public_market_da
 export type StockDataQualityStatus = "ok" | "partial" | "blocked" | "empty";
 export type StockSignalSeverity = "info" | "notice" | "alert" | "urgent";
 
+export interface StockProviderRunArgs {
+  configName?: string;
+  jobName: string;
+  channelId: string;
+  runAt: Date;
+}
+
+export interface StockProviderAttachment {
+  path: string;
+  name?: string;
+  description?: string;
+}
+
+export interface StockProviderResult {
+  text: string;
+  attachments?: StockProviderAttachment[];
+  skipTask?: {
+    reason: string;
+    message?: string;
+    notifyMessage?: string;
+  };
+  commit?: () => Promise<void>;
+}
+
+export type StockProviderRunner = (args: StockProviderRunArgs) => Promise<StockProviderResult>;
+
 export interface StockSymbolRef {
   symbol: string;
   provider_symbol?: string;

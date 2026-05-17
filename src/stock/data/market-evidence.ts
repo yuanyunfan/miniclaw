@@ -2,7 +2,7 @@ export type {
   MarketIntelEvidenceCollection,
   MarketIntelEvidenceItem,
   MarketIntelEvidenceSection,
-} from "../../providers/market-intel/types.js";
+} from "./market-intel-types.js";
 export {
   buildEmptyMarketIntelEvidenceCollection,
   collectMarketIntelOfficialEvidence,

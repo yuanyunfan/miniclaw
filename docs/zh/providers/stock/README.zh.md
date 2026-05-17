@@ -3,7 +3,7 @@ doc_id: stock-providers-index
 lang: zh
 translation_of: docs/providers/stock/README.md
 translation_status: current
-source_sha256: 6339a06d23eb62ac48dbb446512600ef26a2625ca84d45a8ed6f35e2899226f1
+source_sha256: 0383056d3d7b9e7b9fa960707ecc5e3f54a62216c809b40c8fdd6e780ddd8a43
 ---
 # 股票 Provider 系列
 
@@ -49,7 +49,9 @@ src/stock/
 
 这是一次兼容迁移：`pre_provider`、`pre_provider_config` 和 `pre_context_providers` 等 cron YAML 字段不变。
 
-`src/providers/*` 不应该拥有 stock source/data 实现。source/data cleanup slice 之后，stock provider 目录保留 cron 注册、runtime config loader、provider-specific types、fixtures 和部分 report-format helper；可复用 source/data 逻辑位于 `src/stock/sources/*` 和 `src/stock/data/*`。
+`src/providers/*` 不应该拥有 stock source/data/signal/report implementation logic。ownership cleanup slice 之后，stock provider 目录保留 cron 注册、runtime config loader、compatibility re-export facade、fixtures 和 tests。Stock-owned types、payload builders、chart renderers、calibration helpers、source adapters、data-domain modules 和 signal logic 都位于 `src/stock/*`。
+
+`src/stock/reports/*` 中仍然存在的 provider imports 是刻意保留的 cron compatibility boundary：report composers 可以调用 provider config loaders 和 generic provider framework contracts，而 `src/stock/sources/*`、`src/stock/data/*`、`src/stock/signals/*` 不再 import stock-specific provider modules。
 
 ## 富途股票 Provider
 
@@ -75,10 +77,13 @@ src/mcp/futu-stock/
 src/providers/futu-stock/
   index.ts         # cron pre_provider compatibility wrapper
   config.ts        # ~/.miniclaw/providers/futu-stock/<name>.yaml
-  format.ts        # safe context formatter
+  format.ts        # compatibility re-export facade
 
 src/stock/reports/futu-stock.ts
   # cron provider wrapper 使用的 report composer
+
+src/stock/reports/futu-stock-format.ts
+  # safe context formatter
 
 src/stock/sources/futu/
   # Futu OpenD readonly access 的 source adapter exports

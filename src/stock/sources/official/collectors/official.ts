@@ -1,5 +1,5 @@
-import type { PreProviderRunArgs } from "../../../../providers/types.js";
-import type { MarketIntelEvidenceCollection, MarketIntelProviderConfig } from "../../../../providers/market-intel/types.js";
+import type { StockProviderRunArgs } from "../../../types.js";
+import type { MarketIntelEvidenceCollection, MarketIntelProviderConfig } from "../../../data/market-intel-types.js";
 import { collectOfficialEventEvidence } from "./events.js";
 import { collectOfficialMacroEvidence } from "./macro.js";
 import { collectOfficialNewsEvidence } from "./news.js";
@@ -15,7 +15,7 @@ export { buildEmptyMarketIntelEvidenceCollection } from "./scoring-input.js";
 
 export async function collectMarketIntelOfficialEvidence(
   params: {
-    args: PreProviderRunArgs;
+    args: StockProviderRunArgs;
     config: MarketIntelProviderConfig;
   },
   deps: { http?: MarketIntelOfficialHttpClient } = {},

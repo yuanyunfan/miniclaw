@@ -3,11 +3,11 @@ doc_id: stock-provider-data-layer-migration
 lang: zh
 translation_of: docs/plans/2026-05-17-stock-provider-data-layer-migration.md
 translation_status: current
-source_sha256: e9c1eee15582dfa05e15493d728bd67adf649b8b71ac5a7875cfc06f646bb81a
+source_sha256: ae294ba87a7dcd954a110635ca842d70f1652cfad5957c8f49255fc9a1d42892
 ---
 # Stock Provider 数据层迁移
 
-Status: in progress (compatibility + source/data cleanup completed; ownership cleanup pending)
+Status: completed (stock ownership migrated; provider config/facade compatibility retained)
 Date: 2026-05-17
 
 ## 背景
@@ -430,3 +430,7 @@ Rollback：
 - 2026-05-17：新增 `src/stock/types.ts`，以及 Futu、Eastmoney、Yahoo、official evidence 的 source adapter 模块；新增 calendar、universe、quotes、portfolio、ETF premium、market evidence、market memory 的 data-domain bridge；新增 pulse、market-intel scoring、forecast evaluation、context synthesis signal 模块；并为所有现有 stock cron provider 增加 report composer。
 - 2026-05-17：已用 `pnpm run typecheck`、stock provider focused Vitest、Futu/Eastmoney MCP focused Vitest 验证兼容性。
 - 2026-05-17：在 compatibility migration 后完成 source/data cleanup slice。`stock-pulse` 的 universe/source mapping 已迁入 `src/stock/data/universe.ts` 和 `src/stock/sources/watchlists.ts`；market-intel calendar、quote snapshot、portfolio context、redaction 和 official evidence collectors 已迁入 `src/stock/data/*` 与 `src/stock/sources/official/collectors/*`；Eastmoney ETF premium 与 Yahoo watchlist research client 已迁入 `src/stock/sources/*`。`src/providers/*` 仍保留 cron-facing config/type compatibility 和部分 report-format helper，最终 report/config cleanup 仍是单独切片。
+- 2026-05-17：完成 ownership cleanup slice。原本由 provider 拥有的 stock `types.ts` 现在改为从 stock-owned modules re-export，例如 `src/stock/data/portfolio-types.ts`、`src/stock/data/market-intel-types.ts`、`src/stock/data/pulse-types.ts`、`src/stock/data/market-context-types.ts`、`src/stock/signals/forecast-evaluation-types.ts`，以及 `src/stock/reports/*` 下的 report-specific type modules。
+- 2026-05-17：将剩余 stock implementation ownership 移出 provider folders：asset allocation 和 portfolio payload assembly 迁入 `src/stock/data/*`；portfolio pie chart rendering 与 broker payload formatters 迁入 `src/stock/reports/*`；market-intel payload formatting 迁入 `src/stock/reports/market-intel-format.ts`；market-intel 与 forecast calibration 迁入 `src/stock/signals/*`。
+- 2026-05-17：stock provider folders 现在只保留 cron config loaders、`index.ts` compatibility exports、小型 re-export facades 和 tests。`src/stock/sources`、`src/stock/data`、`src/stock/signals` 不再 import stock-specific provider modules；report composers 为了 cron compatibility 仍会 import provider config loaders 和 generic provider framework contracts。
+- 2026-05-17：重新用 `pnpm run typecheck`、`pnpm vitest run src/providers/stock-portfolio src/providers/stock-pulse src/providers/market-intel src/providers/market-context src/providers/market-forecast-evaluation src/providers/stock-watchlist-research`、以及 `pnpm vitest run src/mcp/futu-stock src/mcp/eastmoney-jywg src/mcp/eastmoney-myfavor src/providers/futu-stock src/providers/eastmoney-jywg-readonly src/providers/eastmoney-etf-premium` 完成验证。

@@ -3,11 +3,11 @@ import type {
   MarketIntelMarketSnapshot,
   MarketIntelScores,
   MarketIntelSnapshotItem,
-} from "../../providers/market-intel/types.js";
+} from "../data/market-intel-types.js";
 import {
   calibrationRuleForSource,
   type MarketIntelScoringCalibrationConfig,
-} from "../../providers/market-intel/calibration.js";
+} from "./market-intel-calibration.js";
 
 function scoreFromEvidence(params: {
   target: string;

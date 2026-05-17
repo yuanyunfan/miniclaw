@@ -1,12 +1,12 @@
-import type { PreProviderResult, PreProviderRunArgs } from "../../providers/types.js";
+import type { StockProviderResult, StockProviderRunArgs } from "../types.js";
 import type {
   MarketIntelPortfolioContext,
   MarketIntelPortfolioRunner,
   MarketIntelPortfolioSourceSummary,
   MarketIntelProviderConfig,
-} from "../../providers/market-intel/types.js";
+} from "./market-intel-types.js";
 import { sanitizeMarketIntelError } from "./redaction.js";
-import type { StockPortfolioAssetSummary, StockPortfolioCnySummary } from "../../providers/stock-portfolio/types.js";
+import type { StockPortfolioAssetSummary, StockPortfolioCnySummary } from "./portfolio-types.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -92,10 +92,10 @@ export function buildPortfolioContextFromText(text: string, profile: string): Ma
 }
 
 export async function collectMarketIntelPortfolio(params: {
-  args: PreProviderRunArgs;
+  args: StockProviderRunArgs;
   config: MarketIntelProviderConfig;
   runner: MarketIntelPortfolioRunner;
-}): Promise<{ context: MarketIntelPortfolioContext; commit?: PreProviderResult["commit"] }> {
+}): Promise<{ context: MarketIntelPortfolioContext; commit?: StockProviderResult["commit"] }> {
   if (!params.config.portfolio_provider_config) {
     return { context: buildNotConfiguredPortfolioContext() };
   }

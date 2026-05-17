@@ -9,8 +9,8 @@ import {
   type FutuStockConfig,
 } from "../sources/futu/index.js";
 import { loadFutuStockProviderConfig, resolveFutuProviderMarketSession } from "../../providers/futu-stock/config.js";
-import { buildFutuStockProviderPayload, formatFutuStockProviderPayload } from "../../providers/futu-stock/format.js";
-import type { FutuStockProviderConfig } from "../../providers/futu-stock/types.js";
+import { buildFutuStockProviderPayload, formatFutuStockProviderPayload } from "./futu-stock-format.js";
+import type { FutuStockProviderConfig } from "./futu-stock-types.js";
 
 export interface FutuStockProviderDeps {
   client?: FutuStockClient;

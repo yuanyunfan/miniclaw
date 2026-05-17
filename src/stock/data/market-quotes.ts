@@ -10,7 +10,7 @@ import type {
   MarketIntelSnapshotItem,
   MarketIntelSnapshotSection,
   MarketIntelSnapshotSectionStatus,
-} from "../../providers/market-intel/types.js";
+} from "./market-intel-types.js";
 import { sanitizeMarketIntelError } from "./redaction.js";
 export { YahooMarketIntelQuoteClient } from "../sources/yahoo/market-intel-client.js";
 

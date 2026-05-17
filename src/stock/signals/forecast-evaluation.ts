@@ -6,7 +6,7 @@ import type {
   MarketForecastEvaluationScore,
   MarketForecastOutcomeBucket,
   MarketForecastProbabilityGroup,
-} from "../../providers/market-forecast-evaluation/types.js";
+} from "./forecast-evaluation-types.js";
 
 export function normalizeProbabilities(input: {
   up: number;

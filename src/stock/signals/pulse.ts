@@ -8,7 +8,7 @@ import type {
   StockPulseSymbol,
   StockPulseThresholdConfig,
   StockPulseThresholdRule,
-} from "../../providers/stock-pulse/types.js";
+} from "../data/pulse-types.js";
 
 const HOUR_WINDOW_BARS = 12;
 

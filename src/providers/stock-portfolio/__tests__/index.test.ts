@@ -6,8 +6,8 @@ const mocks = vi.hoisted(() => ({
   renderAssetPieChartPng: vi.fn(),
 }));
 
-vi.mock("../pie-chart.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../pie-chart.js")>();
+vi.mock("../../../stock/reports/portfolio-pie-chart.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../stock/reports/portfolio-pie-chart.js")>();
   return {
     ...actual,
     renderAssetPieChartPng: mocks.renderAssetPieChartPng,

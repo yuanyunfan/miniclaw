@@ -1,4 +1,4 @@
-import type { EastmoneyEtfPremiumClient } from "../../../providers/eastmoney-etf-premium/types.js";
+import type { EastmoneyEtfPremiumClient } from "../../data/etf-premium-types.js";
 
 const SELECTOR_ENDPOINT = "https://datacenter.eastmoney.com/stock/fundselector/api/data/get";
 const SELECTOR_FIELDS = [

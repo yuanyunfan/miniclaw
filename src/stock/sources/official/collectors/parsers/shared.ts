@@ -2,7 +2,7 @@ import type {
   MarketIntelEvidenceFreshness,
   MarketIntelEvidenceImportance,
   MarketIntelEvidenceItem,
-} from "../../../../../providers/market-intel/types.js";
+} from "../../../../data/market-intel-types.js";
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));

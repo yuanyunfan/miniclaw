@@ -2,7 +2,7 @@ import type {
   MarketIntelQuoteClient,
   MarketIntelQuoteRequest,
   MarketIntelQuoteSnapshotInput,
-} from "../../../providers/market-intel/types.js";
+} from "../../data/market-intel-types.js";
 import { fetchYahooChartSeries } from "./index.js";
 
 export class YahooMarketIntelQuoteClient implements MarketIntelQuoteClient {

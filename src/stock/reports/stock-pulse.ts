@@ -2,7 +2,7 @@ import type { PreProviderResult, PreProviderRunArgs } from "../../providers/type
 import type { ProviderContext, ProviderDryRunResult, ProviderHealthResult, ProviderManifest, ProviderModule } from "../../providers/framework.js";
 import { providerDryRunFromError, providerHealthFromError, runProviderModuleAsPreProvider } from "../../providers/framework.js";
 import { runStockPortfolioProvider } from "./stock-portfolio.js";
-import type { StockPortfolioPositionPremiumSummary } from "../../providers/stock-portfolio/types.js";
+import type { StockPortfolioPositionPremiumSummary } from "../data/portfolio-types.js";
 import { loadStockPulseProviderConfig } from "../../providers/stock-pulse/config.js";
 import { analyzeStockPulseSeries, buildStockPulsePositionSnapshot } from "../signals/pulse.js";
 import { isActiveWindow, openMarketsAt } from "../data/calendar.js";
@@ -21,7 +21,7 @@ import type {
   StockPulseSymbol,
   StockPulseDryRunSummary,
   StockPulseUniverseSymbol,
-} from "../../providers/stock-pulse/types.js";
+} from "../data/pulse-types.js";
 
 export interface StockPulseProviderDeps {
   loadProviderConfig?: (name?: string) => StockPulseProviderConfig;

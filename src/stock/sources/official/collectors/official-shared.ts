@@ -1,4 +1,4 @@
-import type { PreProviderRunArgs } from "../../../../providers/types.js";
+import type { StockProviderRunArgs } from "../../../types.js";
 import { sanitizeMarketIntelError } from "../../../data/redaction.js";
 import type {
   MarketIntelDataQualitySource,
@@ -7,7 +7,7 @@ import type {
   MarketIntelProviderConfig,
   MarketIntelSourceStatus,
   MarketIntelSourceTier,
-} from "../../../../providers/market-intel/types.js";
+} from "../../../data/market-intel-types.js";
 
 export interface MarketIntelOfficialHttpClient {
   getText(url: string, init?: { headers?: Record<string, string> }): Promise<string>;
@@ -16,7 +16,7 @@ export interface MarketIntelOfficialHttpClient {
 }
 
 export interface OfficialCollectorParams {
-  args: PreProviderRunArgs;
+  args: StockProviderRunArgs;
   config: MarketIntelProviderConfig;
   http: MarketIntelOfficialHttpClient;
 }

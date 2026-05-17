@@ -16,7 +16,7 @@ import type {
   EastmoneyEtfPremiumPayload,
   EastmoneyEtfPremiumProviderConfig,
   EastmoneyEtfPremiumSymbolConfig,
-} from "../../providers/eastmoney-etf-premium/types.js";
+} from "../data/etf-premium-types.js";
 
 export interface EastmoneyEtfPremiumProviderDeps {
   loadProviderConfig?: (name?: string) => EastmoneyEtfPremiumProviderConfig;

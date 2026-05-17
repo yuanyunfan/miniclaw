@@ -1,7 +1,7 @@
 import type { PreProviderResult, PreProviderRunArgs } from "../../providers/types.js";
 import { runStockPortfolioProvider } from "./stock-portfolio.js";
 import { zonedDateKey } from "../data/calendar.js";
-import { sanitizeMarketIntelError } from "../../providers/market-intel/format.js";
+import { sanitizeMarketIntelError } from "./market-intel-format.js";
 import { YahooMarketIntelQuoteClient } from "../sources/yahoo/market-intel-client.js";
 import {
   findLatestMarketForecast,
@@ -16,7 +16,7 @@ import type {
   MarketForecastEvaluationProviderConfig,
   MarketForecastEvaluationQuoteClient,
   MarketForecastEvaluationQuoteInput,
-} from "../../providers/market-forecast-evaluation/types.js";
+} from "../signals/forecast-evaluation-types.js";
 import {
   calibrationNote,
   changePct,

@@ -5,7 +5,7 @@ import type {
   StockPulseSymbol,
   StockPulseUniverseSourceConfig,
   StockPulseUniverseSymbol,
-} from "../../../providers/stock-pulse/types.js";
+} from "../../data/pulse-types.js";
 import {
   getEastmoneyMyfavorUniverseSymbols,
   getFutuWatchlistUniverseSymbols,
