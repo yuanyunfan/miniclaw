@@ -1,7 +1,5 @@
 ---
 status: landing
-website_docs_drift: unaffected
-website_docs_drift_reason: Chinese source docs received translation polish only; website summary semantics are unchanged.
 source_docs:
   en:
     - README.en.md
@@ -41,7 +39,7 @@ flowchart LR
 
 ## 设计边界
 
-- **Discord-native control plane**：chat、task intake、slash commands、cron reports 和 failure recovery 都通过 Discord 交互和留痕。
+- **Discord-native control plane**：chat、task intake、slash commands、cron reports 和 failure recovery 都通过 Discord 交互和留痕；链接很多的长报告会把 preview cards 放到完整结果之后，而不是插在正文 chunk 中间。
 - **Runtime boundary**：MiniClaw 负责 routing、context、progress、trace events 和 delivery；Claude/Codex 负责 agent execution。
 - **Operator visibility**：task traces、cron run history、只读 doctor reports 和 incident workflows 都是 first-class slash-command surfaces。
 - **Provider-first reports**：content、email、stock、watchlist、pulse 和 market-intel providers 先生成结构化上下文，再交给 LLM 汇总；scheduled cron 会先经过全局 active-window guard。

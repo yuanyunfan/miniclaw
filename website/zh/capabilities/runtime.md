@@ -1,7 +1,5 @@
 ---
 status: public-summary
-website_docs_drift: unaffected
-website_docs_drift_reason: Chinese runtime source docs received translation polish only; website summary semantics are unchanged.
 source_docs:
   en:
     - docs/runtime/README.md
@@ -37,7 +35,7 @@ flowchart TD
 - **Intake normalization**：Discord events 被整理成一致的 route input。
 - **Routing semantics**：Smart Router 区分 chat、suggested task、confirmed task 和受信 auto-task channel。
 - **Task lifecycle**：task threads、progress cards、tool traces、final Markdown output、cancellation 和 resume 都属于 runtime。
-- **Discord delivery**：长 Markdown 结果会切成 Discord 尺寸的消息；`<https://...>` 链接会保留 Discord no-preview 行为，让链接很多的 cron report 仍然可读。
+- **Discord delivery**：长 Markdown 结果会切成 Discord 尺寸的消息；裸 URL preview 会延后到最后的 footer，正文 chunk suppress embeds，`<https://...>` 链接保留 Discord no-preview 行为。
 - **Cron execution**：scheduled cron dispatch 会先通过全局 `config.yaml` active-window guard；窗口外不执行 script、provider 或 task runtime。
 - **Recovery loop**：connectivity 和 doctor repair 复用 stored incidents 与 trace evidence。
 - **Merged runtime docs**：feature-level runtime notes 已合并到 runtime source docs。

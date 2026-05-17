@@ -86,7 +86,8 @@ Current delivery shape:
 
 - Status card: short embed for current state.
 - Progress stream: persistent task progress/update message.
-- Final result: normal Markdown message with chunking when needed.
+- Final result: normal Markdown message with chunking when needed. Discord body chunks suppress link embeds, and bare URLs are repeated only in a final link-preview footer so cards appear after the full result rather than between body chunks.
+- Fanout and replay: Discord IM fanout, recovery outbox replay, and script cron `DISCORD_MESSAGE` output use the same deferred-link-preview helper as task results.
 - Trace view: task events and trace-export commands provide operator-level details.
 
 ## Cron Runtime

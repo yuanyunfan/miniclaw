@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { Client } from "discord.js";
+import { MessageFlags, type Client } from "discord.js";
 import { runScript } from "../runner-script.js";
 import type { CronJobScript } from "../types.js";
 
@@ -161,5 +161,25 @@ echo "MEDIA:$PWD/snapshot.json"
     const second = sent[1] as { content: string; files: unknown[] };
     expect(second.content).toBe("part two");
     expect(second.files).toHaveLength(1);
+  });
+
+  it("DISCORD_MESSAGE 链接预览集中到最后一条消息", async () => {
+    writeScript("script.sh", `#!/usr/bin/env bash
+set -euo pipefail
+printf 'script report https://example.com/a\\n' > summary.md
+echo "DISCORD_MESSAGE:$PWD/summary.md"
+`);
+    const sent: unknown[] = [];
+
+    await runScript(scriptJob({}), fakeClient(sent));
+
+    expect(sent).toHaveLength(2);
+    expect(sent[0]).toMatchObject({
+      content: "script report https://example.com/a",
+      flags: MessageFlags.SuppressEmbeds,
+    });
+    expect((sent[1] as { content: string; flags?: unknown }).content).toContain("链接预览集中区");
+    expect((sent[1] as { content: string; flags?: unknown }).content).toContain("https://example.com/a");
+    expect((sent[1] as { flags?: unknown }).flags).toBeUndefined();
   });
 });

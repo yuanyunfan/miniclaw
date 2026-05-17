@@ -1,4 +1,4 @@
-import type { Client, MessageCreateOptions, SendableChannels } from "discord.js";
+import { MessageFlags, type Client, type MessageCreateOptions, type SendableChannels } from "discord.js";
 import type { IMTransport, SentMessage } from "../../contracts.js";
 
 export function createDiscordTransport(client: Client): IMTransport {
@@ -26,9 +26,12 @@ export function createDiscordTransport(client: Client): IMTransport {
     async send(input): Promise<SentMessage> {
       const channel = await fetchSendable(input.target.target);
       const content = input.content.slice(0, 2000);
-      const payload: string | MessageCreateOptions = input.components?.length
-        ? { content, components: input.components as MessageCreateOptions["components"] }
-        : content;
+      const payload: MessageCreateOptions = {
+        content,
+        allowedMentions: { parse: [] },
+        ...(input.components?.length ? { components: input.components as MessageCreateOptions["components"] } : {}),
+        ...(input.suppressEmbeds ? { flags: MessageFlags.SuppressEmbeds } : {}),
+      };
       const message = await channel.send(payload);
       return {
         transport: "discord",

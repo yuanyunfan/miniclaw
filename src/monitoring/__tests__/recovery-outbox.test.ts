@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { Client } from "discord.js";
+import { MessageFlags, type Client } from "discord.js";
 import { setDb } from "../../store/connection.js";
 import { ensureBaseSchema, runMigrations } from "../../store/schema.js";
 import {
@@ -122,8 +122,39 @@ describe("recovery outbox flush", () => {
     const result = await flushRecoveryOutbox(clientRecordingSends(sent));
 
     expect(result).toMatchObject({ taskDeliveriesDelivered: 1, failedAttempts: 0 });
-    expect(String(sent[0])).toContain("补发任务结果");
-    expect(sent).toContain("final result");
+    expect((sent[0] as { content: string }).content).toContain("补发任务结果");
+    expect((sent[1] as { content: string }).content).toBe("final result");
     expect(listRecoveryOutbox({ kind: "task_result_delivery" })[0]?.status).toBe("delivered");
+  });
+
+  it("defers link previews when replaying pending task results", async () => {
+    createTask({
+      id: "task-1",
+      discord_thread_id: "",
+      discord_user_id: "cron",
+      prompt: "hello",
+      cwd: "/tmp",
+    });
+    enqueueTaskResultDelivery({
+      channelId: "channel-1",
+      taskId: "task-1",
+      jobName: "daily-job",
+      route: "cron_task",
+      success: true,
+      messages: ["正文 https://example.com/a"],
+      deliveryError: "discord down",
+    });
+    const sent: unknown[] = [];
+
+    await flushRecoveryOutbox(clientRecordingSends(sent));
+
+    expect(sent).toHaveLength(3);
+    expect(sent[1]).toMatchObject({
+      content: "正文 https://example.com/a",
+      flags: MessageFlags.SuppressEmbeds,
+    });
+    expect((sent[2] as { content: string; flags?: unknown }).content).toContain("链接预览集中区");
+    expect((sent[2] as { content: string; flags?: unknown }).content).toContain("https://example.com/a");
+    expect((sent[2] as { flags?: unknown }).flags).toBeUndefined();
   });
 });

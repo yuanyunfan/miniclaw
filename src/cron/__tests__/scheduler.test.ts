@@ -55,6 +55,12 @@ function clientWithFailingSends(failuresBeforeSuccess: number): { client: Client
   return { client, sendCount: () => sends };
 }
 
+function sentContent(payload: unknown): string | undefined {
+  if (typeof payload === "string") return payload;
+  const content = (payload as { content?: unknown })?.content;
+  return typeof content === "string" ? content : undefined;
+}
+
 let db: Database.Database;
 
 beforeEach(() => {
@@ -624,7 +630,7 @@ describe("cron scheduler dispatch", () => {
         fetch: async () => ({
           isSendable: () => true,
           send: async (payload: unknown) => {
-            if (typeof payload === "string") {
+            if (sentContent(payload) === "hello") {
               jobSends++;
               throw new Error("message failed token=secret-value");
             }
@@ -699,7 +705,7 @@ describe("cron scheduler dispatch", () => {
         fetch: async () => ({
           isSendable: () => true,
           send: async (payload: unknown) => {
-            if (typeof payload === "string") {
+            if (sentContent(payload) === "hello") {
               jobSends++;
               throw new Error(`job-failed-${jobSends}`);
             }
@@ -734,7 +740,7 @@ describe("cron scheduler dispatch", () => {
         fetch: async () => ({
           isSendable: () => true,
           send: async (payload: unknown) => {
-            if (typeof payload === "string") {
+            if (sentContent(payload) === "hello") {
               jobSends++;
               if (jobSends === 1) throw new Error("temporary boom");
               return { id: "job-ok" };
@@ -774,7 +780,7 @@ describe("cron scheduler dispatch", () => {
         fetch: async () => ({
           isSendable: () => true,
           send: async (payload: unknown) => {
-            if (typeof payload === "string") {
+            if (sentContent(payload) === "hello") {
               jobSends++;
               if (jobSends === 1) throw new Error("temporary boom");
               secondSendSawBeforeRun = beforeRunCalled;

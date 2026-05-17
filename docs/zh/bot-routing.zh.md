@@ -3,7 +3,7 @@ doc_id: bot-routing
 lang: zh
 translation_of: docs/bot-routing.md
 translation_status: current
-source_sha256: 35fb8e934a0c79c1fa17fbebed8f1f8e7236f25d6dc691e4e6b7ad043614567f
+source_sha256: ef3c791b6a3b898d052fc2b90863828c4f39c328258dc0bdec80bf64a7e2946a
 ---
 # Discord Bot 路由
 
@@ -158,7 +158,7 @@ sequenceDiagram
 
 chat 故意保持 read-oriented。workspace writes、shell execution、Git operations、durable output 和 multi-file coding work 应走 task runtime。
 
-最终 Discord Markdown 投递会使用共享的 2000 字符 chunker。裸 `https://...` 链接会被集中到最后的 link-preview footer，正文 chunk 会 suppress embeds；但用 `<https://...>` 包起来的 Discord no-embed 链接会保留 no-preview 语义，不会被复制到 preview footer。发布大量链接的 cron prompt 如果希望链接可点击但不出现预览卡片，应优先使用 angle-bracket 形式。
+最终 Discord Markdown 投递会使用共享的 2000 字符 chunker。裸 `https://...` 链接会被集中到最后的 link-preview footer，正文 chunk 会 suppress embeds；但用 `<https://...>` 包起来的 Discord no-embed 链接会保留 no-preview 语义，不会被复制到 preview footer。这个规则适用于 chat replies、task results、Discord IM fanout、recovery replay 和 script cron `DISCORD_MESSAGE` output；新增 Discord text-delivery 路径应使用同一个 helper，不要直接用 raw content 调 `channel.send()`。发布大量链接的 cron prompt 如果希望链接可点击但不出现预览卡片，应优先使用 angle-bracket 形式。
 
 ## 安全变更地图
 

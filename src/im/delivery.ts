@@ -1,10 +1,10 @@
 import type { Client } from "discord.js";
 import type { RuntimeConfig } from "../config.js";
 import type { IMRouteConfig, IMTransportId } from "../config/types.js";
+import { chunkMessageWithDeferredLinkPreviews } from "../discord/chunks.js";
 import type { IMDeliveryTarget, SentMessage } from "./contracts.js";
 import { createIMTransportRegistry, requireIMTransport, type IMTransportRegistry } from "./registry.js";
 
-const DISCORD_CHUNK_SIZE = 2000;
 const FEISHU_CHUNK_SIZE = 3900;
 
 export interface IMDeliveryResult {
@@ -23,10 +23,14 @@ export interface ResolveDeliveryTargetsOptions {
 
 type IMRuntimeConfig = RuntimeConfig["im"];
 
-function chunkText(text: string, size: number): string[] {
-  const normalized = text.trim() || "[empty message]";
-  const chunks: string[] = [];
-  for (let i = 0; i < normalized.length; i += size) chunks.push(normalized.slice(i, i + size));
+interface IMTextChunk {
+  content: string;
+  suppressEmbeds?: boolean;
+}
+
+function chunkText(text: string, size: number): IMTextChunk[] {
+  const chunks: IMTextChunk[] = [];
+  for (let i = 0; i < text.length; i += size) chunks.push({ content: text.slice(i, i + size) });
   return chunks;
 }
 
@@ -65,8 +69,15 @@ export function resolveDeliveryTargets(options: ResolveDeliveryTargetsOptions): 
   return targets;
 }
 
-function chunkSizeForTransport(transport: IMTransportId): number {
-  return transport === "feishu" ? FEISHU_CHUNK_SIZE : DISCORD_CHUNK_SIZE;
+function chunksForTransport(transport: IMTransportId, text: string): IMTextChunk[] {
+  const normalized = text.trim() || "[empty message]";
+  if (transport === "discord") {
+    return chunkMessageWithDeferredLinkPreviews(normalized, "[empty message]").map((chunk) => ({
+      content: chunk.content,
+      suppressEmbeds: chunk.suppressEmbeds,
+    }));
+  }
+  return chunkText(normalized, FEISHU_CHUNK_SIZE);
 }
 
 export async function sendTextToTargets(input: {
@@ -81,10 +92,11 @@ export async function sendTextToTargets(input: {
     try {
       const transport = requireIMTransport(input.registry, target.transport);
       let lastMessage: SentMessage | undefined;
-      for (const chunk of chunkText(input.content, chunkSizeForTransport(target.transport))) {
+      for (const chunk of chunksForTransport(target.transport, input.content)) {
         lastMessage = await transport.send({
           target,
-          content: chunk,
+          content: chunk.content,
+          suppressEmbeds: chunk.suppressEmbeds,
           metadata: input.metadata,
         });
       }

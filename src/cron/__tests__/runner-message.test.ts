@@ -25,10 +25,10 @@ function fakeClient(channel: unknown): Client {
 
 describe("runMessage", () => {
   it("发送模板渲染后的消息", async () => {
-    const sent: string[] = [];
+    const sent: unknown[] = [];
     const channel = {
       isSendable: () => true,
-      send: async (body: string) => {
+      send: async (body: unknown) => {
         sent.push(body);
         return {};
       },
@@ -36,7 +36,10 @@ describe("runMessage", () => {
 
     await runMessage(messageJob(), fakeClient(channel));
 
-    expect(sent).toEqual(["hello test-message"]);
+    expect(sent).toEqual([{
+      content: "hello test-message",
+      allowedMentions: { parse: [] },
+    }]);
   });
 
   it("频道不可发送时抛错，方便 scheduler 记录 error", async () => {

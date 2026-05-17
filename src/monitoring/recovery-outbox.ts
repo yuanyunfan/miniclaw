@@ -1,9 +1,10 @@
 import type { Client } from "discord.js";
 import { buildCronRetryActionRows, type CronRetryButtonDetails } from "../cron/failure-notifier.js";
 import { loadCronJobs } from "../cron/loader.js";
+import { chunkMessageWithDeferredLinkPreviews } from "../discord/chunks.js";
 import { createLogger } from "../lib/log.js";
 import { createDiscordTransport } from "../im/adapters/discord/transport.js";
-import type { IMTransport } from "../im/contracts.js";
+import type { IMDeliveryTarget, IMTransport, SentMessage } from "../im/contracts.js";
 import type { CronRunRow } from "../store/cron-runs.js";
 import {
   enqueueRecoveryOutbox,
@@ -336,21 +337,20 @@ async function flushTaskDeliveries(transport: IMTransport, rows: RecoveryOutboxR
         `原始状态: ${payload.success ? "success" : "failed"}`,
         `首次投递失败时间: ${payload.created_at}`,
       ].join("\n").slice(0, 2000);
+      const target: IMDeliveryTarget = { transport: "discord", target: row.channel_id };
       let sent = await transport.send({
-        target: { transport: "discord", target: row.channel_id },
+        target,
         content: header,
         metadata: { recovery_outbox_kind: "task_result_delivery", task_id: payload.task_id },
       });
-      for (const message of payload.messages.slice(0, 20)) {
-        sent = await transport.send({
-          target: { transport: "discord", target: row.channel_id },
-          content: message.slice(0, 2000),
-          metadata: { recovery_outbox_kind: "task_result_delivery", task_id: payload.task_id },
-        });
-      }
+      const body = payload.messages.slice(0, 20).join("\n");
+      sent = await sendDiscordTextWithDeferredLinkPreviews(transport, target, body, {
+        recovery_outbox_kind: "task_result_delivery",
+        task_id: payload.task_id,
+      }) ?? sent;
       if (payload.messages.length > 20) {
         sent = await transport.send({
-          target: { transport: "discord", target: row.channel_id },
+          target,
           content: `... 另有 ${payload.messages.length - 20} 段输出未自动补发，请查看本地 task 记录。`,
           metadata: { recovery_outbox_kind: "task_result_delivery", task_id: payload.task_id },
         });
@@ -364,6 +364,24 @@ async function flushTaskDeliveries(transport: IMTransport, rows: RecoveryOutboxR
     }
   }
   return { delivered, failed };
+}
+
+async function sendDiscordTextWithDeferredLinkPreviews(
+  transport: IMTransport,
+  target: IMDeliveryTarget,
+  text: string,
+  metadata: Record<string, unknown>,
+): Promise<SentMessage | undefined> {
+  let sent: SentMessage | undefined;
+  for (const chunk of chunkMessageWithDeferredLinkPreviews(text, "[empty message]")) {
+    sent = await transport.send({
+      target,
+      content: chunk.content,
+      suppressEmbeds: chunk.suppressEmbeds,
+      metadata,
+    });
+  }
+  return sent;
 }
 
 export async function flushRecoveryOutbox(

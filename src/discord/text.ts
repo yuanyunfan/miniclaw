@@ -1,4 +1,4 @@
-import { MessageFlags, type Message, type SendableChannels } from "discord.js";
+import { MessageFlags, type Message, type MessageCreateOptions, type SendableChannels } from "discord.js";
 import { chunkMessageWithDeferredLinkPreviews, type ChunkedDiscordText } from "./chunks.js";
 
 function messagePayload(chunk: ChunkedDiscordText): {
@@ -17,9 +17,16 @@ export async function sendChunkedTextWithDeferredLinkPreviews(
   channel: SendableChannels,
   text: string,
   fallback?: string,
+  options: { files?: MessageCreateOptions["files"] } = {},
 ): Promise<void> {
-  for (const chunk of chunkMessageWithDeferredLinkPreviews(text, fallback)) {
-    await channel.send(messagePayload(chunk));
+  const chunks = chunkMessageWithDeferredLinkPreviews(text, fallback);
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i]!;
+    const isLast = i === chunks.length - 1;
+    await channel.send({
+      ...messagePayload(chunk),
+      ...(isLast && options.files?.length ? { files: options.files } : {}),
+    });
   }
 }
 

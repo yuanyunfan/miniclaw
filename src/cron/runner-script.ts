@@ -6,6 +6,7 @@ import "../proxy.js";
 import type { Client, SendableChannels } from "discord.js";
 import { AttachmentBuilder } from "discord.js";
 import type { CronJobRunContext, CronJobRunOutcome, CronJobScript } from "./types.js";
+import { sendChunkedTextWithDeferredLinkPreviews } from "../discord/text.js";
 import { createLogger } from "../lib/log.js";
 
 const log = createLogger("cron");
@@ -271,9 +272,12 @@ export async function runScript(job: CronJobScript, client: Client, context: Cro
   if (success && messages.length > 0 && !stderr) {
     for (let i = 0; i < messages.length; i++) {
       const isLast = i === messages.length - 1;
-      await ch.send(isLast && files.length
-        ? { content: trimDiscordContent(messages[i]), files }
-        : { content: trimDiscordContent(messages[i]) });
+      await sendChunkedTextWithDeferredLinkPreviews(
+        ch,
+        trimDiscordContent(messages[i]),
+        "[empty message]",
+        isLast && files.length ? { files } : {},
+      );
     }
     return { status: "success" };
   }

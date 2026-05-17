@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 import { resolveDeliveryTargets, sendTextToTargets } from "../delivery.js";
 import type { IMTransport } from "../contracts.js";
 
-function recordingTransport(id: "discord" | "feishu", sent: string[]): IMTransport {
+interface RecordedSend {
+  transport: "discord" | "feishu";
+  target: string;
+  content: string;
+  suppressEmbeds?: boolean;
+}
+
+function recordingTransport(id: "discord" | "feishu", sent: RecordedSend[]): IMTransport {
   return {
     id,
     kind: "im_transport",
@@ -17,7 +24,12 @@ function recordingTransport(id: "discord" | "feishu", sent: string[]): IMTranspo
       mentions: id === "discord",
     },
     async send(input) {
-      sent.push(`${id}:${input.target.target}:${input.content}`);
+      sent.push({
+        transport: id,
+        target: input.target.target,
+        content: input.content,
+        suppressEmbeds: input.suppressEmbeds,
+      });
       return {
         transport: id,
         target: input.target.target,
@@ -67,7 +79,7 @@ describe("IM delivery", () => {
   });
 
   it("sends text through every requested transport", async () => {
-    const sent: string[] = [];
+    const sent: RecordedSend[] = [];
     const registry = new Map([
       ["discord", recordingTransport("discord", sent)],
       ["feishu", recordingTransport("feishu", sent)],
@@ -84,8 +96,37 @@ describe("IM delivery", () => {
 
     expect(results).toHaveLength(2);
     expect(sent).toEqual([
-      "discord:1000000000000000000:hello",
-      "feishu:default:hello",
+      { transport: "discord", target: "1000000000000000000", content: "hello", suppressEmbeds: false },
+      { transport: "feishu", target: "default", content: "hello", suppressEmbeds: undefined },
     ]);
+  });
+
+  it("defers Discord link previews to a final footer for IM fanout", async () => {
+    const sent: RecordedSend[] = [];
+    const registry = new Map([
+      ["discord", recordingTransport("discord", sent)],
+    ] as const);
+
+    await sendTextToTargets({
+      registry,
+      content: "正文 https://example.com/a 和 [B](https://example.com/b)。",
+      targets: [{ transport: "discord", target: "1000000000000000000" }],
+    });
+
+    expect(sent).toHaveLength(2);
+    expect(sent[0]).toMatchObject({
+      transport: "discord",
+      target: "1000000000000000000",
+      suppressEmbeds: true,
+    });
+    expect(sent[0]?.content).toContain("正文 https://example.com/a");
+    expect(sent[1]).toMatchObject({
+      transport: "discord",
+      target: "1000000000000000000",
+      suppressEmbeds: false,
+    });
+    expect(sent[1]?.content).toContain("链接预览集中区");
+    expect(sent[1]?.content).toContain("https://example.com/a");
+    expect(sent[1]?.content).toContain("https://example.com/b");
   });
 });

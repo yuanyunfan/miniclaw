@@ -3,7 +3,7 @@ doc_id: runtime-index
 lang: zh
 translation_of: docs/runtime/README.md
 translation_status: current
-source_sha256: 192396badc6baaddbac546b9100d90ceaecfdcec7f62ff236c4c641bee288a6d
+source_sha256: 9463eea6878686aaafcf61018daff2eead3a16f8944761af704d8a0460f647c0
 ---
 # MiniClaw Runtime 文档
 
@@ -93,7 +93,8 @@ Current delivery shape:
 
 - Status card: 简短 embed，展示当前状态。
 - Progress stream: 持久 progress/update message。
-- Final result: 普通 Markdown message，必要时 chunking。
+- Final result: 普通 Markdown message，必要时 chunking。Discord 正文 chunk 会 suppress link embeds，裸 URL 只会在最后的 link-preview footer 里重复，因此卡片出现在完整结果之后，而不是插在正文 chunk 中间。
+- Fanout and replay: Discord IM fanout、recovery outbox replay 和 script cron `DISCORD_MESSAGE` output 使用与 task results 相同的 deferred-link-preview helper。
 - Trace view: task events 和 trace-export command 提供 operator 级细节。
 
 ## Cron Runtime 执行时

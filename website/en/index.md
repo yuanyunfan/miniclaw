@@ -39,7 +39,7 @@ flowchart LR
 
 ## Design Surface
 
-- **Discord-native control plane**: chat, task intake, slash commands, cron reports, and failure recovery all land in Discord.
+- **Discord-native control plane**: chat, task intake, slash commands, cron reports, and failure recovery all land in Discord; long link-heavy reports keep preview cards after the full result instead of between body chunks.
 - **Runtime boundary**: MiniClaw owns routing, context, progress, trace events, and delivery; Claude/Codex own agent execution.
 - **Operator visibility**: task traces, cron run history, read-only doctor reports, and incident workflows are first-class slash-command surfaces.
 - **Provider-first reports**: content, email, stock, watchlist, pulse, and market-intel providers produce structured context before the LLM summarizes anything, after scheduled cron passes the global active-window guard.
