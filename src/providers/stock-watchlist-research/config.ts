@@ -2,8 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { load as yamlLoad } from "js-yaml";
-import type { StockPulseMarketScope } from "../stock-pulse/types.js";
-import type { StockWatchlistResearchConfig, StockWatchlistResearchRunType } from "./types.js";
+import type { StockPulseMarketScope } from "../../stock/data/pulse-types.js";
+import type { StockWatchlistResearchConfig, StockWatchlistResearchRunType } from "../../stock/reports/watchlist-research-types.js";
 
 const CONFIG_DIR_DEFAULT = join(homedir(), ".miniclaw/providers/stock-watchlist-research");
 const RESERVED_PROVIDER_CONFIG_NAMES = new Set(["config"]);

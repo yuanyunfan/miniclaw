@@ -1,6 +1,6 @@
 # Stock Provider Data-Layer Migration
 
-Status: completed (stock ownership migrated; provider config/facade compatibility retained)
+Status: completed (stock ownership migrated; provider config compatibility retained; provider stock facades removed)
 Date: 2026-05-17
 
 ## Background
@@ -335,7 +335,7 @@ Goal: make stock provider folders true cron compatibility facades.
 
 Actions:
 
-- Reduce stock provider folders to `index.ts`, `config.ts`, optional `types.ts` re-export facades, and compatibility tests.
+- Reduce stock provider folders to `index.ts`, `config.ts`, and compatibility tests; remove stock `types.ts`, `format.ts`, `calibration.ts`, and chart re-export facades once imports have moved to `src/stock/*`.
 - Decide whether provider `config.ts` stays in `src/providers/*` permanently because config files are provider-named, or whether config loaders move to `src/stock/reports/config/*` with provider facades.
 - Update docs to describe the final boundary only after code proves it.
 - Add a static dependency check if the repo quality-gate style supports it.
@@ -425,5 +425,6 @@ Each commit should keep the runtime provider names stable and include the focuse
 - 2026-05-17: Completed the source/data cleanup slice after the compatibility migration. Moved `stock-pulse` universe/source mapping into `src/stock/data/universe.ts` and `src/stock/sources/watchlists.ts`; moved market-intel calendar, quote snapshot, portfolio context, redaction, and official evidence collectors into `src/stock/data/*` and `src/stock/sources/official/collectors/*`; moved Eastmoney ETF premium and Yahoo watchlist research clients into `src/stock/sources/*`. `src/providers/*` still owns cron-facing config/type compatibility and some report-format helpers, so the final report/config cleanup remains a separate slice.
 - 2026-05-17: Completed the ownership cleanup slice. Provider-owned stock `types.ts` files now re-export from stock-owned modules such as `src/stock/data/portfolio-types.ts`, `src/stock/data/market-intel-types.ts`, `src/stock/data/pulse-types.ts`, `src/stock/data/market-context-types.ts`, `src/stock/signals/forecast-evaluation-types.ts`, and report-specific type modules under `src/stock/reports/*`.
 - 2026-05-17: Moved remaining stock implementation ownership out of provider folders: asset allocation and portfolio payload assembly into `src/stock/data/*`; portfolio pie chart rendering and broker payload formatters into `src/stock/reports/*`; market-intel payload formatting into `src/stock/reports/market-intel-format.ts`; market-intel and forecast calibration into `src/stock/signals/*`.
-- 2026-05-17: Provider stock folders now retain cron config loaders, `index.ts` compatibility exports, small re-export facades, and tests. `src/stock/sources`, `src/stock/data`, and `src/stock/signals` no longer import stock-specific provider modules; report composers still import provider config loaders and generic provider framework contracts for cron compatibility.
+- 2026-05-17: Before final facade removal, provider stock folders retained cron config loaders, `index.ts` compatibility exports, small re-export facades, and tests. `src/stock/sources`, `src/stock/data`, and `src/stock/signals` no longer imported stock-specific provider modules; report composers still imported provider config loaders and generic provider framework contracts for cron compatibility.
 - 2026-05-17: Re-verified with `pnpm run typecheck`, `pnpm vitest run src/providers/stock-portfolio src/providers/stock-pulse src/providers/market-intel src/providers/market-context src/providers/market-forecast-evaluation src/providers/stock-watchlist-research`, and `pnpm vitest run src/mcp/futu-stock src/mcp/eastmoney-jywg src/mcp/eastmoney-myfavor src/providers/futu-stock src/providers/eastmoney-jywg-readonly src/providers/eastmoney-etf-premium`.
+- 2026-05-17: Removed the final stock provider compatibility facades: provider-level `types.ts`, `format.ts`, `calibration.ts`, `pie-chart.ts`, and `asset-allocation.ts`. Runtime code, provider configs, store code, cron code, and tests now import stock-owned modules directly from `src/stock/data`, `src/stock/signals`, and `src/stock/reports`; stock provider folders retain only top-level `index.ts` and `config.ts` as the cron/provider compatibility boundary.

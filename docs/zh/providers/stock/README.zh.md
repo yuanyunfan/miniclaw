@@ -3,7 +3,7 @@ doc_id: stock-providers-index
 lang: zh
 translation_of: docs/providers/stock/README.md
 translation_status: current
-source_sha256: 0383056d3d7b9e7b9fa960707ecc5e3f54a62216c809b40c8fdd6e780ddd8a43
+source_sha256: e9d7cae7117371f023125e8cdb796f02d983efef8818943f726a1d0039f18037
 ---
 # 股票 Provider 系列
 
@@ -49,7 +49,7 @@ src/stock/
 
 这是一次兼容迁移：`pre_provider`、`pre_provider_config` 和 `pre_context_providers` 等 cron YAML 字段不变。
 
-`src/providers/*` 不应该拥有 stock source/data/signal/report implementation logic。ownership cleanup slice 之后，stock provider 目录保留 cron 注册、runtime config loader、compatibility re-export facade、fixtures 和 tests。Stock-owned types、payload builders、chart renderers、calibration helpers、source adapters、data-domain modules 和 signal logic 都位于 `src/stock/*`。
+`src/providers/*` 不应该拥有 stock source/data/signal/report implementation logic。final provider thinning slice 之后，stock provider folders 顶层只保留 `index.ts` 和 `config.ts`，作为 cron/provider compatibility boundary；provider tests 与 fixtures 可以继续留在 `__tests__/` 或 `fixtures/` 下，但 `types.ts`、`format.ts`、`calibration.ts`、`pie-chart.ts` 和 provider-level stock data facade 已删除。Stock-owned types、payload builders、chart renderers、calibration helpers、source adapters、data-domain modules 和 signal logic 都位于 `src/stock/*`。
 
 `src/stock/reports/*` 中仍然存在的 provider imports 是刻意保留的 cron compatibility boundary：report composers 可以调用 provider config loaders 和 generic provider framework contracts，而 `src/stock/sources/*`、`src/stock/data/*`、`src/stock/signals/*` 不再 import stock-specific provider modules。
 
@@ -77,7 +77,6 @@ src/mcp/futu-stock/
 src/providers/futu-stock/
   index.ts         # cron pre_provider compatibility wrapper
   config.ts        # ~/.miniclaw/providers/futu-stock/<name>.yaml
-  format.ts        # compatibility re-export facade
 
 src/stock/reports/futu-stock.ts
   # cron provider wrapper 使用的 report composer

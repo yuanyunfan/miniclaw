@@ -15,7 +15,7 @@ import type {
   MarketIntelSourcesConfig,
   MarketIntelTimeWindow,
   MarketIntelWatchlistsConfig,
-} from "./types.js";
+} from "../../stock/data/market-intel-types.js";
 import { parseTimeToMinutes } from "../../stock/data/market-calendar.js";
 
 const CONFIG_DIR_DEFAULT = join(homedir(), ".miniclaw/providers/market-intel");

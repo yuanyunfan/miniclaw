@@ -1,6 +1,6 @@
 import { v4 as uuid } from "uuid";
 import { getDb } from "./connection.js";
-import type { MarketIntelPayload, MarketIntelScore } from "../providers/market-intel/types.js";
+import type { MarketIntelPayload, MarketIntelScore } from "../stock/data/market-intel-types.js";
 
 export interface MarketForecastRow {
   id: string;

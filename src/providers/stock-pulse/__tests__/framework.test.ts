@@ -7,7 +7,7 @@ import type {
   StockPulseQuoteConfig,
   StockPulseQuoteSeries,
   StockPulseSymbol,
-} from "../types.js";
+} from "../../../stock/data/pulse-types.js";
 
 function testConfig(): StockPulseProviderConfig {
   return {

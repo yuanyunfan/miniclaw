@@ -2,8 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { load as yamlLoad } from "js-yaml";
-import type { MarketForecastBenchmarkConfig, MarketForecastEvaluationProviderConfig } from "./types.js";
-import type { MarketIntelMarketScope } from "../market-intel/types.js";
+import type { MarketForecastBenchmarkConfig, MarketForecastEvaluationProviderConfig } from "../../stock/signals/forecast-evaluation-types.js";
+import type { MarketIntelMarketScope } from "../../stock/data/market-intel-types.js";
 
 const CONFIG_DIR_DEFAULT = join(homedir(), ".miniclaw/providers/market-forecast-evaluation");
 const RESERVED_PROVIDER_CONFIG_NAMES = new Set(["config"]);

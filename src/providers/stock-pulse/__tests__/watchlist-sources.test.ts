@@ -4,7 +4,7 @@ import {
   mapEastmoneyMyfavorSymbols,
   mapFutuWatchlistSymbols,
 } from "../../../stock/sources/watchlists.js";
-import type { StockPulseUniverseSourceConfig } from "../types.js";
+import type { StockPulseUniverseSourceConfig } from "../../../stock/data/pulse-types.js";
 
 function source(market: StockPulseUniverseSourceConfig["market"]): StockPulseUniverseSourceConfig {
   return {

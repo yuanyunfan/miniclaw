@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildEmptyMarketIntelEvidenceCollection } from "../../../stock/sources/official/collectors/official.js";
 import { runMarketIntelProvider } from "../index.js";
-import type { MarketIntelProviderConfig, MarketIntelQuoteClient, MarketIntelQuoteRequest, MarketIntelQuoteSnapshotInput } from "../types.js";
+import type { MarketIntelProviderConfig, MarketIntelQuoteClient, MarketIntelQuoteRequest, MarketIntelQuoteSnapshotInput } from "../../../stock/data/market-intel-types.js";
 
 const quoteClient: MarketIntelQuoteClient = {
   source: "mock_quotes",

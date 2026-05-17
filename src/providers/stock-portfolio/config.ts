@@ -7,7 +7,7 @@ import type {
   StockPortfolioProviderConfig,
   StockPortfolioSourceConfig,
   StockPortfolioSourceName,
-} from "./types.js";
+} from "../../stock/data/portfolio-types.js";
 
 const CONFIG_DIR_DEFAULT = join(homedir(), ".miniclaw/providers/stock-portfolio");
 const RESERVED_PROVIDER_CONFIG_NAMES = new Set(["config"]);

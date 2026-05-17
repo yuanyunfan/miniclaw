@@ -206,6 +206,8 @@ flowchart LR
 
 `pre_context_providers` are optional, non-blocking background providers that run before `pre_script` and the primary `pre_provider`; they prepend durable context such as rolling market memory without replacing the task's source-of-truth provider. Provider collection is read-only unless a provider explicitly documents a commit phase. `commit()` is delayed until downstream task success. Provider docs live under `docs/providers/`; private account/session details live under `docs/private/` or `~/.miniclaw/` and must not enter public docs.
 
+Stock provider names remain cron-facing compatibility contracts in `src/providers/index.ts`, but stock implementation ownership now lives under `src/stock/*`. Top-level stock provider folders under `src/providers/*` keep only `index.ts` wrappers and provider-named `config.ts` loaders; reusable stock types, report formatting, chart rendering, calibration, source adapters, data domains, and signal logic are imported directly from `src/stock/data`, `src/stock/signals`, `src/stock/sources`, and `src/stock/reports`. Cron and store code that persists market forecast or market context payloads should depend on stock data-domain types rather than provider facade types.
+
 ## Storage Model
 
 MiniClaw uses `~/.miniclaw/data.db` in SQLite WAL mode. Schema migrations are managed through `PRAGMA user_version`; the current schema is defined by `src/store/schema.ts` as `SCHEMA_VERSION = 15`.

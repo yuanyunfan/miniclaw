@@ -6,7 +6,7 @@ import {
 import { collectOfficialEventEvidence } from "../../../stock/sources/official/collectors/events.js";
 import { collectOfficialMacroEvidence } from "../../../stock/sources/official/collectors/macro.js";
 import { collectOfficialNewsEvidence } from "../../../stock/sources/official/collectors/news.js";
-import type { MarketIntelProviderConfig } from "../types.js";
+import type { MarketIntelProviderConfig } from "../../../stock/data/market-intel-types.js";
 
 function usConfig(overrides: Partial<MarketIntelProviderConfig> = {}): MarketIntelProviderConfig {
   return {

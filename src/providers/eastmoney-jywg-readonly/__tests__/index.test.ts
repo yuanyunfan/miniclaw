@@ -10,7 +10,7 @@ import type {
   EastmoneyJywgHealthCheck,
   EastmoneyJywgRawBrokerData,
 } from "../../../mcp/eastmoney-jywg/types.js";
-import type { EastmoneyJywgProviderConfig } from "../types.js";
+import type { EastmoneyJywgProviderConfig } from "../../../stock/reports/eastmoney-jywg-readonly-types.js";
 
 let tmp: string;
 let sessionPath: string;

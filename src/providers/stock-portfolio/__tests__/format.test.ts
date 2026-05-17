@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildStockPortfolioPayload, formatStockPortfolioPayload, sanitizeStockPortfolioError } from "../format.js";
-import type { StockPortfolioProviderConfig } from "../types.js";
+import { buildStockPortfolioPayload, formatStockPortfolioPayload, sanitizeStockPortfolioError } from "../../../stock/data/portfolio.js";
+import type { StockPortfolioProviderConfig } from "../../../stock/data/portfolio-types.js";
 
 const config: StockPortfolioProviderConfig = {
   continue_on_error: true,

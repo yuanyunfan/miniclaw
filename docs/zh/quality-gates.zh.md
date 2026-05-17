@@ -3,7 +3,7 @@ doc_id: quality-gates
 lang: zh
 translation_of: docs/quality-gates.md
 translation_status: current
-source_sha256: 50ab872c9c638fd3785e213225ed77ed0cf30a450bf3e89c04b8666dcd37a0c7
+source_sha256: aa296ac72e4313aee94592394f2061295fff8634ab2be010a3725b159e659ab0
 ---
 # MiniClaw 质量门禁
 
@@ -105,6 +105,14 @@ pnpm test
 
 - pre-commit
 - CI
+
+## Coverage Ratchet 覆盖率棘轮
+
+目的：防止高价值实现文件在重构过程中静默丢失 focused test coverage。
+
+`pnpm run quality:coverage` 会在 `pnpm run test:cov` 生成 `coverage/coverage-summary.json` 后读取它，并检查 `scripts/quality-coverage-ratchet.ts` 中定义的 file-specific thresholds。
+
+当前 ratcheted stock report targets 位于 `src/stock/reports`，而不是 provider compatibility facades。这样 stock provider data-layer migration 之后，gate 仍绑定到真正拥有 report logic 的实现文件。
 
 ## L2：内部集成测试
 

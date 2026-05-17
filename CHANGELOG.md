@@ -32,6 +32,8 @@
 - 股票 provider 实现迁移到 `src/stock/` 四层结构：`src/providers/*/index.ts` 保持 cron 兼容入口，Source Adapter、Data Domain、Signal / Intelligence 和 Report Composer 逻辑进入 `src/stock/sources`、`src/stock/data`、`src/stock/signals` 和 `src/stock/reports`。
 - 继续收敛股票 provider 数据边界：`stock-pulse` universe/watchlist source、market-intel calendar/quotes/portfolio/official collectors、Eastmoney ETF premium client 和 Yahoo watchlist research client 从 `src/providers/*` 迁入 `src/stock/data` 与 `src/stock/sources`。
 - 完成 stock provider ownership cleanup：provider-owned stock types、portfolio/market-intel/broker formatters、portfolio chart、market-intel calibration 和 forecast calibration 迁入 `src/stock/data`、`src/stock/signals`、`src/stock/reports`，provider 侧保留 config 与兼容 re-export facades。
+- 删除最终 stock provider compatibility facades：`src/providers/*` 顶层只保留 stock provider 的 `index.ts` 和 `config.ts` 边界，cron/store/config/tests 改为直接引用 `src/stock/data`、`src/stock/signals` 和 `src/stock/reports`。
+- coverage ratchet 的 stock 阈值同步迁到 `src/stock/reports`，避免继续以已删除的 provider compatibility facades 作为质量门目标。
 - `quality:website-docs` 支持 `trace_docs` 和集中 unaffected ack，让内部 docs 小改不再默认牵引 website 正文更新。
 - App Trending 默认频道从 `daily-app-trending` 改为 `weekly-app-trending`，频道初始化脚本会把旧频道原地重命名并清理旧 channel-map key。
 

@@ -8,7 +8,7 @@ import type {
   EastmoneyJywgAssetGapPolicyConfig,
   EastmoneyJywgPositiveMarketValueGapPolicy,
   EastmoneyJywgProviderConfig,
-} from "./types.js";
+} from "../../stock/reports/eastmoney-jywg-readonly-types.js";
 
 const CONFIG_DIR_DEFAULT = join(homedir(), ".miniclaw/providers/eastmoney-jywg-readonly");
 const RESERVED_PROVIDER_CONFIG_NAMES = new Set(["config"]);

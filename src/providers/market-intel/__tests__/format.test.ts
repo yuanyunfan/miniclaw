@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { buildMarketIntelCalendarSnapshot } from "../../../stock/data/market-calendar.js";
-import { buildMarketIntelPayload, formatMarketIntelPayload, sanitizeMarketIntelError } from "../format.js";
+import { buildMarketIntelPayload, formatMarketIntelPayload, sanitizeMarketIntelError } from "../../../stock/reports/market-intel-format.js";
 import { buildPortfolioContextFromText } from "../../../stock/data/market-portfolio.js";
-import type { MarketIntelProviderConfig } from "../types.js";
+import type { MarketIntelProviderConfig } from "../../../stock/data/market-intel-types.js";
 
 function testConfig(): MarketIntelProviderConfig {
   return {

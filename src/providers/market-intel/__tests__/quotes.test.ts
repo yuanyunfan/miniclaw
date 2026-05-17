@@ -5,7 +5,7 @@ import type {
   MarketIntelQuoteClient,
   MarketIntelQuoteRequest,
   MarketIntelQuoteSnapshotInput,
-} from "../types.js";
+} from "../../../stock/data/market-intel-types.js";
 
 function testConfig(): MarketIntelProviderConfig {
   return {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildMarketIntelScoringCalibrationConfig, summarizeMarketForecastCalibration } from "../calibration.js";
+import { buildMarketIntelScoringCalibrationConfig, summarizeMarketForecastCalibration } from "../../../stock/signals/forecast-calibration.js";
 import type {
   MarketForecastCalibrationRecord,
   MarketForecastEvaluationRow,

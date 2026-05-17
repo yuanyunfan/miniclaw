@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { runMarketForecastEvaluationProvider, __testables } from "../index.js";
 import type { MarketForecastItemRow, MarketForecastRow } from "../../../store/market-forecasts.js";
-import type { MarketForecastEvaluationProviderConfig, MarketForecastEvaluationQuoteClient } from "../types.js";
+import type { MarketForecastEvaluationProviderConfig, MarketForecastEvaluationQuoteClient } from "../../../stock/signals/forecast-evaluation-types.js";
 
 function config(): MarketForecastEvaluationProviderConfig {
   return {

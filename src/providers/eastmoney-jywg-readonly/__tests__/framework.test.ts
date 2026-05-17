@@ -7,7 +7,7 @@ import type {
   EastmoneyJywgRawBrokerData,
   EastmoneyJywgSession,
 } from "../../../mcp/eastmoney-jywg/types.js";
-import type { EastmoneyJywgProviderConfig } from "../types.js";
+import type { EastmoneyJywgProviderConfig } from "../../../stock/reports/eastmoney-jywg-readonly-types.js";
 
 const session: EastmoneyJywgSession = {
   version: 1,

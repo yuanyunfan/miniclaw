@@ -21,8 +21,8 @@ const thresholds: Record<string, Partial<Record<MetricName, number>>> = {
   "src/cron/template.ts": { statements: 95, lines: 95, functions: 100, branches: 90 },
   "src/lib/markdown.ts": { statements: 95, lines: 95, functions: 100, branches: 85 },
   "src/routing/intent.ts": { statements: 80, lines: 80, functions: 100, branches: 80 },
-  "src/providers/futu-stock/format.ts": { statements: 95, lines: 95, functions: 100, branches: 75 },
-  "src/providers/stock-portfolio/index.ts": { statements: 90, lines: 90, functions: 100, branches: 55 },
+  "src/stock/reports/futu-stock-format.ts": { statements: 95, lines: 95, functions: 100, branches: 75 },
+  "src/stock/reports/stock-portfolio.ts": { statements: 90, lines: 90, functions: 100, branches: 55 },
 };
 
 const summary = JSON.parse(readFileSync("coverage/coverage-summary.json", "utf8")) as CoverageSummary;

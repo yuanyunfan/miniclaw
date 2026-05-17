@@ -35,6 +35,7 @@ flowchart LR
 - **`quality:docs-i18n`** checks bilingual doc pairing, metadata, heading shape, language split, and source-hash parity.
 - **`quality:website-docs`** keeps website summaries tied to repo docs without forcing internal implementation updates into public copy.
 - **`quality:changelog`** blocks release-visible changes that do not update `CHANGELOG.md`.
+- **`quality:coverage`** checks ratcheted file thresholds after coverage runs; stock report thresholds track `src/stock/reports` ownership, not provider compatibility facades.
 - **`quality:commit`** is the staged gate for normal local commits.
 - **`quality:push`** expands into build, coverage, cron E2E, full-tree safety, secrets, and dependency checks.
 

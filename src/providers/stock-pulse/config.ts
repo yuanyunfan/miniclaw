@@ -15,7 +15,7 @@ import type {
   StockPulseTimeWindow,
   StockPulseUniverseConfig,
   StockPulseUniverseSourceConfig,
-} from "./types.js";
+} from "../../stock/data/pulse-types.js";
 import { parseTimeToMinutes } from "../../stock/data/calendar.js";
 
 const CONFIG_DIR_DEFAULT = join(homedir(), ".miniclaw/providers/stock-pulse");

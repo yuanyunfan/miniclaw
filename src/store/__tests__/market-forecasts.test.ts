@@ -11,7 +11,7 @@ import {
   stripMarketForecastJsonForDisplay,
   updateMarketForecastReport,
 } from "../market-forecasts.js";
-import type { MarketIntelPayload } from "../../providers/market-intel/types.js";
+import type { MarketIntelPayload } from "../../stock/data/market-intel-types.js";
 
 beforeAll(() => {
   initDb();

@@ -9,7 +9,7 @@ import type {
   StockPulseSymbol,
   StockPulseUniverseSourceConfig,
   StockPulseUniverseSymbol,
-} from "../types.js";
+} from "../../../stock/data/pulse-types.js";
 
 interface StockPulseReplayFixture {
   runAt: string;

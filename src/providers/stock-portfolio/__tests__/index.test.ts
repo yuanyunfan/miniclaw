@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { runStockPortfolioProvider } from "../index.js";
-import type { StockPortfolioProviderConfig, StockPortfolioSourceRunner } from "../types.js";
+import type { StockPortfolioProviderConfig, StockPortfolioSourceRunner } from "../../../stock/data/portfolio-types.js";
 
 const mocks = vi.hoisted(() => ({
   renderAssetPieChartPng: vi.fn(),

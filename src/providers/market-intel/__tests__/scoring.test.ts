@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildMarketIntelScores } from "../../../stock/signals/market-intel.js";
-import type { MarketIntelEvidenceItem, MarketIntelMarketSnapshot } from "../types.js";
+import type { MarketIntelEvidenceItem, MarketIntelMarketSnapshot } from "../../../stock/data/market-intel-types.js";
 
 describe("buildMarketIntelScores", () => {
   it("returns insufficient_data without directional evidence", () => {

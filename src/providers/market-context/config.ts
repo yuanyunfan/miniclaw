@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { load as yamlLoad } from "js-yaml";
 import type { MarketContextScope } from "../../store/market-context.js";
-import type { MarketContextProviderConfig, MarketContextProviderMode } from "./types.js";
+import type { MarketContextProviderConfig, MarketContextProviderMode } from "../../stock/data/market-context-types.js";
 
 const CONFIG_DIR_DEFAULT = join(homedir(), ".miniclaw/providers/market-context");
 const RESERVED_PROVIDER_CONFIG_NAMES = new Set(["config"]);

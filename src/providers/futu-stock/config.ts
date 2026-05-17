@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { load as yamlLoad } from "js-yaml";
 import type { FutuRedactionLevel } from "../../mcp/futu-stock/types.js";
-import type { FutuStockProviderConfig } from "./types.js";
+import type { FutuStockProviderConfig } from "../../stock/reports/futu-stock-types.js";
 
 const CONFIG_DIR_DEFAULT = join(homedir(), ".miniclaw/providers/futu-stock");
 const RESERVED_PROVIDER_CONFIG_NAMES = new Set(["config"]);

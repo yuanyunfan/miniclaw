@@ -3,7 +3,7 @@ doc_id: architecture
 lang: zh
 translation_of: docs/architecture.md
 translation_status: current
-source_sha256: 3300d3c6ad8f908e4cb6e0e586be0ebc55a2712ae555e5c9733a8783e55b9cf5
+source_sha256: bedb719acfe0002a3eadd084ef5d7ec8a0f2efa7531ee1c0a7ba8260a92fcaa7
 ---
 # MiniClaw 架构
 
@@ -212,6 +212,8 @@ flowchart LR
 `config.yaml` 中的 `cron.active_window` 是 scheduler-level guard。启用后，scheduled cron dispatch 和 missed-run catch-up 会在配置的本地时间窗口外记录为 skipped，不进入 runner 或 provider。手动 `pnpm cron:test` 仍保留为显式 operator troubleshooting 路径。
 
 `pre_context_providers` 是 optional、non-blocking 的 background providers，会在 `pre_script` 和 primary `pre_provider` 前运行；它们用于注入 rolling market memory 这类 durable context，但不替代 task 的 source-of-truth provider。provider collection 默认 read-only，除非 provider 明确记录 commit phase。`commit()` 延迟到 downstream task success 后执行。provider docs 放在 `docs/providers/`；private account/session details 放在 `docs/private/` 或 `~/.miniclaw/`，不得进入 public docs。
+
+Stock provider names 仍然是 `src/providers/index.ts` 中的 cron-facing compatibility contracts，但 stock implementation ownership 已经归入 `src/stock/*`。`src/providers/*` 下的 stock provider folders 顶层只保留 `index.ts` wrapper 和 provider-named `config.ts` loader；可复用 stock types、report formatting、chart rendering、calibration、source adapters、data domains 和 signal logic 都直接从 `src/stock/data`、`src/stock/signals`、`src/stock/sources`、`src/stock/reports` 引入。cron 和 store code 在持久化 market forecast 或 market context payload 时，应依赖 stock data-domain types，而不是 provider facade types。
 
 ## 存储模型
 

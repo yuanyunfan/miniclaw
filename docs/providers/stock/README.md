@@ -42,7 +42,7 @@ src/stock/
 
 This is a compatibility migration: cron YAML fields such as `pre_provider`, `pre_provider_config`, and `pre_context_providers` do not change.
 
-`src/providers/*` should not own stock source/data/signal/report implementation logic. After the ownership cleanup slice, stock provider folders keep cron registration, runtime config loaders, compatibility re-export facades, fixtures, and tests. Stock-owned types, payload builders, chart renderers, calibration helpers, source adapters, data-domain modules, and signal logic live under `src/stock/*`.
+`src/providers/*` should not own stock source/data/signal/report implementation logic. After the final provider thinning slice, stock provider folders keep only top-level `index.ts` and `config.ts` files as cron/provider compatibility boundaries; provider tests and fixtures may remain under `__tests__/` or `fixtures/`, but `types.ts`, `format.ts`, `calibration.ts`, `pie-chart.ts`, and provider-level stock data facades have been removed. Stock-owned types, payload builders, chart renderers, calibration helpers, source adapters, data-domain modules, and signal logic live under `src/stock/*`.
 
 The remaining provider imports from `src/stock/reports/*` are deliberate cron compatibility boundaries: report composers may call provider config loaders and generic provider framework contracts, while `src/stock/sources/*`, `src/stock/data/*`, and `src/stock/signals/*` stay free of stock-specific provider module imports.
 
@@ -70,7 +70,6 @@ src/mcp/futu-stock/
 src/providers/futu-stock/
   index.ts         # cron pre_provider compatibility wrapper
   config.ts        # ~/.miniclaw/providers/futu-stock/<name>.yaml
-  format.ts        # compatibility re-export facade
 
 src/stock/reports/futu-stock.ts
   # report composer used by the cron provider wrapper

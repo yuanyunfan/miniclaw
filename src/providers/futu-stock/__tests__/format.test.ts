@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildFutuStockProviderPayload, formatFutuStockProviderPayload } from "../format.js";
+import { buildFutuStockProviderPayload, formatFutuStockProviderPayload } from "../../../stock/reports/futu-stock-format.js";
 import type { FutuAccountSnapshot, FutuStockProfileConfig } from "../../../mcp/futu-stock/types.js";
 
 const profile: FutuStockProfileConfig = {

@@ -3,8 +3,8 @@ import {
   buildAssetPieChartModel,
   classifyPieHolding,
   renderAssetPieChartSvg,
-} from "../pie-chart.js";
-import type { StockPortfolioAssetSummary, StockPortfolioClassifiableHolding } from "../types.js";
+} from "../../../stock/reports/portfolio-pie-chart.js";
+import type { StockPortfolioAssetSummary, StockPortfolioClassifiableHolding } from "../../../stock/data/portfolio-types.js";
 
 function holding(overrides: Partial<StockPortfolioClassifiableHolding>): StockPortfolioClassifiableHolding {
   return {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mapEastmoneyFundSelectorRow, runEastmoneyEtfPremiumProvider } from "../index.js";
-import type { EastmoneyEtfPremiumClient, EastmoneyEtfPremiumProviderConfig } from "../types.js";
+import type { EastmoneyEtfPremiumClient, EastmoneyEtfPremiumProviderConfig } from "../../../stock/data/etf-premium-types.js";
 
 const config: EastmoneyEtfPremiumProviderConfig = {
   timeout_ms: 1000,

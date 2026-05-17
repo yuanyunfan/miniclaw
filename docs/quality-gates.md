@@ -99,6 +99,14 @@ Run locations:
 - pre-commit
 - CI
 
+## Coverage Ratchet
+
+Purpose: keep high-value implementation files from silently losing focused test coverage during refactors.
+
+`pnpm run quality:coverage` reads `coverage/coverage-summary.json` after `pnpm run test:cov` and checks file-specific thresholds in `scripts/quality-coverage-ratchet.ts`.
+
+Current ratcheted stock report targets live under `src/stock/reports`, not provider compatibility facades. This keeps the gate attached to the owned report logic after the stock provider data-layer migration.
+
 ## L2: Internal Integration Tests
 
 Purpose: connect MiniClaw modules while replacing external systems with fakes or fixtures.

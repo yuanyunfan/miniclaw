@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { createEastmoneyJywgProvider, runEastmoneyJywgProvider } from "../index.js";
-import type { EastmoneyJywgDryRunSummary, EastmoneyJywgProviderConfig } from "../types.js";
+import type { EastmoneyJywgDryRunSummary, EastmoneyJywgProviderConfig } from "../../../stock/reports/eastmoney-jywg-readonly-types.js";
 import type {
   EastmoneyJywgClient,
   EastmoneyJywgConfig,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { __testables, runStockWatchlistResearchProvider } from "../index.js";
-import type { MarketIntelProviderConfig } from "../../market-intel/types.js";
+import type { MarketIntelProviderConfig } from "../../../stock/data/market-intel-types.js";
 import type {
   StockPulseMarketConfig,
   StockPulseProviderConfig,
@@ -11,8 +11,8 @@ import type {
   StockPulseSymbol,
   StockPulseUniverseSourceConfig,
   StockPulseUniverseSymbol,
-} from "../../stock-pulse/types.js";
-import type { StockWatchlistResearchClient, StockWatchlistResearchConfig } from "../types.js";
+} from "../../../stock/data/pulse-types.js";
+import type { StockWatchlistResearchClient, StockWatchlistResearchConfig } from "../../../stock/reports/watchlist-research-types.js";
 
 function marketConfig(): StockPulseMarketConfig {
   return {

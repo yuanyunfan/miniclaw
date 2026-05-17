@@ -17,8 +17,8 @@ import { createLogger } from "../lib/log.js";
 import { runPreProvider, runProviderDryRun, runProviderHealthCheck } from "../providers/index.js";
 import type { PreProviderAttachment } from "../providers/types.js";
 import { categorizeProviderError, type ProviderDryRunResult, type ProviderHealthResult } from "../providers/framework.js";
-import type { MarketIntelPayload } from "../providers/market-intel/types.js";
-import type { MarketContextProviderPayload } from "../providers/market-context/types.js";
+import type { MarketContextProviderPayload } from "../stock/data/market-context-types.js";
+import type { MarketIntelPayload } from "../stock/data/market-intel-types.js";
 import { DRAINING_MESSAGE, isDraining } from "../runtime/shutdown.js";
 
 const log = createLogger("cron");

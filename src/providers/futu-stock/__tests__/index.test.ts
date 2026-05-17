@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { runFutuStockProvider } from "../index.js";
 import type { FutuRawBrokerData, FutuStockClient, FutuStockConfig } from "../../../mcp/futu-stock/types.js";
-import type { FutuStockProviderConfig } from "../types.js";
+import type { FutuStockProviderConfig } from "../../../stock/reports/futu-stock-types.js";
 
 const futuConfig: FutuStockConfig = {
   profiles: {

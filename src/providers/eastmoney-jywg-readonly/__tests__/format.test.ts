@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildEastmoneyJywgProviderPayload, formatEastmoneyJywgProviderPayload } from "../format.js";
+import { buildEastmoneyJywgProviderPayload, formatEastmoneyJywgProviderPayload } from "../../../stock/reports/eastmoney-jywg-readonly-format.js";
 import type { EastmoneyJywgAccountSnapshot, EastmoneyJywgProfileConfig } from "../../../mcp/eastmoney-jywg/types.js";
 
 const profile: EastmoneyJywgProfileConfig = {
