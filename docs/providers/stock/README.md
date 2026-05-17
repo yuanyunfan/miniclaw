@@ -25,6 +25,23 @@ flowchart LR
 - [`eastmoney.md`](eastmoney.md): Eastmoney family boundary for JYWG holdings and MyFavor watchlist.
 - [`research.md`](research.md): stock research provider pipeline across portfolio, pulse, market-intel, and watchlist research.
 
+## Current Code Layout
+
+Stock cron provider names remain registered through `src/providers/index.ts`. Each stock provider `src/providers/*/index.ts` is now a compatibility wrapper that re-exports the report composer in `src/stock/reports/*`.
+
+Reusable stock internals are organized by data responsibility:
+
+```text
+src/stock/
+  sources/   # external Futu, Eastmoney, Yahoo, and official evidence adapters
+  data/      # calendar, universe, quotes, portfolio, ETF premium, market evidence, market memory
+  signals/   # pulse anomaly, market-intel scoring, forecast evaluation, context synthesis
+  reports/   # cron-facing stock report composers
+  types.ts   # vendor-neutral stock domain types
+```
+
+This is a compatibility migration: cron YAML fields such as `pre_provider`, `pre_provider_config`, and `pre_context_providers` do not change.
+
 ## Futu Stock Provider
 
 Runtime names:
@@ -47,9 +64,15 @@ src/mcp/futu-stock/
   types.ts
 
 src/providers/futu-stock/
-  index.ts         # cron pre_provider entry
+  index.ts         # cron pre_provider compatibility wrapper
   config.ts        # ~/.miniclaw/providers/futu-stock/<name>.yaml
   format.ts        # safe context formatter
+
+src/stock/reports/futu-stock.ts
+  # report composer used by the cron provider wrapper
+
+src/stock/sources/futu/
+  # source adapter exports around Futu OpenD readonly access
 ```
 
 Trusted source:
@@ -117,6 +140,7 @@ Verification owner:
 
 ```bash
 pnpm vitest run src/mcp/futu-stock src/providers/futu-stock
+pnpm vitest run src/providers/stock-portfolio src/providers/stock-pulse src/providers/market-intel src/providers/market-context src/providers/market-forecast-evaluation src/providers/stock-watchlist-research
 pnpm run quality:docs
 pnpm run typecheck
 ```

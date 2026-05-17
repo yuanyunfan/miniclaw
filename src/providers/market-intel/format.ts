@@ -12,7 +12,7 @@ import type {
   MarketIntelRoleProtocol,
 } from "./types.js";
 import type { MarketIntelScoringCalibrationConfig } from "./calibration.js";
-import { buildMarketIntelScores } from "./scoring.js";
+import { buildMarketIntelScores } from "../../stock/signals/market-intel.js";
 import type { PreProviderRunArgs } from "../types.js";
 import { buildNotConfiguredPortfolioContext } from "./portfolio.js";
 import { buildEmptyMarketIntelSnapshot } from "./quotes.js";

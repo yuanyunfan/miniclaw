@@ -28,6 +28,7 @@
 - 以 English canonical 重写当前核心 docs：`docs/README.md`、`docs/architecture.md`、`docs/bot-routing.md`、`docs/chat-router-current-logic.md`、`docs/install-distribution-strategy.md`、`docs/prompts.md` 和 `docs/quality-gates.md`；对应中文 mirror 同步为 `docs/zh/**`。
 - 润色 `docs/zh/**` 中文 mirror 的章节标题和高频机器翻译术语，并标记受影响中文 website summary 为语义未变。
 - 新增股票 `market-context` rolling memory provider，用于每日维护 A 股、港股、美股和跨市场长期摘要，并通过 cron `pre_context_providers` 注入股票任务。
+- 股票 provider 实现迁移到 `src/stock/` 四层结构：`src/providers/*/index.ts` 保持 cron 兼容入口，Source Adapter、Data Domain、Signal / Intelligence 和 Report Composer 逻辑进入 `src/stock/sources`、`src/stock/data`、`src/stock/signals` 和 `src/stock/reports`。
 - `quality:website-docs` 支持 `trace_docs` 和集中 unaffected ack，让内部 docs 小改不再默认牵引 website 正文更新。
 - App Trending 默认频道从 `daily-app-trending` 改为 `weekly-app-trending`，频道初始化脚本会把旧频道原地重命名并清理旧 channel-map key。
 

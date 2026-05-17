@@ -3,11 +3,11 @@ doc_id: stock-provider-data-layer-migration
 lang: zh
 translation_of: docs/plans/2026-05-17-stock-provider-data-layer-migration.md
 translation_status: current
-source_sha256: cae3052a2182a8e971abdf8b9e457fdecc5c3840026209bfd5e5a6f340bbf841
+source_sha256: 09c8ecf27561e0e6db4439887c37b4b9641eb7c2ef4dfb1fc648359d466e1a6a
 ---
 # Stock Provider 数据层迁移
 
-Status: draft
+Status: completed (compatibility migration)
 Date: 2026-05-17
 
 ## 背景
@@ -182,3 +182,6 @@ src/stock/
 ## 执行记录
 
 - 2026-05-17：基于当前 provider code inspection 和前序 stock provider architecture discussion 创建计划。
+- 2026-05-17：完成兼容迁移切片。`src/providers/*/index.ts` 对所有 stock provider 名称继续作为 cron-facing compatibility layer，可复用 stock 实现迁入 `src/stock/`。
+- 2026-05-17：新增 `src/stock/types.ts`，以及 Futu、Eastmoney、Yahoo、official evidence 的 source adapter 模块；新增 calendar、universe、quotes、portfolio、ETF premium、market evidence、market memory 的 data-domain bridge；新增 pulse、market-intel scoring、forecast evaluation、context synthesis signal 模块；并为所有现有 stock cron provider 增加 report composer。
+- 2026-05-17：已用 `pnpm run typecheck`、stock provider focused Vitest、Futu/Eastmoney MCP focused Vitest 验证兼容性。

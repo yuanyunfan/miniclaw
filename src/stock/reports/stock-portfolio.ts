@@ -1,0 +1,125 @@
+import type { PreProviderResult, PreProviderRunArgs } from "../../providers/types.js";
+import { runEastmoneyEtfPremiumProvider } from "./eastmoney-etf-premium.js";
+import { runEastmoneyJywgProvider } from "./eastmoney-jywg-readonly.js";
+import { runFutuStockProvider } from "./futu-stock.js";
+import { loadStockPortfolioProviderConfig } from "../../providers/stock-portfolio/config.js";
+import { buildStockPortfolioPayload, formatStockPortfolioPayload, sanitizeStockPortfolioError } from "../data/portfolio.js";
+import { buildAssetPieChartModel, renderAssetPieChartPng } from "../../providers/stock-portfolio/pie-chart.js";
+import type {
+  StockPortfolioProviderConfig,
+  StockPortfolioSourceConfig,
+  StockPortfolioSourceResult,
+  StockPortfolioSourceRunner,
+} from "../../providers/stock-portfolio/types.js";
+
+const SOURCE_RUNNERS: Record<string, StockPortfolioSourceRunner> = {
+  "eastmoney-etf-premium": runEastmoneyEtfPremiumProvider,
+  "futu-stock": runFutuStockProvider,
+  "eastmoney-jywg-readonly": runEastmoneyJywgProvider,
+};
+
+export interface StockPortfolioProviderDeps {
+  loadProviderConfig?: (name?: string) => StockPortfolioProviderConfig;
+  runners?: Partial<Record<string, StockPortfolioSourceRunner>>;
+}
+
+function parseProviderPayload(text: string, source: StockPortfolioSourceConfig): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("payload is not a JSON object");
+    }
+    return parsed as Record<string, unknown>;
+  } catch (err) {
+    throw new Error(`${source.provider}/${source.config ?? "default"} returned invalid JSON: ${sanitizeStockPortfolioError(err)}`);
+  }
+}
+
+export async function runStockPortfolioProvider(
+  args: PreProviderRunArgs,
+  deps: StockPortfolioProviderDeps = {},
+): Promise<PreProviderResult> {
+  const configName = args.configName ?? "default";
+  const config = (deps.loadProviderConfig ?? loadStockPortfolioProviderConfig)(configName);
+  const commits: Array<() => Promise<void>> = [];
+  const results: StockPortfolioSourceResult[] = [];
+
+  for (const source of config.sources) {
+    const runner = deps.runners?.[source.provider] ?? SOURCE_RUNNERS[source.provider];
+    const sourceConfig = source.config ?? configName;
+    if (!runner) throw new Error(`stock-portfolio source runner not found: ${source.provider}`);
+    try {
+      const result = await runner({ ...args, configName: sourceConfig });
+      const payload = parseProviderPayload(result.text, source);
+      results.push({
+        provider: source.provider,
+        config: sourceConfig,
+        label: source.label,
+        asset_account_label: source.asset_account_label,
+        include_asset_totals: source.include_asset_totals,
+        status: "ok",
+        payload,
+      });
+      if (result.commit) commits.push(result.commit);
+    } catch (err) {
+      const error = sanitizeStockPortfolioError(err);
+      if (source.required || !config.continue_on_error) {
+        throw new Error(`stock-portfolio source failed: ${source.provider}/${sourceConfig}: ${error}`);
+      }
+      results.push({
+        provider: source.provider,
+        config: sourceConfig,
+        label: source.label,
+        asset_account_label: source.asset_account_label,
+        include_asset_totals: source.include_asset_totals,
+        status: "error",
+        error,
+      });
+    }
+  }
+
+  const okCount = results.filter((result) => result.status === "ok").length;
+  if (okCount === 0 && config.fail_if_all_sources_fail) {
+    const errors = results
+      .filter((result) => result.status === "error")
+      .map((result) => `${result.provider}/${result.config}: ${result.error}`)
+      .join("; ");
+    throw new Error(`stock-portfolio provider failed: all sources failed${errors ? `: ${errors}` : ""}`);
+  }
+
+  const payload = buildStockPortfolioPayload({
+    generatedAt: args.runAt,
+    profile: configName,
+    config,
+    sources: results,
+  });
+  const attachments: PreProviderResult["attachments"] = [];
+  if (config.include_asset_pie_chart && payload.asset_summary) {
+    try {
+      const model = buildAssetPieChartModel(payload.asset_summary);
+      if (model) {
+        const path = await renderAssetPieChartPng(model, {
+          profile: configName,
+          generatedAt: args.runAt,
+        });
+        attachments.push({
+          path,
+          name: `stock-portfolio-${configName}-asset-pie.png`,
+          description: "Daily Stock Summary asset allocation pie chart",
+        });
+        payload.usage_notes.push(
+          "MiniClaw will upload a PNG asset allocation pie chart after the Markdown report. In the holdings classification section, mention that the pie chart is attached below.",
+        );
+      }
+    } catch (err) {
+      payload.warnings.push(`asset pie chart generation failed: ${sanitizeStockPortfolioError(err)}`);
+    }
+  }
+  return {
+    text: formatStockPortfolioPayload(payload),
+    ...(attachments.length ? { attachments } : {}),
+    commit: async () => {
+      for (const commit of commits) await commit();
+    },
+  };
+}

@@ -12,6 +12,7 @@ import type {
   MarketIntelSnapshotSectionStatus,
 } from "./types.js";
 import { sanitizeMarketIntelError } from "./redaction.js";
+export { YahooMarketIntelQuoteClient } from "../../stock/sources/yahoo/market-intel-client.js";
 
 const PROVIDER_SYMBOL_MAP: Record<string, string> = {
   DXY: "DX-Y.NYB",
@@ -23,83 +24,6 @@ const PROVIDER_SYMBOL_MAP: Record<string, string> = {
   A50: "CN=F",
   HSI_FUTURES: "HSI=F",
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === "object" && !Array.isArray(value));
-}
-
-function num(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function str(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
-
-async function fetchJson(url: URL, timeoutMs: number): Promise<unknown> {
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, {
-      signal: ac.signal,
-      headers: { "User-Agent": "MiniClaw/0.4 market-intel" },
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.json() as unknown;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-function parseYahooChart(json: unknown, request: MarketIntelQuoteRequest): MarketIntelQuoteSnapshotInput {
-  if (!isRecord(json) || !isRecord(json.chart) || !Array.isArray(json.chart.result) || !isRecord(json.chart.result[0])) {
-    throw new Error(`yahoo chart returned invalid payload for ${request.provider_symbol}`);
-  }
-  const result = json.chart.result[0];
-  const meta = isRecord(result.meta) ? result.meta : {};
-  const timestamps = Array.isArray(result.timestamp) ? result.timestamp : [];
-  const indicators = isRecord(result.indicators) ? result.indicators : {};
-  const quote = Array.isArray(indicators.quote) && isRecord(indicators.quote[0]) ? indicators.quote[0] : {};
-  const closes = Array.isArray(quote.close) ? quote.close : [];
-  let latestTs: number | undefined;
-  let latestPrice: number | undefined;
-  for (let i = timestamps.length - 1; i >= 0; i--) {
-    const ts = num(timestamps[i]);
-    const close = num(closes[i]);
-    if (ts !== undefined && close !== undefined) {
-      latestTs = ts;
-      latestPrice = close;
-      break;
-    }
-  }
-  const metaPrice = num(meta.regularMarketPrice) ?? num(meta.previousClose);
-  const price = latestPrice ?? metaPrice;
-  if (latestTs === undefined || price === undefined) {
-    throw new Error(`yahoo chart returned no quote for ${request.provider_symbol}`);
-  }
-  return {
-    symbol: request.symbol,
-    provider_symbol: request.provider_symbol,
-    latest_at: new Date(latestTs * 1000).toISOString(),
-    latest_price: price,
-    previous_close: num(meta.chartPreviousClose) ?? num(meta.previousClose),
-    currency: str(meta.currency),
-  };
-}
-
-export class YahooMarketIntelQuoteClient implements MarketIntelQuoteClient {
-  readonly source = "yahoo_chart_unofficial";
-  readonly source_tier = "fallback" as const;
-
-  async getSnapshot(request: MarketIntelQuoteRequest): Promise<MarketIntelQuoteSnapshotInput> {
-    const url = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(request.provider_symbol)}`);
-    url.searchParams.set("range", "5d");
-    url.searchParams.set("interval", "5m");
-    url.searchParams.set("includePrePost", "true");
-    url.searchParams.set("events", "div,splits");
-    return parseYahooChart(await fetchJson(url, 8000), request);
-  }
-}
 
 async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const out = new Array<R>(items.length);

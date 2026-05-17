@@ -3,7 +3,7 @@ doc_id: stock-providers-index
 lang: zh
 translation_of: docs/providers/stock/README.md
 translation_status: current
-source_sha256: 0546d883bf078264b9aa9fe09622c3bef5032fb211a10c9a2493d534d3a62f97
+source_sha256: 787b00d06cc131e23b1a6ab6d78036abeeab8a99537fb16f5db866c823b23954
 ---
 # 股票 Provider 系列
 
@@ -32,6 +32,23 @@ flowchart LR
 - [`../../../providers/stock/eastmoney.md`](../../../providers/stock/eastmoney.md): JYWG holdings 和 MyFavor watchlist 的 Eastmoney family boundary。
 - [`../../../providers/stock/research.md`](../../../providers/stock/research.md): 横跨 portfolio、pulse、market-intel 和 watchlist research 的 stock research provider pipeline。
 
+## 当前代码布局
+
+Stock cron provider names 仍通过 `src/providers/index.ts` 注册。每个 stock provider 的 `src/providers/*/index.ts` 现在都是 compatibility wrapper，实际 re-export `src/stock/reports/*` 中的 report composer。
+
+可复用 stock internals 按数据职责组织：
+
+```text
+src/stock/
+  sources/   # external Futu, Eastmoney, Yahoo, and official evidence adapters
+  data/      # calendar, universe, quotes, portfolio, ETF premium, market evidence, market memory
+  signals/   # pulse anomaly, market-intel scoring, forecast evaluation, context synthesis
+  reports/   # cron-facing stock report composers
+  types.ts   # vendor-neutral stock domain types
+```
+
+这是一次兼容迁移：`pre_provider`、`pre_provider_config` 和 `pre_context_providers` 等 cron YAML 字段不变。
+
 ## 富途股票 Provider
 
 Runtime names:
@@ -54,9 +71,15 @@ src/mcp/futu-stock/
   types.ts
 
 src/providers/futu-stock/
-  index.ts         # cron pre_provider entry
+  index.ts         # cron pre_provider compatibility wrapper
   config.ts        # ~/.miniclaw/providers/futu-stock/<name>.yaml
   format.ts        # safe context formatter
+
+src/stock/reports/futu-stock.ts
+  # cron provider wrapper 使用的 report composer
+
+src/stock/sources/futu/
+  # Futu OpenD readonly access 的 source adapter exports
 ```
 
 Trusted source:
@@ -124,6 +147,7 @@ Verification owner:
 
 ```bash
 pnpm vitest run src/mcp/futu-stock src/providers/futu-stock
+pnpm vitest run src/providers/stock-portfolio src/providers/stock-pulse src/providers/market-intel src/providers/market-context src/providers/market-forecast-evaluation src/providers/stock-watchlist-research
 pnpm run quality:docs
 pnpm run typecheck
 ```
