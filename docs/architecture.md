@@ -187,6 +187,7 @@ Implemented state:
 ```mermaid
 flowchart LR
   Job["cron/*.yaml"] --> Scheduler["cron/scheduler.ts"]
+  Config["config.yaml<br/>cron.active_window"] --> Scheduler
   Scheduler --> Runner["runner-task / runner-script / runner-message"]
   Runner --> PreProvider["pre_provider"]
   PreProvider --> Framework["providers/framework.ts"]
@@ -198,6 +199,8 @@ flowchart LR
   Runner --> Runs[("cron_runs")]
   Runner --> Retry["failure notifier + retry button"]
 ```
+
+`cron.active_window` in `config.yaml` is a scheduler-level guard. When enabled, scheduled cron dispatches and missed-run catch-ups are recorded as skipped outside the configured local-time window before runners or providers execute. Manual `pnpm cron:test` remains an explicit operator path for troubleshooting.
 
 Provider collection is read-only unless a provider explicitly documents a commit phase. `commit()` is delayed until downstream task success. Provider docs live under `docs/providers/`; private account/session details live under `docs/private/` or `~/.miniclaw/` and must not enter public docs.
 

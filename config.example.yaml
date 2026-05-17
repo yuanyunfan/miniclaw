@@ -137,6 +137,16 @@ agent:
   shutdown_drain_timeout_ms: 1800000 # 30 minutes
   register_commands_on_start: false
 
+cron:
+  active_window:
+    # Optional global guard for scheduled cron dispatch. When enabled, every
+    # scheduled cron job is recorded as skipped outside this local-time window.
+    # Manual `pnpm cron:test` runs still bypass the guard for troubleshooting.
+    enabled: false
+    timezone: Asia/Shanghai
+    start: "08:00"
+    end: "00:00"
+
 startup_watchdog:
   # Runs before Discord clientReady. If bot.login hangs or fails, MiniClaw can
   # still raise a local macOS notification instead of silently relying on PM2.

@@ -26,6 +26,7 @@ flowchart LR
     Task[Task Runtime]
     Manager[Agent Run Manager]
     Cron[Cron Scheduler]
+    ActiveWindow[config.yaml active_window]
   end
   subgraph Context
     Providers[Readonly Providers]
@@ -46,7 +47,8 @@ flowchart LR
   Router --> Chat
   Router --> Task
   Task --> Manager
-  Cron --> Providers
+  Cron --> ActiveWindow
+  ActiveWindow --> Providers
   Providers --> Task
   Memory --> Chat
   Memory --> Task
@@ -61,7 +63,7 @@ flowchart LR
 ## 边界图
 
 - **Interface boundary**：Discord 承载用户意图、执行进度、最终输出和 operator actions。
-- **Runtime boundary**：routing、task lifecycle、可选 Agent Run Manager orchestration、cron 和 recovery logic 留在 MiniClaw。
+- **Runtime boundary**：routing、task lifecycle、可选 Agent Run Manager orchestration、cron active-window guard 和 recovery logic 留在 MiniClaw。
 - **Provider boundary**：外部账户只作为 read-only context source；secrets 和 sessions 不进入 Git。
 - **Execution boundary**：Claude/Codex 执行任务，但 session、usage、trace events 和 delivery 由 MiniClaw 统一。
 - **Docs boundary**：英文 repo docs 是 canonical source；中文 mirror 和 website pages 都通过 gate 跟随它。

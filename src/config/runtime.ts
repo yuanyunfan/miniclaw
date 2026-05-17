@@ -5,6 +5,7 @@ import { loadRuntimeConfigSource } from "./load.js";
 import { buildAgentRuntimeConfig } from "./domains/agent.js";
 import { buildAgentRunManagerRuntimeConfig } from "./domains/agent-run-manager.js";
 import { buildAttachmentRuntimeConfig } from "./domains/attachments.js";
+import { buildCronRuntimeConfig } from "./domains/cron.js";
 import { buildE2eRuntimeConfig } from "./domains/e2e.js";
 import { buildIMRuntimeConfig } from "./domains/im.js";
 import { buildMcpRuntimeConfig } from "./domains/mcp.js";
@@ -47,6 +48,7 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
   const routing = buildRoutingRuntimeConfig(reader, model.modelClient.defaultClient);
   const storage = buildStorageRuntimeConfig(reader);
   const e2e = buildE2eRuntimeConfig(reader);
+  const cron = buildCronRuntimeConfig(reader);
   const operations = buildOperationalRuntimeConfig(reader, e2e.mode);
   const attachments = buildAttachmentRuntimeConfig(reader);
   const im = buildIMRuntimeConfig(reader);
@@ -76,6 +78,7 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
     mcp: buildMcpRuntimeConfig(reader),
     ...routing,
     tasks: buildTaskRuntimeConfig(reader),
+    ...cron,
     ...storage,
     e2e,
     ...operations,

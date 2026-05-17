@@ -8,6 +8,11 @@ import { runScript } from "./runner-script.js";
 import { recordRun, getAllJobStates, updateJobState, type JobState } from "./state.js";
 import type { CronJob, CronJobRunContext, CronJobRunOutcome } from "./types.js";
 import {
+  describeCronActiveWindow,
+  isCronActiveWindowOpen,
+  type CronActiveWindowConfig,
+} from "./active-window.js";
+import {
   sanitizeCronError,
   sendOrUpdateCronFailureAlert,
   updateCronRecoveredAlert,
@@ -63,6 +68,9 @@ type DispatchOptions = {
   notifyFailures?: boolean;
   failureAlert?: CronFailureAlertRef;
   scheduledAt?: Date;
+  now?: Date;
+  respectActiveWindow?: boolean;
+  activeWindow?: CronActiveWindowConfig;
 };
 
 type CronRetryBeforeRun = (pending: { status: "woke" | "started"; jobName: string }) => Promise<void>;
@@ -244,6 +252,35 @@ function getCronControlBlock(job: CronJob, now = new Date()): CronControlBlock |
   }
 
   return undefined;
+}
+
+function getActiveWindowSkip(
+  job: CronJob,
+  now: Date,
+  activeWindow: CronActiveWindowConfig = config.cron.activeWindow,
+): { message: string; metadata: Record<string, unknown> } | undefined {
+  if (!activeWindow.enabled) return undefined;
+  if (isCronActiveWindowOpen(now, activeWindow)) return undefined;
+
+  const windowLabel = describeCronActiveWindow(activeWindow);
+  return {
+    message: `${job.name} skipped: outside cron active_window ${windowLabel}`,
+    metadata: {
+      checked_at: now.toISOString(),
+      active_window: {
+        timezone: activeWindow.timezone,
+        start: activeWindow.start,
+        end: activeWindow.end,
+      },
+    },
+  };
+}
+
+function expectedScheduleAllowedByActiveWindow(
+  scheduledAt: Date,
+  activeWindow: CronActiveWindowConfig = config.cron.activeWindow,
+): boolean {
+  return isCronActiveWindowOpen(scheduledAt, activeWindow);
 }
 
 function getRunningJobCount(jobName: string): number {
@@ -776,6 +813,7 @@ async function auditMissedRuns(
   jobs: CronJob[],
   client: Client,
   now = new Date(),
+  options: { activeWindow?: CronActiveWindowConfig } = {},
 ): Promise<MissedRunAuditResult> {
   const result: MissedRunAuditResult = {
     checked: 0,
@@ -811,6 +849,7 @@ async function auditMissedRuns(
 
       const candidates = expectedSchedules.slice(-missedRunConfig.maxRecords);
       for (const scheduledAt of candidates) {
+        if (!expectedScheduleAllowedByActiveWindow(scheduledAt, options.activeWindow)) continue;
         result.checked++;
         if (hasCronRunForSchedule(job.name, scheduledAt, { toleranceMs: SCHEDULE_LOOKUP_TOLERANCE_MS })) {
           continue;
@@ -845,6 +884,9 @@ async function auditMissedRuns(
           await dispatch(job, client, DEFAULT_RETRY_POLICY, {
             notifyFailures: true,
             scheduledAt,
+            now,
+            respectActiveWindow: true,
+            activeWindow: options.activeWindow,
           });
         } catch (err) {
           log.error(`${job.name} catch-up dispatch failed unexpectedly:`, err);
@@ -945,9 +987,10 @@ async function dispatch(
   retryPolicy: RetryPolicy = DEFAULT_RETRY_POLICY,
   options: DispatchOptions = {}
 ): Promise<void> {
-  const scheduledAt = options.scheduledAt ?? new Date();
+  const now = options.now ?? new Date();
+  const scheduledAt = options.scheduledAt ?? now;
   if (isDraining()) {
-    const startedAt = new Date();
+    const startedAt = now;
     const msg = `${job.name} skipped: ${DRAINING_MESSAGE}`;
     log.warn(msg);
     markRunSkipped(job, scheduledAt, startedAt, msg, "draining");
@@ -955,8 +998,21 @@ async function dispatch(
     return;
   }
 
+  if (options.respectActiveWindow) {
+    const activeWindowSkip = getActiveWindowSkip(job, now, options.activeWindow);
+    if (activeWindowSkip) {
+      const startedAt = now;
+      log.info(activeWindowSkip.message);
+      markRunSkipped(job, scheduledAt, startedAt, activeWindowSkip.message, "outside_active_window", {
+        metadata: activeWindowSkip.metadata,
+      });
+      recordRun(job.name, false, 0, activeWindowSkip.message);
+      return;
+    }
+  }
+
   if (!tryAcquireJobSlot(job)) {
-    const startedAt = new Date();
+    const startedAt = now;
     const active = getRunningJobCount(job.name);
     const maxConcurrency = getJobMaxConcurrency(job);
     const msg = maxConcurrency === 1
@@ -975,7 +1031,7 @@ async function dispatch(
   try {
     const controlBlock = getCronControlBlock(job);
     if (controlBlock) {
-      const startedAt = new Date();
+      const startedAt = options.now ?? new Date();
       log.warn(controlBlock.message);
       markRunSkipped(job, scheduledAt, startedAt, controlBlock.message, controlBlock.category, {
         status: controlBlock.status,
@@ -988,6 +1044,22 @@ async function dispatch(
     }
 
     for (let attempt = 1; attempt <= policy.maxAttempts; attempt++) {
+      const attemptNow = options.now ?? new Date();
+      if (options.respectActiveWindow) {
+        const activeWindowSkip = getActiveWindowSkip(job, attemptNow, options.activeWindow);
+        if (activeWindowSkip) {
+          log.info(activeWindowSkip.message);
+          markRunSkipped(job, scheduledAt, attemptNow, activeWindowSkip.message, "outside_active_window", {
+            metadata: {
+              ...activeWindowSkip.metadata,
+              skipped_attempt: attempt,
+              failure_run_id: failureRunId,
+            },
+          });
+          recordRun(job.name, false, 0, activeWindowSkip.message);
+          return;
+        }
+      }
       const startedAt = Date.now();
       const cronRun = createCronRun({
         jobName: job.name,
@@ -1156,7 +1228,7 @@ export function startScheduler(client: Client): { scheduled: number; errors: Arr
     try {
       const scheduledTasks = getCronSchedules(job).map((schedule) => cron.schedule(
         schedule,
-        () => { void dispatch(job, client, DEFAULT_RETRY_POLICY, { notifyFailures: true }); },
+        () => { void dispatch(job, client, DEFAULT_RETRY_POLICY, { notifyFailures: true, respectActiveWindow: true }); },
         { timezone: job.timezone }
       ));
       tasks.set(job.name, scheduledTasks);
@@ -1256,6 +1328,7 @@ export async function requestCronRetryNow(
   void dispatch(job, client, NO_RETRY_POLICY, {
     notifyFailures: true,
     failureAlert: options.failureAlert,
+    respectActiveWindow: true,
   }).catch((err) => {
     log.error(`${jobName} immediate retry failed unexpectedly:`, err);
   });
@@ -1273,4 +1346,5 @@ export const __testables = {
   auditMissedRuns,
   markRunMissed,
   normalizeMissedRunConfig,
+  expectedScheduleAllowedByActiveWindow,
 };

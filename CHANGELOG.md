@@ -7,6 +7,7 @@
 ## [Unreleased]
 
 ### Added
+- 新增全局 `cron.active_window` 配置，可在 `config.yaml` 中按时区设置 scheduled cron 活动时间；窗口外会记录 skipped，不执行 script、provider 或 task runtime。
 - 新增 `eastmoney-etf-premium` public provider，从 Eastmoney fund selector 读取 ETF `PREMIUM_DISCOUNT_RATIO`，并让 `stock-portfolio` 只在 JYWG 持仓行存在时按代码合并折溢价数据。
 - 新增 `quality:changelog` gate，并接入 `quality:commit`、`quality:push` 和 CI；`src/**`、`scripts/**`、`.github/workflows/**`、`docs/**`、`website/**`、`prompts/**` 等 release-visible 变更必须同 patch 更新 `CHANGELOG.md`。
 - 强化 `quality:docs-i18n`：所有非 archive/private 的 canonical docs 必须在 `docs/documentation-migration-map.md` 中声明中文 mirror，中文 mirror 必须带 `source_sha256`，并检查英文 prose 不含 CJK、中文 prose 含 CJK、heading shape parity 和 orphan `docs/zh/**`。

@@ -120,9 +120,17 @@ agent:
   max_concurrent_tasks: 1
   budget_usd: 1.0
   max_turns: 30
+cron:
+  active_window:
+    enabled: false
+    timezone: Asia/Shanghai
+    start: "08:00"
+    end: "00:00"
 ```
 
 完整模板见 [`config.example.yaml`](config.example.yaml)。Discord ID 必须加引号，避免 YAML 把超大整数解析成不安全的 number。
+
+`cron.active_window.enabled: true` 会给所有计划触发的 cron job 加全局活动时间门禁；窗口外只记录 skipped，不执行 script、provider 或 task。手动 `pnpm cron:test <job>` 仍会执行，用于排障。
 
 `routing.smart_router.enabled: true` 后，MiniClaw 会在 chat 入口执行 LLM-first capability 路由：普通解释问题继续走 chat，需要改文件、跑命令、Git、运行态排查或持久化输出的请求会显示“转为 task / 继续 chat / 取消”按钮；`routing.smart_router.auto_task_channels` 仅适合专门的受信 task 频道。
 

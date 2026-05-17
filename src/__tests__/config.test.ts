@@ -60,6 +60,10 @@ const ENV_KEYS = [
   "MINICLAW_TASK_TRACE_AUTO_ATTACH_MIN_DURATION_MS",
   "MINICLAW_TASK_TRACE_AUTO_ATTACH_MIN_EVENT_COUNT",
   "MINICLAW_TASK_TRACE_AUTO_ATTACH_MAX_BYTES",
+  "MINICLAW_CRON_ACTIVE_WINDOW_ENABLED",
+  "MINICLAW_CRON_ACTIVE_WINDOW_TIMEZONE",
+  "MINICLAW_CRON_ACTIVE_WINDOW_START",
+  "MINICLAW_CRON_ACTIVE_WINDOW_END",
   "MINICLAW_SMART_ROUTER_ENABLED",
   "MINICLAW_SMART_ROUTER_DEFAULT_MODE",
   "MINICLAW_SMART_ROUTER_MIN_CONFIRM_CONFIDENCE",
@@ -288,6 +292,12 @@ tasks:
     min_duration_ms: 600000
     min_event_count: 25
     max_bytes: 65536
+cron:
+  active_window:
+    enabled: true
+    timezone: Asia/Shanghai
+    start: "08:00"
+    end: "00:00"
 attachments:
   max_mb: 16
   max_count: 3
@@ -417,6 +427,12 @@ notifications:
       minEventCount: 25,
       maxBytes: 65536,
     });
+    expect(config.cron.activeWindow).toEqual({
+      enabled: true,
+      timezone: "Asia/Shanghai",
+      start: "08:00",
+      end: "00:00",
+    });
     expect(config.smartRouter).toMatchObject({
       enabled: true,
       defaultMode: "suggest",
@@ -524,6 +540,12 @@ storage:
       minDurationMs: 0,
       minEventCount: 0,
       maxBytes: 120000,
+    });
+    expect(config.cron.activeWindow).toEqual({
+      enabled: false,
+      timezone: "Asia/Shanghai",
+      start: "08:00",
+      end: "00:00",
     });
     expect(config.agentRunManager.enabled).toBe(false);
     expect(config.agentRunManager.policy).toEqual({

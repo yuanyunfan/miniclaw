@@ -105,6 +105,7 @@ Execution flow:
 ```text
 cron schedule
   -> load job config
+  -> apply global config.yaml cron.active_window guard when enabled
   -> optional provider health/dry-run preflight
   -> run pre_provider when configured
   -> inject provider text into task prompt
@@ -117,6 +118,9 @@ Runtime contract:
 
 - Provider commit callbacks must run only after the downstream task succeeds.
 - Provider failures should fail closed unless the provider config explicitly allows partial data.
+- `cron.active_window` is a global scheduled-dispatch guard. Outside the window, MiniClaw writes a skipped `cron_runs` row with `error_category=outside_active_window` and does not call scripts, providers, or task runtime.
+- Missed-run audit ignores expected schedules outside `cron.active_window` so sleep/off-hours do not create false missed-run incidents.
+- Manual `pnpm cron:test` bypasses `cron.active_window` because it is an explicit operator action.
 - Cron run records are operational evidence for Auto Doctor and recovery workflows.
 - Script jobs and task jobs share delivery semantics but not prompt/provider handling.
 

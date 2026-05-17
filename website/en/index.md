@@ -27,7 +27,8 @@ flowchart LR
   Intake --> Router[Smart Router]
   Router --> Chat[Chat Runtime]
   Router --> Task[Task Runtime]
-  Cron[Cron Scheduler] --> Providers[Pre Providers]
+  Cron[Cron Scheduler] --> ActiveWindow[Active Window Guard]
+  ActiveWindow --> Providers[Pre Providers]
   Providers --> Task
   Task --> Agents[Claude / Codex]
   Chat --> Store[(SQLite)]
@@ -40,7 +41,7 @@ flowchart LR
 
 - **Discord-native control plane**: chat, task intake, slash commands, cron reports, and failure recovery all land in Discord.
 - **Runtime boundary**: MiniClaw owns routing, context, progress, trace events, and delivery; Claude/Codex own agent execution.
-- **Provider-first reports**: WeChat, email, stock, and market providers produce structured context before the LLM summarizes anything.
+- **Provider-first reports**: WeChat, email, stock, and market providers produce structured context before the LLM summarizes anything, after scheduled cron passes the global active-window guard.
 - **Local-first state**: user config, secrets, provider sessions, cron state, and SQLite data live outside the public repo.
 - **Docs-driven governance**: English repo docs are the canonical implementation record; Chinese docs mirror them with source-hash parity.
 - **Quality as architecture**: docs drift, website drift, bilingual parity, changelog drift, coverage, secrets, and cron E2E are executable gates.
@@ -60,7 +61,7 @@ sequenceDiagram
   U->>D: message, slash command, or schedule
   D->>R: normalized intake event
   R->>T: chat, task, or cron route
-  T->>P: collect trusted context
+  T->>P: collect trusted context when active window allows
   T->>A: execute with bounded runtime config
   A->>S: persist trace, usage, and state
   T->>D: progress, result, or recovery action

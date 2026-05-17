@@ -188,6 +188,78 @@ describe("cron scheduler dispatch", () => {
     expect(sends).toBe(1);
   });
 
+  it("scheduled dispatch skips outside the global active window without sending", async () => {
+    let sends = 0;
+    const client = {
+      channels: {
+        fetch: async () => ({
+          isSendable: () => true,
+          send: async () => {
+            sends++;
+            return {};
+          },
+        }),
+      },
+    } as unknown as Client;
+    const job = { ...messageJob(), name: "active-window-message" };
+
+    await __testables.dispatch(job, client, __testables.DEFAULT_RETRY_POLICY, {
+      respectActiveWindow: true,
+      now: new Date("2026-05-15T18:00:00.000Z"),
+      activeWindow: {
+        enabled: true,
+        timezone: "Asia/Shanghai",
+        start: "08:00",
+        end: "00:00",
+      },
+    });
+
+    expect(sends).toBe(0);
+    const rows = listCronRuns({ jobName: job.name, limit: 5 });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      status: "skipped",
+      error_category: "outside_active_window",
+      error_message: "active-window-message skipped: outside cron active_window 08:00-00:00 Asia/Shanghai",
+    });
+    expect(JSON.parse(rows[0]?.metadata_json ?? "{}")).toMatchObject({
+      checked_at: "2026-05-15T18:00:00.000Z",
+      active_window: {
+        timezone: "Asia/Shanghai",
+        start: "08:00",
+        end: "00:00",
+      },
+    });
+  });
+
+  it("missed-run audit ignores schedules outside the global active window", async () => {
+    const client = {} as Client;
+    const job: CronJobMessage = {
+      ...messageJob(),
+      name: "overnight-hourly",
+      schedule: "0 * * * *",
+      timezone: "Asia/Shanghai",
+    };
+
+    const result = await __testables.auditMissedRuns(
+      [job],
+      client,
+      new Date("2026-05-15T18:10:00.000Z"),
+      {
+        activeWindow: {
+          enabled: true,
+          timezone: "Asia/Shanghai",
+          start: "08:00",
+          end: "00:00",
+        },
+      },
+    );
+
+    expect(result.checked).toBe(0);
+    expect(result.missed).toHaveLength(0);
+    expect(listCronRuns({ jobName: job.name, limit: 5 })).toHaveLength(0);
+  });
+
   it("同名 job 上一次未完成时跳过本次触发并记录 error", async () => {
     const gate = deferred();
     let sendStarted = false;

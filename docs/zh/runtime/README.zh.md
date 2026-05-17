@@ -3,7 +3,7 @@ doc_id: runtime-index
 lang: zh
 translation_of: docs/runtime/README.md
 translation_status: current
-source_sha256: 07d4ed5187a61ca00784eb1e3a785b502304e21eeed57f23f7e522420ec0606c
+source_sha256: 192396badc6baaddbac546b9100d90ceaecfdcec7f62ff236c4c641bee288a6d
 ---
 # MiniClaw Runtime
 
@@ -112,6 +112,7 @@ Execution flow:
 ```text
 cron schedule
   -> load job config
+  -> enabled 时应用全局 config.yaml cron.active_window guard
   -> optional provider health/dry-run preflight
   -> run pre_provider when configured
   -> inject provider text into task prompt
@@ -124,6 +125,9 @@ Runtime contract:
 
 - Provider commit callback 只能在 downstream task 成功后运行。
 - Provider failure 默认 fail closed，除非 provider config 明确允许 partial data。
+- `cron.active_window` 是全局 scheduled-dispatch guard。窗口外 MiniClaw 写入 `error_category=outside_active_window` 的 skipped `cron_runs` row，不调用 script、provider 或 task runtime。
+- Missed-run audit 会忽略 `cron.active_window` 之外的 expected schedules，避免睡眠/离线时段产生误报 missed-run incident。
+- 手动 `pnpm cron:test` 会绕过 `cron.active_window`，因为它是显式 operator action。
 - Cron run record 是 Auto Doctor 和 recovery workflow 的运维证据。
 - Script job 和 task job 共享 delivery semantics，但不共享 prompt/provider handling。
 

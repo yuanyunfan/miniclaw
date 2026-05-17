@@ -21,7 +21,8 @@ flowchart TD
   Decide --> Chat[Chat Runtime]
   Decide --> Confirm[Task Confirmation]
   Confirm --> Task[Task Runtime]
-  Cron[Cron Trigger] --> Task
+  Cron[Cron Trigger] --> ActiveWindow[config.yaml active_window]
+  ActiveWindow --> Task
   Task --> Agent[Agent Runtime Registry]
   Agent --> Events[Task Events]
   Events --> Store[(SQLite)]
@@ -36,7 +37,7 @@ flowchart TD
 - **Routing semantics**: the hard route decides ignore/thread continuation/task channel/chat; Smart Router separates chat, suggested task, confirmed task, and trusted auto-task channels.
 - **Task lifecycle**: task threads, progress cards, tool traces, final Markdown output, cancellation, and resume behavior are runtime concerns.
 - **Discord delivery**: long Markdown results are chunked into Discord-sized messages; `<https://...>` links keep Discord's no-preview behavior so link-heavy cron reports can stay readable.
-- **Cron execution**: cron jobs can collect provider output before creating the agent prompt.
+- **Cron execution**: scheduled cron dispatches pass through the global `config.yaml` active-window guard before scripts, providers, or task runtime run.
 - **Recovery loop**: connectivity and doctor repair paths reuse stored incidents and trace evidence.
 - **Merged runtime docs**: feature-level runtime notes have been folded into the runtime source docs.
 

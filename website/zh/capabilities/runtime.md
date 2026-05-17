@@ -20,7 +20,8 @@ flowchart TD
   Decide --> Chat[Chat Runtime]
   Decide --> Confirm[Task Confirmation]
   Confirm --> Task[Task Runtime]
-  Cron[Cron Trigger] --> Task
+  Cron[Cron Trigger] --> ActiveWindow[config.yaml active_window]
+  ActiveWindow --> Task
   Task --> Agent[Agent Runtime Registry]
   Agent --> Events[Task Events]
   Events --> Store[(SQLite)]
@@ -35,7 +36,7 @@ flowchart TD
 - **Routing semantics**：Smart Router 区分 chat、suggested task、confirmed task 和受信 auto-task channel。
 - **Task lifecycle**：task threads、progress cards、tool traces、final Markdown output、cancellation 和 resume 都属于 runtime。
 - **Discord delivery**：长 Markdown 结果会切成 Discord 尺寸的消息；`<https://...>` 链接会保留 Discord no-preview 行为，让链接很多的 cron report 仍然可读。
-- **Cron execution**：cron jobs 可以先收集 provider output，再创建 agent prompt。
+- **Cron execution**：scheduled cron dispatch 会先通过全局 `config.yaml` active-window guard；窗口外不执行 script、provider 或 task runtime。
 - **Recovery loop**：connectivity 和 doctor repair 复用 stored incidents 与 trace evidence。
 - **Merged runtime docs**：feature-level runtime notes 已合并到 runtime source docs。
 

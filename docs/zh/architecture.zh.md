@@ -3,7 +3,7 @@ doc_id: architecture
 lang: zh
 translation_of: docs/architecture.md
 translation_status: current
-source_sha256: eaaf428ef8b85b9037e730e217f28b851d11ca0a0c975def95833cff09e9ec74
+source_sha256: e408c210a0da0929ee98969cc678cb4db7179dbe706a078b69fa343be6d541ca
 ---
 # MiniClaw Architecture
 
@@ -194,6 +194,7 @@ flowchart TD
 ```mermaid
 flowchart LR
   Job["cron/*.yaml"] --> Scheduler["cron/scheduler.ts"]
+  Config["config.yaml<br/>cron.active_window"] --> Scheduler
   Scheduler --> Runner["runner-task / runner-script / runner-message"]
   Runner --> PreProvider["pre_provider"]
   PreProvider --> Framework["providers/framework.ts"]
@@ -205,6 +206,8 @@ flowchart LR
   Runner --> Runs[("cron_runs")]
   Runner --> Retry["failure notifier + retry button"]
 ```
+
+`config.yaml` 中的 `cron.active_window` 是 scheduler-level guard。启用后，scheduled cron dispatch 和 missed-run catch-up 会在配置的本地时间窗口外记录为 skipped，不进入 runner 或 provider。手动 `pnpm cron:test` 仍保留为显式 operator troubleshooting 路径。
 
 provider collection 默认 read-only，除非 provider 明确记录 commit phase。`commit()` 延迟到 downstream task success 后执行。provider docs 放在 `docs/providers/`；private account/session details 放在 `docs/private/` 或 `~/.miniclaw/`，不得进入 public docs。
 

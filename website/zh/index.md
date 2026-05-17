@@ -27,7 +27,8 @@ flowchart LR
   Intake --> Router[Smart Router]
   Router --> Chat[Chat Runtime]
   Router --> Task[Task Runtime]
-  Cron[Cron Scheduler] --> Providers[Pre Providers]
+  Cron[Cron Scheduler] --> ActiveWindow[Active Window Guard]
+  ActiveWindow --> Providers[Pre Providers]
   Providers --> Task
   Task --> Agents[Claude / Codex]
   Chat --> Store[(SQLite)]
@@ -40,7 +41,7 @@ flowchart LR
 
 - **Discord-native control plane**：chat、task intake、slash commands、cron reports 和 failure recovery 都通过 Discord 交互和留痕。
 - **Runtime boundary**：MiniClaw 负责 routing、context、progress、trace events 和 delivery；Claude/Codex 负责 agent execution。
-- **Provider-first reports**：WeChat、email、stock、market providers 先生成结构化上下文，再交给 LLM 汇总。
+- **Provider-first reports**：WeChat、email、stock、market providers 先生成结构化上下文，再交给 LLM 汇总；scheduled cron 会先经过全局 active-window guard。
 - **Local-first state**：用户配置、secrets、provider sessions、cron state 和 SQLite 数据都留在公开 repo 之外。
 - **Docs-driven governance**：英文 repo docs 是 canonical implementation record；中文 docs 通过 source-hash parity 跟随英文。
 - **Quality as architecture**：docs drift、website drift、bilingual parity、changelog drift、coverage、secrets 和 cron E2E 都是可执行 gate。
@@ -60,7 +61,7 @@ sequenceDiagram
   U->>D: message, slash command, or schedule
   D->>R: normalized intake event
   R->>T: chat, task, or cron route
-  T->>P: collect trusted context
+  T->>P: collect trusted context when active window allows
   T->>A: execute with bounded runtime config
   A->>S: persist trace, usage, and state
   T->>D: progress, result, or recovery action
