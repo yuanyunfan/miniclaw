@@ -29,7 +29,11 @@ Core positioning:
 | `/task <description>` | Claude Code or Codex from `config.yaml` | Create an isolated thread with a status card, live progress, and final Markdown output |
 | Cron jobs | Claude Code or Codex + pre-provider | Collect structured data, run analysis, and push reports to Discord on schedule |
 | `/status` | - | View active and recent tasks |
+| `/task-log <id>` | - | Export a safe Markdown trace for a task |
+| `/cron-runs` / `/cron-run <id>` | - | Inspect cron run history and one run detail |
 | `/health` | - | Inspect process, task, and cron health |
+| `/doctor` | - | Run read-only diagnosis for task, cron, runtime, and Auto Doctor evidence |
+| `/incidents` / `/incident ...` | - | Review, resolve, ignore, retry, and guarded-ship Auto Doctor incidents |
 | `/agent-config` | - | Show provider, model, Codex/Claude settings, MCP, and skills inheritance |
 | `/cancel <id>` | - | Cancel a running task |
 | `/resume <id> <followup>` | - | Continue a previous session. Sessions cannot be resumed across providers |
@@ -53,7 +57,11 @@ Built-in data capabilities:
 - `cmb-credit-card-email`: CMB credit-card email parsing.
 - `futu-stock`: read-only Futu OpenD account snapshots and position P&L.
 - `eastmoney-jywg-readonly`: read-only Eastmoney `jywg.18.cn` account snapshots and position P&L.
+- `eastmoney-etf-premium`: public Eastmoney ETF premium/discount enrichment for held ETF rows only.
 - `stock-portfolio`: multi-broker portfolio aggregation with CNY P&L rollups and top gainers/losers.
+- `stock-pulse`: intraday anomaly scans across portfolio symbols, watchlists, and quote bars.
+- `market-intel` / `market-forecast-evaluation`: market evidence collection, forecast persistence, and post-market calibration.
+- `stock-watchlist-research`: watchlist-only buy-timing research that excludes held symbols.
 
 ## Architecture
 
@@ -124,9 +132,17 @@ agent:
   max_concurrent_tasks: 1
   budget_usd: 1.0
   max_turns: 30
+cron:
+  active_window:
+    enabled: false
+    timezone: Asia/Shanghai
+    start: "08:00"
+    end: "00:00"
 ```
 
 See [config.example.yaml](config.example.yaml) for the full template. Quote Discord IDs because they are larger than JavaScript's safe integer range.
+
+When `cron.active_window.enabled: true`, scheduled cron jobs are globally gated by the configured local-time window. Jobs outside the window are recorded as skipped before script, provider, or task execution. Manual `pnpm cron:test <job>` still runs for troubleshooting.
 
 When `routing.smart_router.enabled` is `true`, MiniClaw classifies chat-entry messages before answering. Normal explanation questions still use chat; prompts that likely need file edits, tests, Git, or long-running work show `convert to task / continue chat / cancel` buttons. `routing.smart_router.auto_task_channels` should only be used for dedicated trusted task channels.
 
@@ -216,9 +232,9 @@ Default channel layout:
 | STOCK | daily-stock-market for the base template; stock reports can be split into daily-us-stock / daily-cn-stock |
 | NEWS | news-domestic / news-international / trending / tldr / monitor-github-repo |
 
-The WeChat Official Account digest job `daily-wechat-mp` needs an additional Official Platform session and a target `daily-wechat-article` channel. See [docs/features/02-wechat-mp-provider.md](docs/features/02-wechat-mp-provider.md).
+The WeChat Official Account digest job `daily-wechat-mp` needs an additional Official Platform session and a target `daily-wechat-article` channel. See [docs/providers/content.md](docs/providers/content.md).
 
-For brokerage-backed stock reports, use the `stock-portfolio` aggregate provider and split delivery into `daily-us-stock` and `daily-cn-stock` channels. See [docs/features/10-stock-portfolio-provider.md](docs/features/10-stock-portfolio-provider.md).
+For brokerage-backed stock reports, use the `stock-portfolio` aggregate provider and split delivery into `daily-us-stock` and `daily-cn-stock` channels. See [docs/providers/stock/README.md](docs/providers/stock/README.md) and [docs/providers/stock/research.md](docs/providers/stock/research.md).
 
 If you use your own channel layout, skip the setup scripts and edit the `channel` field in `~/.miniclaw/cron/*.yaml` manually.
 
@@ -227,41 +243,43 @@ For a dedicated task intake channel, prefer `routing.task_channels` in `config.y
 ## Project Structure
 
 ```text
-src/
-|-- index.ts              # Entry point: DB init -> command registration -> bot startup
-|-- bot.ts                # Discord event listeners and message routing
-|-- config.ts             # Layered YAML + env configuration loading
-|-- proxy.ts              # HTTP and WebSocket proxy setup
-|-- agent/
-|   |-- chat.ts           # @mention / auto-reply chat
-|   |-- codex.ts          # Codex SDK wrapper
-|   |-- runtime-config.ts # /agent-config runtime inheritance summary
-|   |-- session.ts        # Provider-prefixed session IDs
-|   `-- task.ts           # /task execution with Claude/Codex and streaming progress
-|-- commands/
-|   |-- register.ts       # Slash command registration
-|   `-- handlers.ts       # /task /status /cancel /resume handlers
-|-- cron/                 # node-cron scheduler, runners, and state persistence
-|-- capabilities/
-|   `-- email/            # Read-only mailbox capability: IMAP, MIME parsing, redaction, dedupe state
-|-- discord/
-|   |-- chunks.ts         # 2000-char message chunking with code fence balancing
-|   |-- formatter.ts      # Embed templates
-|   `-- progress.ts       # Throttled progress message editing
-|-- providers/
-|   |-- wechat-mp/        # WeChat Official Account pre-provider
-|   |-- email-query/      # Generic email query pre-provider
-|   |-- cmb-credit-card-email/ # CMB credit-card email parsing pre-provider
-|   |-- eastmoney-jywg-readonly/ # Eastmoney jywg.18.cn read-only stock-report pre-provider
-|   |-- futu-stock/       # Futu read-only stock-report pre-provider
-|   `-- stock-portfolio/  # Multi-broker aggregation with CNY P&L rollups
-|-- mcp/
-|   |-- eastmoney-jywg/   # Eastmoney jywg.18.cn read-only MCP server
-|   `-- futu-stock/       # Futu OpenD read-only MCP server
-|-- memory/               # Markdown long-term memory
-|-- stage/                # pnpm stage multi-agent TUI
-`-- store/
-    `-- db.ts             # SQLite storage
+.
+|-- src/                    # MiniClaw runtime source
+|   |-- index.ts            # Entry point: DB, commands, bot, cron, doctor scheduler
+|   |-- bot.ts              # Discord client lifecycle; business routing delegates to bot/*
+|   |-- config.ts           # Compatibility facade; config/ owns YAML/env/default assembly
+|   |-- proxy.ts            # HTTP and WebSocket proxy setup
+|   |-- agent/              # chat/task execution, runners, runtime registry, Agent Run Manager
+|   |   |-- run-manager/    # managed multi-agent runs, bus, scheduler, ACP/MCP bridge
+|   |   |-- runners/        # Claude/Codex/fake task runners
+|   |   `-- runtimes/       # runtime interface adapter registry
+|   |-- bot/                # message, slash, button, and thread-continuation dispatch
+|   |-- commands/           # slash command registration and handlers
+|   |-- config/             # schema, env/YAML load, domain defaults, runtime freeze
+|   |-- cron/               # scheduler, active window, runners, retry alerts, run history
+|   |-- capabilities/email/ # generic read-only mailbox capability
+|   |-- discord/            # formatter, chunks, task intake, trace attachments
+|   |-- im/                 # IM transport abstraction: Discord + Feishu outbound
+|   |-- runtime/            # agent runtime / IM transport / model client contracts
+|   |-- providers/          # pre-provider framework and content/email/stock/market providers
+|   |-- mcp/                # Eastmoney/Futu/Agent Bus MCP servers
+|   |-- memory/             # Markdown memory parsing, injection, maintenance
+|   |-- monitoring/         # connectivity monitor, watchdog, recovery outbox
+|   |-- notifications/      # macOS / SMTP fallback notifications
+|   |-- ops/                # doctor, doctor-repair, doctor-scheduler, safe-restart
+|   |-- privacy/            # diagnostic redaction helpers
+|   |-- quality/            # docs/changelog/website quality gate helpers
+|   |-- routing/            # hard route, Smart Router, context/cwd resolution
+|   |-- stage/              # pnpm stage multi-agent TUI and ui/*
+|   `-- store/              # SQLite schema, migrations, repositories, trace export
+|-- scripts/                # setup, doctor, cron/provider CLI, quality gates
+|-- docs/                   # implementation source of truth
+|-- docs/zh/                # tracked Chinese docs mirror
+|-- website/                # GitHub Pages presentation layer
+|-- prompts/                # repo-owned prompt assets and templates
+|-- agents/                 # repo-owned agent role cards
+|-- personas/               # Stage persona cards
+`-- config.example.yaml     # user config template
 ```
 
 ## Tech Stack

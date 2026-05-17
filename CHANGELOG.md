@@ -27,6 +27,7 @@
 - 以 English canonical 重写当前核心 docs：`docs/README.md`、`docs/architecture.md`、`docs/bot-routing.md`、`docs/chat-router-current-logic.md`、`docs/install-distribution-strategy.md`、`docs/prompts.md` 和 `docs/quality-gates.md`；对应中文 mirror 同步为 `docs/zh/**`。
 
 ### Fixed
+- 修复根 README 的文档漂移：同步当前 slash commands、provider 列表、`docs/providers/**` 链接和最新项目结构。
 - Discord 消息分块现在会保留 `<https://...>` no-embed 链接语义，不再把 browser tabs cron 的 no-embed 链接重新收集成裸 URL 预览区。
 
 ---

@@ -29,7 +29,11 @@ MiniClaw 面向单用户、本地 Mac 常驻运行。Discord 是入口和交付�
 | `/task <描述>` | `config.yaml` 选择 Claude Code / Codex | 创建独立线程，状态卡片 + 实时进度 + Markdown 最终结果 |
 | cron 定时任务 | Claude Code / Codex + pre_provider | 到点自动采集数据、执行分析并推送 Discord |
 | `/status` | — | 查看活跃/历史任务 |
+| `/task-log <id>` | — | 导出任务的安全 Markdown trace |
+| `/cron-runs` / `/cron-run <id>` | — | 查看 cron run 历史和单次运行详情 |
 | `/health` | — | 查看 MiniClaw 进程、任务和 cron 健康状态 |
+| `/doctor` | — | 只读诊断 task、cron、运行状态和 Auto Doctor evidence |
+| `/incidents` / `/incident ...` | — | 查看、处理和 guarded ship Auto Doctor incident |
 | `/agent-config` | — | 查看当前 provider、模型、Codex/Claude settings、MCP、skills 继承摘要 |
 | `/cancel <id>` | — | 终止运行中的任务 |
 | `/resume <id> <指令>` | — | 恢复之前的 session 继续执行（不能跨 provider 恢复） |
@@ -51,7 +55,11 @@ MiniClaw 面向单用户、本地 Mac 常驻运行。Discord 是入口和交付�
 - `cmb-credit-card-email`: 招商信用卡邮件消费解析。
 - `futu-stock`: 富途 OpenD 只读账户快照和持仓盈亏。
 - `eastmoney-jywg-readonly`: 东方财富 `jywg.18.cn` 只读账户快照和持仓盈亏。
+- `eastmoney-etf-premium`: 东方财富公开 ETF 折溢价补充数据，只能 enrich 已持仓 ETF。
 - `stock-portfolio`: 聚合多券商持仓，生成统一人民币口径盈亏、Top gainers/losers 和股票日报上下文。
+- `stock-pulse`: 组合持仓、watchlist 和行情 bar 的盘中异动扫描。
+- `market-intel` / `market-forecast-evaluation`: 市场证据采集、预测持久化和盘后校准。
+- `stock-watchlist-research`: 只研究 watchlist 且排除已持仓标的的买点分析。
 
 ## 架构
 
@@ -219,9 +227,9 @@ python3 scripts/update-cron-channels.py
 | 💹 STOCK | daily-stock-market（基础模板）；股票日报推荐按需拆为 daily-us-stock / daily-cn-stock |
 | 📰 NEWS | news-domestic / news-international / trending / tldr / monitor-github-repo |
 
-微信公众号日报 `daily-wechat-mp` 需要额外的公众号后台登录态和 `daily-wechat-article` 频道，默认不由模板脚本创建。配置方式见 [`docs/features/02-wechat-mp-provider.md`](docs/features/02-wechat-mp-provider.md)。
+微信公众号日报 `daily-wechat-mp` 需要额外的公众号后台登录态和 `daily-wechat-article` 频道，默认不由模板脚本创建。配置方式见 [`docs/providers/content.md`](docs/providers/content.md)。
 
-股票日报如果接入富途/东方财富，推荐使用 `stock-portfolio` 聚合 provider，并拆成 `daily-us-stock`、`daily-cn-stock` 两个频道。配置方式见 [`docs/features/10-stock-portfolio-provider.md`](docs/features/10-stock-portfolio-provider.md)。
+股票日报如果接入富途/东方财富，推荐使用 `stock-portfolio` 聚合 provider，并拆成 `daily-us-stock`、`daily-cn-stock` 两个频道。配置方式见 [`docs/providers/stock/README.md`](docs/providers/stock/README.md) 与 [`docs/providers/stock/research.md`](docs/providers/stock/research.md)。
 
 如果你想用**自己的**频道结构（而不是 hermes-style），跳过这两个脚本，直接 `vim ~/.miniclaw/cron/*.yaml` 改各自的 `channel: "<id>"`。
 
@@ -230,41 +238,43 @@ python3 scripts/update-cron-channels.py
 ## 项目结构
 
 ```
-src/
-├── index.ts              # 入口：初始化 DB → 注册命令 → 启动 Bot
-├── bot.ts                # Discord 事件监听 + 消息路由
-├── config.ts             # YAML + env layered 配置加载
-├── proxy.ts              # HTTP + WebSocket 代理注入
-├── agent/
-│   ├── chat.ts           # @mention/auto-reply 对话（Agent SDK）
-│   ├── codex.ts          # Codex SDK 封装
-│   ├── runtime-config.ts # /agent-config 运行时继承摘要
-│   ├── session.ts        # provider-prefixed session id
-│   └── task.ts           # /task 任务执行（Claude/Codex + 流式进度）
-├── commands/
-│   ├── register.ts       # Slash command 注册
-│   └── handlers.ts       # /task /status /cancel /resume 处理
-├── cron/                 # node-cron 调度、runner、state 持久化
-├── capabilities/
-│   └── email/            # 通用只读邮箱能力（IMAP、MIME 解析、脱敏、dedupe state）
-├── discord/
-│   ├── chunks.ts         # 消息分片（2000 字符 + 代码围栏平衡）
-│   ├── formatter.ts      # Embed 模板（启动/完成/失败/状态）
-│   └── progress.ts       # 进度更新推送（节流 + 编辑式）
-├── providers/
-│   ├── wechat-mp/        # 微信公众号 pre-provider
-│   ├── email-query/      # 通用邮件查询 pre-provider
-│   ├── cmb-credit-card-email/ # 招商信用卡邮件消费解析 pre-provider
-│   ├── eastmoney-jywg-readonly/ # 东方财富 jywg.18.cn 只读股票日报 pre-provider
-│   ├── futu-stock/       # 富途账户只读股票日报 pre-provider
-│   └── stock-portfolio/  # 聚合多个只读股票账户 provider，生成 CNY 盈亏汇总
-├── mcp/
-│   ├── eastmoney-jywg/   # 东方财富 jywg.18.cn 只读 MCP server
-│   └── futu-stock/       # 富途 OpenD 只读 MCP server
-├── memory/               # markdown 长期记忆
-├── stage/                # pnpm stage 多 agent TUI
-└── store/
-    └── db.ts             # SQLite 存储（tasks + chat_history）
+.
+├── src/                    # MiniClaw runtime 源码
+│   ├── index.ts            # 入口：初始化 DB、注册命令、启动 Bot、cron、doctor scheduler
+│   ├── bot.ts              # Discord client lifecycle，业务路由委托给 bot/*
+│   ├── config.ts           # 兼容 facade；实际 YAML/env/default 组装在 config/
+│   ├── proxy.ts            # HTTP + WebSocket 代理注入
+│   ├── agent/              # chat/task 执行、runner、runtime registry、Agent Run Manager
+│   │   ├── run-manager/    # managed multi-agent run、bus、scheduler、ACP/MCP bridge
+│   │   ├── runners/        # Claude/Codex/fake task runner
+│   │   └── runtimes/       # runtime interface adapter registry
+│   ├── bot/                # message、slash、button、thread continuation dispatch
+│   ├── commands/           # slash command 注册和 handlers
+│   ├── config/             # schema、env/YAML load、domain defaults、runtime freeze
+│   ├── cron/               # scheduler、active window、runner、retry alert、run history
+│   ├── capabilities/email/ # 通用只读邮箱 capability
+│   ├── discord/            # Discord formatter、chunks、task intake、trace attachment
+│   ├── im/                 # IM transport abstraction：Discord + Feishu outbound
+│   ├── runtime/            # agent runtime / IM transport / model client contracts
+│   ├── providers/          # pre_provider framework 和内容、邮箱、股票、市场研究 providers
+│   ├── mcp/                # Eastmoney/Futu/Agent Bus MCP servers
+│   ├── memory/             # markdown memory 解析、注入、维护
+│   ├── monitoring/         # connectivity monitor、watchdog、recovery outbox
+│   ├── notifications/      # macOS / SMTP fallback 通知
+│   ├── ops/                # doctor、doctor-repair、doctor-scheduler、safe-restart
+│   ├── privacy/            # diagnostic redaction helper
+│   ├── quality/            # docs/changelog/website quality gate helpers
+│   ├── routing/            # hard route、Smart Router、context/cwd resolution
+│   ├── stage/              # pnpm stage 多 agent TUI 和 ui/*
+│   └── store/              # SQLite schema、migrations、repositories、trace export
+├── scripts/                # setup、doctor、cron/provider CLI、quality gates
+├── docs/                   # implementation source of truth
+├── docs/zh/                # tracked Chinese docs mirror
+├── website/                # GitHub Pages presentation layer
+├── prompts/                # repo-owned prompt assets and templates
+├── agents/                 # repo-owned agent role cards
+├── personas/               # Stage persona cards
+└── config.example.yaml     # user config template
 ```
 
 ## 技术栈

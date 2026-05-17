@@ -41,7 +41,8 @@ flowchart LR
 
 - **Discord-native control plane**: chat, task intake, slash commands, cron reports, and failure recovery all land in Discord.
 - **Runtime boundary**: MiniClaw owns routing, context, progress, trace events, and delivery; Claude/Codex own agent execution.
-- **Provider-first reports**: WeChat, email, stock, and market providers produce structured context before the LLM summarizes anything, after scheduled cron passes the global active-window guard.
+- **Operator visibility**: task traces, cron run history, read-only doctor reports, and incident workflows are first-class slash-command surfaces.
+- **Provider-first reports**: content, email, stock, watchlist, pulse, and market-intel providers produce structured context before the LLM summarizes anything, after scheduled cron passes the global active-window guard.
 - **Local-first state**: user config, secrets, provider sessions, cron state, and SQLite data live outside the public repo.
 - **Docs-driven governance**: English repo docs are the canonical implementation record; Chinese docs mirror them with source-hash parity.
 - **Quality as architecture**: docs drift, website drift, bilingual parity, changelog drift, coverage, secrets, and cron E2E are executable gates.

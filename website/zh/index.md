@@ -41,7 +41,8 @@ flowchart LR
 
 - **Discord-native control plane**：chat、task intake、slash commands、cron reports 和 failure recovery 都通过 Discord 交互和留痕。
 - **Runtime boundary**：MiniClaw 负责 routing、context、progress、trace events 和 delivery；Claude/Codex 负责 agent execution。
-- **Provider-first reports**：WeChat、email、stock、market providers 先生成结构化上下文，再交给 LLM 汇总；scheduled cron 会先经过全局 active-window guard。
+- **Operator visibility**：task traces、cron run history、只读 doctor reports 和 incident workflows 都是 first-class slash-command surfaces。
+- **Provider-first reports**：content、email、stock、watchlist、pulse 和 market-intel providers 先生成结构化上下文，再交给 LLM 汇总；scheduled cron 会先经过全局 active-window guard。
 - **Local-first state**：用户配置、secrets、provider sessions、cron state 和 SQLite 数据都留在公开 repo 之外。
 - **Docs-driven governance**：英文 repo docs 是 canonical implementation record；中文 docs 通过 source-hash parity 跟随英文。
 - **Quality as architecture**：docs drift、website drift、bilingual parity、changelog drift、coverage、secrets 和 cron E2E 都是可执行 gate。
