@@ -3,11 +3,11 @@ doc_id: stock-provider-data-layer-migration
 lang: zh
 translation_of: docs/plans/2026-05-17-stock-provider-data-layer-migration.md
 translation_status: current
-source_sha256: 070584b222402f295c2ad64d794e9ee09b76a1e33bb640ce2ac363620a3f83fa
+source_sha256: e9c1eee15582dfa05e15493d728bd67adf649b8b71ac5a7875cfc06f646bb81a
 ---
 # Stock Provider 数据层迁移
 
-Status: in progress (compatibility + source/data cleanup completed)
+Status: in progress (compatibility + source/data cleanup completed; ownership cleanup pending)
 Date: 2026-05-17
 
 ## 背景
@@ -130,6 +130,250 @@ src/stock/
    - 只有 source adapters 在代码中存在后，才新增 source-family docs。
    - 只有 report composers 在代码中存在后，才新增 pipeline docs。
    - 不要在代码存在前把规划中的 module paths 写成已完成实现事实。
+
+## 剩余执行计划
+
+兼容迁移已经把主要 runtime entrypoints 移入 `src/stock/reports/*`，但只有当 stock domain code 不再依赖 `src/providers/*` 下的 stock-specific 文件时，迁移才算真正完成。下一阶段因此是 ownership cleanup，而不是继续做大范围目录搬迁。
+
+### 完成定义
+
+只有以下条件都成立时，本迁移才算完成：
+
+- `src/stock/sources/*`、`src/stock/data/*` 和 `src/stock/signals/*` 不再 import `src/providers/*` 下的 stock-specific modules。
+- `src/stock/reports/*` 可以 import generic provider framework contracts，但 stock-specific config/type/format ownership 要么属于 `src/stock/*`，要么由 thin provider wrapper 传入。
+- `src/providers/*` 下的每个 stock provider folder 只保留 compatibility exports、config loading、provider framework adapters、compatibility behavior tests，以及少量 provider-specific cron glue。
+- 现有 cron YAML provider names 和 config file locations 保持兼容。
+- 除非明确规划 schema version bump，否则 fixture output shape 不变。
+
+### Slice 0：Baseline And Dependency Guard
+
+目标：在移动代码前，让剩余迁移工作可度量。
+
+Actions：
+
+- 从 `src/providers/index.ts` 记录当前 stock provider compatibility list。
+- 用 `rg "../../providers|../../../providers|../../../../providers|../../../../../providers" src/stock --glob '*.ts'` 记录当前 reverse dependency count。
+- 新增或记录 guard expectation：`src/stock/sources`、`src/stock/data` 和 `src/stock/signals` 不允许 import stock-specific provider modules。
+- 暂时豁免 `src/stock/reports`，因为它仍是 cron-facing composer layer。
+
+Acceptance criteria：
+
+- reviewer 能清楚判断哪些 remaining imports 是允许的，哪些是 migration debt。
+- cleanup slice 的最终 PR 或 commit summary 中包含 baseline command。
+
+Verification：
+
+- `pnpm run typecheck`
+- `pnpm run quality:docs`
+
+Rollback：
+
+- 本 slice 只改文档；如果 guard wording 过严，直接回滚文档补充。
+
+### Slice 1：Move Stock Domain Types Out Of Providers
+
+目标：移除最大的耦合来源：当前由 provider folders 拥有的 stock data 和 signal types。
+
+Target moves：
+
+- `src/providers/stock-pulse/types.ts` -> stock-owned pulse/universe/quote types。
+- `src/providers/market-intel/types.ts` -> stock-owned market evidence、market snapshot、scoring 和 payload types。
+- `src/providers/stock-portfolio/types.ts` -> stock-owned portfolio aggregation 和 premium types。
+- `src/providers/market-forecast-evaluation/types.ts` -> stock-owned forecast evaluation types。
+- `src/providers/market-context/types.ts` -> stock-owned market memory/report context types。
+- `src/providers/futu-stock/types.ts`、`src/providers/eastmoney-jywg-readonly/types.ts` 和 `src/providers/eastmoney-etf-premium/types.ts` -> 相关 `src/stock/sources/*`、`src/stock/data/*` 或 `src/stock/reports/*` 模块下的 source/report payload types。
+
+Implementation approach：
+
+- 如果单个 flat `src/stock/types.ts` 会过宽，优先使用 module-local stock type files。例如 `src/stock/data/portfolio-types.ts`、`src/stock/data/market-intel-types.ts`、`src/stock/signals/forecast-evaluation-types.ts` 都是可接受的。
+- `src/providers/*/types.ts` 在一个迁移周期内保留为 compatibility re-export files。
+- 先更新所有 non-provider imports，再更新 provider tests。
+- 本 slice 不改变 runtime payload schema。
+
+Acceptance criteria：
+
+- `src/stock/sources/*`、`src/stock/data/*` 和 `src/stock/signals/*` 不再 import provider `types.ts`。
+- Provider `types.ts` files 要么消失，要么变成 pure re-export compatibility facades。
+- 不修改 cron config 或 runtime provider name。
+
+Verification：
+
+- `pnpm vitest run src/providers/stock-portfolio src/providers/stock-pulse src/providers/market-intel src/providers/market-context src/providers/market-forecast-evaluation src/providers/stock-watchlist-research`
+- `pnpm vitest run src/mcp/futu-stock src/mcp/eastmoney-jywg src/mcp/eastmoney-myfavor`
+- `pnpm run typecheck`
+
+Rollback：
+
+- 回滚 type move，同时保留之前 provider-owned type files。
+
+### Slice 2：Move Portfolio Data Semantics Into Data Domain
+
+目标：让 `src/stock/data/portfolio.ts` 成为真正的 data-domain module，而不是 provider formatting 的 re-export。
+
+Target moves：
+
+- 将 portfolio payload construction、CNY rollup、FX conversion、source compaction、source error redaction 和 position premium merge logic 从 `src/providers/stock-portfolio/format.ts` 移入 `src/stock/data/portfolio.ts` 或更小的 `src/stock/data/portfolio-*` modules。
+- 将 asset classification guidance 的 data 部分移入 `src/stock/data/portfolio.ts` 或 dedicated portfolio classification module。
+- 最终 JSON string formatting 可以留在 `src/stock/reports/stock-portfolio.ts`，也可以作为命名清晰的 data-domain serializer。
+
+Provider boundary after slice：
+
+- `src/providers/stock-portfolio/format.ts` 应删除，或降级为 compatibility re-export。
+- `src/stock/reports/stock-portfolio.ts` 应从 `src/stock/data/portfolio*` import portfolio domain functions，而不是从 provider format files import。
+
+Acceptance criteria：
+
+- `src/stock/data/portfolio.ts` 不再 import `../../providers/stock-portfolio/format.js`。
+- Portfolio tests 仍覆盖 `position_premium_summary`、CNY rollup、source error handling 和 redacted source payload behavior。
+- 现有 daily stock summary 和 A/H stock cron payloads 保持 schema-compatible。
+
+Verification：
+
+- `pnpm vitest run src/providers/stock-portfolio src/providers/futu-stock src/providers/eastmoney-jywg-readonly src/providers/eastmoney-etf-premium`
+- `pnpm run typecheck`
+
+Rollback：
+
+- 恢复 provider format module 作为 implementation source，并让 stock data module 继续作为 facade。
+
+### Slice 3：Move Portfolio Visualization And Classification Signals
+
+目标：从 `src/providers/stock-portfolio` 移除非 provider 的 chart 和 classification logic。
+
+Target moves：
+
+- 如果把 `src/providers/stock-portfolio/pie-chart.ts` 视为 report rendering，则迁到 `src/stock/reports/portfolio-pie-chart.ts`；如果 classification 会被复用，则拆成 `src/stock/signals/portfolio-allocation.ts` 加 report renderer。
+- PNG file output 的 runtime storage 路径保持不变。
+- `runStockPortfolioProvider` 的 chart attachment behavior 保持不变。
+
+Acceptance criteria：
+
+- 没有 stock report import `../../providers/stock-portfolio/pie-chart.js`。
+- Pie chart model tests 继续覆盖 domestic equity、overseas equity、bond buckets、gold、cash、unclassified assets、label ordering 和 rendering。
+- Runtime attachment metadata 保持不变。
+
+Verification：
+
+- `pnpm vitest run src/providers/stock-portfolio/__tests__/pie-chart.test.ts src/providers/stock-portfolio/__tests__/index.test.ts`
+- `pnpm run typecheck`
+
+Rollback：
+
+- 在旧 provider path re-export 已迁移 chart module 一个迁移周期。
+
+### Slice 4：Move Market Intel Formatting And Calibration Ownership
+
+目标：把 market-intel payload assembly、data quality assembly 和 calibration logic 放到 stock-owned data/signal/report modules。
+
+Target moves：
+
+- 将 `src/providers/market-intel/format.ts` 的 payload builders 移入 `src/stock/reports/market-intel-format.ts`，或把可复用 data quality logic 拆入 `src/stock/data/market-evidence.ts`。
+- 将 `src/providers/market-intel/calibration.ts` 移入 `src/stock/signals/market-intel-calibration.ts`。
+- 更新 `src/stock/signals/market-intel.ts`、`src/stock/reports/market-intel.ts` 和 `src/stock/reports/watchlist-research.ts`，从 stock-owned modules import calibration 和 payload builders。
+- 除非重新设计 provider config ownership，否则 `src/providers/market-intel/config.ts` 继续负责 provider config loading。
+
+Acceptance criteria：
+
+- `src/stock/signals/market-intel.ts` 不再 import provider calibration。
+- `src/stock/reports/market-intel.ts` 不再 import provider format helpers。
+- Market-intel fixtures 继续证明 data quality、evidence IDs、role protocol、scoring 和 skip behavior。
+
+Verification：
+
+- `pnpm vitest run src/providers/market-intel src/providers/stock-watchlist-research`
+- `pnpm run typecheck`
+
+Rollback：
+
+- 如有需要，让旧 provider `format.ts` 和 `calibration.ts` 作为 compatibility re-exports 保留。
+
+### Slice 5：Move Forecast Evaluation Calibration Into Signals
+
+目标：让 forecast evaluation reliability、calibration summary 和 scoring helpers 对齐 Signal / Intelligence layer。
+
+Target moves：
+
+- 将 `src/providers/market-forecast-evaluation/calibration.ts` 移入 `src/stock/signals/forecast-calibration.ts`。
+- Forecast persistence 继续留在 `src/store/market-forecasts.ts`。
+- `market-forecast-evaluation` provider 的 report generation 继续留在 `src/stock/reports/forecast-evaluation.ts`。
+
+Acceptance criteria：
+
+- Calibration computation 从 `src/stock/signals/*` import，而不是从 provider folders import。
+- Forecast evaluation output 和 market-intel calibration file generation 保持兼容。
+
+Verification：
+
+- `pnpm vitest run src/providers/market-forecast-evaluation src/providers/market-intel`
+- `pnpm run typecheck`
+
+Rollback：
+
+- 从旧 provider path re-export 已迁移 calibration functions，直到 downstream imports 完成更新。
+
+### Slice 6：Move Broker Report Payload Builders To Stock Sources Or Reports
+
+目标：从 provider folders 移除 broker-specific report payload construction，同时保持 readonly safety 和 redaction 不变。
+
+Target moves：
+
+- 将 `src/providers/futu-stock/format.ts` 移入 `src/stock/reports/futu-stock-format.ts`；或者把 broker snapshot normalization 拆入 `src/stock/sources/futu`，final payload formatting 放入 `src/stock/reports/futu-stock`。
+- 将 `src/providers/eastmoney-jywg-readonly/format.ts` 移入 `src/stock/reports/eastmoney-jywg-readonly-format.ts`；或者拆分 source normalization 和 report formatting。
+- MCP/raw broker clients 继续留在 `src/mcp/*`，source adapter facades 继续留在 `src/stock/sources/*`。
+
+Acceptance criteria：
+
+- `src/stock/reports/futu-stock.ts` 和 `src/stock/reports/eastmoney-jywg-readonly.ts` 不再 import provider format files。
+- Redaction 和 readonly safety tests 保持通过。
+- trusted cron configs 的 exact/private redaction behavior 不变。
+
+Verification：
+
+- `pnpm vitest run src/mcp/futu-stock src/mcp/eastmoney-jywg src/providers/futu-stock src/providers/eastmoney-jywg-readonly`
+- `pnpm run typecheck`
+
+Rollback：
+
+- 旧 provider `format.ts` files 作为 compatibility re-exports 保留一个迁移周期。
+
+### Slice 7：Thin Provider Folders And Tighten Boundaries
+
+目标：让 stock provider folders 成为真正的 cron compatibility facades。
+
+Actions：
+
+- 将 stock provider folders 收敛到 `index.ts`、`config.ts`、可选 `types.ts` re-export facades 和 compatibility tests。
+- 决定 provider `config.ts` 是否永久留在 `src/providers/*`，因为 config files 是 provider-named；或者将 config loaders 移到 `src/stock/reports/config/*` 并由 provider facades re-export。
+- 只有代码证明最终边界后，才更新 docs 描述。
+- 如果 repo quality-gate 风格支持，新增 static dependency check。
+
+Acceptance criteria：
+
+- 重新运行 `find src/providers -maxdepth 2 -type f | rg '(stock|market|eastmoney|futu)'` 时，provider folders 下不再出现 source/data/signal implementation files。
+- `rg "../../providers|../../../providers|../../../../providers|../../../../../providers" src/stock/sources src/stock/data src/stock/signals --glob '*.ts'` 不返回 stock-specific provider imports。
+- `src/providers/index.ts` 仍是 cron provider names 的唯一 central registry。
+
+Verification：
+
+- `pnpm run typecheck`
+- `pnpm run lint`
+- `pnpm test`
+- `pnpm run e2e:cron`
+- `pnpm run quality:docs`
+
+Rollback：
+
+- 先恢复 provider facade re-exports；rollback 期间避免修改 cron YAML 或 runtime config paths。
+
+### 推荐 Commit 边界
+
+- Commit 1：docs/baseline guard 与 type ownership move。
+- Commit 2：portfolio data 与 chart ownership cleanup。
+- Commit 3：market-intel 与 forecast calibration cleanup。
+- Commit 4：broker payload builder cleanup。
+- Commit 5：final provider-folder thinning 与 docs sync。
+
+每个 commit 都应保持 runtime provider names 稳定，并在最终 verification notes 中包含该 slice 的 focused test commands。
 
 ## 验证计划
 

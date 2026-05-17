@@ -27,6 +27,7 @@
 ### Changed
 - 以 English canonical 重写当前核心 docs：`docs/README.md`、`docs/architecture.md`、`docs/bot-routing.md`、`docs/chat-router-current-logic.md`、`docs/install-distribution-strategy.md`、`docs/prompts.md` 和 `docs/quality-gates.md`；对应中文 mirror 同步为 `docs/zh/**`。
 - 润色 `docs/zh/**` 中文 mirror 的章节标题和高频机器翻译术语，并标记受影响中文 website summary 为语义未变。
+- 扩展 stock provider 数据层迁移计划，补充 ownership cleanup 的分阶段执行清单、验收标准、验证命令和回滚策略，并同步中文 mirror。
 - 新增股票 `market-context` rolling memory provider，用于每日维护 A 股、港股、美股和跨市场长期摘要，并通过 cron `pre_context_providers` 注入股票任务。
 - 股票 provider 实现迁移到 `src/stock/` 四层结构：`src/providers/*/index.ts` 保持 cron 兼容入口，Source Adapter、Data Domain、Signal / Intelligence 和 Report Composer 逻辑进入 `src/stock/sources`、`src/stock/data`、`src/stock/signals` 和 `src/stock/reports`。
 - 继续收敛股票 provider 数据边界：`stock-pulse` universe/watchlist source、market-intel calendar/quotes/portfolio/official collectors、Eastmoney ETF premium client 和 Yahoo watchlist research client 从 `src/providers/*` 迁入 `src/stock/data` 与 `src/stock/sources`。

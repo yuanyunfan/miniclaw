@@ -1,6 +1,6 @@
 # Stock Provider Data-Layer Migration
 
-Status: in progress (compatibility + source/data cleanup completed)
+Status: in progress (compatibility + source/data cleanup completed; ownership cleanup pending)
 Date: 2026-05-17
 
 ## Background
@@ -123,6 +123,250 @@ Layer responsibilities:
    - Add source-family docs only after the source adapters exist in code.
    - Add pipeline docs only after report composers exist in code.
    - Do not document planned module paths as completed implementation facts before the code exists.
+
+## Remaining Execution Plan
+
+The compatibility migration already moved the main runtime entrypoints into `src/stock/reports/*`, but the migration is not complete until stock domain code no longer depends on stock-specific files under `src/providers/*`. The next execution plan is therefore an ownership cleanup, not another broad directory shuffle.
+
+### Completion Definition
+
+The migration is complete only when all of these are true:
+
+- `src/stock/sources/*`, `src/stock/data/*`, and `src/stock/signals/*` do not import stock-specific modules from `src/providers/*`.
+- `src/stock/reports/*` may import the generic provider framework contracts, but stock-specific config/type/format ownership either lives in `src/stock/*` or is passed in from a thin provider wrapper.
+- Each stock provider folder under `src/providers/*` contains only compatibility exports, config loading, provider framework adapters, tests for compatibility behavior, and small provider-specific cron glue.
+- Existing cron YAML provider names and config file locations remain compatible.
+- Fixture output shape is unchanged unless a planned schema version bump is explicitly documented.
+
+### Slice 0: Baseline And Dependency Guard
+
+Goal: make the remaining work measurable before moving code.
+
+Actions:
+
+- Record the current stock provider compatibility list from `src/providers/index.ts`.
+- Record the current reverse dependency count with `rg "../../providers|../../../providers|../../../../providers|../../../../../providers" src/stock --glob '*.ts'`.
+- Add or document a guard expectation that `src/stock/sources`, `src/stock/data`, and `src/stock/signals` must not import stock-specific provider modules.
+- Keep `src/stock/reports` temporarily exempt because it is still the cron-facing composer layer.
+
+Acceptance criteria:
+
+- A reviewer can tell exactly which remaining imports are allowed and which are migration debt.
+- The baseline command is included in the final PR or commit summary for the cleanup slice.
+
+Verification:
+
+- `pnpm run typecheck`
+- `pnpm run quality:docs`
+
+Rollback:
+
+- Documentation-only slice; revert the docs addition if the guard wording proves too strict.
+
+### Slice 1: Move Stock Domain Types Out Of Providers
+
+Goal: remove the largest coupling source: stock data and signal types currently owned by provider folders.
+
+Target moves:
+
+- `src/providers/stock-pulse/types.ts` -> stock-owned pulse/universe/quote types.
+- `src/providers/market-intel/types.ts` -> stock-owned market evidence, market snapshot, scoring, and payload types.
+- `src/providers/stock-portfolio/types.ts` -> stock-owned portfolio aggregation and premium types.
+- `src/providers/market-forecast-evaluation/types.ts` -> stock-owned forecast evaluation types.
+- `src/providers/market-context/types.ts` -> stock-owned market memory/report context types.
+- `src/providers/futu-stock/types.ts`, `src/providers/eastmoney-jywg-readonly/types.ts`, and `src/providers/eastmoney-etf-premium/types.ts` -> source/report payload types under the relevant `src/stock/sources/*`, `src/stock/data/*`, or `src/stock/reports/*` module.
+
+Implementation approach:
+
+- Prefer module-local stock type files when a single flat `src/stock/types.ts` would become too broad. For example, `src/stock/data/portfolio-types.ts`, `src/stock/data/market-intel-types.ts`, and `src/stock/signals/forecast-evaluation-types.ts` are acceptable.
+- Keep `src/providers/*/types.ts` as compatibility re-export files for one migration cycle.
+- Update all non-provider imports first, then update provider tests.
+- Do not change runtime payload schema in this slice.
+
+Acceptance criteria:
+
+- `src/stock/sources/*`, `src/stock/data/*`, and `src/stock/signals/*` no longer import provider `types.ts`.
+- Provider `types.ts` files either disappear or become pure re-export compatibility facades.
+- No cron config or runtime provider name changes.
+
+Verification:
+
+- `pnpm vitest run src/providers/stock-portfolio src/providers/stock-pulse src/providers/market-intel src/providers/market-context src/providers/market-forecast-evaluation src/providers/stock-watchlist-research`
+- `pnpm vitest run src/mcp/futu-stock src/mcp/eastmoney-jywg src/mcp/eastmoney-myfavor`
+- `pnpm run typecheck`
+
+Rollback:
+
+- Revert the type move while keeping the previous provider-owned type files intact.
+
+### Slice 2: Move Portfolio Data Semantics Into Data Domain
+
+Goal: make `src/stock/data/portfolio.ts` a real data-domain module instead of a re-export of provider formatting.
+
+Target moves:
+
+- Move portfolio payload construction, CNY rollup, FX conversion, source compaction, source error redaction, and position premium merge logic from `src/providers/stock-portfolio/format.ts` into `src/stock/data/portfolio.ts` or smaller `src/stock/data/portfolio-*` modules.
+- Move the data part of asset classification guidance into `src/stock/data/portfolio.ts` or a dedicated portfolio classification module.
+- Keep final JSON string formatting either in `src/stock/reports/stock-portfolio.ts` or as a data-domain serializer with a clear name.
+
+Provider boundary after slice:
+
+- `src/providers/stock-portfolio/format.ts` should either be removed or reduced to a compatibility re-export.
+- `src/stock/reports/stock-portfolio.ts` should import portfolio domain functions from `src/stock/data/portfolio*`, not from provider format files.
+
+Acceptance criteria:
+
+- `src/stock/data/portfolio.ts` no longer imports `../../providers/stock-portfolio/format.js`.
+- Portfolio tests still prove `position_premium_summary`, CNY rollup, source error handling, and redacted source payload behavior.
+- Existing daily stock summary and A/H stock cron payloads remain schema-compatible.
+
+Verification:
+
+- `pnpm vitest run src/providers/stock-portfolio src/providers/futu-stock src/providers/eastmoney-jywg-readonly src/providers/eastmoney-etf-premium`
+- `pnpm run typecheck`
+
+Rollback:
+
+- Restore the provider format module as the implementation source and leave the stock data module as a facade.
+
+### Slice 3: Move Portfolio Visualization And Classification Signals
+
+Goal: remove non-provider chart and classification logic from `src/providers/stock-portfolio`.
+
+Target moves:
+
+- Move `src/providers/stock-portfolio/pie-chart.ts` into `src/stock/reports/portfolio-pie-chart.ts` if treated as report rendering, or `src/stock/signals/portfolio-allocation.ts` plus a report renderer if classification is reused.
+- Keep PNG file output under runtime storage unchanged.
+- Keep chart attachment behavior in `runStockPortfolioProvider`.
+
+Acceptance criteria:
+
+- No stock report imports `../../providers/stock-portfolio/pie-chart.js`.
+- Pie chart model tests still cover domestic equity, overseas equity, bond buckets, gold, cash, unclassified assets, label ordering, and rendering.
+- Runtime attachment metadata remains unchanged.
+
+Verification:
+
+- `pnpm vitest run src/providers/stock-portfolio/__tests__/pie-chart.test.ts src/providers/stock-portfolio/__tests__/index.test.ts`
+- `pnpm run typecheck`
+
+Rollback:
+
+- Re-export the moved chart module from the old provider path for one migration cycle.
+
+### Slice 4: Move Market Intel Formatting And Calibration Ownership
+
+Goal: put market-intel payload assembly, data quality assembly, and calibration logic under stock-owned data/signal/report modules.
+
+Target moves:
+
+- Move `src/providers/market-intel/format.ts` payload builders into `src/stock/reports/market-intel-format.ts` or split reusable data quality logic into `src/stock/data/market-evidence.ts`.
+- Move `src/providers/market-intel/calibration.ts` into `src/stock/signals/market-intel-calibration.ts`.
+- Update `src/stock/signals/market-intel.ts`, `src/stock/reports/market-intel.ts`, and `src/stock/reports/watchlist-research.ts` to import calibration and payload builders from stock-owned modules.
+- Keep provider config loading in `src/providers/market-intel/config.ts` unless and until provider config ownership is redesigned.
+
+Acceptance criteria:
+
+- `src/stock/signals/market-intel.ts` no longer imports provider calibration.
+- `src/stock/reports/market-intel.ts` no longer imports provider format helpers.
+- Market-intel fixtures continue to prove data quality, evidence IDs, role protocol, scoring, and skip behavior.
+
+Verification:
+
+- `pnpm vitest run src/providers/market-intel src/providers/stock-watchlist-research`
+- `pnpm run typecheck`
+
+Rollback:
+
+- Keep old provider `format.ts` and `calibration.ts` as compatibility re-exports if needed.
+
+### Slice 5: Move Forecast Evaluation Calibration Into Signals
+
+Goal: align forecast evaluation reliability, calibration summary, and scoring helpers with the Signal / Intelligence layer.
+
+Target moves:
+
+- Move `src/providers/market-forecast-evaluation/calibration.ts` into `src/stock/signals/forecast-calibration.ts`.
+- Keep forecast persistence in `src/store/market-forecasts.ts`.
+- Keep `market-forecast-evaluation` provider report generation in `src/stock/reports/forecast-evaluation.ts`.
+
+Acceptance criteria:
+
+- Calibration computation imports from `src/stock/signals/*`, not provider folders.
+- Forecast evaluation output and market-intel calibration file generation remain compatible.
+
+Verification:
+
+- `pnpm vitest run src/providers/market-forecast-evaluation src/providers/market-intel`
+- `pnpm run typecheck`
+
+Rollback:
+
+- Re-export moved calibration functions from the old provider path until downstream imports are updated.
+
+### Slice 6: Move Broker Report Payload Builders To Stock Sources Or Reports
+
+Goal: remove broker-specific report payload construction from provider folders while keeping readonly safety and redaction intact.
+
+Target moves:
+
+- Move `src/providers/futu-stock/format.ts` into `src/stock/reports/futu-stock-format.ts` or split broker snapshot normalization into `src/stock/sources/futu` and final payload formatting into `src/stock/reports/futu-stock`.
+- Move `src/providers/eastmoney-jywg-readonly/format.ts` into `src/stock/reports/eastmoney-jywg-readonly-format.ts` or split source normalization from report formatting.
+- Keep MCP/raw broker clients under `src/mcp/*` and source adapter facades under `src/stock/sources/*`.
+
+Acceptance criteria:
+
+- `src/stock/reports/futu-stock.ts` and `src/stock/reports/eastmoney-jywg-readonly.ts` do not import provider format files.
+- Redaction and readonly safety tests remain green.
+- Exact/private redaction behavior is unchanged for trusted cron configs.
+
+Verification:
+
+- `pnpm vitest run src/mcp/futu-stock src/mcp/eastmoney-jywg src/providers/futu-stock src/providers/eastmoney-jywg-readonly`
+- `pnpm run typecheck`
+
+Rollback:
+
+- Leave old provider `format.ts` files as compatibility re-exports for one migration cycle.
+
+### Slice 7: Thin Provider Folders And Tighten Boundaries
+
+Goal: make stock provider folders true cron compatibility facades.
+
+Actions:
+
+- Reduce stock provider folders to `index.ts`, `config.ts`, optional `types.ts` re-export facades, and compatibility tests.
+- Decide whether provider `config.ts` stays in `src/providers/*` permanently because config files are provider-named, or whether config loaders move to `src/stock/reports/config/*` with provider facades.
+- Update docs to describe the final boundary only after code proves it.
+- Add a static dependency check if the repo quality-gate style supports it.
+
+Acceptance criteria:
+
+- A fresh `find src/providers -maxdepth 2 -type f | rg '(stock|market|eastmoney|futu)'` shows no source/data/signal implementation files under provider folders.
+- `rg "../../providers|../../../providers|../../../../providers|../../../../../providers" src/stock/sources src/stock/data src/stock/signals --glob '*.ts'` returns no stock-specific provider imports.
+- `src/providers/index.ts` remains the only central registry for cron provider names.
+
+Verification:
+
+- `pnpm run typecheck`
+- `pnpm run lint`
+- `pnpm test`
+- `pnpm run e2e:cron`
+- `pnpm run quality:docs`
+
+Rollback:
+
+- Restore provider facade re-exports first; avoid changing cron YAML or runtime config paths during rollback.
+
+### Recommended Commit Boundaries
+
+- Commit 1: docs/baseline guard and type ownership move.
+- Commit 2: portfolio data and chart ownership cleanup.
+- Commit 3: market-intel and forecast calibration cleanup.
+- Commit 4: broker payload builder cleanup.
+- Commit 5: final provider-folder thinning and docs sync.
+
+Each commit should keep the runtime provider names stable and include the focused test commands for that slice in the final verification notes.
 
 ## Verification Plan
 
