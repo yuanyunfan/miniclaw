@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyzeWebsiteDocs } from "../website-docs.js";
+import { analyzeWebsiteDocs, parseWebsiteDocsAck } from "../website-docs.js";
 
 describe("website docs checks", () => {
   it("requires source_docs on non-landing pages", () => {
@@ -20,7 +20,7 @@ status: public-summary
     expect(result.findings).toEqual([
       {
         path: "website/en/design/architecture.md",
-        reason: "website page must declare source_docs unless status is landing",
+        reason: "website page must declare source_docs or trace_docs unless status is landing",
       },
     ]);
   });
@@ -55,6 +55,7 @@ source_docs:
     expect(result.affectedPages).toEqual([
       { page: "website/en/design/architecture.md", source: "docs/architecture.md" },
     ]);
+    expect(result.tracePages).toEqual([]);
   });
 
   it("passes affected pages when the website page is changed in the same patch", () => {
@@ -82,6 +83,7 @@ source_docs:
     expect(result.affectedPages).toEqual([
       { page: "website/en/design/architecture.md", source: "docs/architecture.md" },
     ]);
+    expect(result.tracePages).toEqual([]);
   });
 
   it("uses the website page language when checking affected source_docs", () => {
@@ -107,9 +109,10 @@ source_docs:
 
     expect(result.findings).toEqual([]);
     expect(result.affectedPages).toEqual([]);
+    expect(result.tracePages).toEqual([]);
   });
 
-  it("passes affected pages with an explicit unaffected override", () => {
+  it("does not let legacy page-frontmatter unaffected override bypass blocking source docs", () => {
     const result = analyzeWebsiteDocs({
       pages: [
         {
@@ -130,9 +133,114 @@ source_docs:
       sourceExists: (path) => path === "docs/architecture.md",
     });
 
+    expect(result.findings).toEqual([
+      {
+        path: "website/en/design/architecture.md",
+        reason: "canonical source changed without website update: docs/architecture.md",
+      },
+    ]);
+    expect(result.affectedPages).toEqual([
+      { page: "website/en/design/architecture.md", source: "docs/architecture.md" },
+    ]);
+    expect(result.tracePages).toEqual([]);
+  });
+
+  it("reports trace-only docs without failing", () => {
+    const result = analyzeWebsiteDocs({
+      pages: [
+        {
+          path: "website/en/capabilities/runtime.md",
+          text: `---
+status: public-summary
+trace_docs:
+  en:
+    - docs/runtime/README.md
+---
+# Runtime
+`,
+        },
+      ],
+      changedPaths: ["docs/runtime/README.md"],
+      sourceExists: (path) => path === "docs/runtime/README.md",
+    });
+
+    expect(result.findings).toEqual([]);
+    expect(result.affectedPages).toEqual([]);
+    expect(result.tracePages).toEqual([
+      { page: "website/en/capabilities/runtime.md", source: "docs/runtime/README.md" },
+    ]);
+  });
+
+  it("passes blocking docs with a same-patch central unaffected ack", () => {
+    const result = analyzeWebsiteDocs({
+      pages: [
+        {
+          path: "website/en/design/architecture.md",
+          text: `---
+status: public-summary
+source_docs:
+  en:
+    - docs/architecture.md
+---
+# Architecture
+`,
+        },
+      ],
+      changedPaths: ["docs/architecture.md", ".website-docs-drift-ack.md"],
+      ackPathChanged: true,
+      ackText: "- page=website/en/design/architecture.md source=docs/architecture.md reason=internal implementation detail only\n",
+      sourceExists: (path) => path === "docs/architecture.md",
+    });
+
     expect(result.findings).toEqual([]);
     expect(result.affectedPages).toEqual([
       { page: "website/en/design/architecture.md", source: "docs/architecture.md" },
+    ]);
+    expect(result.tracePages).toEqual([]);
+  });
+
+  it("does not apply central unaffected ack unless the ack file changed", () => {
+    const result = analyzeWebsiteDocs({
+      pages: [
+        {
+          path: "website/en/design/architecture.md",
+          text: `---
+status: public-summary
+source_docs:
+  en:
+    - docs/architecture.md
+---
+# Architecture
+`,
+        },
+      ],
+      changedPaths: ["docs/architecture.md"],
+      ackPathChanged: false,
+      ackText: "- page=website/en/design/architecture.md source=docs/architecture.md reason=internal implementation detail only\n",
+      sourceExists: (path) => path === "docs/architecture.md",
+    });
+
+    expect(result.findings).toEqual([
+      {
+        path: "website/en/design/architecture.md",
+        reason: "canonical source changed without website update: docs/architecture.md",
+      },
+    ]);
+  });
+
+  it("parses central unaffected ack entries", () => {
+    const parsed = parseWebsiteDocsAck(`
+# same-patch notes
+- page=website/en/index.md source=docs/runtime/README.md reason=internal runtime detail only
+`);
+
+    expect(parsed.findings).toEqual([]);
+    expect(parsed.acks).toEqual([
+      {
+        page: "website/en/index.md",
+        source: "docs/runtime/README.md",
+        reason: "internal runtime detail only",
+      },
     ]);
   });
 
@@ -156,8 +264,8 @@ source_docs:
     });
 
     expect(result.findings.map((finding) => finding.reason)).toEqual([
-      "source_docs must not point to private docs: docs/private/eastmoney/session.md",
-      "archive source_docs require status: history: docs/archive/old.md",
+      "website source references must not point to private docs: docs/private/eastmoney/session.md",
+      "archive website source references require status: history: docs/archive/old.md",
     ]);
   });
 });

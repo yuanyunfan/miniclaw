@@ -2,11 +2,14 @@
 status: public-summary
 source_docs:
   en:
-    - docs/architecture.md
     - docs/plans/2026-05-15-documentation-strategy.md
   zh:
-    - docs/zh/architecture.zh.md
     - docs/zh/plans/2026-05-15-documentation-strategy.zh.md
+trace_docs:
+  en:
+    - docs/architecture.md
+  zh:
+    - docs/zh/architecture.zh.md
 ---
 
 # Architecture
@@ -81,4 +84,4 @@ flowchart TD
   Recover --> Persist
 ```
 
-Legacy feature stubs have been merged and removed. Current implementation facts belong in runtime, provider, experiment, and reference docs, then flow into this website through `source_docs`.
+Legacy feature stubs have been merged and removed. Current implementation facts belong in runtime, provider, experiment, and reference docs, then flow into this website through public-impact or trace-only source references.

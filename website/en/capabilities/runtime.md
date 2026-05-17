@@ -1,6 +1,6 @@
 ---
 status: public-summary
-source_docs:
+trace_docs:
   en:
     - docs/runtime/README.md
     - docs/bot-routing.md

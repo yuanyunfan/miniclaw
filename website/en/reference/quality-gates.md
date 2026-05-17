@@ -33,7 +33,7 @@ flowchart LR
 
 - **`quality:docs:drift`** checks implementation-to-docs invariants.
 - **`quality:docs-i18n`** checks bilingual doc pairing, metadata, heading shape, language split, and source-hash parity.
-- **`quality:website-docs`** checks website `source_docs` traceability and affected-page updates.
+- **`quality:website-docs`** keeps website summaries tied to repo docs without forcing internal implementation updates into public copy.
 - **`quality:changelog`** blocks release-visible changes that do not update `CHANGELOG.md`.
 - **`quality:commit`** is the staged gate for normal local commits.
 - **`quality:push`** expands into build, coverage, cron E2E, full-tree safety, secrets, and dependency checks.
@@ -43,10 +43,12 @@ flowchart LR
 ```mermaid
 flowchart TD
   Source[Repo Source Docs] --> Page[Website Page]
-  Page --> Frontmatter[source_docs]
-  Frontmatter --> Gate[quality:website-docs]
+  Page --> PublicImpact[source_docs]
+  Page --> TraceOnly[trace_docs]
+  PublicImpact --> Gate[quality:website-docs]
+  TraceOnly --> Gate
   Gate --> Artifact[GitHub Pages Artifact]
   Artifact --> Pages[GitHub Pages Deploy]
 ```
 
-The Pages workflow builds and validates the site every time. Deployment runs when GitHub Pages is enabled for the repository; otherwise the workflow uploads the built artifact for review.
+The Pages workflow builds and validates the site every time. Source changes that alter public summaries should update website pages; trace-only changes are reported for review without blocking the site.

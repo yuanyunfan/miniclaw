@@ -3,6 +3,10 @@ status: public-summary
 source_docs:
   en:
     - docs/providers/README.md
+  zh:
+    - docs/zh/providers/README.zh.md
+trace_docs:
+  en:
     - docs/providers/provider-framework.md
     - docs/providers/content.md
     - docs/providers/email.md
@@ -10,7 +14,6 @@ source_docs:
     - docs/providers/stock/eastmoney.md
     - docs/providers/stock/research.md
   zh:
-    - docs/zh/providers/README.zh.md
     - docs/zh/providers/provider-framework.zh.md
     - docs/zh/providers/content.zh.md
     - docs/zh/providers/email.zh.md

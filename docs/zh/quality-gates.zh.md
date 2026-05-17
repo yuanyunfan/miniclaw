@@ -3,7 +3,7 @@ doc_id: quality-gates
 lang: zh
 translation_of: docs/quality-gates.md
 translation_status: current
-source_sha256: 71a8989681f3febb37c94dbfd79ba04bf0af766505c9b3a70c77b94632f78777
+source_sha256: 50ab872c9c638fd3785e213225ed77ed0cf30a450bf3e89c04b8666dcd37a0c7
 ---
 # MiniClaw 质量门禁
 
@@ -195,7 +195,16 @@ archive 和 private docs 默认排除在 required bilingual parity 外，除非 
 
 目的：保持 GitHub Pages presentation content 与 canonical repo docs 绑定。
 
-`pnpm run quality:website-docs` 检查 website frontmatter 和 `source_docs` references。website pages 只是 presentation layer；不能替代 `docs/` 作为 implementation source of truth。
+`pnpm run quality:website-docs` 检查 website frontmatter 和 source references。website pages 只是 presentation layer；不能替代 `docs/` 作为 implementation source of truth。
+
+website 更新应该只服务 public-impact 变化，而不是 routine implementation bookkeeping。小 fix 应更新 code、focused tests、canonical docs 和 changelog；除非 public summary 已经不准确，否则不要编辑 `website/**`。只有 public capability、install/config workflow、用户可见行为，或 website 既有表述变化时，才更新 website pages。
+
+website pages 可以声明两类来源：
+
+- `source_docs`：public-impact sources。这些 source 变化时，gate 会要求更新 website page，或显式确认 website 不受影响。
+- `trace_docs`：trace-only sources。这些 source 变化时只提示 review，不阻塞 gate。
+
+如果 `source_docs` 变化不影响 public website copy，应通过 `.website-docs-drift-ack.md` 记录这个判断，而不是修改 website frontmatter 或把实现细节写进页面正文。
 
 ## G2：Secrets 与依赖
 

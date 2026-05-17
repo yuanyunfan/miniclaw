@@ -3,12 +3,15 @@ status: landing
 source_docs:
   en:
     - README.en.md
+  zh:
+    - README.md
+trace_docs:
+  en:
     - docs/architecture.md
     - docs/runtime/README.md
     - docs/providers/README.md
     - docs/quality-gates.md
   zh:
-    - README.md
     - docs/zh/architecture.zh.md
     - docs/zh/runtime/README.zh.md
     - docs/zh/providers/README.zh.md

@@ -1,14 +1,15 @@
 ---
 status: public-summary
-website_docs_drift: unaffected
-website_docs_drift_reason: Chinese architecture source docs received translation polish only; website summary semantics are unchanged.
 source_docs:
   en:
-    - docs/architecture.md
     - docs/plans/2026-05-15-documentation-strategy.md
   zh:
-    - docs/zh/architecture.zh.md
     - docs/zh/plans/2026-05-15-documentation-strategy.zh.md
+trace_docs:
+  en:
+    - docs/architecture.md
+  zh:
+    - docs/zh/architecture.zh.md
 ---
 
 # Architecture
@@ -83,4 +84,4 @@ flowchart TD
   Recover --> Persist
 ```
 
-历史 feature stubs 已完成合并并删除。当前实现事实应写入 runtime、provider、experiment 和 reference docs，再通过 `source_docs` 流入 website。
+历史 feature stubs 已完成合并并删除。当前实现事实应写入 runtime、provider、experiment 和 reference docs，再通过 public-impact 或 trace-only source references 流入 website。

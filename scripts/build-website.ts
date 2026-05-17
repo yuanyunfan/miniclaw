@@ -27,6 +27,7 @@ interface WebsitePage {
   lang: "en" | "zh" | "root";
   status: string;
   sourceDocs: Record<string, string[]>;
+  traceDocs: Record<string, string[]>;
   body: string;
 }
 
@@ -224,9 +225,16 @@ function alternateLanguagePath(page: WebsitePage, pages: WebsitePage[]): string 
 }
 
 function renderSourceDocs(page: WebsitePage): string {
-  const entries = Object.entries(page.sourceDocs).flatMap(([lang, paths]) =>
-    paths.map((path) => ({ lang, path })),
-  );
+  const combinedDocs = new Map<string, { lang: string; path: string }>();
+  const addDocs = (docs: Record<string, string[]>): void => {
+    for (const [lang, paths] of Object.entries(docs)) {
+      for (const path of paths) combinedDocs.set(`${lang}:${path}`, { lang, path });
+    }
+  };
+  addDocs(page.sourceDocs);
+  addDocs(page.traceDocs);
+
+  const entries = Array.from(combinedDocs.values());
   if (!entries.length) return "";
   const title = page.lang === "zh" ? "来源文档" : "Source Docs";
   const summary = page.lang === "zh"
@@ -345,6 +353,7 @@ function loadPages(): WebsitePage[] {
         lang: langFor(outputPath),
         status: frontmatterString(parsed.data, "status") ?? "public-summary",
         sourceDocs: frontmatterStringRecord(parsed.data, "source_docs"),
+        traceDocs: frontmatterStringRecord(parsed.data, "trace_docs"),
         body: parsed.body,
       };
     })

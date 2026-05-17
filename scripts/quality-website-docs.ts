@@ -1,6 +1,9 @@
 #!/usr/bin/env tsx
 import { execFileSync } from "node:child_process";
-import { analyzeWebsiteDocsFromRepo } from "../src/quality/website-docs.js";
+import {
+  analyzeWebsiteDocsFromRepo,
+  WEBSITE_DOCS_DRIFT_ACK_PATH,
+} from "../src/quality/website-docs.js";
 
 const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
 process.chdir(repoRoot);
@@ -63,6 +66,14 @@ if (result.affectedPages.length) {
   }
 }
 
+if (result.tracePages.length) {
+  console.warn("Website docs trace-only source changes (not blocking):");
+  for (const traced of result.tracePages) {
+    console.warn(`- ${traced.page}: ${traced.source}`);
+  }
+  console.warn(`Use ${WEBSITE_DOCS_DRIFT_ACK_PATH} only for blocking source_docs changes that are publicly unaffected.`);
+}
+
 if (result.findings.length) {
   console.error("Website docs check failed:");
   for (const finding of result.findings) {
@@ -72,5 +83,5 @@ if (result.findings.length) {
 }
 
 console.log(
-  `Website docs check passed (${pagePaths.length} page(s), ${result.affectedPages.length} affected page(s)).`,
+  `Website docs check passed (${pagePaths.length} page(s), ${result.affectedPages.length} affected page(s), ${result.tracePages.length} trace-only source change(s)).`,
 );

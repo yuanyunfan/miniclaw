@@ -188,7 +188,16 @@ Archive and private docs are intentionally excluded from required bilingual pari
 
 Purpose: keep GitHub Pages presentation content tied to canonical repo docs.
 
-`pnpm run quality:website-docs` checks website frontmatter and `source_docs` references. Website pages are presentation-only; they do not replace `docs/` as the implementation source of truth.
+`pnpm run quality:website-docs` checks website frontmatter and source references. Website pages are presentation-only; they do not replace `docs/` as the implementation source of truth.
+
+Website updates are public-impact updates, not routine implementation bookkeeping. Small fixes should update code, focused tests, canonical docs, and changelog entries without editing `website/**` unless the public summary becomes inaccurate. Update website pages only when a public capability, install/config workflow, user-visible behavior, or existing website claim changes.
+
+Website pages may declare two source classes:
+
+- `source_docs`: public-impact sources. Changes to these sources block until the website page is updated or explicitly acknowledged as unaffected.
+- `trace_docs`: trace-only sources. Changes to these sources are reported for review but do not block the gate.
+
+If a `source_docs` change does not affect public website copy, record that decision through `.website-docs-drift-ack.md` instead of editing website frontmatter or adding implementation details to the page body.
 
 ## G2: Secrets And Dependencies
 

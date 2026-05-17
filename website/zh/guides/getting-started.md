@@ -1,7 +1,5 @@
 ---
 status: public-summary
-website_docs_drift: unaffected
-website_docs_drift_reason: Chinese install source docs received translation polish only; website summary semantics are unchanged.
 source_docs:
   en:
     - docs/runbooks/install.md
