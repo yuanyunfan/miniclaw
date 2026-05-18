@@ -7,6 +7,7 @@
 ## [Unreleased]
 
 ### Added
+- 扩展 `third-party-health` hourly script，覆盖 provider health、Yahoo 行情 canary、WeChat MP 搜索、email IMAP、market-intel 官方源和 stock-portfolio 聚合配置，并在异常通知中保留分类、延迟和修复建议。
 - 新增 stock provider 数据层迁移计划，明确 Source Adapter、Data Domain、Signal / Intelligence、Report Composer / Cron Provider 四层结构，并同步英文 canonical docs、中文 mirror、migration map 和 stock provider 入口链接。
 - 新增全局 `cron.active_window` 配置，可在 `config.yaml` 中按时区设置 scheduled cron 活动时间；窗口外会记录 skipped，不执行 script、provider 或 task runtime。
 - 新增 `eastmoney-etf-premium` public provider，从 Eastmoney fund selector 读取 ETF `PREMIUM_DISCOUNT_RATIO`，并让 `stock-portfolio` 只在 JYWG 持仓行存在时按代码合并折溢价数据。

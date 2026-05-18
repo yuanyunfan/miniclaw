@@ -99,6 +99,7 @@ describe("third-party health check", () => {
       eastmoneyClient: okEastmoneyClient(),
       loadEastmoneySession: () => session,
       saveEastmoneySession,
+      includeExtendedChecks: false,
     });
 
     expect(report.ok).toBe(true);
@@ -130,6 +131,7 @@ describe("third-party health check", () => {
       },
       loadEastmoneySession: () => session,
       saveEastmoneySession: vi.fn(),
+      includeExtendedChecks: false,
     });
 
     expect(report.ok).toBe(false);
@@ -139,5 +141,72 @@ describe("third-party health check", () => {
     expect(message).not.toContain("secret");
     expect(message).not.toContain("abc123");
     expect(message).not.toContain("futu-stock/hk");
+  });
+
+  it("includes extended provider health targets when enabled", async () => {
+    const report = await runThirdPartyHealthCheck({
+      now: () => now,
+      loadFutuConfig: () => futuConfig,
+      futuClient: okFutuClient(),
+      loadEastmoneyConfig: () => eastmoneyConfig,
+      eastmoneyClient: okEastmoneyClient(),
+      loadEastmoneySession: () => session,
+      saveEastmoneySession: vi.fn(),
+      providerHealthTargets: [{ provider: "eastmoney-etf-premium", configName: "cn-stock" }],
+      yahooConfigNames: [],
+      wechatConfigNames: [],
+      emailHealthTargets: [],
+      marketIntelConfigNames: [],
+      stockPortfolioConfigNames: [],
+      runProviderHealthCheck: async () => ({
+        ok: true,
+        message: "eastmoney-etf-premium config ok: cn-stock",
+        checkedAt: now.toISOString(),
+        safeDetails: { symbols: ["159513"], has_premium_discount_ratio: true },
+      }),
+    });
+
+    expect(report.ok).toBe(true);
+    expect(report.checks).toHaveLength(3);
+    expect(report.checks.at(-1)).toMatchObject({
+      provider: "eastmoney-etf-premium",
+      profile: "cn-stock",
+      status: "ok",
+      kind: "provider",
+      stage: "health",
+    });
+  });
+
+  it("reports extended provider failures and redacts secrets", async () => {
+    const report = await runThirdPartyHealthCheck({
+      now: () => now,
+      loadFutuConfig: () => futuConfig,
+      futuClient: okFutuClient(),
+      loadEastmoneyConfig: () => eastmoneyConfig,
+      eastmoneyClient: okEastmoneyClient(),
+      loadEastmoneySession: () => session,
+      saveEastmoneySession: vi.fn(),
+      providerHealthTargets: [{ provider: "wechat-mp", configName: "daily-ai-wechat" }],
+      yahooConfigNames: [],
+      wechatConfigNames: [],
+      emailHealthTargets: [],
+      marketIntelConfigNames: [],
+      stockPortfolioConfigNames: [],
+      runProviderHealthCheck: async () => ({
+        ok: false,
+        category: "auth",
+        message: "token=secret Cookie: sid=abc user@example.com validatekey=abc123",
+        checkedAt: now.toISOString(),
+      }),
+    });
+
+    expect(report.ok).toBe(false);
+    const message = formatThirdPartyHealthIssueReport(report);
+    expect(message).toContain("wechat-mp/daily-ai-wechat");
+    expect(message).toContain("category=auth");
+    expect(message).not.toContain("secret");
+    expect(message).not.toContain("sid=abc");
+    expect(message).not.toContain("user@example.com");
+    expect(message).not.toContain("abc123");
   });
 });
