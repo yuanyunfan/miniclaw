@@ -60,6 +60,20 @@ export interface FutuWatchlistSecurity {
   stock_child_type?: string;
 }
 
+export interface FutuWatchlistGroupError {
+  group_name: string;
+  error: string;
+  rate_limited: boolean;
+}
+
+export interface FutuWatchlistResult {
+  captured_at: string;
+  group_count: number;
+  securities: FutuWatchlistSecurity[];
+  group_errors: FutuWatchlistGroupError[];
+  rate_limited: boolean;
+}
+
 export interface FutuPositionSummary {
   code: string;
   name: string;

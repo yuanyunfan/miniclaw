@@ -1,6 +1,23 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const futuMocks = vi.hoisted(() => ({
+  getFutuWatchlistSecuritiesResult: vi.fn(),
+  loadFutuStockConfig: vi.fn(() => ({ profiles: { default: {} } })),
+  resolveFutuStockProfile: vi.fn((_config: unknown, name = "default") => ({ profile_name: name })),
+}));
+
+vi.mock("../../../mcp/futu-stock/futu-client.js", () => ({
+  getFutuWatchlistSecuritiesResult: futuMocks.getFutuWatchlistSecuritiesResult,
+}));
+
+vi.mock("../../../mcp/futu-stock/config.js", () => ({
+  loadFutuStockConfig: futuMocks.loadFutuStockConfig,
+  resolveFutuStockProfile: futuMocks.resolveFutuStockProfile,
+}));
+
 import {
   __testables,
+  getFutuWatchlistUniverseSymbolsBatch,
   mapEastmoneyMyfavorSymbols,
   mapFutuWatchlistSymbols,
 } from "../../../stock/sources/watchlists.js";
@@ -17,6 +34,12 @@ function source(market: StockPulseUniverseSourceConfig["market"]): StockPulseUni
 }
 
 describe("stock-pulse watchlist universe sources", () => {
+  beforeEach(() => {
+    futuMocks.getFutuWatchlistSecuritiesResult.mockReset();
+    futuMocks.loadFutuStockConfig.mockClear();
+    futuMocks.resolveFutuStockProfile.mockClear();
+  });
+
   it("maps Futu watchlist securities by market prefix", () => {
     const mapped = mapFutuWatchlistSymbols([
       { group_name: "US", code: "US.AAPL", name: "Apple" },
@@ -88,5 +111,53 @@ describe("stock-pulse watchlist universe sources", () => {
 
     expect(limited).toHaveLength(1);
     expect(limited[0]?.symbol).toBe("AAPL");
+  });
+
+  it("collects one Futu batch and maps mixed-market rows per source", async () => {
+    futuMocks.getFutuWatchlistSecuritiesResult.mockResolvedValueOnce({
+      captured_at: "2026-05-18T00:00:00.000Z",
+      group_count: 1,
+      securities: [
+        { group_name: "All", code: "US.AAPL", name: "Apple" },
+        { group_name: "All", code: "HK.00700", name: "Tencent" },
+        { group_name: "All", code: "FX.EURUSD", name: "EUR/USD" },
+      ],
+      group_errors: [],
+      rate_limited: false,
+    });
+
+    const cnSource = source("cn-a");
+    const hkSource = source("hk");
+    const results = await getFutuWatchlistUniverseSymbolsBatch([cnSource, hkSource]);
+
+    expect(futuMocks.getFutuWatchlistSecuritiesResult).toHaveBeenCalledTimes(1);
+    expect(futuMocks.getFutuWatchlistSecuritiesResult.mock.calls[0]?.[1]).toMatchObject({ limit: expect.any(Number) });
+    expect(futuMocks.getFutuWatchlistSecuritiesResult.mock.calls[0]?.[1]?.limit).toBeGreaterThan(cnSource.limit + hkSource.limit);
+    expect(results.find((item) => item.source === cnSource)?.symbols).toEqual([]);
+    expect(results.find((item) => item.source === hkSource)?.symbols).toEqual([
+      {
+        symbol: "00700",
+        name: "Tencent",
+        market: "hk",
+        source: "universe:hk-watchlist:All",
+      },
+    ]);
+  });
+
+  it("reports all-group Futu rate limits as unavailable instead of empty", async () => {
+    futuMocks.getFutuWatchlistSecuritiesResult.mockResolvedValueOnce({
+      captured_at: "2026-05-18T00:00:00.000Z",
+      group_count: 1,
+      securities: [],
+      group_errors: [{ group_name: "All", error: "获取自选股分组频率太高，请求失败，每30秒最多10次。", rate_limited: true }],
+      rate_limited: true,
+    });
+
+    const [result] = await getFutuWatchlistUniverseSymbolsBatch([source("hk")]);
+
+    expect(result?.symbols).toEqual([]);
+    expect(result?.unavailable).toBe(true);
+    expect(result?.warnings.join("\n")).toContain("rate-limited");
+    expect(result?.warnings.join("\n")).toContain("频率太高");
   });
 });

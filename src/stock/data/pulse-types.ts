@@ -110,6 +110,14 @@ export interface StockPulseUniverseSymbol {
   source: string;
 }
 
+export interface StockPulseUniverseSourceResult {
+  source: StockPulseUniverseSourceConfig;
+  symbols: StockPulseUniverseSymbol[];
+  warnings: string[];
+  error?: string;
+  unavailable?: boolean;
+}
+
 export interface StockPulseQuoteBar {
   timestamp: string;
   open?: number;
@@ -131,6 +139,7 @@ export interface StockPulseQuoteSeries {
 export interface StockPulseQuoteClient {
   getBars(symbol: StockPulseSymbol, config: StockPulseQuoteConfig): Promise<StockPulseQuoteSeries>;
   getUniverseSymbols?(source: StockPulseUniverseSourceConfig): Promise<StockPulseUniverseSymbol[]>;
+  getUniverseSymbolsBatch?(sources: StockPulseUniverseSourceConfig[]): Promise<StockPulseUniverseSourceResult[]>;
 }
 
 export interface StockPulseBaseline {

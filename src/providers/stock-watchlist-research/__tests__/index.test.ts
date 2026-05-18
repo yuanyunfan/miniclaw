@@ -10,6 +10,7 @@ import type {
   StockPulseQuoteSeries,
   StockPulseSymbol,
   StockPulseUniverseSourceConfig,
+  StockPulseUniverseSourceResult,
   StockPulseUniverseSymbol,
 } from "../../../stock/data/pulse-types.js";
 import type { StockWatchlistResearchClient, StockWatchlistResearchConfig } from "../../../stock/reports/watchlist-research-types.js";
@@ -123,6 +124,7 @@ describe("runStockWatchlistResearchProvider", () => {
               provider: "futu-stock",
               config: "us-stock",
               label: "Futu US",
+              include_asset_totals: true,
               status: "ok",
               payload: {
                 positions_summary: {
@@ -131,6 +133,17 @@ describe("runStockWatchlistResearchProvider", () => {
                   top_gainers: [],
                   top_losers: [],
                 },
+              },
+            },
+            {
+              provider: "eastmoney-etf-premium",
+              config: "us-stock",
+              label: "ETF premium reference",
+              include_asset_totals: false,
+              status: "ok",
+              payload: {
+                source: "eastmoney-etf-premium",
+                premiums: [],
               },
             },
           ],
@@ -154,6 +167,7 @@ describe("runStockWatchlistResearchProvider", () => {
       held_symbols: 1,
       excluded_symbols: 1,
     });
+    expect(parsed.watchlist_source.warnings).toEqual([]);
     expect(parsed.symbols.map((item: { symbol: string }) => item.symbol)).toEqual(["AAPL"]);
     expect(parsed.symbols[0].sources).toEqual(["universe:futu-us-watchlist:US"]);
     expect(parsed.symbols[0].portfolio).toBeUndefined();
@@ -232,6 +246,99 @@ describe("runStockWatchlistResearchProvider", () => {
     expect(parsed.watchlist_source.scanned_symbols).toBe(0);
     expect(parsed.watchlist_source.portfolio_filter.excluded_symbols).toBe(2);
     expect(parsed.symbols).toEqual([]);
+  });
+
+  it("keeps true empty broker watchlists separate from source failures", async () => {
+    const quoteClient: StockPulseQuoteClient = {
+      async getBars(): Promise<StockPulseQuoteSeries> {
+        throw new Error("quotes should not be requested");
+      },
+      async getUniverseSymbolsBatch(sources: StockPulseUniverseSourceConfig[]): Promise<StockPulseUniverseSourceResult[]> {
+        return sources.map((source) => ({ source, symbols: [], warnings: [] }));
+      },
+    };
+
+    const result = await runStockWatchlistResearchProvider({
+      configName: "us-pre-market",
+      jobName: "us-watchlist-stock-pre-market",
+      channelId: "channel",
+      runAt: new Date("2026-05-12T12:45:00.000Z"),
+    }, {
+      loadProviderConfig: () => providerConfig(),
+      loadStockPulseConfig: () => stockPulseConfig(),
+      portfolioRunner: async () => {
+        throw new Error("portfolio should not be requested");
+      },
+      quoteClient,
+      researchClient: {
+        async getProfile() {
+          throw new Error("research should not be requested");
+        },
+        async getFinancials() {
+          throw new Error("research should not be requested");
+        },
+        async getNews() {
+          throw new Error("research should not be requested");
+        },
+      },
+    });
+
+    const parsed = JSON.parse(result.text);
+    expect(parsed.run_context.skipped).toBe(true);
+    expect(parsed.run_context.skip_reason).toBe("empty_broker_watchlist");
+    expect(parsed.watchlist_source.raw_watchlist_symbols).toBe(0);
+    expect(parsed.watchlist_source.warnings).toEqual([]);
+    expect(result.skipTask?.reason).toBe("empty_broker_watchlist");
+  });
+
+  it("marks broker watchlist source failures as unavailable with warnings", async () => {
+    const quoteClient: StockPulseQuoteClient = {
+      async getBars(): Promise<StockPulseQuoteSeries> {
+        throw new Error("quotes should not be requested");
+      },
+      async getUniverseSymbolsBatch(sources: StockPulseUniverseSourceConfig[]): Promise<StockPulseUniverseSourceResult[]> {
+        return sources.map((source) => ({
+          source,
+          symbols: [],
+          warnings: ["futu watchlist profile default rate-limited: 1/1 group(s) failed; first=All: 获取自选股分组频率太高，请求失败，每30秒最多10次。"],
+          error: "futu watchlist profile default unavailable",
+          unavailable: true,
+        }));
+      },
+    };
+
+    const result = await runStockWatchlistResearchProvider({
+      configName: "us-pre-market",
+      jobName: "us-watchlist-stock-pre-market",
+      channelId: "channel",
+      runAt: new Date("2026-05-12T12:45:00.000Z"),
+    }, {
+      loadProviderConfig: () => providerConfig(),
+      loadStockPulseConfig: () => stockPulseConfig(),
+      portfolioRunner: async () => {
+        throw new Error("portfolio should not be requested");
+      },
+      quoteClient,
+      researchClient: {
+        async getProfile() {
+          throw new Error("research should not be requested");
+        },
+        async getFinancials() {
+          throw new Error("research should not be requested");
+        },
+        async getNews() {
+          throw new Error("research should not be requested");
+        },
+      },
+    });
+
+    const parsed = JSON.parse(result.text);
+    expect(parsed.run_context.skipped).toBe(true);
+    expect(parsed.run_context.skip_reason).toBe("broker_watchlist_unavailable");
+    expect(parsed.watchlist_source.raw_watchlist_symbols).toBe(0);
+    expect(parsed.watchlist_source.warnings.join("\n")).toContain("rate-limited");
+    expect(parsed.watchlist_source.warnings.join("\n")).toContain("频率太高");
+    expect(result.skipTask?.reason).toBe("broker_watchlist_unavailable");
   });
 
   it("strips portfolio config when embedding market-intel context", () => {

@@ -100,18 +100,70 @@ async function collectBrokerWatchlistSymbols(params: {
   stockPulseConfig: StockPulseProviderConfig;
   quoteClient: StockPulseQuoteClient;
   warnings: string[];
-}): Promise<{ sources: number; fetched: StockPulseUniverseSymbol[]; scanned: StockPulseSymbol[] }> {
+}): Promise<{ sources: number; fetched: StockPulseUniverseSymbol[]; scanned: StockPulseSymbol[]; unavailable: boolean }> {
   const sources = params.stockPulseConfig.universe.sources.filter((source) => source.enabled !== false && brokerWatchlistSource(source));
   const fetched: StockPulseUniverseSymbol[] = [];
+  let unavailable = false;
+  const warningSet = new Set<string>();
+  const pushWarning = (message: string): void => {
+    if (warningSet.has(message)) return;
+    warningSet.add(message);
+    params.warnings.push(message);
+  };
+
+  if (sources.length && params.quoteClient.getUniverseSymbolsBatch) {
+    try {
+      const results = await params.quoteClient.getUniverseSymbolsBatch(sources);
+      const seenSources = new Set<StockPulseUniverseSourceConfig>();
+      for (const result of results) {
+        seenSources.add(result.source);
+        fetched.push(...result.symbols);
+        for (const warning of result.warnings) pushWarning(`watchlist source ${result.source.name}: ${warning}`);
+        if (result.error && !result.warnings.length) pushWarning(`watchlist source ${result.source.name} failed: ${result.error}`);
+        unavailable = unavailable || Boolean(result.unavailable || result.error);
+      }
+      for (const source of sources) {
+        if (seenSources.has(source)) continue;
+        unavailable = true;
+        pushWarning(`watchlist source ${source.name} failed: batch result missing`);
+      }
+    } catch (err) {
+      unavailable = true;
+      pushWarning(`watchlist source batch failed: ${safeProviderErrorMessage(err)}`);
+    }
+  } else {
+    if (sources.length && !params.quoteClient.getUniverseSymbols) {
+      unavailable = true;
+      pushWarning("watchlist sources skipped: quote client does not support universe sources");
+    }
+  }
+
+  if (sources.length && params.quoteClient.getUniverseSymbolsBatch) {
+    const scanned = buildScanUniverse({
+      scope: params.config.market_scope,
+      configured: [],
+      portfolio: [],
+      universeSourceSymbols: fetched,
+      includeWatchlist: false,
+      includePortfolio: false,
+      includeSources: true,
+      openMarkets: marketsForScope(params.config.market_scope),
+      maxSymbols: params.config.max_symbols,
+    });
+    return { sources: sources.length, fetched, scanned, unavailable };
+  }
+
   for (const source of sources) {
     if (!params.quoteClient.getUniverseSymbols) {
-      params.warnings.push(`watchlist source ${source.name} skipped: quote client does not support universe sources`);
+      unavailable = true;
+      pushWarning(`watchlist source ${source.name} skipped: quote client does not support universe sources`);
       continue;
     }
     try {
       fetched.push(...await params.quoteClient.getUniverseSymbols(source));
     } catch (err) {
-      params.warnings.push(`watchlist source ${source.name} failed: ${safeProviderErrorMessage(err)}`);
+      unavailable = true;
+      pushWarning(`watchlist source ${source.name} failed: ${safeProviderErrorMessage(err)}`);
     }
   }
   const scanned = buildScanUniverse({
@@ -125,7 +177,7 @@ async function collectBrokerWatchlistSymbols(params: {
     openMarkets: marketsForScope(params.config.market_scope),
     maxSymbols: params.config.max_symbols,
   });
-  return { sources: sources.length, fetched, scanned };
+  return { sources: sources.length, fetched, scanned, unavailable };
 }
 
 function positionRows(payload: Record<string, unknown>): Record<string, unknown>[] {
@@ -146,18 +198,22 @@ function portfolioCompletenessWarnings(portfolioPayload: unknown): string[] {
   const warnings: string[] = [];
   for (const source of portfolioPayload.sources.filter(isRecord)) {
     const sourceLabel = str(source.label) ?? `${str(source.provider) ?? "unknown"}/${str(source.config) ?? "default"}`;
+    const contributesAccountPositions = source.include_asset_totals !== false;
     if (source.status !== "ok") {
+      if (!contributesAccountPositions) continue;
       warnings.push(`portfolio source ${sourceLabel} is unavailable; cannot safely exclude held symbols`);
       continue;
     }
     const payload = isRecord(source.payload) ? source.payload : undefined;
     const summary = payload && isRecord(payload.positions_summary) ? payload.positions_summary : undefined;
     if (!payload || !summary) {
+      if (!contributesAccountPositions) continue;
       warnings.push(`portfolio source ${sourceLabel} has no positions_summary; cannot safely exclude held symbols`);
       continue;
     }
     const positionsCount = num(summary.positions_count);
     if (positionsCount === undefined) {
+      if (!contributesAccountPositions) continue;
       warnings.push(`portfolio source ${sourceLabel} has no positions_count; cannot safely exclude held symbols`);
       continue;
     }
@@ -449,7 +505,7 @@ async function runStockWatchlistResearchStructured(
   let skipReason: string | undefined;
 
   if (watchlist.scanned.length === 0) {
-    skipReason = "empty_broker_watchlist";
+    skipReason = watchlist.unavailable ? "broker_watchlist_unavailable" : "empty_broker_watchlist";
   } else {
     const filter = await collectPortfolioFilter({
       args: {

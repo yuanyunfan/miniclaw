@@ -6,6 +6,8 @@ import type {
   FutuRawBrokerData,
   FutuStockClient,
   FutuStockProfileConfig,
+  FutuWatchlistGroupError,
+  FutuWatchlistResult,
   FutuWatchlistSecurity,
 } from "./types.js";
 
@@ -142,6 +144,10 @@ port = int(profile.get("opend_port", 11111))
 selected_groups = [str(g).strip() for g in req.get("groups", []) if str(g).strip()]
 limit = int(req.get("limit", 200))
 
+def is_rate_limited(message):
+    text = str(message).lower()
+    return "频率太高" in text or "rate limit" in text or "too many" in text or "too frequent" in text
+
 def df_to_records(data):
     if data is None:
         return []
@@ -172,9 +178,16 @@ try:
         groups = [g for g in groups if g in selected_groups]
 
     securities = []
+    group_errors = []
     for group in groups:
         ret, security_data = ctx.get_user_security(group)
         if ret != RET_OK:
+            error = str(security_data)
+            group_errors.append({
+                "group_name": group,
+                "error": error,
+                "rate_limited": is_rate_limited(error),
+            })
             continue
         for row in df_to_records(security_data):
             code = str(row.get("code") or "").strip()
@@ -197,6 +210,8 @@ try:
         "captured_at": datetime.now(timezone.utc).isoformat(),
         "group_count": len(groups),
         "securities": securities,
+        "group_errors": group_errors,
+        "rate_limited": any(item.get("rate_limited") for item in group_errors),
     })
 except Exception as exc:
     fail(exc)
@@ -288,6 +303,34 @@ async function checkPython(profile: FutuStockProfileConfig): Promise<FutuHealthC
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function parseWatchlistSecurity(item: Record<string, unknown>): FutuWatchlistSecurity {
+  return {
+    group_name: typeof item.group_name === "string" ? item.group_name : "",
+    code: typeof item.code === "string" ? item.code : "",
+    name: typeof item.name === "string" ? item.name : undefined,
+    stock_type: typeof item.stock_type === "string" ? item.stock_type : undefined,
+    stock_child_type: typeof item.stock_child_type === "string" ? item.stock_child_type : undefined,
+  };
+}
+
+function looksRateLimited(message: string): boolean {
+  const lower = message.toLowerCase();
+  return lower.includes("频率太高") || lower.includes("rate limit") || lower.includes("too many") || lower.includes("too frequent");
+}
+
+function parseWatchlistGroupError(item: Record<string, unknown>): FutuWatchlistGroupError {
+  const error = typeof item.error === "string" ? sanitizeError(item.error) : "";
+  return {
+    group_name: typeof item.group_name === "string" ? item.group_name : "",
+    error,
+    rate_limited: typeof item.rate_limited === "boolean" ? item.rate_limited : looksRateLimited(error),
+  };
+}
+
 export class PythonFutuStockClient implements FutuStockClient {
   async healthCheck(profile: FutuStockProfileConfig): Promise<FutuHealthCheck> {
     try {
@@ -332,6 +375,13 @@ export async function getFutuWatchlistSecurities(
   profile: FutuStockProfileConfig,
   options: { groups?: string[]; limit?: number } = {},
 ): Promise<FutuWatchlistSecurity[]> {
+  return (await getFutuWatchlistSecuritiesResult(profile, options)).securities;
+}
+
+export async function getFutuWatchlistSecuritiesResult(
+  profile: FutuStockProfileConfig,
+  options: { groups?: string[]; limit?: number } = {},
+): Promise<FutuWatchlistResult> {
   assertSafeOpendHost(profile);
   const payload = JSON.stringify({
     profile,
@@ -341,16 +391,28 @@ export async function getFutuWatchlistSecurities(
   const result = await runPython(profile.python_bin, ["-c", FUTU_WATCHLIST_BRIDGE], payload);
   if (result.timedOut) throw new Error(`futu watchlist bridge timed out after ${PYTHON_TIMEOUT_MS}ms: ${sanitizeError(result.stderr || result.stdout)}`);
   if (result.code !== 0) throw new Error(`futu watchlist bridge exited with ${result.code ?? result.signal}: ${sanitizeError(result.stderr || result.stdout)}`);
-  const parsed = parseLastJsonPayload<{ ok?: boolean; error?: string; securities?: unknown[] }>(result.stdout);
+  const parsed = parseLastJsonPayload<{
+    ok?: boolean;
+    error?: string;
+    captured_at?: string;
+    group_count?: number;
+    securities?: unknown[];
+    group_errors?: unknown[];
+    rate_limited?: boolean;
+  }>(result.stdout);
   if (!parsed.ok) throw new Error(sanitizeError(parsed.error ?? "futu watchlist bridge failed"));
-  return (Array.isArray(parsed.securities) ? parsed.securities : [])
-    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object" && !Array.isArray(item)))
-    .map((item) => ({
-      group_name: typeof item.group_name === "string" ? item.group_name : "",
-      code: typeof item.code === "string" ? item.code : "",
-      name: typeof item.name === "string" ? item.name : undefined,
-      stock_type: typeof item.stock_type === "string" ? item.stock_type : undefined,
-      stock_child_type: typeof item.stock_child_type === "string" ? item.stock_child_type : undefined,
-    }))
+  const groupErrors = (Array.isArray(parsed.group_errors) ? parsed.group_errors : [])
+    .filter(isRecord)
+    .map(parseWatchlistGroupError);
+  const securities = (Array.isArray(parsed.securities) ? parsed.securities : [])
+    .filter(isRecord)
+    .map(parseWatchlistSecurity)
     .filter((item) => item.code);
+  return {
+    captured_at: typeof parsed.captured_at === "string" ? parsed.captured_at : new Date().toISOString(),
+    group_count: typeof parsed.group_count === "number" && Number.isFinite(parsed.group_count) ? parsed.group_count : 0,
+    securities,
+    group_errors: groupErrors,
+    rate_limited: Boolean(parsed.rate_limited) || groupErrors.some((item) => item.rate_limited),
+  };
 }

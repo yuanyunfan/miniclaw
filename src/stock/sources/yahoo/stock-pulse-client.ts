@@ -4,10 +4,12 @@ import type {
   StockPulseQuoteSeries,
   StockPulseSymbol,
   StockPulseUniverseSourceConfig,
+  StockPulseUniverseSourceResult,
   StockPulseUniverseSymbol,
 } from "../../data/pulse-types.js";
 import {
   getEastmoneyMyfavorUniverseSymbols,
+  getFutuWatchlistUniverseSymbolsBatch,
   getFutuWatchlistUniverseSymbols,
 } from "../watchlists.js";
 import {
@@ -24,6 +26,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function str(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function safeUniverseError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  return raw
+    .replace(/(validatekey=)[^&\s"']+/gi, "$1[redacted]")
+    .replace(/(password|token|cookie|secret|session|account|customer|acc_id)\s*[:=]\s*[^,\s}]+/gi, "$1=[redacted]")
+    .replace(/([A-Za-z0-9+/=_-]{24,})/g, "[redacted]")
+    .slice(0, 800);
 }
 
 function parseEastmoneyClist(json: unknown, source: StockPulseUniverseSourceConfig): StockPulseUniverseSymbol[] {
@@ -96,5 +107,42 @@ export class YahooStockPulseQuoteClient implements StockPulseQuoteClient {
       return getEastmoneyMyfavorUniverseSymbols(source);
     }
     return fetchEastmoneyClist(source);
+  }
+
+  async getUniverseSymbolsBatch(sources: StockPulseUniverseSourceConfig[]): Promise<StockPulseUniverseSourceResult[]> {
+    const results = new Map<StockPulseUniverseSourceConfig, StockPulseUniverseSourceResult>();
+    const futuSources = sources.filter((source) => source.type === "futu_watchlist");
+    if (futuSources.length) {
+      for (const result of await getFutuWatchlistUniverseSymbolsBatch(futuSources)) {
+        results.set(result.source, result);
+      }
+    }
+
+    for (const source of sources.filter((item) => item.type !== "futu_watchlist")) {
+      try {
+        results.set(source, {
+          source,
+          symbols: await this.getUniverseSymbols(source),
+          warnings: [],
+        });
+      } catch (err) {
+        const message = safeUniverseError(err);
+        results.set(source, {
+          source,
+          symbols: [],
+          warnings: [`universe source ${source.name} failed: ${message}`],
+          error: message,
+          unavailable: true,
+        });
+      }
+    }
+
+    return sources.map((source) => results.get(source) ?? {
+      source,
+      symbols: [],
+      warnings: [`universe source ${source.name} was not collected`],
+      error: "source was not collected",
+      unavailable: true,
+    });
   }
 }

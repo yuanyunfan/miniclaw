@@ -112,7 +112,25 @@ async function collectUniverseSourceSymbols(
   quoteClient: StockPulseQuoteClient,
   warnings: string[],
 ): Promise<StockPulseUniverseSymbol[]> {
-  if (!config.universe.include_sources || !quoteClient.getUniverseSymbols) return [];
+  if (!config.universe.include_sources) return [];
+  if (quoteClient.getUniverseSymbolsBatch) {
+    try {
+      const results = await quoteClient.getUniverseSymbolsBatch(config.universe.sources);
+      const symbols: StockPulseUniverseSymbol[] = [];
+      for (const result of results) {
+        symbols.push(...result.symbols);
+        warnings.push(...result.warnings.map((warning) => `universe source ${result.source.name}: ${warning}`));
+        if (result.error && !result.warnings.length) {
+          warnings.push(`universe source ${result.source.name} failed: ${result.error}`);
+        }
+      }
+      return symbols;
+    } catch (err) {
+      warnings.push(`universe source batch failed: ${sanitizeStockPulseError(err)}`);
+      return [];
+    }
+  }
+  if (!quoteClient.getUniverseSymbols) return [];
   const symbols: StockPulseUniverseSymbol[] = [];
   for (const source of config.universe.sources) {
     try {

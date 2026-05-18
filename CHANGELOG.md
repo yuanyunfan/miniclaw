@@ -42,6 +42,7 @@
 - 移除 website landing page 中过细的内部 Discord channel slug，让 website 保持对外项目窗口定位。
 - 精简 website runtime/landing 文案，让公开网站只保留高层能力说明。
 - 修复根 README 的文档漂移：同步当前 slash commands、provider 列表、`docs/providers/**` 链接和最新项目结构。
+- 修复 `stock-watchlist-research` 对 Futu broker watchlist 的采集：同一 profile/groups 只抓取一次后按市场分流，避免 CN source 为空或 OpenD 限频时吞掉 HK/US watchlist，并把 broker source 不可用与真实空 watchlist 区分为不同 skip reason。
 - Discord 消息分块现在会保留 `<https://...>` no-embed 链接语义，不再把 browser tabs cron 的 no-embed 链接重新收集成裸 URL 预览区。
 - Discord IM fanout、recovery outbox 和 script cron 直发路径统一使用延后链接预览分块，避免长 cron 报告被中途展开的链接卡片切断。
 

@@ -3,9 +3,34 @@ import { HttpEastmoneyMyfavorClient } from "../../mcp/eastmoney-myfavor/client.j
 import { loadEastmoneyMyfavorSession } from "../../mcp/eastmoney-myfavor/session-vault.js";
 import type { EastmoneyMyfavorSecurity } from "../../mcp/eastmoney-myfavor/types.js";
 import { loadFutuStockConfig, resolveFutuStockProfile } from "../../mcp/futu-stock/config.js";
-import { getFutuWatchlistSecurities } from "../../mcp/futu-stock/futu-client.js";
-import type { FutuWatchlistSecurity } from "../../mcp/futu-stock/types.js";
-import type { StockPulseMarket, StockPulseUniverseSourceConfig, StockPulseUniverseSymbol } from "../data/pulse-types.js";
+import { getFutuWatchlistSecuritiesResult } from "../../mcp/futu-stock/futu-client.js";
+import { sanitizeError } from "../../mcp/futu-stock/safety.js";
+import type { FutuWatchlistResult, FutuWatchlistSecurity } from "../../mcp/futu-stock/types.js";
+import type {
+  StockPulseMarket,
+  StockPulseUniverseSourceConfig,
+  StockPulseUniverseSourceResult,
+  StockPulseUniverseSymbol,
+} from "../data/pulse-types.js";
+
+const FUTU_WATCHLIST_RAW_FETCH_FLOOR = 1000;
+const FUTU_WATCHLIST_RAW_FETCH_CAP = 5000;
+
+interface FutuWatchlistBatch {
+  profileName: string;
+  groups?: string[];
+  sources: StockPulseUniverseSourceConfig[];
+}
+
+export class WatchlistSourceUnavailableError extends Error {
+  readonly warnings: string[];
+
+  constructor(message: string, warnings: string[] = []) {
+    super(message);
+    this.name = "WatchlistSourceUnavailableError";
+    this.warnings = warnings;
+  }
+}
 
 function marketFromFutuCode(code: string): StockPulseMarket | undefined {
   const upper = code.trim().toUpperCase();
@@ -46,6 +71,99 @@ export function mapFutuWatchlistSymbols(
   }).filter((item): item is StockPulseUniverseSymbol => item !== undefined).slice(0, source.limit);
 }
 
+function futuGroupsKey(groups: string[] | undefined): string {
+  return (groups ?? []).map((group) => group.trim()).filter(Boolean).sort().join("\u0000");
+}
+
+function futuBatchKey(source: StockPulseUniverseSourceConfig): string {
+  return `${source.profile ?? "default"}\u0001${futuGroupsKey(source.groups)}`;
+}
+
+function futuRawFetchLimit(sources: StockPulseUniverseSourceConfig[]): number {
+  const requested = sources.reduce((sum, source) => sum + Math.max(0, source.limit), 0);
+  return Math.min(FUTU_WATCHLIST_RAW_FETCH_CAP, Math.max(FUTU_WATCHLIST_RAW_FETCH_FLOOR, requested));
+}
+
+function futuBatches(sources: StockPulseUniverseSourceConfig[]): FutuWatchlistBatch[] {
+  const batches = new Map<string, FutuWatchlistBatch>();
+  for (const source of sources) {
+    const key = futuBatchKey(source);
+    const existing = batches.get(key);
+    if (existing) {
+      existing.sources.push(source);
+      continue;
+    }
+    batches.set(key, {
+      profileName: source.profile ?? "default",
+      groups: source.groups,
+      sources: [source],
+    });
+  }
+  return [...batches.values()];
+}
+
+function futuResultWarnings(profileName: string, result: FutuWatchlistResult): string[] {
+  if (!result.group_errors.length) return [];
+  const first = result.group_errors[0];
+  const prefix = result.rate_limited ? "rate-limited" : "partial";
+  return [
+    `futu watchlist profile ${profileName} ${prefix}: ${result.group_errors.length}/${result.group_count} group(s) failed${first ? `; first=${first.group_name || "unknown"}: ${first.error}` : ""}`,
+  ];
+}
+
+function futuResultUnavailable(result: FutuWatchlistResult): boolean {
+  return result.group_count > 0 && result.securities.length === 0 && result.group_errors.length >= result.group_count;
+}
+
+function unavailableResult(
+  source: StockPulseUniverseSourceConfig,
+  message: string,
+  warnings: string[] = [message],
+): StockPulseUniverseSourceResult {
+  return {
+    source,
+    symbols: [],
+    warnings,
+    error: message,
+    unavailable: true,
+  };
+}
+
+export async function getFutuWatchlistUniverseSymbolsBatch(
+  sources: StockPulseUniverseSourceConfig[],
+): Promise<StockPulseUniverseSourceResult[]> {
+  const futuSources = sources.filter((source) => source.type === "futu_watchlist");
+  const results = new Map<StockPulseUniverseSourceConfig, StockPulseUniverseSourceResult>();
+  if (!futuSources.length) return [];
+
+  const config = loadFutuStockConfig();
+  for (const batch of futuBatches(futuSources)) {
+    try {
+      const profile = resolveFutuStockProfile(config, batch.profileName);
+      const result = await getFutuWatchlistSecuritiesResult(profile, {
+        groups: batch.groups,
+        limit: futuRawFetchLimit(batch.sources),
+      });
+      const warnings = futuResultWarnings(batch.profileName, result);
+      const unavailable = futuResultUnavailable(result);
+      for (const source of batch.sources) {
+        results.set(source, {
+          source,
+          symbols: mapFutuWatchlistSymbols(result.securities, source),
+          warnings,
+          unavailable,
+          error: unavailable ? warnings[0] ?? `futu watchlist profile ${batch.profileName} unavailable` : undefined,
+        });
+      }
+    } catch (err) {
+      const message = `futu watchlist profile ${batch.profileName} failed: ${sanitizeError(err)}`;
+      for (const source of batch.sources) results.set(source, unavailableResult(source, message));
+    }
+  }
+
+  return futuSources.map((source) => results.get(source) ?? unavailableResult(source, `futu watchlist source ${source.name} was not collected`));
+}
+
 export function mapEastmoneyMyfavorSymbols(
   rows: EastmoneyMyfavorSecurity[],
   source: StockPulseUniverseSourceConfig,
@@ -65,13 +183,12 @@ export function mapEastmoneyMyfavorSymbols(
 export async function getFutuWatchlistUniverseSymbols(
   source: StockPulseUniverseSourceConfig,
 ): Promise<StockPulseUniverseSymbol[]> {
-  const config = loadFutuStockConfig();
-  const profile = resolveFutuStockProfile(config, source.profile ?? "default");
-  const securities = await getFutuWatchlistSecurities(profile, {
-    groups: source.groups,
-    limit: source.limit,
-  });
-  return mapFutuWatchlistSymbols(securities, source);
+  const [result] = await getFutuWatchlistUniverseSymbolsBatch([source]);
+  if (!result) return [];
+  if (result.unavailable) {
+    throw new WatchlistSourceUnavailableError(result.error ?? `futu watchlist source ${source.name} unavailable`, result.warnings);
+  }
+  return result.symbols;
 }
 
 export async function getEastmoneyMyfavorUniverseSymbols(
@@ -92,4 +209,6 @@ export const __testables = {
   marketFromFutuCode,
   symbolFromFutuCode,
   marketFromEastmoneyFlag,
+  futuRawFetchLimit,
+  futuBatches,
 };
