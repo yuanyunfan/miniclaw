@@ -24,11 +24,12 @@ flowchart LR
 
 ## Stock Providers
 
-- [`stock/README.md`](stock/README.md): stock-provider family map, Futu readonly provider boundary, and stock data-flow summary.
-- [`stock/eastmoney.md`](stock/eastmoney.md): Eastmoney provider family, merging JYWG readonly holdings and MyFavor watchlist boundaries.
-- [`stock/research.md`](stock/research.md): stock research pipeline across portfolio, pulse, market-intel, and watchlist research.
+- [`stock/README.md`](stock/README.md): stock data-system overview and runtime layering.
+- [`stock/data-and-sources.md`](stock/data-and-sources.md): trusted data sources, account/watchlist boundaries, and normalized stock data semantics.
+- [`stock/workflows.md`](stock/workflows.md): stock data products and cron workflow composition.
+- [`stock/operations-and-security.md`](stock/operations-and-security.md): stock operations, session refresh, troubleshooting, and safety rules.
 
-Stock provider feature stubs have been merged and removed; use `stock/README.md` and `stock/research.md` as the current stock source docs.
+Stock provider feature stubs have been merged and removed. Use the stock data-system docs above as the current stock source docs.
 
 ## Content Providers
 

@@ -4,11 +4,11 @@ import {
   buildMarketIntelScoringCalibrationConfig,
   summarizeMarketForecastCalibration,
   type MarketForecastCalibrationGroup,
-} from "../src/providers/market-forecast-evaluation/calibration.js";
+} from "../src/stock/signals/forecast-calibration.js";
 import {
   getMarketIntelScoringCalibrationConfigPath,
   writeMarketIntelScoringCalibrationConfig,
-} from "../src/providers/market-intel/calibration.js";
+} from "../src/stock/signals/market-intel-calibration.js";
 
 function argValue(name: string, fallback?: string): string | undefined {
   const idx = process.argv.indexOf(name);

@@ -11,15 +11,17 @@ trace_docs:
     - docs/providers/content.md
     - docs/providers/email.md
     - docs/providers/stock/README.md
-    - docs/providers/stock/eastmoney.md
-    - docs/providers/stock/research.md
+    - docs/providers/stock/data-and-sources.md
+    - docs/providers/stock/workflows.md
+    - docs/providers/stock/operations-and-security.md
   zh:
     - docs/zh/providers/provider-framework.zh.md
     - docs/zh/providers/content.zh.md
     - docs/zh/providers/email.zh.md
     - docs/zh/providers/stock/README.zh.md
-    - docs/zh/providers/stock/eastmoney.zh.md
-    - docs/zh/providers/stock/research.zh.md
+    - docs/zh/providers/stock/data-and-sources.zh.md
+    - docs/zh/providers/stock/workflows.zh.md
+    - docs/zh/providers/stock/operations-and-security.zh.md
 ---
 
 # Providers

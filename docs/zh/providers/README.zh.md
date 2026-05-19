@@ -3,7 +3,7 @@ doc_id: providers-index
 lang: zh
 translation_of: docs/providers/README.md
 translation_status: current
-source_sha256: 339869269ea5ac85566bb572b6c53bc12ee669703efab684a285673dad2a29eb
+source_sha256: dc733e0202cf398f014d51f699416b1b6ed4ad4d21796c47f2a4781c2faba883
 ---
 # MiniClaw Provider 文档
 
@@ -31,11 +31,12 @@ flowchart LR
 
 ## 股票 Provider
 
-- [`../../providers/stock/README.md`](../../providers/stock/README.md): stock-provider family map、Futu readonly provider boundary 和 stock data-flow summary。
-- [`../../providers/stock/eastmoney.md`](../../providers/stock/eastmoney.md): Eastmoney provider family，合并 JYWG readonly holdings 和 MyFavor watchlist 边界。
-- [`../../providers/stock/research.md`](../../providers/stock/research.md): 串联 portfolio、pulse、market-intel 和 watchlist research 的 stock research pipeline。
+- [`../../providers/stock/README.md`](../../providers/stock/README.md): stock data-system overview 和 runtime layering。
+- [`../../providers/stock/data-and-sources.md`](../../providers/stock/data-and-sources.md): trusted data sources、account/watchlist boundaries 和 normalized stock data semantics。
+- [`../../providers/stock/workflows.md`](../../providers/stock/workflows.md): stock data products 和 cron workflow composition。
+- [`../../providers/stock/operations-and-security.md`](../../providers/stock/operations-and-security.md): stock operations、session refresh、troubleshooting 和 safety rules。
 
-Stock provider feature stubs 已合并并删除；当前 stock source docs 是 [`../../providers/stock/README.md`](../../providers/stock/README.md) 和 [`../../providers/stock/research.md`](../../providers/stock/research.md)。
+Stock provider feature stubs 已合并并删除；当前 stock source docs 是上面的 stock data-system docs。
 
 ## 内容 Provider
 

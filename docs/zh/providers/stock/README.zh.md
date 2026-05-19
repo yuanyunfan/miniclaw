@@ -3,157 +3,82 @@ doc_id: stock-providers-index
 lang: zh
 translation_of: docs/providers/stock/README.md
 translation_status: current
-source_sha256: e9d7cae7117371f023125e8cdb796f02d983efef8818943f726a1d0039f18037
+source_sha256: e40de4b837861cf46796ac25622409334a16affef59619b273bce7dadde4df51
 ---
-# 股票 Provider 系列
+# Stock Data System
 
-> 结论：stock provider docs 描述只读券商/account source、watchlist source、market evidence 和 research workflow。账户专属 session 和私有券商细节不能出现在 public website pages。
+> 结论：stock 文档现在按数据系统组织，而不是按 provider 文件夹树组织。数据源负责抓取原始事实，`src/stock/data` 和 `src/stock/signals` 负责标准化与打分，`src/stock/reports` 负责生成 task-ready product，cron/provider wrapper 只保留 MiniClaw runtime 兼容层。
 
-## 数据流
+## 系统地图
 
 ```mermaid
 flowchart LR
-  Futu[Futu OpenD readonly account / watchlist] --> FutuProvider[futu-stock]
-  EastmoneyJYWG[Eastmoney JYWG holdings] --> Eastmoney[Eastmoney family]
-  EastmoneyMyFavor[Eastmoney MyFavor watchlist] --> Eastmoney
-  FutuProvider --> Portfolio[stock-portfolio]
-  Eastmoney --> Portfolio
-  FutuProvider --> Pulse[stock-pulse universe]
-  Eastmoney --> Pulse
-  Portfolio --> Research[stock research pipeline]
-  Pulse --> Research
-  MarketIntel[market-intel] --> Research
-  Research --> Discord[Discord stock channels]
+  Futu[Futu OpenD] --> Sources[Stock sources]
+  JYWG[Eastmoney JYWG] --> Sources
+  MyFavor[Eastmoney MyFavor] --> Sources
+  ETF[Eastmoney ETF selector] --> Sources
+  Yahoo[Yahoo chart] --> Sources
+  Official[Official market evidence] --> Sources
+
+  Sources --> Data[Standard stock data]
+  Data --> Signals[Signals and calibration]
+  Signals --> Products[Stock data products]
+  Products --> Cron[Cron reports]
+  Products --> Prompt[LLM prompt context]
+  Cron --> Discord[Discord stock channels]
 ```
 
-## Canonical 文档
+## 文档集合
 
-- [`../../../plans/2026-05-17-stock-provider-data-layer-migration.md`](../../../plans/2026-05-17-stock-provider-data-layer-migration.md): data-layer-first stock architecture 目标迁移计划，cron providers 保留为 orchestration layer。
-- [`../../../providers/stock/eastmoney.md`](../../../providers/stock/eastmoney.md): JYWG holdings 和 MyFavor watchlist 的 Eastmoney family boundary。
-- [`../../../providers/stock/research.md`](../../../providers/stock/research.md): 横跨 portfolio、pulse、market-intel 和 watchlist research 的 stock research provider pipeline。
+- [`../../../providers/stock/data-and-sources.md`](../../../providers/stock/data-and-sources.md)：trusted sources、session boundary、source reliability 和标准化 stock data semantics。
+- [`../../../providers/stock/workflows.md`](../../../providers/stock/workflows.md)：stock data products，以及当前使用它们的 cron workflows。
+- [`../../../providers/stock/operations-and-security.md`](../../../providers/stock/operations-and-security.md)：health check、refresh command、安全规则和常见恢复路径。
+- [`../../../plans/2026-05-17-stock-provider-data-layer-migration.md`](../../../plans/2026-05-17-stock-provider-data-layer-migration.md)：data-layer-first 架构的历史迁移计划。
 
-## 当前代码布局
-
-Stock cron provider names 仍通过 `src/providers/index.ts` 注册。每个 stock provider 的 `src/providers/*/index.ts` 现在都是 compatibility wrapper，实际 re-export `src/stock/reports/*` 中的 report composer。
-
-可复用 stock internals 按数据职责组织：
+## Runtime 分层
 
 ```text
 src/stock/
   sources/   # external Futu, Eastmoney, Yahoo, and official evidence adapters
   data/      # calendar, universe, quotes, portfolio, ETF premium, market evidence, market memory
-  signals/   # pulse anomaly, market-intel scoring, forecast evaluation, context synthesis
-  reports/   # cron-facing stock report composers
+  signals/   # pulse anomaly, market-intel scoring, forecast evaluation, calibration
+  reports/   # cron-facing stock report composers and prompt payload renderers
   types.ts   # vendor-neutral stock domain types
 ```
 
-这是一次兼容迁移：`pre_provider`、`pre_provider_config` 和 `pre_context_providers` 等 cron YAML 字段不变。
+stock provider 的 `src/providers/*/index.ts` 是 compatibility wrapper。它们 re-export `src/stock/reports/*` 的 report composer，让已有 cron YAML 可以继续使用 `pre_provider`、`pre_provider_config` 和 `pre_context_providers`。
 
-`src/providers/*` 不应该拥有 stock source/data/signal/report implementation logic。final provider thinning slice 之后，stock provider folders 顶层只保留 `index.ts` 和 `config.ts`，作为 cron/provider compatibility boundary；provider tests 与 fixtures 可以继续留在 `__tests__/` 或 `fixtures/` 下，但 `types.ts`、`format.ts`、`calibration.ts`、`pie-chart.ts` 和 provider-level stock data facade 已删除。Stock-owned types、payload builders、chart renderers、calibration helpers、source adapters、data-domain modules 和 signal logic 都位于 `src/stock/*`。
+这个边界是刻意保留的：
 
-`src/stock/reports/*` 中仍然存在的 provider imports 是刻意保留的 cron compatibility boundary：report composers 可以调用 provider config loaders 和 generic provider framework contracts，而 `src/stock/sources/*`、`src/stock/data/*`、`src/stock/signals/*` 不再 import stock-specific provider modules。
+- `src/stock/sources/*`、`src/stock/data/*` 和 `src/stock/signals/*` 不 import stock-specific provider modules。
+- `src/stock/reports/*` 可以 import provider config loaders 和 provider framework types，因为 reports 是 cron-facing product layer。
+- `src/providers/<stock-provider>/config.ts` 仍然是 `~/.miniclaw/providers/**` 本地命名配置的 loader。
+- provider tests 和 fixtures 可以继续留在 `src/providers/**/__tests__` 或 `fixtures/` 下，用来验证 runtime compatibility。
 
-## 富途股票 Provider
+## 数据产品
 
-Runtime names:
+当前 stock products 包括：
 
-- MCP server: `futu-stock`.
-- Cron pre-provider: `futu-stock`.
-- Stock-pulse universe source: `futu_watchlist`.
+- `stock-portfolio`：把 readonly broker/account evidence 合成为 redacted portfolio 和 asset summaries。
+- `stock-pulse`：扫描持仓和 watchlist symbols 的 intraday movement 与 anomaly signals。
+- `market-intel`：采集 market evidence、quote context、portfolio context 和 calibrated market scores。
+- `market-context`：存储并注入 rolling multi-day market memory。
+- `market-forecast-evaluation`：对 stored market forecasts 和 benchmark outcomes 做评估。
+- `stock-watchlist-research`：研究 broker watchlist 中尚未持有的 symbols。
 
-Owner code paths:
+## 核心规则
 
-```text
-src/mcp/futu-stock/
-  server.ts        # stdio MCP server with readonly tools
-  config.ts        # ~/.miniclaw/providers/futu-stock/config.yaml
-  futu-client.ts   # Python bridge to official futu-api / moomoo package
-  mapper.ts        # Futu fields -> unified account snapshot
-  redact.ts        # prompt/Discord-safe redaction
-  safety.ts        # readonly tool and forbidden API checks
-  state.ts
-  types.ts
+- holdings 和 watchlist symbols 是不同数据类型。
+- public ETF premium data 可以按代码 enrich 已持仓 ETF，但不能证明账户持有。
+- market context 是 memory，不是实时 quote source。
+- forecast evaluations 是 calibration telemetry，不是交易指令。
+- stock provider 不能 unlock trading、place orders、modify orders、transfer funds 或绕过 login challenges。
 
-src/providers/futu-stock/
-  index.ts         # cron pre_provider compatibility wrapper
-  config.ts        # ~/.miniclaw/providers/futu-stock/<name>.yaml
-
-src/stock/reports/futu-stock.ts
-  # cron provider wrapper 使用的 report composer
-
-src/stock/reports/futu-stock-format.ts
-  # safe context formatter
-
-src/stock/sources/futu/
-  # Futu OpenD readonly access 的 source adapter exports
-```
-
-Trusted source:
-
-- 通过本机 OpenD 访问 Futu / moomoo 官方 OpenAPI。
-- OpenD 应只监听 `127.0.0.1`。
-- MiniClaw 通过官方 Python SDK bridge 访问 OpenD；不保存 Futu account password 或 trading password。
-
-Command:
+## 验证
 
 ```bash
-pnpm mcp:futu-stock
-```
-
-Readonly tools:
-
-- `futu_health_check`
-- `futu_get_account_snapshot`
-- `futu_get_positions_summary`
-- `futu_get_daily_pnl_report`
-
-Forbidden behavior:
-
-- `unlock_trade`
-- `place_order`
-- `modify_order`
-- automatic trading、strategy trading、fund transfer 或任何 trade-password workflow
-- 把 account IDs、phone numbers、tokens、raw SDK session data 或 OpenD credentials 暴露到 logs/Discord/LLM prompts
-
-Provider usage:
-
-```yaml
-pre_provider: futu-stock
-pre_provider_config: us-stock
-```
-
-Stock-pulse universe source usage:
-
-```yaml
-universe:
-  include_sources: true
-  sources:
-    - type: futu_watchlist
-      name: futu-us-watchlist
-      market: us
-      profile: us
-      groups: ["Favorites"]
-      limit: 80
-```
-
-Futu watchlist rows 是 observation-universe symbols。除非它们同时来自 portfolio/account provider payload，否则不能渲染为 account holdings。
-
-## Provider 边界
-
-- Holdings 和 watchlists 是不同 source types。
-- Account providers 可以 feed `stock-portfolio`；watchlist sources 可以 feed `stock-pulse` 和 watchlist research。
-- Provider code 应在 LLM interpretation 前计算 deterministic evidence。
-- Public website pages 可以总结 stock capabilities，但实现事实应通过 `source_docs` 回链到本目录。
-
-## 历史遗留清理
-
-旧 Futu feature stub 已在迁移完成后删除。Stock research 主题记录在 [`research.zh.md`](research.zh.md)。
-
-Verification owner:
-
-```bash
-pnpm vitest run src/mcp/futu-stock src/providers/futu-stock
 pnpm vitest run src/providers/stock-portfolio src/providers/stock-pulse src/providers/market-intel src/providers/market-context src/providers/market-forecast-evaluation src/providers/stock-watchlist-research
+pnpm vitest run src/mcp/futu-stock src/mcp/eastmoney-jywg src/mcp/eastmoney-myfavor src/providers/futu-stock src/providers/eastmoney-jywg-readonly src/providers/eastmoney-etf-premium
 pnpm run quality:docs
 pnpm run typecheck
 ```

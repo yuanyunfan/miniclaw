@@ -3,7 +3,7 @@ doc_id: documentation-migration-map
 lang: zh
 translation_of: docs/documentation-migration-map.md
 translation_status: current
-source_sha256: 4a6db63d20308fcefe96a304b74d9cc62a38641d32c68292126fe5fc010eb3f9
+source_sha256: 6bf91b8cb91cc696efb0820716b3ee28a0000abf94b4f9195c9c20d511d80a1a
 ---
 # MiniClaw 文档迁移地图
 
@@ -151,12 +151,34 @@ source_sha256: 4a6db63d20308fcefe96a304b74d9cc62a38641d32c68292126fe5fc010eb3f9
     "translation_status": "current"
   },
   {
-    "doc_id": "stock-research-provider-pipeline",
-    "source_path": "docs/providers/stock/research.md",
-    "zh_path": "docs/zh/providers/stock/research.zh.md",
+    "doc_id": "stock-workflows",
+    "source_path": "docs/providers/stock/workflows.md",
+    "zh_path": "docs/zh/providers/stock/workflows.zh.md",
     "category": "provider",
     "status": "website-source",
-    "merge_group": "providers/stock/research",
+    "merge_group": "providers/stock/workflows",
+    "website_exposure": "public",
+    "translation_required": true,
+    "translation_status": "current"
+  },
+  {
+    "doc_id": "stock-data-and-sources",
+    "source_path": "docs/providers/stock/data-and-sources.md",
+    "zh_path": "docs/zh/providers/stock/data-and-sources.zh.md",
+    "category": "provider",
+    "status": "website-source",
+    "merge_group": "providers/stock/data",
+    "website_exposure": "public",
+    "translation_required": true,
+    "translation_status": "current"
+  },
+  {
+    "doc_id": "stock-operations-and-security",
+    "source_path": "docs/providers/stock/operations-and-security.md",
+    "zh_path": "docs/zh/providers/stock/operations-and-security.zh.md",
+    "category": "provider",
+    "status": "website-source",
+    "merge_group": "providers/stock/operations",
     "website_exposure": "public",
     "translation_required": true,
     "translation_status": "current"
@@ -234,17 +256,6 @@ source_sha256: 4a6db63d20308fcefe96a304b74d9cc62a38641d32c68292126fe5fc010eb3f9
     "category": "provider",
     "status": "website-source",
     "merge_group": "providers",
-    "website_exposure": "public",
-    "translation_required": true,
-    "translation_status": "current"
-  },
-  {
-    "doc_id": "eastmoney-provider-family",
-    "source_path": "docs/providers/stock/eastmoney.md",
-    "zh_path": "docs/zh/providers/stock/eastmoney.zh.md",
-    "category": "provider",
-    "status": "website-source",
-    "merge_group": "providers/eastmoney",
     "website_exposure": "public",
     "translation_required": true,
     "translation_status": "current"

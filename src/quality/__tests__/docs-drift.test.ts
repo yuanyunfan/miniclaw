@@ -11,9 +11,9 @@ describe("docs drift path matching", () => {
   it("matches exact paths and single-level docs globs", () => {
     expect(matchesPathPattern("src/bot.ts", "src/bot.ts")).toBe(true);
     expect(matchesPathPattern("docs/providers/content.md", "docs/providers/*.md")).toBe(true);
-    expect(matchesPathPattern("docs/providers/stock/eastmoney.md", "docs/providers/*.md")).toBe(false);
+    expect(matchesPathPattern("docs/providers/stock/data-and-sources.md", "docs/providers/*.md")).toBe(false);
     expect(matchesPathPattern("docs/providers/provider-framework.md", "docs/providers/*.md")).toBe(true);
-    expect(matchesPathPattern("docs/providers/stock/eastmoney.md", "docs/providers/**/*.md")).toBe(true);
+    expect(matchesPathPattern("docs/providers/stock/data-and-sources.md", "docs/providers/**/*.md")).toBe(true);
   });
 
   it("matches recursive source globs", () => {
@@ -111,7 +111,7 @@ describe("docs drift requirement matching", () => {
 
   it("accepts new taxonomy docs for runtime, provider, and experiment source changes", () => {
     expect(
-      findDocsDriftFindings(["src/providers/stock-pulse/index.ts", "docs/providers/stock/research.md"])
+      findDocsDriftFindings(["src/providers/stock-pulse/index.ts", "docs/providers/stock/workflows.md"])
     ).toEqual([]);
     expect(
       findDocsDriftFindings(["src/agent/task.ts", "docs/runtime/README.md"])

@@ -1,152 +1,77 @@
-# Stock Provider Family
+# Stock Data System
 
-> Conclusion: stock provider docs describe readonly brokerage/account sources, watchlist sources, market evidence, and research workflows. Account-specific sessions and private brokerage details stay outside public website pages.
+> Conclusion: stock docs are organized around the data system, not around the provider folder tree. Data sources fetch raw facts, `src/stock/data` and `src/stock/signals` normalize and score them, `src/stock/reports` packages task-ready products, and cron/provider wrappers only keep MiniClaw runtime compatibility.
 
-## Data Flow
+## System Map
 
 ```mermaid
 flowchart LR
-  Futu[Futu OpenD readonly account / watchlist] --> FutuProvider[futu-stock]
-  EastmoneyJYWG[Eastmoney JYWG holdings] --> Eastmoney[Eastmoney family]
-  EastmoneyMyFavor[Eastmoney MyFavor watchlist] --> Eastmoney
-  FutuProvider --> Portfolio[stock-portfolio]
-  Eastmoney --> Portfolio
-  FutuProvider --> Pulse[stock-pulse universe]
-  Eastmoney --> Pulse
-  Portfolio --> Research[stock research pipeline]
-  Pulse --> Research
-  MarketIntel[market-intel] --> Research
-  Research --> Discord[Discord stock channels]
+  Futu[Futu OpenD] --> Sources[Stock sources]
+  JYWG[Eastmoney JYWG] --> Sources
+  MyFavor[Eastmoney MyFavor] --> Sources
+  ETF[Eastmoney ETF selector] --> Sources
+  Yahoo[Yahoo chart] --> Sources
+  Official[Official market evidence] --> Sources
+
+  Sources --> Data[Standard stock data]
+  Data --> Signals[Signals and calibration]
+  Signals --> Products[Stock data products]
+  Products --> Cron[Cron reports]
+  Products --> Prompt[LLM prompt context]
+  Cron --> Discord[Discord stock channels]
 ```
 
-## Canonical Docs
+## Documentation Set
 
-- [`../../plans/2026-05-17-stock-provider-data-layer-migration.md`](../../plans/2026-05-17-stock-provider-data-layer-migration.md): target migration plan for a data-layer-first stock architecture with cron providers as the orchestration layer.
-- [`eastmoney.md`](eastmoney.md): Eastmoney family boundary for JYWG holdings and MyFavor watchlist.
-- [`research.md`](research.md): stock research provider pipeline across portfolio, pulse, market-intel, and watchlist research.
+- [`data-and-sources.md`](data-and-sources.md): trusted sources, session boundaries, source reliability, and normalized stock data semantics.
+- [`workflows.md`](workflows.md): stock data products and the current cron workflows that use them.
+- [`operations-and-security.md`](operations-and-security.md): health checks, refresh commands, safety rules, and common recovery paths.
+- [`../../plans/2026-05-17-stock-provider-data-layer-migration.md`](../../plans/2026-05-17-stock-provider-data-layer-migration.md): historical migration plan for the data-layer-first architecture.
 
-## Current Code Layout
-
-Stock cron provider names remain registered through `src/providers/index.ts`. Each stock provider `src/providers/*/index.ts` is now a compatibility wrapper that re-exports the report composer in `src/stock/reports/*`.
-
-Reusable stock internals are organized by data responsibility:
+## Runtime Layers
 
 ```text
 src/stock/
   sources/   # external Futu, Eastmoney, Yahoo, and official evidence adapters
   data/      # calendar, universe, quotes, portfolio, ETF premium, market evidence, market memory
-  signals/   # pulse anomaly, market-intel scoring, forecast evaluation, context synthesis
-  reports/   # cron-facing stock report composers
+  signals/   # pulse anomaly, market-intel scoring, forecast evaluation, calibration
+  reports/   # cron-facing stock report composers and prompt payload renderers
   types.ts   # vendor-neutral stock domain types
 ```
 
-This is a compatibility migration: cron YAML fields such as `pre_provider`, `pre_provider_config`, and `pre_context_providers` do not change.
+`src/providers/*/index.ts` files for stock providers are compatibility wrappers. They re-export report composers from `src/stock/reports/*` so existing cron YAML can keep using `pre_provider`, `pre_provider_config`, and `pre_context_providers`.
 
-`src/providers/*` should not own stock source/data/signal/report implementation logic. After the final provider thinning slice, stock provider folders keep only top-level `index.ts` and `config.ts` files as cron/provider compatibility boundaries; provider tests and fixtures may remain under `__tests__/` or `fixtures/`, but `types.ts`, `format.ts`, `calibration.ts`, `pie-chart.ts`, and provider-level stock data facades have been removed. Stock-owned types, payload builders, chart renderers, calibration helpers, source adapters, data-domain modules, and signal logic live under `src/stock/*`.
+The boundary is deliberate:
 
-The remaining provider imports from `src/stock/reports/*` are deliberate cron compatibility boundaries: report composers may call provider config loaders and generic provider framework contracts, while `src/stock/sources/*`, `src/stock/data/*`, and `src/stock/signals/*` stay free of stock-specific provider module imports.
+- `src/stock/sources/*`, `src/stock/data/*`, and `src/stock/signals/*` do not import stock-specific provider modules.
+- `src/stock/reports/*` may import provider config loaders and provider framework types because reports are the cron-facing product layer.
+- `src/providers/<stock-provider>/config.ts` remains the named config loader for local files under `~/.miniclaw/providers/**`.
+- Provider tests and fixtures may stay under `src/providers/**/__tests__` or `fixtures/` when they verify runtime compatibility.
 
-## Futu Stock Provider
+## Data Products
 
-Runtime names:
+Current stock products are:
 
-- MCP server: `futu-stock`.
-- Cron pre-provider: `futu-stock`.
-- Stock-pulse universe source: `futu_watchlist`.
+- `stock-portfolio`: combines readonly broker/account evidence into redacted portfolio and asset summaries.
+- `stock-pulse`: scans held and watchlist symbols for intraday movement and anomaly signals.
+- `market-intel`: gathers market evidence, quote context, portfolio context, and calibrated market scores.
+- `market-context`: stores and injects rolling multi-day market memory.
+- `market-forecast-evaluation`: evaluates stored market forecasts against benchmark outcomes.
+- `stock-watchlist-research`: researches broker watchlist symbols that are not already held.
 
-Owner code paths:
+## Core Rules
 
-```text
-src/mcp/futu-stock/
-  server.ts        # stdio MCP server with readonly tools
-  config.ts        # ~/.miniclaw/providers/futu-stock/config.yaml
-  futu-client.ts   # Python bridge to official futu-api / moomoo package
-  mapper.ts        # Futu fields -> unified account snapshot
-  redact.ts        # prompt/Discord-safe redaction
-  safety.ts        # readonly tool and forbidden API checks
-  state.ts
-  types.ts
+- Holdings and watchlist symbols are different data types.
+- Public ETF premium data can enrich a held ETF by code, but it never proves account ownership.
+- Market context is memory, not a real-time quote source.
+- Forecast evaluations are calibration telemetry, not trading instructions.
+- No stock provider may unlock trading, place orders, modify orders, transfer funds, or bypass login challenges.
 
-src/providers/futu-stock/
-  index.ts         # cron pre_provider compatibility wrapper
-  config.ts        # ~/.miniclaw/providers/futu-stock/<name>.yaml
-
-src/stock/reports/futu-stock.ts
-  # report composer used by the cron provider wrapper
-
-src/stock/reports/futu-stock-format.ts
-  # safe context formatter
-
-src/stock/sources/futu/
-  # source adapter exports around Futu OpenD readonly access
-```
-
-Trusted source:
-
-- Futu / moomoo official OpenAPI through local OpenD.
-- OpenD should listen only on `127.0.0.1`.
-- MiniClaw talks to OpenD through the official Python SDK bridge; it does not store Futu account password or trading password.
-
-Command:
+## Verification
 
 ```bash
-pnpm mcp:futu-stock
-```
-
-Readonly tools:
-
-- `futu_health_check`
-- `futu_get_account_snapshot`
-- `futu_get_positions_summary`
-- `futu_get_daily_pnl_report`
-
-Forbidden behavior:
-
-- `unlock_trade`
-- `place_order`
-- `modify_order`
-- automatic trading, strategy trading, fund transfer, or any trade-password workflow
-- exposing account IDs, phone numbers, tokens, raw SDK session data, or OpenD credentials to logs/Discord/LLM prompts
-
-Provider usage:
-
-```yaml
-pre_provider: futu-stock
-pre_provider_config: us-stock
-```
-
-Stock-pulse universe source usage:
-
-```yaml
-universe:
-  include_sources: true
-  sources:
-    - type: futu_watchlist
-      name: futu-us-watchlist
-      market: us
-      profile: us
-      groups: ["Favorites"]
-      limit: 80
-```
-
-Futu watchlist rows are observation-universe symbols. They must not be rendered as account holdings unless they also arrive through a portfolio/account provider payload.
-
-## Provider Boundaries
-
-- Holdings and watchlists are different source types.
-- Account providers may feed `stock-portfolio`; watchlist sources may feed `stock-pulse` and watchlist research.
-- Provider code should compute deterministic evidence before LLM interpretation.
-- Public website pages may summarize stock capabilities, but implementation facts should link back to this directory through `source_docs`.
-
-## Legacy Cleanup
-
-The previous Futu feature stub has been removed after migration. Stock research topics are documented in [`research.md`](research.md).
-
-Verification owner:
-
-```bash
-pnpm vitest run src/mcp/futu-stock src/providers/futu-stock
 pnpm vitest run src/providers/stock-portfolio src/providers/stock-pulse src/providers/market-intel src/providers/market-context src/providers/market-forecast-evaluation src/providers/stock-watchlist-research
+pnpm vitest run src/mcp/futu-stock src/mcp/eastmoney-jywg src/mcp/eastmoney-myfavor src/providers/futu-stock src/providers/eastmoney-jywg-readonly src/providers/eastmoney-etf-premium
 pnpm run quality:docs
 pnpm run typecheck
 ```

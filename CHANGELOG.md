@@ -27,6 +27,7 @@
 - 公开 docs/config 示例改用占位 channel ID 和通用路径，并让 G0 阻止 raw Discord snowflake 或本机用户目录路径进入公开文档。
 
 ### Changed
+- 将 stock provider 文档重组为压缩的 data-system 结构：`README`、`data-and-sources`、`workflows`、`operations-and-security` 四篇文档统一描述数据源、标准数据语义、数据产品、cron workflow、运维与账号安全边界，并同步中文 mirror、migration map 和 website trace docs。
 - 以 English canonical 重写当前核心 docs：`docs/README.md`、`docs/architecture.md`、`docs/bot-routing.md`、`docs/chat-router-current-logic.md`、`docs/install-distribution-strategy.md`、`docs/prompts.md` 和 `docs/quality-gates.md`；对应中文 mirror 同步为 `docs/zh/**`。
 - 润色 `docs/zh/**` 中文 mirror 的章节标题和高频机器翻译术语，并标记受影响中文 website summary 为语义未变。
 - 扩展 stock provider 数据层迁移计划，补充 ownership cleanup 的分阶段执行清单、验收标准、验证命令和回滚策略，并同步中文 mirror。
@@ -40,6 +41,7 @@
 - App Trending 默认频道从 `daily-app-trending` 改为 `weekly-app-trending`，频道初始化脚本会把旧频道原地重命名并清理旧 channel-map key。
 
 ### Fixed
+- 修复 `market-calibration` CLI 的 import 漂移，改为引用迁移后的 `src/stock/signals/forecast-calibration` 和 `market-intel-calibration`。
 - 移除 website landing page 中过细的内部 Discord channel slug，让 website 保持对外项目窗口定位。
 - 精简 website runtime/landing 文案，让公开网站只保留高层能力说明。
 - 修复根 README 的文档漂移：同步当前 slash commands、provider 列表、`docs/providers/**` 链接和最新项目结构。

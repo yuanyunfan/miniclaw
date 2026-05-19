@@ -24,9 +24,10 @@ Runtime compatibility stubs have been removed after their content was merged int
 - [`providers/provider-framework.md`](providers/provider-framework.md): Provider framework source of truth for manifests, health checks, dry runs, structured output, fixtures, and failure taxonomy.
 - [`providers/content.md`](providers/content.md): Content provider family, currently covering WeChat MP ingestion and dedupe boundaries.
 - [`providers/email.md`](providers/email.md): Email provider family, separating the read-only email capability from business parsers.
-- [`providers/stock/README.md`](providers/stock/README.md): Stock provider family data flow and Futu readonly provider boundary.
-- [`providers/stock/eastmoney.md`](providers/stock/eastmoney.md): Eastmoney provider family, including JYWG readonly and MyFavor watchlist.
-- [`providers/stock/research.md`](providers/stock/research.md): Stock research provider pipeline connecting portfolio, pulse, market intel, and watchlist research.
+- [`providers/stock/README.md`](providers/stock/README.md): Stock data-system overview and runtime layering.
+- [`providers/stock/data-and-sources.md`](providers/stock/data-and-sources.md): Stock source inventory, trust boundaries, and normalized data semantics.
+- [`providers/stock/workflows.md`](providers/stock/workflows.md): Stock data products and cron workflow composition.
+- [`providers/stock/operations-and-security.md`](providers/stock/operations-and-security.md): Stock operations, session refresh, troubleshooting, and account safety rules.
 
 Provider compatibility stubs have been removed after their content was merged into the provider-family docs above.
 
@@ -73,7 +74,7 @@ Website pages must stay presentation-only and declare language-aware `source_doc
 ## Placement Rules
 
 - Global architecture, routing, engineering governance, and framework-level prompt docs live at the top level of `docs/`.
-- Runtime docs live in `docs/runtime/`, provider docs live in `docs/providers/`, and experimental control-plane docs live in `docs/experiments/`.
+- Runtime docs live in `docs/runtime/`, provider and data-system docs live in `docs/providers/`, and experimental control-plane docs live in `docs/experiments/`.
 - Do not add new feature-level compatibility stubs. Current source-of-truth docs should live in the runtime, provider, or experiment family docs.
 - Implementation plans live only in `docs/plans/`; do not mix plans with current design docs.
 - Obsolete audits, historical retrospectives, and retired global roadmaps live in `docs/archive/`; they cannot replace current source-of-truth docs.

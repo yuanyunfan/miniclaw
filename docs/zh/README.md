@@ -3,7 +3,7 @@ doc_id: docs-index
 lang: zh
 translation_of: docs/README.md
 translation_status: current
-source_sha256: 65702341101c1a1ee0fbb3c0cf2c35b5a0bc8e6f67b7c792e1cd6920a45d7aa7
+source_sha256: 22130d5943d068de7a9f3163e906b8c8f22d2551061f12f5f6a75fa78e57a6f2
 ---
 # MiniClaw 文档索引
 
@@ -31,9 +31,10 @@ runtime compatibility stub 已移除，内容已经合并到 `runtime/README.md`
 - [`providers/provider-framework.md`](providers/provider-framework.zh.md)：provider framework 的 manifest、health check、dry run、structured output、fixture 和 failure taxonomy。
 - [`providers/content.md`](providers/content.zh.md)：content provider family，目前覆盖 WeChat MP ingestion 和 dedupe 边界。
 - [`providers/email.md`](providers/email.zh.md)：email provider family，区分 read-only email capability 和业务 parser。
-- [`providers/stock/README.md`](providers/stock/README.zh.md)：stock provider family 数据流和 Futu readonly provider 边界。
-- [`providers/stock/eastmoney.md`](providers/stock/eastmoney.zh.md)：Eastmoney provider family，包括 JYWG readonly 和 MyFavor watchlist。
-- [`providers/stock/research.md`](providers/stock/research.zh.md)：stock research provider pipeline，连接 portfolio、pulse、market intel 和 watchlist research。
+- [`providers/stock/README.md`](providers/stock/README.zh.md)：stock data-system overview 和 runtime layering。
+- [`providers/stock/data-and-sources.md`](providers/stock/data-and-sources.zh.md)：stock source inventory、trust boundaries 和 normalized data semantics。
+- [`providers/stock/workflows.md`](providers/stock/workflows.zh.md)：stock data products 和 cron workflow composition。
+- [`providers/stock/operations-and-security.md`](providers/stock/operations-and-security.zh.md)：stock operations、session refresh、troubleshooting 和 account safety rules。
 
 provider compatibility stub 已移除，内容已经合并到上面的 provider-family docs。
 
@@ -80,7 +81,7 @@ website pages 只能作为 presentation layer，并通过 `source_docs` frontmat
 ## 放置规则
 
 - 全局架构、routing、工程治理和 framework-level prompt docs 放在 `docs/` 顶层。
-- runtime docs 放在 `docs/runtime/`，provider docs 放在 `docs/providers/`，实验性 control-plane docs 放在 `docs/experiments/`。
+- runtime docs 放在 `docs/runtime/`，provider 和 data-system docs 放在 `docs/providers/`，实验性 control-plane docs 放在 `docs/experiments/`。
 - 不新增 feature-level compatibility stub。当前真相源应进入 runtime、provider 或 experiment family docs。
 - implementation plan 只放在 `docs/plans/`，不要和当前设计文档混放。
 - 过期审计、历史复盘、退役路线图放在 `docs/archive/`，不能替代当前 source-of-truth docs。
