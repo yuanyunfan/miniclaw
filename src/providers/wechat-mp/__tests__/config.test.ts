@@ -38,6 +38,7 @@ accounts:
     const config = loadWechatMpProviderConfig("relative");
 
     expect(config.window).toEqual({ mode: "relative", hours: 24 });
+    expect(config.browser_profile_dir).toBe("~/.miniclaw/browser-profiles/wechat-mp");
   });
 
   it("parses fixed slot windows", () => {
@@ -59,6 +60,7 @@ window:
 max_pages_per_account: 5
 page_size: 10
 dedupe: true
+browser_profile_dir: ~/.miniclaw/browser-profiles/wechat-mp-daily
 accounts:
   - name: 机器之心
     query: 机器之心
@@ -67,6 +69,7 @@ accounts:
     const config = loadWechatMpProviderConfig("fixed");
 
     expect(config.max_pages_per_account).toBe(5);
+    expect(config.browser_profile_dir).toBe("~/.miniclaw/browser-profiles/wechat-mp-daily");
     expect(config.window).toMatchObject({
       mode: "fixed_slots",
       timezone_offset_hours: 8,

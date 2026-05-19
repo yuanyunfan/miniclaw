@@ -118,6 +118,7 @@ export interface EastmoneyJywgClientOptions {
 
 export interface EastmoneyJywgClient {
   healthCheck(profile: EastmoneyJywgProfileConfig, session: EastmoneyJywgSession): Promise<EastmoneyJywgHealthCheck>;
+  refreshSession?(profile: EastmoneyJywgProfileConfig, session: EastmoneyJywgSession): Promise<EastmoneyJywgSession>;
   getRawBrokerData(
     profile: EastmoneyJywgProfileConfig,
     session: EastmoneyJywgSession,

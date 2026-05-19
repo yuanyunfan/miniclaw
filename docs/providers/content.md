@@ -25,6 +25,7 @@ Owner code paths:
 ```text
 src/providers/wechat-mp/
   auth.ts       # session loading/redaction
+  browser-refresh.ts # persistent browser-profile session refresh
   client.ts     # mp.weixin.qq.com backend calls
   collector.ts  # account query, window, dedupe orchestration
   config.ts     # ~/.miniclaw/providers/wechat-mp/<name>.yaml
@@ -33,8 +34,10 @@ src/providers/wechat-mp/
   state.ts      # fakeid cache and sent-article dedupe
 
 scripts/wechat-mp-login.ts
+scripts/wechat-mp-refresh.ts
 scripts/wechat-mp-check.ts
 scripts/wechat-mp-collect.ts
+scripts/auth-session-refresh.ts
 ```
 
 Purpose:
@@ -56,6 +59,7 @@ User config lives under `~/.miniclaw/providers/wechat-mp/<name>.yaml`:
 
 ```yaml
 auth_path: "~/.miniclaw/secrets/wechat-mp-session.json"
+browser_profile_dir: "~/.miniclaw/browser-profiles/wechat-mp"
 state_path: "~/.miniclaw/providers/wechat-mp/state.json"
 window:
   mode: fixed_slots
@@ -92,16 +96,23 @@ Commands:
 
 ```bash
 pnpm wechat-mp:login -- --config daily-ai-wechat
+pnpm wechat-mp:refresh -- --config daily-ai-wechat
+pnpm wechat-mp:refresh -- --config daily-ai-wechat --visible
+pnpm auth:refresh -- --provider wechat-mp --config daily-ai-wechat
 pnpm wechat-mp:check -- --config daily-ai-wechat
 pnpm wechat-mp:collect -- --config daily-ai-wechat --dry-run
 ```
 
 Session contract:
 
-- Login uses a visible browser and saves only the `mp.weixin.qq.com` token/cookies to `auth_path`.
+- Login uses a visible persistent browser profile and saves only the `mp.weixin.qq.com` token/cookies to `auth_path`.
+- Refresh first tries the dedicated browser profile in headless mode. If the profile can still reach a backend URL with a numeric `token`, MiniClaw rewrites `auth_path` after a `searchbiz` health check.
+- `--visible` is the manual recovery path when the backend asks for QR scan, device confirmation, captcha, or another login challenge.
 - `auth_path` should have `0600` permissions and must not be committed.
+- `browser_profile_dir` should be a MiniClaw-only profile directory with private local permissions; do not point it at a user's normal Chrome profile.
 - Check and collect commands must redact token/cookie values.
 - A dry run must not commit dedupe state.
+- Automatic refresh must fail closed on invalid sessions or frequency-control challenges; it must not store account passwords or try to bypass human verification.
 
 ## Cron Usage
 

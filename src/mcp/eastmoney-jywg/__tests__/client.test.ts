@@ -55,6 +55,24 @@ describe("HttpEastmoneyJywgClient", () => {
     expect(raw.updated_session.last_verified_at).toBeTruthy();
   });
 
+  it("refreshes a session through Trade/Buy without querying account data", async () => {
+    const seen: string[] = [];
+    const fetchImpl = async (input: string | URL) => {
+      const url = String(input);
+      seen.push(url);
+      return new Response('<input id="em_validatekey" type="hidden" value="validate-123" />', {
+        headers: { "set-cookie": "sid=refreshed; Domain=.18.cn; Path=/; HttpOnly; Secure" },
+      });
+    };
+    const client = new HttpEastmoneyJywgClient(fetchImpl);
+
+    const refreshed = await client.refreshSession(profile, session);
+
+    expect(seen).toEqual(["https://jywg.18.cn/Trade/Buy"]);
+    expect(refreshed.cookies.find((cookie) => cookie.name === "sid")?.value).toBe("refreshed");
+    expect(refreshed.last_verified_at).toBeTruthy();
+  });
+
   it("maps Status=-2 to an expired session error", async () => {
     const fetchImpl = async (input: string | URL) => {
       const url = String(input);

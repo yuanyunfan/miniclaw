@@ -77,12 +77,14 @@ src/providers/eastmoney-jywg-readonly/
   format.ts         # safe prompt/Discord context formatter
 
 scripts/eastmoney-jywg-login.ts
+scripts/auth-session-refresh.ts
 ```
 
 Commands:
 
 ```bash
 pnpm eastmoney-jywg:login
+pnpm auth:refresh -- --provider eastmoney-jywg
 pnpm mcp:eastmoney-jywg
 ```
 
@@ -141,6 +143,20 @@ cron task
     -> map to unified snapshot
     -> emit redacted provider payload to the LLM prompt
 ```
+
+Session refresh flow:
+
+```text
+pnpm auth:refresh -- --provider eastmoney-jywg
+  -> read configured JYWG profiles
+  -> read 0600 session secret
+  -> GET https://jywg.18.cn/Trade/Buy
+  -> parse em_validatekey only as a liveness proof
+  -> merge response Set-Cookie values and advance last_verified_at
+  -> atomically rewrite the session secret
+```
+
+Refresh does not query holdings, orders, deals, or totals. If `/Trade/Buy` redirects to login or returns captcha/SMS/device challenge content, refresh fails closed and reports `manual_required`; the recovery command is `pnpm eastmoney-jywg:login -- --profile <name>`.
 
 Portfolio integration:
 

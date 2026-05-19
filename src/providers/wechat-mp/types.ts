@@ -22,6 +22,7 @@ export interface WechatMpAccountConfig {
 
 export interface WechatMpProviderConfig {
   auth_path: string;
+  browser_profile_dir: string;
   state_path: string;
   window_hours: number;
   window?: WechatMpWindowConfig;

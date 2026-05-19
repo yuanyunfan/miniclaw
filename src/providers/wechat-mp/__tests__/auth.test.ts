@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildCookieHeader, parseWechatMpSession, redactSessionForLog } from "../auth.js";
+import {
+  buildCookieHeader,
+  filterWechatMpCookies,
+  parseWechatMpSession,
+  redactSessionForLog,
+  tokenFromWechatMpUrl,
+} from "../auth.js";
 
 describe("wechat-mp auth", () => {
   it("parses a valid session and builds cookie header", () => {
@@ -32,5 +38,18 @@ describe("wechat-mp auth", () => {
     expect(redacted.source_url).toContain("token=<redacted>");
     expect(JSON.stringify(redacted)).not.toContain("secret");
     expect(JSON.stringify(redacted)).not.toContain("123456");
+  });
+
+  it("extracts tokens and keeps only WeChat MP cookie domains", () => {
+    expect(tokenFromWechatMpUrl("https://mp.weixin.qq.com/cgi-bin/home?token=123456")).toBe("123456");
+    expect(tokenFromWechatMpUrl("https://mp.weixin.qq.com/cgi-bin/home?token=abc")).toBeUndefined();
+
+    const cookies = filterWechatMpCookies([
+      { name: "slave_sid", value: "sid", domain: "mp.weixin.qq.com" },
+      { name: "wxuin", value: "uin", domain: ".qq.com" },
+      { name: "other", value: "nope", domain: "example.com" },
+    ]);
+
+    expect(cookies.map((cookie) => cookie.name)).toEqual(["slave_sid", "wxuin"]);
   });
 });

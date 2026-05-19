@@ -32,6 +32,8 @@ export function buildWechatMpLoginRequiredMessage(args: PreProviderRunArgs, err:
     "",
     "```bash",
     "# 在 MiniClaw 项目目录运行",
+    `pnpm wechat-mp:refresh -- --config ${name} --visible`,
+    "# 或重新 bootstrap 登录态",
     `pnpm wechat-mp:login -- --config ${name}`,
     `pnpm wechat-mp:check -- --config ${name}`,
     "```",

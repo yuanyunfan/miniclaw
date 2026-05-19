@@ -22,6 +22,7 @@ afterEach(() => {
 function config(overrides: Partial<WechatMpProviderConfig> = {}): WechatMpProviderConfig {
   return {
     auth_path: "unused",
+    browser_profile_dir: "unused",
     state_path: join(tmp, "state.json"),
     window_hours: 24,
     max_pages_per_account: 1,

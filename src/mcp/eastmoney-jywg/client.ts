@@ -151,6 +151,14 @@ export class HttpEastmoneyJywgClient implements EastmoneyJywgClient {
     }
   }
 
+  async refreshSession(
+    profile: EastmoneyJywgProfileConfig,
+    session: EastmoneyJywgSession,
+  ): Promise<EastmoneyJywgSession> {
+    const refreshed = await this.getValidateKey(profile, session);
+    return touchSession(refreshed.session);
+  }
+
   async getRawBrokerData(
     profile: EastmoneyJywgProfileConfig,
     session: EastmoneyJywgSession,

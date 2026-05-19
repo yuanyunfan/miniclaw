@@ -1,6 +1,7 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { basename, dirname, resolve } from "node:path";
 import { homedir } from "node:os";
+import { randomUUID } from "node:crypto";
 import type { WechatMpCookie, WechatMpSession } from "./types.js";
 import { WechatMpInvalidSessionError } from "./errors.js";
 
@@ -49,9 +50,29 @@ export function loadWechatMpSession(path: string): WechatMpSession {
 
 export function saveWechatMpSession(path: string, session: WechatMpSession): void {
   const resolved = resolveHome(path);
-  mkdirSync(dirname(resolved), { recursive: true });
-  writeFileSync(resolved, JSON.stringify(parseWechatMpSession(session), null, 2), "utf8");
-  chmodSync(resolved, 0o600);
+  const dir = dirname(resolved);
+  mkdirSync(dir, { recursive: true });
+  const tmp = resolve(dir, `.${basename(resolved)}.${randomUUID()}.tmp`);
+  writeFileSync(tmp, JSON.stringify(parseWechatMpSession(session), null, 2), "utf8");
+  chmodSync(tmp, 0o600);
+  renameSync(tmp, resolved);
+}
+
+export function tokenFromWechatMpUrl(rawUrl: string): string | undefined {
+  try {
+    const url = new URL(rawUrl);
+    const token = url.searchParams.get("token");
+    return token && /^\d+$/.test(token) ? token : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function filterWechatMpCookies(cookies: WechatMpCookie[]): WechatMpCookie[] {
+  return cookies.filter((cookie) => {
+    const domain = (cookie.domain ?? "").toLowerCase();
+    return domain.includes("mp.weixin.qq.com") || domain.includes("weixin.qq.com") || domain.includes("qq.com");
+  });
 }
 
 export function buildCookieHeader(cookies: WechatMpCookie[]): string {

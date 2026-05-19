@@ -1,5 +1,6 @@
 #!/usr/bin/env tsx
-import { mkdirSync } from "node:fs";
+import { chmodSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import { loadEastmoneyJywgConfig, resolveEastmoneyJywgProfile } from "../src/mcp/eastmoney-jywg/config.js";
 import { HttpEastmoneyJywgClient } from "../src/mcp/eastmoney-jywg/client.js";
 import {
@@ -49,6 +50,11 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function ensurePrivateDir(path: string): void {
+  mkdirSync(path, { recursive: true });
+  if (process.platform !== "win32") chmodSync(path, 0o700);
+}
+
 function buildSession(profileName: string, cookies: EastmoneyJywgCookie[]): EastmoneyJywgSession {
   const now = new Date().toISOString();
   return {
@@ -72,7 +78,8 @@ const checkIntervalMs = Number(argValue("check-interval-ms") ?? "2500");
 const config = loadEastmoneyJywgConfig();
 const profile = resolveEastmoneyJywgProfile(config, profileName);
 const browserProfileDir = resolveHome(profile.browser_profile_dir);
-mkdirSync(browserProfileDir, { recursive: true });
+ensurePrivateDir(dirname(browserProfileDir));
+ensurePrivateDir(browserProfileDir);
 
 const { chromium } = await loadPlaywright();
 const launchOptions: Record<string, unknown> = {

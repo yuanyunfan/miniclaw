@@ -7,6 +7,7 @@ import type { WechatMpFixedWindowSlot, WechatMpProviderConfig, WechatMpWindowCon
 
 const CONFIG_DIR_DEFAULT = join(homedir(), ".miniclaw/providers/wechat-mp");
 const DEFAULT_AUTH_PATH = "~/.miniclaw/secrets/wechat-mp-session.json";
+const DEFAULT_BROWSER_PROFILE_DIR = "~/.miniclaw/browser-profiles/wechat-mp";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -104,6 +105,7 @@ export function loadWechatMpProviderConfig(name?: string): WechatMpProviderConfi
   const windowHours = positiveInt(raw.window_hours, 24);
   return {
     auth_path: typeof raw.auth_path === "string" ? raw.auth_path : DEFAULT_AUTH_PATH,
+    browser_profile_dir: typeof raw.browser_profile_dir === "string" ? raw.browser_profile_dir : DEFAULT_BROWSER_PROFILE_DIR,
     state_path: typeof raw.state_path === "string" ? raw.state_path : "~/.miniclaw/providers/wechat-mp/state.json",
     window_hours: windowHours,
     window: parseWindow(raw, windowHours),

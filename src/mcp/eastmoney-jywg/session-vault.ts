@@ -1,4 +1,5 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { homedir } from "node:os";
 import type { EastmoneyJywgCookie, EastmoneyJywgSession } from "./types.js";
@@ -75,9 +76,12 @@ export function loadEastmoneyJywgSession(path: string): EastmoneyJywgSession {
 
 export function saveEastmoneyJywgSession(path: string, session: EastmoneyJywgSession): void {
   const resolved = resolveHome(path);
-  mkdirSync(dirname(resolved), { recursive: true });
-  writeFileSync(resolved, JSON.stringify(parseEastmoneyJywgSession(session), null, 2), "utf8");
-  chmodSync(resolved, 0o600);
+  const dir = dirname(resolved);
+  mkdirSync(dir, { recursive: true });
+  const tmp = resolve(dir, `.eastmoney-jywg-session.${randomUUID()}.tmp`);
+  writeFileSync(tmp, JSON.stringify(parseEastmoneyJywgSession(session), null, 2), "utf8");
+  chmodSync(tmp, 0o600);
+  renameSync(tmp, resolved);
 }
 
 export function buildCookieHeader(cookies: EastmoneyJywgCookie[]): string {

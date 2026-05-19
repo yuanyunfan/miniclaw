@@ -3,7 +3,7 @@ doc_id: content-provider-family
 lang: zh
 translation_of: docs/providers/content.md
 translation_status: current
-source_sha256: 6befa522d8cae1cf79a9a877e10e595c687c866222ec6c7f2afe4787e9cb6825
+source_sha256: 2df6200a7d5811d03cc7427be1f80fee4d492bd581808e4fadd6091f26ca2dc9
 ---
 # 内容 Provider 系列
 
@@ -32,6 +32,7 @@ Owner code paths:
 ```text
 src/providers/wechat-mp/
   auth.ts       # session loading/redaction
+  browser-refresh.ts # persistent browser-profile session refresh
   client.ts     # mp.weixin.qq.com backend calls
   collector.ts  # account query, window, dedupe orchestration
   config.ts     # ~/.miniclaw/providers/wechat-mp/<name>.yaml
@@ -40,8 +41,10 @@ src/providers/wechat-mp/
   state.ts      # fakeid cache and sent-article dedupe
 
 scripts/wechat-mp-login.ts
+scripts/wechat-mp-refresh.ts
 scripts/wechat-mp-check.ts
 scripts/wechat-mp-collect.ts
+scripts/auth-session-refresh.ts
 ```
 
 Purpose:
@@ -63,6 +66,7 @@ User config lives under `~/.miniclaw/providers/wechat-mp/<name>.yaml`:
 
 ```yaml
 auth_path: "~/.miniclaw/secrets/wechat-mp-session.json"
+browser_profile_dir: "~/.miniclaw/browser-profiles/wechat-mp"
 state_path: "~/.miniclaw/providers/wechat-mp/state.json"
 window:
   mode: fixed_slots
@@ -99,16 +103,23 @@ Commands:
 
 ```bash
 pnpm wechat-mp:login -- --config daily-ai-wechat
+pnpm wechat-mp:refresh -- --config daily-ai-wechat
+pnpm wechat-mp:refresh -- --config daily-ai-wechat --visible
+pnpm auth:refresh -- --provider wechat-mp --config daily-ai-wechat
 pnpm wechat-mp:check -- --config daily-ai-wechat
 pnpm wechat-mp:collect -- --config daily-ai-wechat --dry-run
 ```
 
 Session contract:
 
-- Login 使用可见浏览器，并且只把 `mp.weixin.qq.com` token/cookies 保存到 `auth_path`。
+- Login 使用可见的 persistent browser profile，并且只把 `mp.weixin.qq.com` token/cookies 保存到 `auth_path`。
+- Refresh 会先用专用 browser profile 以 headless 模式尝试续期；如果 profile 还能进入带数字 `token` 的后台 URL，MiniClaw 会在 `searchbiz` health check 通过后重写 `auth_path`。
+- `--visible` 是 QR scan、设备确认、captcha 或其他 login challenge 出现时的人工恢复路径。
 - `auth_path` 应使用 `0600` 权限，且绝不能提交到 git。
+- `browser_profile_dir` 应该是 MiniClaw 专用 profile 目录，并使用 private local permissions；不要指向用户日常 Chrome profile。
 - Check 和 collect commands 必须 redact token/cookie values。
 - Dry run 不能提交 dedupe state。
+- Automatic refresh 遇到 invalid session 或 frequency-control challenge 时必须 fail closed；不能保存账号密码，也不能绕过人工验证。
 
 ## Cron 使用方式
 

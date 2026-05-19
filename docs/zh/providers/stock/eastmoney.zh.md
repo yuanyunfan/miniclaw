@@ -3,7 +3,7 @@ doc_id: eastmoney-provider-family
 lang: zh
 translation_of: docs/providers/stock/eastmoney.md
 translation_status: current
-source_sha256: 2456906f149dbca2051501dc61896ce6d6c8730255ba592b9055e15d157fce44
+source_sha256: ecac577073c28d415a9ab7428699a9c83a72580a7fd05586258951b284b2b600
 ---
 # 东方财富 Provider 系列
 
@@ -84,12 +84,14 @@ src/providers/eastmoney-jywg-readonly/
   format.ts         # safe prompt/Discord context formatter
 
 scripts/eastmoney-jywg-login.ts
+scripts/auth-session-refresh.ts
 ```
 
 Commands:
 
 ```bash
 pnpm eastmoney-jywg:login
+pnpm auth:refresh -- --provider eastmoney-jywg
 pnpm mcp:eastmoney-jywg
 ```
 
@@ -148,6 +150,20 @@ cron task
     -> map to unified snapshot
     -> emit redacted provider payload to the LLM prompt
 ```
+
+Session refresh flow:
+
+```text
+pnpm auth:refresh -- --provider eastmoney-jywg
+  -> read configured JYWG profiles
+  -> read 0600 session secret
+  -> GET https://jywg.18.cn/Trade/Buy
+  -> parse em_validatekey only as a liveness proof
+  -> merge response Set-Cookie values and advance last_verified_at
+  -> atomically rewrite the session secret
+```
+
+Refresh 不查询 holdings、orders、deals 或 totals。如果 `/Trade/Buy` 跳转到登录页，或返回 captcha、短信、设备确认等 challenge 内容，refresh 会 fail closed 并报告 `manual_required`；恢复命令是 `pnpm eastmoney-jywg:login -- --profile <name>`。
 
 Portfolio integration:
 

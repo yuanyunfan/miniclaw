@@ -16,6 +16,7 @@ function args(): PreProviderRunArgs {
 function config(): WechatMpProviderConfig {
   return {
     auth_path: "unused",
+    browser_profile_dir: "unused",
     state_path: "unused",
     window_hours: 24,
     max_pages_per_account: 1,
@@ -45,6 +46,7 @@ describe("runWechatMpProvider", () => {
 
     expect(result.skipTask?.reason).toBe("wechat_mp_session_invalid");
     expect(result.skipTask?.notifyMessage).toContain("微信公众号后台登录态已失效");
+    expect(result.skipTask?.notifyMessage).toContain("pnpm wechat-mp:refresh -- --config daily-ai-wechat --visible");
     expect(result.skipTask?.notifyMessage).toContain("pnpm wechat-mp:login -- --config daily-ai-wechat");
     expect(result.skipTask?.notifyMessage).toContain("pnpm wechat-mp:check -- --config daily-ai-wechat");
 
