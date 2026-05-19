@@ -7,10 +7,12 @@ export type ClaudeSettingSource = "user" | "project" | "local";
 export type SmartRouterDefaultMode = "suggest" | "confirm" | "auto";
 export type SmartRouterClassifierProvider = "auto" | "raven" | "anthropic" | "openai" | "openai_compatible" | "codex";
 export type ModelClientId = SmartRouterClassifierProvider;
-export type IMTransportId = "discord" | "feishu";
+export type IMTransportId = "discord" | "feishu" | "weixin";
 export interface IMRouteTargetConfig {
   transport: IMTransportId;
   target: string;
+  accountId?: string;
+  contextToken?: string;
 }
 export interface IMRouteConfig {
   targets: IMRouteTargetConfig[];

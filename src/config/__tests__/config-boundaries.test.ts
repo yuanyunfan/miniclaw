@@ -129,11 +129,22 @@ im:
     feishu:
       enabled: true
       webhook_url: "https://open.feishu.cn/open-apis/bot/v2/hook/test"
+    weixin:
+      enabled: true
+      poll_enabled: true
+      state_dir: "${join(tmpDir, "weixin-state")}"
+      default_account_id: "acct-im-bot"
+      allow_from: ["owner@im.wechat"]
+      task_bridge_channel_id: "1000000000000000001"
   routes:
     ops:
       targets:
         - transport: feishu
           target: default
+        - transport: weixin
+          target: "owner@im.wechat"
+          account_id: "acct-im-bot"
+          context_token: "ctx-token"
 codex:
   reasoning_effort: high
 storage:
@@ -158,8 +169,21 @@ attachments:
     expect(runtime.runtime.defaultAgent).toBe("claude");
     expect(runtime.modelClient.defaultClient).toBe("openai_compatible");
     expect(runtime.smartRouter.llmClassifier.provider).toBe("openai_compatible");
-    expect(runtime.im.routes.ops).toEqual({ targets: [{ transport: "feishu", target: "default" }] });
+    expect(runtime.im.routes.ops).toEqual({
+      targets: [
+        { transport: "feishu", target: "default" },
+        { transport: "weixin", target: "owner@im.wechat", accountId: "acct-im-bot", contextToken: "ctx-token" },
+      ],
+    });
     expect(runtime.im.transports.feishu.webhookUrl).toBe("https://open.feishu.cn/open-apis/bot/v2/hook/test");
+    expect(runtime.im.transports.weixin).toEqual({
+      enabled: true,
+      pollEnabled: true,
+      stateDir: join(tmpDir, "weixin-state"),
+      defaultAccountId: "acct-im-bot",
+      allowedUserIds: ["owner@im.wechat"],
+      taskBridgeChannelId: "1000000000000000001",
+    });
     expect(runtime.codex.reasoningEffort).toBe("high");
     expect(runtime.channelDefaults["chat-runtime"]).toEqual({ cwd: tmpDir });
     expect(runtime.smartRouter.defaultMode).toBe("auto");

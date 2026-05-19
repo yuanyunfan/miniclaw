@@ -3,19 +3,20 @@ import { resolveDeliveryTargets, sendTextToTargets } from "../delivery.js";
 import type { IMTransport } from "../contracts.js";
 
 interface RecordedSend {
-  transport: "discord" | "feishu";
+  transport: "discord" | "feishu" | "weixin";
   target: string;
+  accountId?: string;
   content: string;
   suppressEmbeds?: boolean;
 }
 
-function recordingTransport(id: "discord" | "feishu", sent: RecordedSend[]): IMTransport {
+function recordingTransport(id: "discord" | "feishu" | "weixin", sent: RecordedSend[]): IMTransport {
   return {
     id,
     kind: "im_transport",
     capabilities: {
       richEmbeds: id === "discord",
-      markdown: id,
+      markdown: id === "weixin" ? "plain" : id,
       editMessage: id === "discord",
       threads: id === "discord",
       files: id === "discord",
@@ -27,6 +28,7 @@ function recordingTransport(id: "discord" | "feishu", sent: RecordedSend[]): IMT
       sent.push({
         transport: id,
         target: input.target.target,
+        accountId: input.target.accountId,
         content: input.content,
         suppressEmbeds: input.suppressEmbeds,
       });
@@ -83,6 +85,7 @@ describe("IM delivery", () => {
     const registry = new Map([
       ["discord", recordingTransport("discord", sent)],
       ["feishu", recordingTransport("feishu", sent)],
+      ["weixin", recordingTransport("weixin", sent)],
     ] as const);
 
     const results = await sendTextToTargets({
@@ -91,13 +94,15 @@ describe("IM delivery", () => {
       targets: [
         { transport: "discord", target: "1000000000000000000" },
         { transport: "feishu", target: "default" },
+        { transport: "weixin", target: "user@im.wechat", accountId: "acct" },
       ],
     });
 
-    expect(results).toHaveLength(2);
+    expect(results).toHaveLength(3);
     expect(sent).toEqual([
-      { transport: "discord", target: "1000000000000000000", content: "hello", suppressEmbeds: false },
-      { transport: "feishu", target: "default", content: "hello", suppressEmbeds: undefined },
+      { transport: "discord", target: "1000000000000000000", accountId: undefined, content: "hello", suppressEmbeds: false },
+      { transport: "feishu", target: "default", accountId: undefined, content: "hello", suppressEmbeds: undefined },
+      { transport: "weixin", target: "user@im.wechat", accountId: "acct", content: "hello", suppressEmbeds: undefined },
     ]);
   });
 

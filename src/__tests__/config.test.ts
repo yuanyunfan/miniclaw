@@ -386,6 +386,14 @@ notifications:
           webhookUrl: "https://open.feishu.cn/open-apis/bot/v2/hook/test",
           secret: "feishu-secret",
         },
+        weixin: {
+          enabled: false,
+          pollEnabled: false,
+          stateDir: undefined,
+          defaultAccountId: undefined,
+          allowedUserIds: [],
+          taskBridgeChannelId: undefined,
+        },
       },
       routes: {
         "daily-watchlist-stock": {

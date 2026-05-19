@@ -15,6 +15,7 @@ import {
 } from "./agent/run-manager/sweeper.js";
 import { startPreClientReadyWatchdog, type PreClientReadyWatchdogHandle } from "./monitoring/pre-client-ready-watchdog.js";
 import { startDoctorScheduler, type DoctorSchedulerHandle } from "./ops/doctor-scheduler.js";
+import { startWeixinGateway, type WeixinGatewayHandle } from "./im/adapters/weixin/gateway.js";
 import { createLogger } from "./lib/log.js";
 import {
   beginDraining,
@@ -41,6 +42,7 @@ let memoryMaintenanceScheduler: MemoryMaintenanceSchedulerHandle | null = null;
 let agentRunManagerSweeper: AgentRunManagerSweeperHandle | null = null;
 let startupWatchdog: PreClientReadyWatchdogHandle | null = null;
 let doctorScheduler: DoctorSchedulerHandle | null = null;
+let weixinGateway: WeixinGatewayHandle | null = null;
 let shutdownPromise: Promise<void> | null = null;
 let signalCount = 0;
 
@@ -59,6 +61,7 @@ async function beginGracefulShutdown(reason: string, force = false): Promise<voi
     agentRunManagerSweeper?.stop();
     startupWatchdog?.stop();
     doctorScheduler?.stop();
+    weixinGateway?.stop();
     stopScheduler();
     await bot?.destroy();
     process.exit(1);
@@ -77,6 +80,7 @@ async function beginGracefulShutdown(reason: string, force = false): Promise<voi
     agentRunManagerSweeper?.stop();
     startupWatchdog?.stop();
     doctorScheduler?.stop();
+    weixinGateway?.stop();
     stopScheduler();
 
     const activeAtStart = listActiveTaskIds();
@@ -114,6 +118,7 @@ async function beginGracefulShutdown(reason: string, force = false): Promise<voi
     agentRunManagerSweeper?.stop();
     startupWatchdog?.stop();
     doctorScheduler?.stop();
+    weixinGateway?.stop();
     stopScheduler();
     await bot?.destroy();
     process.exit(1);
@@ -156,6 +161,7 @@ async function main(): Promise<void> {
     startupWatchdog?.markClientReady();
     connectivityMonitor = startConnectivityMonitor(client);
     doctorScheduler = startDoctorScheduler(client);
+    weixinGateway = startWeixinGateway(client);
     if (config.e2e.disableScheduler) {
       log.info("Cron scheduler disabled by MINICLAW_DISABLE_SCHEDULER");
       return;
@@ -185,6 +191,7 @@ main().catch(async (err) => {
   agentRunManagerSweeper?.stop();
   startupWatchdog?.stop();
   doctorScheduler?.stop();
+  weixinGateway?.stop();
   void bot?.destroy();
   process.exit(1);
 });

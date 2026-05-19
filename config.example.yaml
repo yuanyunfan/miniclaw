@@ -105,8 +105,9 @@ model:
 
 im:
   # Discord remains the default interactive gateway. Feishu is currently
-  # outbound-only for cron/task result fanout validation.
-  default_transport: discord # discord | feishu
+  # outbound-only for cron/task result fanout validation. Weixin direct is
+  # opt-in and starts only after `pnpm weixin:login` saves a local account.
+  default_transport: discord # discord | feishu | weixin
   transports:
     discord:
       enabled: true
@@ -117,6 +118,17 @@ im:
       #   MINICLAW_FEISHU_SECRET
       # webhook_url: "https://open.feishu.cn/open-apis/bot/v2/hook/..."
       # secret: ""
+    weixin:
+      enabled: false
+      poll_enabled: false
+      state_dir: "~/.miniclaw/weixin"
+      # default_account_id: "xxxx-im-bot"
+      # Default allowlist falls back to the scanner user saved by `pnpm weixin:login`.
+      # Use ["*"] only for local smoke tests.
+      allow_from: []
+      # Required only when Weixin users confirm `/task ...`; task progress/result
+      # is bridged through this Discord channel while the final result is echoed to Weixin.
+      task_bridge_channel_id: ""
   routes:
     # Logical route used by cron delivery_route. Existing cron channel stays the
     # primary Discord target; these targets receive extra outbound delivery.
@@ -124,6 +136,9 @@ im:
     #   targets:
     #     - transport: feishu
     #       target: default
+    #     - transport: weixin
+    #       target: "user-id@im.wechat"
+    #       account_id: "xxxx-im-bot"
 
 agent:
   # Legacy compatibility alias. Keep it during transition; new task execution uses runtime.default_agent.

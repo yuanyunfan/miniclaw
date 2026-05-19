@@ -23,7 +23,7 @@ export const claudeSettingSourceValues = ["user", "project", "local"] as const s
 export const smartRouterDefaultModeValues = ["suggest", "confirm", "auto"] as const satisfies readonly SmartRouterDefaultMode[];
 export const smartRouterClassifierProviderValues = ["auto", "raven", "anthropic", "openai", "openai_compatible", "codex"] as const satisfies readonly SmartRouterClassifierProvider[];
 export const modelClientValues = smartRouterClassifierProviderValues satisfies readonly ModelClientId[];
-export const imTransportValues = ["discord", "feishu"] as const satisfies readonly IMTransportId[];
+export const imTransportValues = ["discord", "feishu", "weixin"] as const satisfies readonly IMTransportId[];
 export const audioTranscriptionProviderValues = ["auto", "openai", "openai_compatible", "local_faster_whisper"] as const satisfies readonly AudioTranscriptionProvider[];
 
 const rawConfigObjectSchema = z.record(z.string(), z.unknown());

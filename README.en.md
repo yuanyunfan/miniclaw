@@ -4,13 +4,13 @@ English | [Simplified Chinese](README.md)
 
 Docs website: https://yuanyunfan.github.io/miniclaw/
 
-Personal Discord-native AI automation hub for chat, tasks, scheduled jobs, provider data collection, and private daily reports. It can run through Claude Code or Codex.
+Personal Discord-native AI automation hub for chat, tasks, scheduled jobs, provider data collection, and private daily reports. It can run through Claude Code or Codex, with an optional Weixin direct channel as a lightweight personal WeChat entry point.
 
 MiniClaw is designed for a single-user local Mac setup. Discord is the interaction and delivery layer; MiniClaw handles routing, task threads, cron scheduling, long-term memory, read-only data providers, private report generation, and a Stage multi-agent console.
 
 Core positioning:
 
-- **Discord-native**: chat, tasks, task intake channels, and cron outputs all live in Discord.
+- **Discord-native**: chat, tasks, task intake channels, and cron outputs live in Discord by default; Weixin direct is an opt-in auxiliary entry point.
 - **Switchable agent runtime**: Claude Code and Codex are execution engines; MiniClaw normalizes sessions, progress, output, and local settings inheritance.
 - **Local-first automation**: user config, cron jobs, provider state, and secrets live under `~/.miniclaw/`; the repo stores reusable code only.
 - **Provider-driven reports**: WeChat, email, credit-card, and brokerage data are collected by read-only providers before LLM summarization.
@@ -26,6 +26,7 @@ Core positioning:
 | `@MiniClaw` in any channel | Claude or Codex from `config.yaml` | Same as above |
 | Smart Router confirmation buttons | Claude Code or Codex from `config.yaml` | Detect natural-language task prompts at chat entry points and upgrade them to `/task` threads after confirmation |
 | Plain messages in task intake channels | Claude Code or Codex from `config.yaml` | Create task threads without `@MiniClaw` and use the same output path as `/task` |
+| Weixin direct messages (optional) | Claude or Codex from `config.yaml` | Personal WeChat direct chat; `/task ...` uses text confirmation and bridges execution through a Discord channel |
 | `/task <description>` | Claude Code or Codex from `config.yaml` | Create an isolated thread with a status card, live progress, and final Markdown output |
 | Cron jobs | Claude Code or Codex + pre-provider | Collect structured data, run analysis, and push reports to Discord on schedule |
 | `/status` | - | View active and recent tasks |
@@ -49,6 +50,7 @@ Interaction details:
 - `/task` keeps one persistent progress message. It is edited while the task runs and becomes an `Execution Summary` after completion.
 - Tool progress is rendered in readable lines such as `github: search_repositories`, `Bash ls -la`, or `WebSearch ...`.
 - Proxy support covers both HTTP REST and WebSocket traffic.
+- Weixin direct is disabled by default; run `pnpm weixin:login` to save an account under `~/.miniclaw/weixin`, then enable `im.transports.weixin.enabled` and `poll_enabled` in `config.yaml`.
 
 Built-in data capabilities:
 

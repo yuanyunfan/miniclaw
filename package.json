@@ -73,6 +73,7 @@
     "memory:maintenance": "tsx scripts/memory-maintenance.ts",
     "memory:lint": "tsx scripts/memory-maintenance.ts --dry-run",
     "wechat-mp:login": "tsx scripts/wechat-mp-login.ts",
+    "weixin:login": "tsx scripts/weixin-login.ts",
     "wechat-mp:refresh": "tsx scripts/wechat-mp-refresh.ts",
     "wechat-mp:check": "tsx scripts/wechat-mp-check.ts",
     "wechat-mp:collect": "tsx scripts/wechat-mp-collect.ts",

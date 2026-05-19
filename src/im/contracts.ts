@@ -18,6 +18,8 @@ export interface IMDeliveryTarget {
   transport: IMTransportId;
   target: string;
   threadId?: string;
+  accountId?: string;
+  contextToken?: string;
 }
 
 export interface MessageRef {
@@ -25,6 +27,7 @@ export interface MessageRef {
   target: string;
   messageId: string;
   threadId?: string;
+  accountId?: string;
 }
 
 export interface ThreadRef {

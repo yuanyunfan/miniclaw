@@ -4,6 +4,7 @@ import type { IMTransportId } from "../config/types.js";
 import type { IMTransport } from "./contracts.js";
 import { createDiscordTransport } from "./adapters/discord/transport.js";
 import { createFeishuWebhookTransport } from "./adapters/feishu/transport.js";
+import { createWeixinTransport } from "./adapters/weixin/transport.js";
 
 export type IMTransportRegistry = ReadonlyMap<IMTransportId, IMTransport>;
 type IMRuntimeConfig = RuntimeConfig["im"];
@@ -18,6 +19,12 @@ export function createIMTransportRegistry(client?: Client, imConfig?: IMRuntimeC
     transports.set("feishu", createFeishuWebhookTransport({
       webhookUrl: imConfig.transports.feishu.webhookUrl,
       secret: imConfig.transports.feishu.secret,
+    }));
+  }
+  if (imConfig?.transports.weixin.enabled) {
+    transports.set("weixin", createWeixinTransport({
+      stateDir: imConfig.transports.weixin.stateDir,
+      defaultAccountId: imConfig.transports.weixin.defaultAccountId,
     }));
   }
   return transports;

@@ -7,6 +7,7 @@
 ## [Unreleased]
 
 ### Added
+- 新增 Weixin direct channel MVP：支持 `pnpm weixin:login` 保存个人微信 bot token、`im.transports.weixin` opt-in 长轮询 direct chat、`/task ...` 文本确认后桥接到 Discord channel 执行，以及 cron `delivery_route` 结果额外投递到微信 direct user。
 - 新增 `auth:refresh` / `wechat-mp:refresh` 登录态续期入口：WeChat MP 使用专用 persistent browser profile 做 headless refresh，Eastmoney JYWG 使用只读 `/Trade/Buy` 轻量刷新并原子写回 session secret，遇到扫码、验证码、短信或设备确认时 fail closed 并提示人工恢复。
 - 扩展 `third-party-health` hourly script，覆盖 provider health、Yahoo 行情 canary、WeChat MP 搜索、email IMAP、market-intel 官方源和 stock-portfolio 聚合配置，并在异常通知中保留分类、延迟和修复建议。
 - 新增 stock provider 数据层迁移计划，明确 Source Adapter、Data Domain、Signal / Intelligence、Report Composer / Cron Provider 四层结构，并同步英文 canonical docs、中文 mirror、migration map 和 stock provider 入口链接。

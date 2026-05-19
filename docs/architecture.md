@@ -1,6 +1,6 @@
 # MiniClaw Architecture
 
-> MiniClaw is a local-first Discord-native agent runtime. Discord is the user surface; Node 22 is the process runtime; `~/.miniclaw/` is the user data boundary; SQLite records durable task, routing, incident, provider, and Agent Run Manager state.
+> MiniClaw is a local-first Discord-native agent runtime. Discord is the primary user surface, with optional Weixin direct as a lightweight personal entry point; Node 22 is the process runtime; `~/.miniclaw/` is the user data boundary; SQLite records durable task, routing, incident, provider, and Agent Run Manager state.
 
 ## System View
 
@@ -23,7 +23,7 @@ flowchart LR
     Cron["cron/scheduler.ts<br/>cron runner and retry"]
     Providers["providers + capabilities<br/>stock, content, email"]
     Ops["ops/doctor* + safe-restart<br/>diagnosis, incidents, guarded repair"]
-    IM["im/*<br/>Discord transport, Feishu outbound"]
+    IM["im/*<br/>Discord transport, Feishu outbound, Weixin direct"]
   end
 
   subgraph UserHome["~/.miniclaw/"]
@@ -41,6 +41,7 @@ flowchart LR
     Codex["Codex SDK / CLI config"]
     SMTP["SMTP fallback"]
     MCP["MCP servers"]
+    Weixin["Weixin iLink API<br/>optional direct channel"]
   end
 
   User --> Msg
@@ -64,7 +65,11 @@ flowchart LR
   Chat --> DB
   RunMgr --> DB
   Bot --> IM
+  IM --> Chat
+  IM --> Task
   IM --> Discord
+  IM <--> Weixin
+  User --> Weixin
   Config --> Bot
   Jobs --> Cron
   Memory --> Chat
@@ -278,7 +283,7 @@ State retention is configured through `state.retention.*`. Cleanup is dry-run fi
 
 ## Delivery And Recovery
 
-`recovery_outbox` separates local execution results from IM delivery. `cron_failure_alert` stores retryable cron failure alerts when Discord delivery is unavailable. `task_result_delivery` stores task result fragments for later delivery recovery. Discord is still the only fully interactive gateway; Feishu is currently outbound-only.
+`recovery_outbox` separates local execution results from IM delivery. `cron_failure_alert` stores retryable cron failure alerts when Discord delivery is unavailable. `task_result_delivery` stores task result fragments for later delivery recovery. Discord remains the primary full-fidelity gateway; Feishu is outbound-only; Weixin direct is opt-in text interaction backed by local `~/.miniclaw/weixin` account state and a Discord task bridge channel for confirmed `/task` execution.
 
 ## Observability And Operations
 

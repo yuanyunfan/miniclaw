@@ -35,7 +35,7 @@ function chunkText(text: string, size: number): IMTextChunk[] {
 }
 
 function key(target: IMDeliveryTarget): string {
-  return `${target.transport}:${target.target}:${target.threadId ?? ""}`;
+  return `${target.transport}:${target.accountId ?? ""}:${target.target}:${target.threadId ?? ""}`;
 }
 
 function addUnique(targets: IMDeliveryTarget[], target: IMDeliveryTarget): void {
@@ -49,6 +49,8 @@ function routeTargets(route: string, routes: Record<string, IMRouteConfig> = {})
   return configured.targets.map((target) => ({
     transport: target.transport,
     target: target.target,
+    accountId: target.accountId,
+    contextToken: target.contextToken,
   }));
 }
 

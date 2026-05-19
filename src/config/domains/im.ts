@@ -20,7 +20,14 @@ function parseTarget(value: unknown, routeName: string, index: number): IMRouteT
   if (!target) {
     throw new Error(`Invalid config im.routes.${routeName}.targets[${index}].target: expected non-empty string`);
   }
-  return { transport: transport as IMTransportId, target };
+  const accountId = cleanName(value.account_id) ?? cleanName(value.accountId);
+  const contextToken = cleanName(value.context_token) ?? cleanName(value.contextToken);
+  return {
+    transport: transport as IMTransportId,
+    target,
+    ...(accountId ? { accountId } : {}),
+    ...(contextToken ? { contextToken } : {}),
+  };
 }
 
 function parseRoute(value: unknown, routeName: string): IMRouteConfig {
@@ -69,6 +76,30 @@ export function buildIMRuntimeConfig(reader: ConfigReader) {
             "MINICLAW_FEISHU_WEBHOOK_URL"
           ),
           secret: reader.optionalString(["im", "transports", "feishu", "secret"], "MINICLAW_FEISHU_SECRET"),
+        },
+        weixin: {
+          enabled: reader.boolValue(["im", "transports", "weixin", "enabled"], "MINICLAW_IM_WEIXIN_ENABLED", false),
+          pollEnabled: reader.boolValue(
+            [["im", "transports", "weixin", "poll_enabled"], ["im", "transports", "weixin", "pollEnabled"]],
+            "MINICLAW_WEIXIN_POLL_ENABLED",
+            false
+          ),
+          stateDir: reader.optionalString(
+            [["im", "transports", "weixin", "state_dir"], ["im", "transports", "weixin", "stateDir"]],
+            "MINICLAW_WEIXIN_STATE_DIR"
+          ),
+          defaultAccountId: reader.optionalString(
+            [["im", "transports", "weixin", "default_account_id"], ["im", "transports", "weixin", "defaultAccountId"]],
+            "MINICLAW_WEIXIN_ACCOUNT_ID"
+          ),
+          allowedUserIds: reader.stringArray(
+            [["im", "transports", "weixin", "allow_from"], ["im", "transports", "weixin", "allowed_user_ids"], ["im", "transports", "weixin", "allowedUserIds"]],
+            "MINICLAW_WEIXIN_ALLOW_FROM"
+          ),
+          taskBridgeChannelId: reader.optionalString(
+            [["im", "transports", "weixin", "task_bridge_channel_id"], ["im", "transports", "weixin", "taskBridgeChannelId"]],
+            "MINICLAW_WEIXIN_TASK_BRIDGE_CHANNEL_ID"
+          ),
         },
       },
       routes: parseRoutes(reader.getPath(["im", "routes"])),
