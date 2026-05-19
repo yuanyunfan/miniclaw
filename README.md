@@ -4,13 +4,13 @@
 
 Docs website: https://yuanyunfan.github.io/miniclaw/
 
-个人 Discord-native AI 自动化 Hub — 统一 chat、task、cron、provider 数据采集和私有日报，可在 Claude Code / Codex 之间切换执行；可选接入 Weixin direct channel 做个人微信轻量入口。
+个人 local-first AI 自动化 Hub — 统一 chat、task、cron、provider 数据采集和私有日报，可在 Claude Code / Codex 之间切换执行；Discord 是默认完整控制面，可选 Weixin direct channel 可作为个人微信 text / voice / image 入口。
 
 MiniClaw 面向单用户、本地 Mac 常驻运行。Discord 是入口和交付层，MiniClaw 负责消息路由、任务线程、定时调度、长期记忆、只读数据 provider、私有数据日报和 Stage 多 agent 控制台。
 
 核心定位：
 
-- **Discord-native**：chat、task、task intake channel、cron 结果默认都在 Discord 中交互和留痕；Weixin direct channel 是 opt-in 辅助入口。
+- **Discord-native control plane**：chat、task intake、slash command、cron 结果和 recovery 默认都在 Discord 中交互和留痕；Weixin direct channel 是 opt-in 独立 IM 入口。
 - **Agent runtime 可切换**：Claude Code / Codex 是执行引擎，MiniClaw 负责统一 session、进度、输出和配置继承。
 - **Local-first automation**：个人配置、cron、provider state 和 secrets 都放在 `~/.miniclaw/`，repo 内只保留通用代码。
 - **Provider-driven reports**：微信公众号、邮件、信用卡、股票账户等数据先由只读 provider 结构化采集，再交给 LLM 总结。
@@ -26,7 +26,7 @@ MiniClaw 面向单用户、本地 Mac 常驻运行。Discord 是入口和交付�
 | `@MiniClaw` 在任意频道 | `config.yaml` 选择 Claude / Codex | 同上 |
 | Smart Router 按钮确认 | `config.yaml` 选择 Claude Code / Codex | 在 chat 入口识别自然语言 task prompt，确认后升级为 `/task` 线程 |
 | task intake 频道普通消息 | `config.yaml` 选择 Claude Code / Codex | 无需 @mention，直接创建 task thread，走 `/task` 同一套输出链路 |
-| Weixin direct message（可选） | `config.yaml` 选择 Claude / Codex | 个人微信 direct chat；`/task ...` 使用文本确认后桥接到 Discord channel 执行 |
+| Weixin direct message（可选） | `config.yaml` 选择 Claude / Codex | 个人微信文字/语音/图片 direct chat；Smart Router 判定适合 task 时用 y/n 文本确认，确认后在微信内回传进度和结果 |
 | `/task <描述>` | `config.yaml` 选择 Claude Code / Codex | 创建独立线程，状态卡片 + 实时进度 + Markdown 最终结果 |
 | cron 定时任务 | Claude Code / Codex + pre_provider | 到点自动采集数据、执行分析并推送 Discord |
 | `/status` | — | 查看活跃/历史任务 |
@@ -48,7 +48,7 @@ MiniClaw 面向单用户、本地 Mac 常驻运行。Discord 是入口和交付�
 - `/task` 保留一条 persistent progress message，执行中持续 edit，完成后变成 Execution Summary，可回看最近工具调用
 - 中间步骤可读化：`🔌 github: search_repositories`、`⚡ Bash ls -la`、`🌐 WebSearch ...`
 - 支持代理（ClashX / VPN），HTTP + WebSocket 双通道
-- Weixin direct 默认关闭；先运行 `pnpm weixin:login` 保存 `~/.miniclaw/weixin` 账号，再在 `config.yaml` 启用 `im.transports.weixin.enabled` / `poll_enabled`
+- Weixin direct 默认关闭；先运行 `pnpm weixin:login` 保存 `~/.miniclaw/weixin` 账号，再在 `config.yaml` 启用 `im.transports.weixin.enabled` / `poll_enabled`。启动后 Weixin gateway 不再等待 Discord `clientReady`；文字、可转写语音和带可下载 URL 的图片可进入 chat/task。
 
 **内置数据能力：**
 

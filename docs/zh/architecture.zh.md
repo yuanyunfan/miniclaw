@@ -3,11 +3,11 @@ doc_id: architecture
 lang: zh
 translation_of: docs/architecture.md
 translation_status: current
-source_sha256: 21a034142d0e167241c445c59752ea930cdd1a38e22c55921034aa7146817c41
+source_sha256: deb21df41bca7d7bcd46ce16764c2c2cb4fe9f89d6f44f204c5af740485d254f
 ---
 # MiniClaw 架构
 
-> MiniClaw 是 local-first、Discord-native 的 agent runtime。Discord 是主要用户交互面，同时可选启用 Weixin direct 作为个人微信轻量入口；Node 22 是进程 runtime；`~/.miniclaw/` 是用户数据边界；SQLite 记录 durable task、routing、incident、provider 和 Agent Run Manager 状态。
+> MiniClaw 是 local-first、Discord-native 的 agent runtime。Discord 是主要完整用户交互面，同时可选启用 Weixin direct 作为独立的个人微信文字、语音和图片 chat/task 入口；Node 22 是进程 runtime；`~/.miniclaw/` 是用户数据边界；SQLite 记录 durable task、routing、incident、provider 和 Agent Run Manager 状态。
 
 ## 系统视图
 
@@ -30,7 +30,7 @@ flowchart LR
     Cron["cron/scheduler.ts<br/>cron runner and retry"]
     Providers["providers + capabilities<br/>stock, content, email"]
     Ops["ops/doctor* + safe-restart<br/>diagnosis, incidents, guarded repair"]
-    IM["im/*<br/>Discord transport, Feishu outbound, Weixin direct"]
+    IM["im/*<br/>Discord transport, Feishu outbound, Weixin direct gateway"]
   end
 
   subgraph UserHome["~/.miniclaw/"]
@@ -290,7 +290,7 @@ state retention 通过 `state.retention.*` 配置。cleanup 先 dry-run：`pnpm 
 
 ## 投递与恢复
 
-`recovery_outbox` 把本地执行结果和 IM delivery 分离。`cron_failure_alert` 保存 Discord delivery 不可用时可重试的 cron failure alert；`task_result_delivery` 保存 task result fragments 以便后续 delivery recovery。Discord 仍是主要的完整能力 gateway；Feishu 是 outbound-only；Weixin direct 是 opt-in 文本交互入口，依赖本地 `~/.miniclaw/weixin` account state，并在确认 `/task` 后通过 Discord task bridge channel 执行。
+`recovery_outbox` 把本地执行结果和 IM delivery 分离。`cron_failure_alert` 保存 Discord delivery 不可用时可重试的 cron failure alert；`task_result_delivery` 保存 task result fragments 以便后续 delivery recovery。Discord 仍是主要的完整能力 gateway；Feishu 是 outbound-only；Weixin direct 是 opt-in 文字/语音/图片交互入口，依赖本地 `~/.miniclaw/weixin` account state。登录后，Weixin long-poll gateway 可以不等待 Discord `clientReady` 就启动，把 chat 路由到普通 chat runtime，并通过 Weixin task view reporter 执行已确认 task，把进度和最终结果发回微信。
 
 ## 可观测性与运维
 

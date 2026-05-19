@@ -11,6 +11,8 @@ MiniClaw's router has two layers:
 
 The current policy is LLM-first but conservative. Regex task/chat signals no longer own the decision. Objective facts such as attachments, URL-only messages, and empty messages remain available as fallback facts when the classifier is disabled or unavailable.
 
+Weixin direct has its own gateway path before this Discord hard route. It applies the Weixin allowlist, extracts text/voice/image inputs, then reuses the same Smart Router classifier for chat-vs-task decisions. When Smart Router says task for Weixin, MiniClaw always asks for y/n text confirmation instead of using Discord buttons or automatic task creation.
+
 ## Route Flow
 
 ```mermaid
@@ -61,6 +63,8 @@ flowchart TD
   V -->|cancel| V2[Cancel]
 ```
 
+The diagram above is the Discord message flow. Weixin direct enters after its own long-poll receive path: media extraction -> optional Smart Router classification -> y/n text confirmation for task-like prompts -> chat runtime or Weixin task view reporter.
+
 ## Code Map
 
 - `src/bot.ts`: Discord event registration, client lifecycle, and outer message-route delegation.
@@ -74,6 +78,7 @@ flowchart TD
 - `src/routing/llm.ts`: optional LLM capability classifier.
 - `src/routing/confirmations.ts`: short-lived Smart Router confirmation state.
 - `src/discord/task-intake.ts`: task creation and `executeTask()` entry.
+- `src/im/adapters/weixin/gateway.ts`: Weixin allowlist, media extraction, Smart Router y/n confirmation, direct chat, and direct task execution.
 - `src/agent/chat.ts`: actual chat runtime execution.
 - `src/routing/context.ts`, `src/routing/task-context.ts`, `src/routing/chat-context.ts`: recent context and source metadata.
 
@@ -159,12 +164,13 @@ Classifier failure falls back to objective facts and records the failure reason.
 | light Q&A, explanation, simple reading | `chat` |
 | configured auto-task channel with strong task intent | `task_auto` |
 
-Channel policy decides whether a task intent becomes automatic task creation, confirmation buttons, or fallback chat.
+Discord channel policy decides whether a task intent becomes automatic task creation, confirmation buttons, or fallback chat. Weixin treats `task_auto`, `task_confirm`, and `task_suggest` as "ask by text first"; `y` creates a task, `n` continues chat, and cancel words discard the pending confirmation.
 
 ## Known Boundaries
 
 - Smart Router does not read attachment content before routing.
 - Confirmation state is process-local and short-lived.
 - The classifier judges capability requirements, not user value or answer quality.
-- `/task` and task-channel intake bypass Smart Router because the user or channel already selected task mode.
+- Discord `/task` and task-channel intake bypass Smart Router because the user or channel already selected task mode.
+- Weixin `/task ...` still asks for y/n confirmation so the mobile chat surface has one reversible task conversion path.
 - Chat remains read-oriented even when the model can reason about code; workspace-changing work must go through task mode.

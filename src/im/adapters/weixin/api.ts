@@ -25,10 +25,29 @@ export interface WeixinTextItem {
   text?: string;
 }
 
+export interface WeixinMediaItem {
+  url?: string;
+  image_url?: string;
+  file_url?: string;
+  download_url?: string;
+  media_url?: string;
+  cdn_url?: string;
+  name?: string;
+  file_name?: string;
+  filename?: string;
+  content_type?: string;
+  mime_type?: string;
+  size?: number | string;
+  file_size?: number | string;
+}
+
 export interface WeixinMessageItem {
   type?: number;
   text_item?: WeixinTextItem;
-  voice_item?: { text?: string };
+  image_item?: WeixinMediaItem;
+  voice_item?: WeixinMediaItem & { text?: string };
+  file_item?: WeixinMediaItem;
+  video_item?: WeixinMediaItem;
 }
 
 export interface WeixinMessage {

@@ -1,5 +1,6 @@
 import type { Message, SendableChannels } from "discord.js";
 import type { TaskResult } from "../agent/task.js";
+import type { TaskTerminalStatus, TaskViewProgressSnapshot, TaskViewReporter } from "../agent/task-view.js";
 import type { TaskViewEvent } from "../agent/task-view-events.js";
 import { chunkMessage } from "./chunks.js";
 import { taskCompleteEmbed, taskErrorEmbed, taskStartEmbed } from "./formatter.js";
@@ -12,8 +13,6 @@ import {
 } from "./task-trace-attachment.js";
 
 const PROGRESS_TAIL_LINES = 25;
-
-export type TaskTerminalStatus = "completed" | "failed" | "cancelled" | "interrupted";
 
 export interface DiscordTaskViewReporterOptions {
   taskId: string;
@@ -32,12 +31,6 @@ export interface DiscordTaskViewReporterOptions {
     jobName?: string;
   };
   onDeliveryError?: (operation: string, err: unknown) => void;
-}
-
-export interface TaskViewProgressSnapshot {
-  lines: string[];
-  turns: number;
-  toolCount: number;
 }
 
 interface ViewProgressState {
@@ -158,7 +151,7 @@ function taskViewProgressLine(event: Extract<TaskViewEvent, { type: "tool_progre
   return event.detail ? `${event.title}: "${event.detail}"` : event.title;
 }
 
-export class DiscordTaskViewReporter {
+export class DiscordTaskViewReporter implements TaskViewReporter {
   private readonly progress: ProgressReporter;
   private readonly outputMode: "embed" | "raw";
   private readonly state: ViewProgressState = { lines: [], turns: 0, toolCount: 0 };

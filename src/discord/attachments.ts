@@ -1,4 +1,3 @@
-import type { Attachment } from "discord.js";
 import type { ContentBlockParam } from "@anthropic-ai/sdk/resources/messages.js";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, extname, basename } from "node:path";
@@ -6,6 +5,13 @@ import { tmpdir } from "node:os";
 import { config } from "../config.js";
 import type { CodexInputEntry } from "../agent/codex.js";
 import { transcribeAudio, type AudioTranscriptionInput, type AudioTranscriptionResult } from "./audio-transcription.js";
+
+export interface ProcessableAttachment {
+  name: string;
+  size: number;
+  contentType?: string | null;
+  url: string;
+}
 
 export interface AttachmentResult {
   blocks: ContentBlockParam[];
@@ -35,7 +41,7 @@ const TEXT_MAX_BYTES = 1_000_000;
 
 type Kind = "image" | "pdf" | "text" | "audio" | "binary";
 
-function classify(att: Attachment): Kind {
+function classify(att: ProcessableAttachment): Kind {
   const ct = (att.contentType ?? "").toLowerCase();
   const ext = extname(att.name ?? "").toLowerCase();
   if (IMAGE_MIME.test(ct) || IMAGE_EXT.has(ext)) return "image";
@@ -45,7 +51,7 @@ function classify(att: Attachment): Kind {
   return "binary";
 }
 
-function imageMediaType(att: Attachment): "image/png" | "image/jpeg" | "image/gif" | "image/webp" {
+function imageMediaType(att: ProcessableAttachment): "image/png" | "image/jpeg" | "image/gif" | "image/webp" {
   const ct = (att.contentType ?? "").toLowerCase();
   if (ct === "image/png") return "image/png";
   if (ct === "image/gif") return "image/gif";
@@ -109,7 +115,7 @@ export function cleanupAttachmentScope(opts: AttachmentScope): void {
 }
 
 export async function processAttachments(
-  attachments: Attachment[],
+  attachments: ProcessableAttachment[],
   opts: AttachmentScope,
   deps: ProcessAttachmentDeps = {},
 ): Promise<AttachmentResult> {
@@ -119,7 +125,7 @@ export async function processAttachments(
   const summaryParts: string[] = [];
   const maxBytes = config.maxAttachmentMb * 1024 * 1024;
 
-  let kept: Attachment[] = attachments;
+  let kept: ProcessableAttachment[] = attachments;
   if (kept.length > config.maxAttachments) {
     notices.push(`⚠️ 单条消息附件超过 ${config.maxAttachments} 个，仅处理前 ${config.maxAttachments} 个`);
     kept = kept.slice(0, config.maxAttachments);

@@ -144,6 +144,7 @@ async function main(): Promise<void> {
     enabled: config.agentRunManager.enabled || config.agentRunManager.autoEnabled,
     policy: config.agentRunManager.policy,
   });
+  weixinGateway = startWeixinGateway();
 
   if (config.registerCommandsOnStart) {
     await registerCommands();
@@ -157,11 +158,16 @@ async function main(): Promise<void> {
     timeoutMs: config.startupWatchdog.clientReadyTimeoutMs,
     macosNotificationEnabled: config.startupWatchdog.macosNotificationEnabled,
   });
+  const shutdown = (signal: NodeJS.Signals) => {
+    void beginGracefulShutdown(signal);
+  };
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+
   bot.once("clientReady", (client) => {
     startupWatchdog?.markClientReady();
     connectivityMonitor = startConnectivityMonitor(client);
     doctorScheduler = startDoctorScheduler(client);
-    weixinGateway = startWeixinGateway(client);
     if (config.e2e.disableScheduler) {
       log.info("Cron scheduler disabled by MINICLAW_DISABLE_SCHEDULER");
       return;
@@ -172,15 +178,10 @@ async function main(): Promise<void> {
     await bot.login(config.discord.token);
   } catch (err) {
     await startupWatchdog?.notifyFailure("bot.login failed before Discord clientReady", err);
-    throw err;
+    startupWatchdog?.stop();
+    if (!weixinGateway) throw err;
+    log.error("Discord bot login failed; continuing with non-Discord IM gateways when available:", err);
   }
-
-  const shutdown = (signal: NodeJS.Signals) => {
-    void beginGracefulShutdown(signal);
-  };
-
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
 }
 
 main().catch(async (err) => {

@@ -5,7 +5,10 @@ export type TaskRouteType =
   | "task_channel"
   | "thread_continuation"
   | "smart_router_auto"
-  | "smart_router_confirmed";
+  | "smart_router_confirmed"
+  | "weixin_chat"
+  | "weixin_explicit_task"
+  | "weixin_smart_router_confirmed";
 
 export interface TaskAttachmentSummary {
   name?: string;
@@ -14,8 +17,10 @@ export interface TaskAttachmentSummary {
 }
 
 export interface TaskSourceMetadata {
-  provider: "discord";
+  provider: "discord" | "weixin";
   route_type: TaskRouteType;
+  account_id?: string;
+  source_user_id?: string;
   guild_id?: string;
   guild_name?: string;
   source_channel_id?: string;

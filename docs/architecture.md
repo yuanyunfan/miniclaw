@@ -1,6 +1,6 @@
 # MiniClaw Architecture
 
-> MiniClaw is a local-first Discord-native agent runtime. Discord is the primary user surface, with optional Weixin direct as a lightweight personal entry point; Node 22 is the process runtime; `~/.miniclaw/` is the user data boundary; SQLite records durable task, routing, incident, provider, and Agent Run Manager state.
+> MiniClaw is a local-first Discord-native agent runtime. Discord is the primary full-fidelity user surface, with optional Weixin direct as an independent personal text, voice, and image entry point for chat/task; Node 22 is the process runtime; `~/.miniclaw/` is the user data boundary; SQLite records durable task, routing, incident, provider, and Agent Run Manager state.
 
 ## System View
 
@@ -23,7 +23,7 @@ flowchart LR
     Cron["cron/scheduler.ts<br/>cron runner and retry"]
     Providers["providers + capabilities<br/>stock, content, email"]
     Ops["ops/doctor* + safe-restart<br/>diagnosis, incidents, guarded repair"]
-    IM["im/*<br/>Discord transport, Feishu outbound, Weixin direct"]
+    IM["im/*<br/>Discord transport, Feishu outbound, Weixin direct gateway"]
   end
 
   subgraph UserHome["~/.miniclaw/"]
@@ -283,7 +283,7 @@ State retention is configured through `state.retention.*`. Cleanup is dry-run fi
 
 ## Delivery And Recovery
 
-`recovery_outbox` separates local execution results from IM delivery. `cron_failure_alert` stores retryable cron failure alerts when Discord delivery is unavailable. `task_result_delivery` stores task result fragments for later delivery recovery. Discord remains the primary full-fidelity gateway; Feishu is outbound-only; Weixin direct is opt-in text interaction backed by local `~/.miniclaw/weixin` account state and a Discord task bridge channel for confirmed `/task` execution.
+`recovery_outbox` separates local execution results from IM delivery. `cron_failure_alert` stores retryable cron failure alerts when Discord delivery is unavailable. `task_result_delivery` stores task result fragments for later delivery recovery. Discord remains the primary full-fidelity gateway; Feishu is outbound-only; Weixin direct is opt-in text/voice/image interaction backed by local `~/.miniclaw/weixin` account state. After login, the Weixin long-poll gateway can start without Discord `clientReady`, route chat through the normal chat runtime, and run confirmed tasks through a Weixin task view reporter that sends progress and final results back to Weixin.
 
 ## Observability And Operations
 

@@ -11,6 +11,7 @@ import type { CodexInputEntry } from "./codex.js";
 import { fmtTokens, formatAnthropicUsage } from "./usage.js";
 import { appendTaskEvent, type TaskEventSeverity } from "../store/task-events.js";
 import { TaskReporter } from "./task-reporter.js";
+import type { TaskViewReporter } from "./task-view.js";
 import { buildSupervisorBlock } from "./supervisor.js";
 import { createFakeTaskRunner } from "./runners/fake-task-runner.js";
 import type { AgentRuntime, AgentRuntimeTraceOptions, AgentTaskResult } from "../runtime/agent-runtime.js";
@@ -210,7 +211,8 @@ interface ExecuteTaskParams {
   taskId: string;
   prompt: string;
   cwd: string;
-  channel: SendableChannels;
+  channel?: SendableChannels;
+  viewReporter?: TaskViewReporter;
   resumeSessionId?: string;
   attachmentBlocks?: ContentBlockParam[];
   attachmentCodexInputs?: CodexInputEntry[];
@@ -308,11 +310,14 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
   const outputMode = params.outputMode ?? "embed";
   const reporter = new TaskReporter(params.taskId);
   const selectedRuntime = selectTaskRuntime(config);
-  const viewReporter = new DiscordTaskViewReporter({
+  if (!params.channel && !params.viewReporter) {
+    throw new Error("executeTask requires either a Discord channel or a task view reporter");
+  }
+  const viewReporter = params.viewReporter ?? new DiscordTaskViewReporter({
     taskId: params.taskId,
     prompt: params.prompt,
     cwd: params.cwd,
-    channel: params.channel,
+    channel: params.channel!,
     provider: selectedRuntime.provider,
     model: config.model,
     outputMode,
@@ -362,7 +367,7 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
       });
     }
 
-    const manager = managerRoute.useManaged
+    const manager = managerRoute.useManaged && params.channel
       ? new AgentRunManager({
           taskId: params.taskId,
           cwd: params.cwd,

@@ -3,7 +3,7 @@ doc_id: chat-router-current-logic
 lang: zh
 translation_of: docs/chat-router-current-logic.md
 translation_status: current
-source_sha256: 48a573e2d943bc48ec8d0becb73dac454d52c06632442da252734139808d1122
+source_sha256: 2fb8089024e80e2fededa6da90b0e1519131ffc4dcdd4c36104eca4172c53729
 ---
 # MiniClaw Chat Router 当前逻辑
 
@@ -17,6 +17,8 @@ MiniClaw router 有两层：
 2. 只有进入 `chat` 的消息才会到 `src/routing/intent.ts`，Smart Router 在那里把 objective facts 和可选 LLM capability classification 映射成 `chat`、`task_suggest`、`task_confirm` 或 `task_auto`。
 
 当前策略是 LLM-first 但保守。regex task/chat signals 不再拥有决策权。attachments、URL-only messages、empty messages 等 objective facts 在 classifier disabled 或 unavailable 时仍作为 fallback facts。
+
+Weixin direct 在 Discord hard route 之前有自己的 gateway path。它先执行 Weixin allowlist，提取文字/语音/图片输入，再复用同一套 Smart Router classifier 判断 chat-vs-task。Smart Router 在 Weixin 上判断为 task 时，MiniClaw 一律用 y/n 文本确认，不使用 Discord buttons，也不自动创建 task。
 
 ## 路由流程
 
@@ -68,6 +70,8 @@ flowchart TD
   V -->|cancel| V2[Cancel]
 ```
 
+上图是 Discord message flow。Weixin direct 先经过自己的 long-poll receive path：media extraction -> optional Smart Router classification -> 对 task-like prompt 发 y/n 文本确认 -> chat runtime 或 Weixin task view reporter。
+
 ## 代码地图
 
 - `src/bot.ts`：Discord event registration、client lifecycle 和 outer message-route delegation。
@@ -81,6 +85,7 @@ flowchart TD
 - `src/routing/llm.ts`：可选 LLM capability classifier。
 - `src/routing/confirmations.ts`：短生命周期 Smart Router confirmation state。
 - `src/discord/task-intake.ts`：task creation 和 `executeTask()` 入口。
+- `src/im/adapters/weixin/gateway.ts`：Weixin allowlist、media extraction、Smart Router y/n confirmation、direct chat 和 direct task execution。
 - `src/agent/chat.ts`：真实 chat runtime execution。
 - `src/routing/context.ts`、`src/routing/task-context.ts`、`src/routing/chat-context.ts`：recent context 和 source metadata。
 
@@ -166,12 +171,13 @@ classifier failure 会 fallback 到 objective facts，并记录失败原因。cl
 | light Q&A, explanation, simple reading | `chat` |
 | configured auto-task channel with strong task intent | `task_auto` |
 
-channel policy 决定 task intent 最终是 automatic task、confirmation buttons，还是 fallback chat。
+Discord channel policy 决定 task intent 最终是 automatic task、confirmation buttons，还是 fallback chat。Weixin 会把 `task_auto`、`task_confirm` 和 `task_suggest` 都当作“先用文本询问”：`y` 创建 task，`n` 继续 chat，取消类回复丢弃 pending confirmation。
 
 ## 已知边界
 
 - Smart Router 在 route 前不会读取 attachment content。
 - confirmation state 是 process-local 且短生命周期。
 - classifier 判断 capability requirements，不判断用户价值或答案质量。
-- `/task` 和 task-channel intake 会绕过 Smart Router，因为用户或 channel 已经选择 task mode。
+- Discord `/task` 和 task-channel intake 会绕过 Smart Router，因为用户或 channel 已经选择 task mode。
+- Weixin `/task ...` 仍然会询问 y/n，让移动聊天入口只有一条可反悔的 task conversion path。
 - chat 保持 read-oriented；workspace-changing work 必须通过 task mode。

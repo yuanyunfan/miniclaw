@@ -20,13 +20,14 @@ trace_docs:
 
 # MiniClaw
 
-MiniClaw 是一个 local-first automation runtime，把 Discord 消息、可选 Weixin direct chat、cron 调度、只读 providers 和 Claude/Codex agents 组织成一条可观测的个人自动化工作流。website 是面向人的门户；实现契约仍维护在 repo docs 中。
+MiniClaw 是一个 local-first automation runtime，把 Discord 消息、可选 Weixin direct 文字/语音/图片入口、cron 调度、只读 providers 和 Claude/Codex agents 组织成一条可观测的个人自动化工作流。website 是面向人的门户；实现契约仍维护在 repo docs 中。
 
 ## 系统设计
 
 ```mermaid
 flowchart LR
-  Discord[Discord] --> Intake[Bot Intake]
+  Discord[Discord] --> Intake[IM Intake]
+  Weixin[Weixin Direct] --> Intake
   Intake --> Router[Smart Router]
   Router --> Chat[Chat Runtime]
   Router --> Task[Task Runtime]
@@ -42,7 +43,7 @@ flowchart LR
 
 ## 设计边界
 
-- **Discord-native control plane**：chat、task intake、slash commands、cron reports 和 failure recovery 默认通过 Discord 交互和留痕；Weixin direct 是 opt-in 的个人文本入口。
+- **Discord-native control plane**：chat、task intake、slash commands、cron reports 和 failure recovery 默认通过 Discord 交互和留痕；Weixin direct 是 opt-in 的个人文字/语音/图片入口，可独立进入 chat 或经 y/n 确认进入 task。
 - **Runtime boundary**：MiniClaw 负责 routing、context、progress、trace events 和 delivery；Claude/Codex 负责 agent execution。
 - **Operator visibility**：task traces、cron run history、只读 doctor reports 和 incident workflows 都是 first-class slash-command surfaces。
 - **Provider-first reports**：content、email、stock、watchlist、pulse 和 market-intel providers 先生成结构化上下文，再交给 LLM 汇总；scheduled cron 会先经过全局 active-window guard。

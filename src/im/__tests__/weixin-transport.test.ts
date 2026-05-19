@@ -151,8 +151,48 @@ describe("Weixin gateway helpers", () => {
       "run diagnostics"
     );
 
-    expect(prompt).toContain("<weixin_task_source_metadata trust=\"untrusted\">");
+    expect(prompt).toContain("<task_source_metadata trust=\"untrusted\">");
     expect(prompt).toContain("\"provider\": \"weixin\"");
     expect(prompt).toContain("<user_task priority=\"current\">\nrun diagnostics\n</user_task>");
+  });
+
+  it("uses y/n as task/chat confirmation and keeps cancel separate", () => {
+    expect(gatewayTestables.isConfirm("y")).toBe(true);
+    expect(gatewayTestables.isConfirm("确认")).toBe(true);
+    expect(gatewayTestables.isContinueChat("n")).toBe(true);
+    expect(gatewayTestables.isContinueChat("继续")).toBe(true);
+    expect(gatewayTestables.isCancel("取消")).toBe(true);
+    expect(gatewayTestables.isCancel("n")).toBe(false);
+  });
+
+  it("extracts Weixin text, voice transcript, and image attachments for model input", () => {
+    const content = gatewayTestables.extractInboundContent({
+      message_id: 7,
+      item_list: [
+        { type: 1, text_item: { text: "看一下这张图" } },
+        { type: 3, voice_item: { text: "顺便总结一下" } },
+        {
+          type: 2,
+          image_item: {
+            image_url: "https://cdn.test/pic.jpg",
+            file_name: "pic.jpg",
+            file_size: "1234",
+            mime_type: "image/jpeg",
+          },
+        },
+      ],
+    });
+
+    expect(content.prompt).toContain("看一下这张图");
+    expect(content.prompt).toContain("[语音转写]");
+    expect(content.prompt).toContain("顺便总结一下");
+    expect(content.attachments).toEqual([
+      {
+        url: "https://cdn.test/pic.jpg",
+        name: "pic.jpg",
+        contentType: "image/jpeg",
+        size: 1234,
+      },
+    ]);
   });
 });

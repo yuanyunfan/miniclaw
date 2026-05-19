@@ -168,4 +168,57 @@ describe("executeTask runtime registry wiring", () => {
     });
     expect(sent).toContain("runtime registry ok");
   });
+
+  it("can execute with an IM task view reporter and no Discord channel", async () => {
+    const runtimeResult = {
+      success: true,
+      sessionId: "codex:sess-im",
+      costUsd: 0,
+      durationMs: 12,
+      turns: 1,
+      result: "im reporter ok",
+      progressLines: ["im step"],
+      toolCount: 1,
+    };
+    mocks.getDefaultAgentRuntime.mockReturnValue(configuredRuntime());
+    mocks.startTask.mockResolvedValue(runtimeResult);
+
+    const { createTask, initDb } = await import("../../store/db.js");
+    const { executeTask } = await import("../task.js");
+    initDb();
+    createTask({
+      id: "task-im-reporter",
+      discord_thread_id: "weixin:acct:task-im-reporter",
+      discord_user_id: "weixin:user",
+      prompt: "run through im reporter",
+      cwd: tmp,
+    });
+
+    const viewReporter = {
+      start: vi.fn(async () => undefined),
+      handle: vi.fn(async () => undefined),
+      snapshot: vi.fn(() => ({ lines: ["snapshot step"], turns: 1, toolCount: 1 })),
+      finish: vi.fn(async () => undefined),
+      renderTaskError: vi.fn(async () => undefined),
+    };
+
+    const result = await executeTask({
+      taskId: "task-im-reporter",
+      prompt: "run through im reporter",
+      cwd: tmp,
+      viewReporter,
+    });
+
+    expect(result).toBe(runtimeResult);
+    expect(mocks.startTask).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: "task-im-reporter",
+      prompt: "run through im reporter",
+      cwd: tmp,
+      signal: expect.any(AbortSignal),
+      onViewEvent: expect.any(Function),
+      onTraceEvent: expect.any(Function),
+    }));
+    expect(viewReporter.start).toHaveBeenCalled();
+    expect(viewReporter.finish).toHaveBeenCalledWith(runtimeResult, "completed", { lines: ["im step"], toolCount: 1 });
+  });
 });
