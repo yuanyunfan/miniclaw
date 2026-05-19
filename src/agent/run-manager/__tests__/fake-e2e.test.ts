@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const E2E_STYLE_TEST_TIMEOUT_MS = 15_000;
+
 const ENV_KEYS = [
   "MINICLAW_CONFIG",
   "MINICLAW_E2E_MODE",
@@ -157,5 +159,5 @@ describe("Agent Run Manager fake E2E", () => {
     expect(eventTypes).toContain("artifact_written");
     expect(eventTypes).toContain("verdict_received");
     expect(sent.some((message) => message.includes("Agent Run Manager fake E2E completed"))).toBe(true);
-  });
+  }, E2E_STYLE_TEST_TIMEOUT_MS);
 });

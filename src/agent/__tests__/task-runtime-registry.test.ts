@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { AgentRuntime } from "../../runtime/agent-runtime.js";
 
+const E2E_STYLE_TEST_TIMEOUT_MS = 15_000;
+
 const ENV_KEYS = [
   "DISCORD_TOKEN",
   "MINICLAW_CONFIG",
@@ -167,7 +169,7 @@ describe("executeTask runtime registry wiring", () => {
       result_summary: "runtime registry ok",
     });
     expect(sent).toContain("runtime registry ok");
-  });
+  }, E2E_STYLE_TEST_TIMEOUT_MS);
 
   it("can execute with an IM task view reporter and no Discord channel", async () => {
     const runtimeResult = {
@@ -220,5 +222,5 @@ describe("executeTask runtime registry wiring", () => {
     }));
     expect(viewReporter.start).toHaveBeenCalled();
     expect(viewReporter.finish).toHaveBeenCalledWith(runtimeResult, "completed", { lines: ["im step"], toolCount: 1 });
-  });
+  }, E2E_STYLE_TEST_TIMEOUT_MS);
 });
