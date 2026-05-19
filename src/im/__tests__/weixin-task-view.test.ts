@@ -55,12 +55,14 @@ describe("WeixinTaskViewReporter", () => {
 
   it("suppresses final delivery errors so task completion state is not converted to runtime failure", async () => {
     const send = vi.fn().mockRejectedValue(new Error("send failed"));
+    const onFinalDeliveryFailed = vi.fn();
     const reporter = new WeixinTaskViewReporter({
       taskId: "task-weixin-final",
       prompt: "run diagnostics",
       cwd: "/tmp/work",
       send,
       sendRetryDelayMs: 0,
+      onFinalDeliveryFailed,
     });
 
     await expect(reporter.finish({
@@ -75,5 +77,8 @@ describe("WeixinTaskViewReporter", () => {
     await flushTimers();
 
     expect(send).toHaveBeenCalledTimes(2);
+    expect(onFinalDeliveryFailed).toHaveBeenCalledTimes(1);
+    expect(onFinalDeliveryFailed.mock.calls[0]?.[0][0]).toContain("MiniClaw task task-wei 已完成");
+    expect(onFinalDeliveryFailed.mock.calls[0]?.[1].message).toBe("send failed");
   });
 });

@@ -98,7 +98,7 @@ export function startConnectivityMonitor(client: Client): ConnectivityMonitorHan
         lastStatus = snapshot.status;
       }
       if (snapshot.status === "discord_ok" || snapshot.status === "recovered") {
-        await flushRecoveryOutbox(client, { snapshot }).catch((err) => {
+        await flushRecoveryOutbox(client, { snapshot, imConfig: config.im }).catch((err) => {
           log.warn("recovery outbox flush failed:", err);
         });
       }

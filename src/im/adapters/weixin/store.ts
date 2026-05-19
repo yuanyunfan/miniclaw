@@ -149,3 +149,14 @@ export function saveWeixinContextToken(accountId: string, userId: string, contex
     },
   }, stateDir);
 }
+
+export function clearWeixinContextToken(accountId: string, userId: string, stateDir?: string): void {
+  const account = loadWeixinAccount(accountId, stateDir);
+  if (!account?.contextTokens?.[userId]) return;
+  const nextTokens = { ...account.contextTokens };
+  delete nextTokens[userId];
+  saveWeixinAccount(accountId, {
+    ...account,
+    contextTokens: Object.keys(nextTokens).length ? nextTokens : undefined,
+  }, stateDir);
+}

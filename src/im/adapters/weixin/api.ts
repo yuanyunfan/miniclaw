@@ -300,6 +300,23 @@ export function buildWeixinTextMessage(params: {
   };
 }
 
+export class WeixinSendMessageError extends Error {
+  constructor(
+    readonly code: number,
+    readonly errmsg: string,
+    readonly operation = "sendmessage",
+  ) {
+    super(`Weixin ${operation} error ${code}: ${errmsg || "unknown error"}`);
+    this.name = "WeixinSendMessageError";
+  }
+}
+
+export function isWeixinSendMessageErrorCode(err: unknown, code: number): boolean {
+  if (err instanceof WeixinSendMessageError) return err.code === code;
+  const message = err instanceof Error ? err.message : String(err);
+  return message.includes(` error ${code}:`) || message.includes(` errcode ${code}`);
+}
+
 export async function sendWeixinMessageBody(params: {
   body: { msg?: WeixinMessage };
   options: WeixinApiOptions;
@@ -333,7 +350,7 @@ export async function sendWeixinText(params: {
   });
   const code = resp.errcode ?? resp.ret ?? 0;
   if (code !== 0) {
-    throw new Error(`Weixin sendmessage error ${code}: ${resp.errmsg ?? "unknown error"}`);
+    throw new WeixinSendMessageError(code, resp.errmsg ?? "unknown error");
   }
   return { messageId: clientId };
 }

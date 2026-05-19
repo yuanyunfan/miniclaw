@@ -15,6 +15,10 @@ import {
   recordSmartRouterDecision,
   recordSmartRouterUserChoice,
 } from "../../../store/db.js";
+import {
+  enqueueTaskResultDelivery,
+  flushTaskResultDeliveriesForTarget,
+} from "../../../monitoring/recovery-outbox.js";
 import { buildSmartTaskPrompt } from "../../../routing/context.js";
 import { hashPrompt, promptPreview } from "../../../routing/decision-log.js";
 import { classifySmartRoute, resolveSmartRouterAction, type RouteDecision } from "../../../routing/intent.js";
@@ -22,6 +26,7 @@ import { classifyRouteWithLlm } from "../../../routing/llm.js";
 import { buildTaskPromptWithContext, type TaskRouteType, type TaskSourceMetadata } from "../../../routing/task-context.js";
 import type { CodexInputEntry } from "../../../agent/codex.js";
 import { createWeixinTransport } from "./transport.js";
+import type { IMTransportRegistry } from "../../registry.js";
 import { WeixinTaskViewReporter } from "./task-view.js";
 import {
   extractWeixinText,
@@ -200,6 +205,26 @@ async function sendWeixinReply(account: WeixinAccountData, to: string, text: str
     },
     content: text,
   });
+}
+
+async function flushPendingWeixinTaskResults(account: WeixinAccountData, to: string): Promise<void> {
+  const registry: IMTransportRegistry = new Map([[
+    "weixin",
+    createWeixinTransport({
+      stateDir: config.im.transports.weixin.stateDir,
+      defaultAccountId: account.accountId,
+    }),
+  ]]);
+  const result = await flushTaskResultDeliveriesForTarget({
+    target: { transport: "weixin", target: to, accountId: account.accountId },
+    registry,
+  });
+  if (result.delivered || result.failed) {
+    log.info(
+      `weixin flushed pending task deliveries account=${account.accountId} to=${to} ` +
+      `delivered=${result.delivered} failed=${result.failed}`
+    );
+  }
 }
 
 async function getWeixinTypingTicket(account: WeixinAccountData, to: string, contextToken?: string): Promise<string> {
@@ -661,25 +686,49 @@ async function runConfirmedTask(params: {
   });
   if (processed.notices.length) await sendWeixinReply(params.account, to, processed.notices.join("\n"));
 
-  void executeTask({
-    taskId,
-    prompt: taskPrompt,
-    cwd,
-    attachmentBlocks: processed.blocks,
-    attachmentCodexInputs: processed.codexInputs,
-    viewReporter: new WeixinTaskViewReporter({
-      taskId,
-      prompt: params.prompt,
-      cwd,
-      send: (text) => sendWeixinReply(params.account, to, text),
-    }),
-  }).catch(async (err) => {
-    const messageText = err instanceof Error ? err.message : String(err);
-    log.error(`weixin task execution failed account=${params.account.accountId} from=${to} task=${taskId}: ${messageText}`);
-    await sendWeixinReply(params.account, to, `任务执行异常：${messageText.slice(0, 300)}`).catch((sendErr) => {
-      log.error(`weixin task failure notification failed account=${params.account.accountId} from=${to} task=${taskId}:`, sendErr);
-    });
-  });
+  void (async () => {
+    let typing: WeixinTypingHandle | null = null;
+    try {
+      typing = await startWeixinTyping(params.account, to, params.message.context_token);
+      await executeTask({
+        taskId,
+        prompt: taskPrompt,
+        cwd,
+        attachmentBlocks: processed.blocks,
+        attachmentCodexInputs: processed.codexInputs,
+        viewReporter: new WeixinTaskViewReporter({
+          taskId,
+          prompt: params.prompt,
+          cwd,
+          send: (text) => sendWeixinReply(params.account, to, text),
+          onFinalDeliveryFailed: (messages, err, result) => {
+            enqueueTaskResultDelivery({
+              channelId,
+              taskId,
+              route: params.routeType,
+              success: result.success,
+              durationMs: result.durationMs,
+              messages,
+              deliveryError: err.message,
+              target: {
+                transport: "weixin",
+                target: to,
+                accountId: params.account.accountId,
+              },
+            });
+          },
+        }),
+      });
+    } catch (err) {
+      const messageText = err instanceof Error ? err.message : String(err);
+      log.error(`weixin task execution failed account=${params.account.accountId} from=${to} task=${taskId}: ${messageText}`);
+      await sendWeixinReply(params.account, to, `任务执行异常：${messageText.slice(0, 300)}`).catch((sendErr) => {
+        log.error(`weixin task failure notification failed account=${params.account.accountId} from=${to} task=${taskId}:`, sendErr);
+      });
+    } finally {
+      await typing?.stop();
+    }
+  })();
 }
 
 async function handlePendingReply(account: WeixinAccountData, from: string, text: string): Promise<boolean> {
@@ -862,7 +911,15 @@ async function handleMessage(account: WeixinAccountData, message: WeixinMessage)
     log.warn(`dropping unauthorized weixin message account=${account.accountId} from=${from}`);
     return;
   }
-  if (message.context_token) saveWeixinContextToken(account.accountId, from, message.context_token, config.im.transports.weixin.stateDir);
+  if (message.context_token) {
+    saveWeixinContextToken(account.accountId, from, message.context_token, config.im.transports.weixin.stateDir);
+    await flushPendingWeixinTaskResults(account, from).catch((err) => {
+      log.warn(
+        `weixin pending task delivery flush failed account=${account.accountId} from=${from}: ` +
+        `${err instanceof Error ? err.message : String(err)}`
+      );
+    });
+  }
 
   const content = extractInboundContent(message);
   const text = extractWeixinText(message).trim();

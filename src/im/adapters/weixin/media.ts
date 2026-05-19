@@ -8,6 +8,7 @@ import {
   DEFAULT_WEIXIN_CDN_BASE_URL,
   getWeixinUploadUrl,
   sendWeixinMessageBody,
+  WeixinSendMessageError,
   WeixinMessageItemType,
   WeixinMessageState,
   WeixinMessageType,
@@ -505,7 +506,7 @@ export async function sendWeixinMediaFile(params: {
       },
     });
     const code = resp.errcode ?? resp.ret ?? 0;
-    if (code !== 0) throw new Error(`Weixin sendmessage media error ${code}: ${resp.errmsg ?? "unknown error"}`);
+    if (code !== 0) throw new WeixinSendMessageError(code, resp.errmsg ?? "unknown error", "sendmessage media");
   }
   return { messageId: lastClientId };
 }

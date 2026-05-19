@@ -18,7 +18,7 @@ import {
 import { parseWeixinTaskCommand, __testables as gatewayTestables } from "../adapters/weixin/gateway.js";
 import { materializeWeixinAttachments, __testables as mediaTestables, type WeixinProcessableAttachment } from "../adapters/weixin/media.js";
 import { __resetWeixinSessionPauseForTests, getWeixinSessionPauseRemainingMs, pauseWeixinSession } from "../adapters/weixin/session.js";
-import { saveWeixinAccount, saveWeixinContextToken } from "../adapters/weixin/store.js";
+import { getWeixinContextToken, saveWeixinAccount, saveWeixinContextToken } from "../adapters/weixin/store.js";
 import { createWeixinTransport } from "../adapters/weixin/transport.js";
 
 let tmpDir: string;
@@ -259,6 +259,31 @@ describe("Weixin transport", () => {
     expect(JSON.parse(String(calls[0]?.init.body))).toMatchObject({
       msg: { context_token: "ctx" },
     });
+  });
+
+  it("retries text sends without a stale stored context token on sendmessage -2", async () => {
+    saveWeixinAccount("acct", {
+      token: "token",
+      baseUrl: "https://weixin.test/",
+      userId: "owner@im.wechat",
+    }, tmpDir);
+    saveWeixinContextToken("acct", "user@im.wechat", "stale-ctx", tmpDir);
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const fetchFn = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), init: init ?? {} });
+      return jsonResponse(calls.length === 1 ? { ret: -2 } : { ret: 0 });
+    });
+
+    const transport = createWeixinTransport({ stateDir: tmpDir, fetchFn: fetchFn as unknown as typeof fetch });
+    await transport.send({
+      target: { transport: "weixin", target: "user@im.wechat", accountId: "acct" },
+      content: "hello",
+    });
+
+    const bodies = calls.map((call) => JSON.parse(String(call.init.body)));
+    expect(bodies[0]).toMatchObject({ msg: { context_token: "stale-ctx" } });
+    expect(bodies[1]?.msg.context_token).toBeUndefined();
+    expect(getWeixinContextToken("acct", "user@im.wechat", tmpDir)).toBeUndefined();
   });
 
   it("uploads and sends image files through the Weixin CDN media path", async () => {

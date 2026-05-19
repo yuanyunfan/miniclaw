@@ -20,6 +20,12 @@ export interface WeixinTaskViewReporterOptions {
   prompt: string;
   cwd: string;
   send: (text: string) => Promise<void>;
+  onFinalDeliveryFailed?: (
+    messages: string[],
+    error: Error,
+    result: TaskResult,
+    status: TaskTerminalStatus,
+  ) => Promise<void> | void;
   progressIntervalMs?: number;
   sendRetryDelayMs?: number;
 }
@@ -76,15 +82,24 @@ export class WeixinTaskViewReporter implements TaskViewReporter {
     this.sendRetryDelayMs = options.sendRetryDelayMs ?? SEND_RETRY_DELAY_MS;
   }
 
-  private sendBestEffort(text: string, stage: string): void {
-    void Promise.resolve().then(() => this.options.send(text)).catch((err) => {
+  private async sendWithRetry(text: string, stage: string): Promise<void> {
+    try {
+      await this.options.send(text);
+    } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       log.warn(`task ${this.options.taskId.slice(0, 8)} ${stage} send failed; retrying once: ${message}`);
-      void retryAfter(this.sendRetryDelayMs, () => this.options.send(text)).catch((retryErr) => {
+      try {
+        await retryAfter(this.sendRetryDelayMs, () => this.options.send(text));
+      } catch (retryErr) {
         const retryMessage = retryErr instanceof Error ? retryErr.message : String(retryErr);
         log.warn(`task ${this.options.taskId.slice(0, 8)} ${stage} retry failed; suppressing delivery error: ${retryMessage}`);
-      });
-    });
+        throw retryErr;
+      }
+    }
+  }
+
+  private sendBestEffort(text: string, stage: string): void {
+    void this.sendWithRetry(text, stage).catch(() => undefined);
   }
 
   async start(): Promise<void> {
@@ -145,8 +160,22 @@ export class WeixinTaskViewReporter implements TaskViewReporter {
     const body = result.success
       ? result.result.trim() || "[无文字回复]"
       : `任务失败：${result.result.trim() || "unknown error"}`;
-    for (const [idx, chunk] of chunks(body).entries()) {
-      this.sendBestEffort(idx === 0 ? `${header}\n\n${chunk}` : chunk, "finish");
+    const messages = chunks(body).map((chunk, idx) => idx === 0 ? `${header}\n\n${chunk}` : chunk);
+    let firstError: Error | undefined;
+    for (const message of messages) {
+      try {
+        await this.sendWithRetry(message, "finish");
+      } catch (err) {
+        firstError ??= err instanceof Error ? err : new Error(String(err));
+      }
+    }
+    if (firstError && this.options.onFinalDeliveryFailed) {
+      try {
+        await this.options.onFinalDeliveryFailed(messages, firstError, result, status);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        log.warn(`task ${this.options.taskId.slice(0, 8)} finish recovery enqueue failed; suppressing delivery error: ${message}`);
+      }
     }
   }
 

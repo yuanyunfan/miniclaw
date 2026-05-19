@@ -13,11 +13,14 @@ import {
 } from "../../store/cron-runs.js";
 import {
   enqueueTaskResultDelivery,
+  flushTaskResultDeliveriesForTarget,
   flushRecoveryOutbox,
 } from "../recovery-outbox.js";
 import { listRecoveryOutbox } from "../../store/recovery-outbox.js";
 import { createTask } from "../../store/repositories/tasks.js";
 import type { ConnectivitySnapshot } from "../connectivity-core.js";
+import type { IMTransport } from "../../im/contracts.js";
+import type { IMTransportRegistry } from "../../im/registry.js";
 
 let db: Database.Database;
 let previousCronDir: string | undefined;
@@ -156,5 +159,123 @@ describe("recovery outbox flush", () => {
     expect((sent[2] as { content: string; flags?: unknown }).content).toContain("链接预览集中区");
     expect((sent[2] as { content: string; flags?: unknown }).content).toContain("https://example.com/a");
     expect((sent[2] as { flags?: unknown }).flags).toBeUndefined();
+  });
+
+  it("leaves pending Weixin task results for fresh inbound target flush", async () => {
+    createTask({
+      id: "task-weixin-1",
+      discord_thread_id: "",
+      discord_user_id: "weixin:user@im.wechat",
+      prompt: "hello",
+      cwd: "/tmp",
+    });
+    enqueueTaskResultDelivery({
+      channelId: "weixin:acct:user@im.wechat",
+      taskId: "task-weixin-1",
+      route: "weixin_smart_task",
+      success: true,
+      messages: ["final result"],
+      deliveryError: "weixin send failed",
+      target: { transport: "weixin", target: "user@im.wechat", accountId: "acct" },
+    });
+    const sent: unknown[] = [];
+    const weixinTransport: IMTransport = {
+      id: "weixin",
+      kind: "im_transport",
+      capabilities: {
+        richEmbeds: false,
+        markdown: "plain",
+        editMessage: false,
+        threads: false,
+        files: true,
+        buttons: false,
+        slashCommands: false,
+        mentions: false,
+      },
+      send: async (input) => {
+        sent.push(input);
+        return {
+          transport: "weixin",
+          target: input.target.target,
+          accountId: input.target.accountId,
+          messageId: `wx-${sent.length}`,
+        };
+      },
+    };
+    const registry: IMTransportRegistry = new Map([["weixin", weixinTransport]]);
+
+    const result = await flushRecoveryOutbox(clientRecordingSends([]), { registry });
+
+    expect(result).toMatchObject({ taskDeliveriesDelivered: 0, failedAttempts: 0 });
+    expect(sent).toHaveLength(0);
+    expect(listRecoveryOutbox({ kind: "task_result_delivery" })[0]?.status).toBe("pending");
+  });
+
+  it("flushes only matching pending Weixin task results for a fresh inbound target", async () => {
+    createTask({
+      id: "task-weixin-1",
+      discord_thread_id: "",
+      discord_user_id: "weixin:user@im.wechat",
+      prompt: "hello",
+      cwd: "/tmp",
+    });
+    createTask({
+      id: "task-weixin-2",
+      discord_thread_id: "",
+      discord_user_id: "weixin:other@im.wechat",
+      prompt: "hello",
+      cwd: "/tmp",
+    });
+    enqueueTaskResultDelivery({
+      channelId: "weixin:acct:user@im.wechat",
+      taskId: "task-weixin-1",
+      success: true,
+      messages: ["target result"],
+      target: { transport: "weixin", target: "user@im.wechat", accountId: "acct" },
+    });
+    enqueueTaskResultDelivery({
+      channelId: "weixin:acct:other@im.wechat",
+      taskId: "task-weixin-2",
+      success: true,
+      messages: ["other result"],
+      target: { transport: "weixin", target: "other@im.wechat", accountId: "acct" },
+    });
+    const sent: unknown[] = [];
+    const weixinTransport: IMTransport = {
+      id: "weixin",
+      kind: "im_transport",
+      capabilities: {
+        richEmbeds: false,
+        markdown: "plain",
+        editMessage: false,
+        threads: false,
+        files: true,
+        buttons: false,
+        slashCommands: false,
+        mentions: false,
+      },
+      send: async (input) => {
+        sent.push(input);
+        return {
+          transport: "weixin",
+          target: input.target.target,
+          messageId: `wx-${sent.length}`,
+        };
+      },
+    };
+    const registry: IMTransportRegistry = new Map([["weixin", weixinTransport]]);
+
+    const result = await flushTaskResultDeliveriesForTarget({
+      target: { transport: "weixin", target: "user@im.wechat", accountId: "acct" },
+      registry,
+    });
+
+    expect(result).toEqual({ delivered: 1, failed: 0 });
+    expect(sent).toHaveLength(2);
+    expect(JSON.stringify(sent)).toContain("target result");
+    expect(JSON.stringify(sent)).not.toContain("other result");
+    const rows = listRecoveryOutbox({ kind: "task_result_delivery" });
+    expect(rows.find((row) => row.task_id === "task-weixin-1")?.status).toBe("delivered");
+    expect(rows.find((row) => row.task_id === "task-weixin-2")?.status).toBe("pending");
   });
 });

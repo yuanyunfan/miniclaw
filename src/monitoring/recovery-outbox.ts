@@ -1,10 +1,12 @@
 import type { Client } from "discord.js";
+import type { RuntimeConfig } from "../config.js";
 import { buildCronRetryActionRows, type CronRetryButtonDetails } from "../cron/failure-notifier.js";
 import { loadCronJobs } from "../cron/loader.js";
-import { chunkMessageWithDeferredLinkPreviews } from "../discord/chunks.js";
 import { createLogger } from "../lib/log.js";
 import { createDiscordTransport } from "../im/adapters/discord/transport.js";
 import type { IMDeliveryTarget, IMTransport, SentMessage } from "../im/contracts.js";
+import { sendTextToTargets } from "../im/delivery.js";
+import { createIMTransportRegistry, type IMTransportRegistry } from "../im/registry.js";
 import type { CronRunRow } from "../store/cron-runs.js";
 import {
   enqueueRecoveryOutbox,
@@ -44,6 +46,7 @@ interface TaskResultDeliveryPayload {
   success: boolean;
   duration_ms?: number;
   messages: string[];
+  target?: IMDeliveryTarget;
   created_at: string;
   delivery_error?: string | null;
 }
@@ -75,6 +78,7 @@ export interface EnqueueTaskResultDeliveryInput {
   jobName?: string | null;
   route?: string | null;
   durationMs?: number;
+  target?: IMDeliveryTarget;
   deliveryError?: string | null;
 }
 
@@ -83,6 +87,11 @@ export interface FlushRecoveryOutboxResult {
   taskDeliveriesDelivered: number;
   failedAttempts: number;
   backfilledCronAlerts: number;
+}
+
+export interface FlushTaskResultDeliveriesForTargetResult {
+  delivered: number;
+  failed: number;
 }
 
 function toIso(value: Date | string): string {
@@ -189,6 +198,7 @@ export function enqueueTaskResultDelivery(input: EnqueueTaskResultDeliveryInput)
     success: input.success,
     duration_ms: input.durationMs,
     messages,
+    ...(input.target ? { target: input.target } : {}),
     created_at: new Date().toISOString(),
     delivery_error: input.deliveryError,
   };
@@ -281,6 +291,62 @@ function formatCronMissedAlertSummary(rows: RecoveryOutboxRow[], options: { retr
   return lines.join("\n").slice(0, 2000);
 }
 
+function cleanString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function isKnownTransport(value: unknown): value is IMDeliveryTarget["transport"] {
+  return value === "discord" || value === "feishu" || value === "weixin";
+}
+
+function taskDeliveryTarget(row: RecoveryOutboxRow, payload: TaskResultDeliveryPayload): IMDeliveryTarget {
+  const raw = payload.target;
+  if (raw && typeof raw === "object") {
+    const candidate = raw as unknown as Record<string, unknown>;
+    const transport = candidate.transport;
+    const target = cleanString(candidate.target);
+    if (isKnownTransport(transport) && target) {
+      const deliveryTarget: IMDeliveryTarget = { transport, target };
+      const accountId = cleanString(candidate.accountId) ?? cleanString(candidate.account_id);
+      const contextToken = cleanString(candidate.contextToken) ?? cleanString(candidate.context_token);
+      const threadId = cleanString(candidate.threadId) ?? cleanString(candidate.thread_id);
+      if (accountId) deliveryTarget.accountId = accountId;
+      if (contextToken) deliveryTarget.contextToken = contextToken;
+      if (threadId) deliveryTarget.threadId = threadId;
+      return deliveryTarget;
+    }
+  }
+  return { transport: "discord", target: row.channel_id };
+}
+
+function sameDeliveryTarget(a: IMDeliveryTarget, b: IMDeliveryTarget): boolean {
+  return a.transport === b.transport
+    && a.target === b.target
+    && (a.accountId ?? "") === (b.accountId ?? "")
+    && (a.threadId ?? "") === (b.threadId ?? "");
+}
+
+function shouldFlushTaskDeliveryGlobally(row: RecoveryOutboxRow): boolean {
+  const payload = parseJsonObject<TaskResultDeliveryPayload>(row);
+  if (!payload) return true;
+  return taskDeliveryTarget(row, payload).transport !== "weixin";
+}
+
+async function sendTextViaRegistry(
+  registry: IMTransportRegistry,
+  target: IMDeliveryTarget,
+  content: string,
+  metadata: Record<string, unknown>,
+): Promise<SentMessage | undefined> {
+  const result = await sendTextToTargets({
+    targets: [target],
+    content,
+    registry,
+    metadata,
+  });
+  return result[0]?.message;
+}
+
 async function flushCronFailureAlerts(transport: IMTransport, rows: RecoveryOutboxRow[]): Promise<{ delivered: number; failed: number }> {
   let delivered = 0;
   let failed = 0;
@@ -318,7 +384,7 @@ async function flushCronFailureAlerts(transport: IMTransport, rows: RecoveryOutb
   return { delivered, failed };
 }
 
-async function flushTaskDeliveries(transport: IMTransport, rows: RecoveryOutboxRow[]): Promise<{ delivered: number; failed: number }> {
+async function flushTaskDeliveries(registry: IMTransportRegistry, rows: RecoveryOutboxRow[]): Promise<{ delivered: number; failed: number }> {
   let delivered = 0;
   let failed = 0;
   for (const row of rows) {
@@ -329,33 +395,28 @@ async function flushTaskDeliveries(transport: IMTransport, rows: RecoveryOutboxR
       continue;
     }
     try {
+      const target = taskDeliveryTarget(row, payload);
+      const metadata = { recovery_outbox_kind: "task_result_delivery", task_id: payload.task_id };
       const header = [
         "📬 MiniClaw 补发任务结果",
         "",
-        `Task: \`${shortId(payload.task_id)}\``,
-        ...(payload.job_name ? [`Cron: \`${payload.job_name}\``] : []),
+        `Task: ${shortId(payload.task_id)}`,
+        ...(payload.job_name ? [`Cron: ${payload.job_name}`] : []),
         `原始状态: ${payload.success ? "success" : "failed"}`,
         `首次投递失败时间: ${payload.created_at}`,
       ].join("\n").slice(0, 2000);
-      const target: IMDeliveryTarget = { transport: "discord", target: row.channel_id };
-      let sent = await transport.send({
-        target,
-        content: header,
-        metadata: { recovery_outbox_kind: "task_result_delivery", task_id: payload.task_id },
-      });
+      let sent = await sendTextViaRegistry(registry, target, header, metadata);
       const body = payload.messages.slice(0, 20).join("\n");
-      sent = await sendDiscordTextWithDeferredLinkPreviews(transport, target, body, {
-        recovery_outbox_kind: "task_result_delivery",
-        task_id: payload.task_id,
-      }) ?? sent;
+      sent = await sendTextViaRegistry(registry, target, body, metadata) ?? sent;
       if (payload.messages.length > 20) {
-        sent = await transport.send({
+        sent = await sendTextViaRegistry(
+          registry,
           target,
-          content: `... 另有 ${payload.messages.length - 20} 段输出未自动补发，请查看本地 task 记录。`,
-          metadata: { recovery_outbox_kind: "task_result_delivery", task_id: payload.task_id },
-        });
+          `... 另有 ${payload.messages.length - 20} 段输出未自动补发，请查看本地 task 记录。`,
+          metadata,
+        );
       }
-      const messageId = sent.messageId || undefined;
+      const messageId = sent?.messageId || undefined;
       markRecoveryOutboxDelivered(row.id, messageId);
       delivered++;
     } catch (err) {
@@ -366,35 +427,44 @@ async function flushTaskDeliveries(transport: IMTransport, rows: RecoveryOutboxR
   return { delivered, failed };
 }
 
-async function sendDiscordTextWithDeferredLinkPreviews(
-  transport: IMTransport,
-  target: IMDeliveryTarget,
-  text: string,
-  metadata: Record<string, unknown>,
-): Promise<SentMessage | undefined> {
-  let sent: SentMessage | undefined;
-  for (const chunk of chunkMessageWithDeferredLinkPreviews(text, "[empty message]")) {
-    sent = await transport.send({
-      target,
-      content: chunk.content,
-      suppressEmbeds: chunk.suppressEmbeds,
-      metadata,
+export async function flushTaskResultDeliveriesForTarget(input: {
+  target: IMDeliveryTarget;
+  registry: IMTransportRegistry;
+  limit?: number;
+}): Promise<FlushTaskResultDeliveriesForTargetResult> {
+  const limit = Math.max(1, Math.min(100, Math.floor(input.limit ?? 25)));
+  const rows = listRecoveryOutbox({ kind: "task_result_delivery", status: "pending", limit })
+    .filter((row) => {
+      const payload = parseJsonObject<TaskResultDeliveryPayload>(row);
+      return payload ? sameDeliveryTarget(taskDeliveryTarget(row, payload), input.target) : false;
     });
-  }
-  return sent;
+  if (!rows.length) return { delivered: 0, failed: 0 };
+  const result = await flushTaskDeliveries(input.registry, rows);
+  log.info(
+    `recovery outbox target flush: target=${input.target.transport}:${input.target.accountId ?? ""}:${input.target.target} ` +
+    `task=${result.delivered} failed=${result.failed}`
+  );
+  return result;
 }
 
 export async function flushRecoveryOutbox(
   client: Client,
-  options: { snapshot?: ConnectivitySnapshot; limit?: number } = {},
+  options: {
+    snapshot?: ConnectivitySnapshot;
+    limit?: number;
+    imConfig?: RuntimeConfig["im"];
+    registry?: IMTransportRegistry;
+  } = {},
 ): Promise<FlushRecoveryOutboxResult> {
   const limit = Math.max(1, Math.min(500, Math.floor(options.limit ?? 100)));
   const backfilled = backfillCronMissedAlertsFromOutage(options.snapshot, limit);
-  const taskRows = listRecoveryOutbox({ kind: "task_result_delivery", status: "pending", limit });
+  const taskRows = listRecoveryOutbox({ kind: "task_result_delivery", status: "pending", limit })
+    .filter(shouldFlushTaskDeliveryGlobally);
   const cronRows = listRecoveryOutbox({ kind: "cron_failure_alert", status: "pending", limit });
-  const transport = createDiscordTransport(client);
+  const registry = options.registry ?? createIMTransportRegistry(client, options.imConfig);
+  const transport = registry.get("discord") ?? createDiscordTransport(client);
 
-  const task = await flushTaskDeliveries(transport, taskRows);
+  const task = await flushTaskDeliveries(registry, taskRows);
   const cron = await flushCronFailureAlerts(transport, cronRows);
   const result = {
     cronAlertsDelivered: cron.delivered,

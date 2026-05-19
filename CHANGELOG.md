@@ -52,6 +52,7 @@
 - Weixin QR 登录会带上本地最近 bot token，二维码过期后自动刷新，登录成功后清理同一 `ilink_user_id` 的旧账号 state。
 - Weixin chat 在长回复期间会通过 `getconfig` 获取 typing ticket，并用 `sendtyping` 发送/取消输入状态，避免用户在等待 LLM 回复时完全无反馈。
 - Weixin task view 的 start/progress/final/error 投递改为 best-effort：发送失败只记录 warning 并重试一次，不再把微信发送错误抛回 agent runtime 导致 task 被标记失败。
+- Weixin task 结果投递遇到 `sendmessage -2` 时会对失效 context token 做无 context 重试；final 仍失败时写入 recovery outbox，并在下一次 Weixin 入站消息刷新 context 后自动补发，同时 task 执行期间持续发送 typing keepalive 降低长任务 context 过期概率。
 - 修复 `market-calibration` CLI 的 import 漂移，改为引用迁移后的 `src/stock/signals/forecast-calibration` 和 `market-intel-calibration`。
 - 移除 website landing page 中过细的内部 Discord channel slug，让 website 保持对外项目窗口定位。
 - 精简 website runtime/landing 文案，让公开网站只保留高层能力说明。
