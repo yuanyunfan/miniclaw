@@ -7,9 +7,11 @@ import {
   extractWeixinText,
   getWeixinConfig,
   getWeixinUpdates,
+  pollWeixinQrLogin,
   sendWeixinText,
   sendWeixinTyping,
   startWeixinQrLogin,
+  type WeixinMessage,
   WeixinTypingStatus,
   __testables,
 } from "../adapters/weixin/api.js";
@@ -20,6 +22,49 @@ import { saveWeixinAccount, saveWeixinContextToken } from "../adapters/weixin/st
 import { createWeixinTransport } from "../adapters/weixin/transport.js";
 
 let tmpDir: string;
+
+interface WeixinOfficialFixtures {
+  source: {
+    package_name: string;
+    package_version: string;
+  };
+  inboundImage: WeixinMessage;
+  inboundVoice: WeixinMessage;
+  outboundImageUpload: {
+    getUploadUrlResp: {
+      ret: number;
+      upload_param: string;
+      upload_full_url: string;
+    };
+    cdnUploadRespHeaders: Record<string, string>;
+  };
+  qr: {
+    startResp: {
+      qrcode: string;
+      qrcode_img_content: string;
+    };
+    expiredStatusResp: {
+      status: "expired";
+    };
+  };
+  sessionExpired: {
+    getUpdatesResp: {
+      ret: number;
+      errcode: number;
+      errmsg: string;
+    };
+  };
+  routing: {
+    chatText: string;
+    taskText: string;
+    taskConfirm: string;
+    taskDecline: string;
+  };
+}
+
+const officialFixtures = JSON.parse(
+  readFileSync(new URL("../__fixtures__/weixin-official-payloads.json", import.meta.url), "utf8"),
+) as WeixinOfficialFixtures;
 
 beforeEach(() => {
   tmpDir = mkdtempSync(join(tmpdir(), "miniclaw-weixin-"));
@@ -37,6 +82,13 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("Weixin API helpers", () => {
+  it("records the official package protocol version used by the native adapter", () => {
+    expect(officialFixtures.source).toMatchObject({
+      package_name: "@tencent-weixin/openclaw-weixin",
+      package_version: "2.4.3",
+    });
+  });
+
   it("builds iLink client version and text send payloads", () => {
     expect(__testables.clientVersion("2.4.3")).toBe(132099);
     expect(buildWeixinTextMessage({
@@ -123,7 +175,7 @@ describe("Weixin API helpers", () => {
     const calls: Array<{ url: string; init: RequestInit }> = [];
     const fetchFn = (async (url: string | URL | Request, init?: RequestInit) => {
       calls.push({ url: String(url), init: init ?? {} });
-      return jsonResponse({ qrcode: "qr", qrcode_img_content: "https://qr.test" });
+      return jsonResponse(officialFixtures.qr.startResp);
     }) as typeof fetch;
 
     await startWeixinQrLogin({ fetchFn, localTokenList: ["token-a", "token-b"] });
@@ -132,6 +184,17 @@ describe("Weixin API helpers", () => {
     expect(JSON.parse(String(calls[0]?.init.body))).toMatchObject({
       local_token_list: ["token-a", "token-b"],
     });
+  });
+
+  it("parses official QR expired status payloads so the login script can refresh", async () => {
+    const fetchFn = (async () => jsonResponse(officialFixtures.qr.expiredStatusResp)) as typeof fetch;
+
+    const resp = await pollWeixinQrLogin({
+      qrcode: "fixture-qr-token",
+      options: { baseUrl: "https://weixin.test/", fetchFn },
+    });
+
+    expect(resp.status).toBe("expired");
   });
 
   it("fetches typing config and sends typing status payloads", async () => {
@@ -212,10 +275,13 @@ describe("Weixin transport", () => {
       calls.push({ url: String(url), init: init ?? {} });
       const href = String(url);
       if (href.endsWith("/ilink/bot/getuploadurl")) {
-        return jsonResponse({ ret: 0, upload_full_url: "https://cdn.test/upload" });
+        return jsonResponse(officialFixtures.outboundImageUpload.getUploadUrlResp);
       }
-      if (href === "https://cdn.test/upload") {
-        return new Response("", { status: 200, headers: { "x-encrypted-param": "download-param" } });
+      if (href === "https://cdn.test/fixture-upload") {
+        return new Response("", {
+          status: 200,
+          headers: officialFixtures.outboundImageUpload.cdnUploadRespHeaders,
+        });
       }
       if (href.endsWith("/ilink/bot/sendmessage")) {
         return jsonResponse({ ret: 0 });
@@ -249,7 +315,7 @@ describe("Weixin transport", () => {
     expect(sendRequests[1]?.msg).toMatchObject({
       to_user_id: "user@im.wechat",
       context_token: "ctx",
-      item_list: [{ type: 2, image_item: { media: { encrypt_query_param: "download-param", encrypt_type: 1 } } }],
+      item_list: [{ type: 2, image_item: { media: { encrypt_query_param: "fixture-download-param", encrypt_type: 1 } } }],
     });
   });
 
@@ -268,8 +334,9 @@ describe("Weixin transport", () => {
 describe("Weixin gateway helpers", () => {
   it("detects textual task commands without treating normal chat as task", () => {
     expect(parseWeixinTaskCommand("/task 更新一下日报")).toBe("更新一下日报");
+    expect(parseWeixinTaskCommand(officialFixtures.routing.taskText)).toBe("check Weixin smoke state");
     expect(parseWeixinTaskCommand("任务：检查 cron 状态")).toBe("检查 cron 状态");
-    expect(parseWeixinTaskCommand("聊一下今天安排")).toBeUndefined();
+    expect(parseWeixinTaskCommand(officialFixtures.routing.chatText)).toBeUndefined();
   });
 
   it("wraps task prompts with untrusted Weixin source metadata", () => {
@@ -285,9 +352,9 @@ describe("Weixin gateway helpers", () => {
   });
 
   it("uses y/n as task/chat confirmation and keeps cancel separate", () => {
-    expect(gatewayTestables.isConfirm("y")).toBe(true);
+    expect(gatewayTestables.isConfirm(officialFixtures.routing.taskConfirm)).toBe(true);
     expect(gatewayTestables.isConfirm("确认")).toBe(true);
-    expect(gatewayTestables.isContinueChat("n")).toBe(true);
+    expect(gatewayTestables.isContinueChat(officialFixtures.routing.taskDecline)).toBe(true);
     expect(gatewayTestables.isContinueChat("继续")).toBe(true);
     expect(gatewayTestables.isCancel("取消")).toBe(true);
     expect(gatewayTestables.isCancel("n")).toBe(false);
@@ -295,7 +362,7 @@ describe("Weixin gateway helpers", () => {
 
   it("pauses polling for session-expired getupdates responses instead of entering the retry loop", async () => {
     const controller = new AbortController();
-    const getUpdates = vi.fn(async () => ({ ret: -14, errmsg: "expired" }));
+    const getUpdates = vi.fn(async () => officialFixtures.sessionExpired.getUpdatesResp);
     const handleMessage = vi.fn();
     const sleep = vi.fn(async (_ms: number, _signal: AbortSignal) => {
       controller.abort();
@@ -374,23 +441,11 @@ describe("Weixin gateway helpers", () => {
 
   it("materializes official encrypted CDN image payloads for model input", async () => {
     const plaintext = Buffer.from("image-bytes");
-    const aeskey = Buffer.from("0123456789abcdef");
+    const aeskey = Buffer.alloc(16);
     const encrypted = mediaTestables.encryptAesEcb(plaintext, aeskey);
     vi.stubGlobal("fetch", vi.fn(async () => new Response(new Uint8Array(encrypted), { status: 200 })));
 
-    const content = gatewayTestables.extractInboundContent({
-      message_id: 8,
-      item_list: [{
-        type: 2,
-        image_item: {
-          media: {
-            full_url: "https://cdn.test/encrypted-image",
-            aes_key: aeskey.toString("base64"),
-          },
-          mid_size: encrypted.length,
-        },
-      }],
-    });
+    const content = gatewayTestables.extractInboundContent(officialFixtures.inboundImage);
 
     expect(content.attachments[0]?.url).toContain("weixin-cdn://image/");
     const materialized = await materializeWeixinAttachments(
@@ -400,8 +455,31 @@ describe("Weixin gateway helpers", () => {
 
     expect(materialized.notices).toEqual([]);
     expect(materialized.attachments[0]).toMatchObject({
-      name: "weixin-image-8.jpg",
+      name: "weixin-image-2403001.jpg",
       contentType: "image/jpeg",
+      size: plaintext.length,
+    });
+    expect(readFileSync(new URL(materialized.attachments[0]!.url))).toEqual(plaintext);
+  });
+
+  it("materializes official encrypted CDN voice payloads and keeps SILK when transcoding is unavailable", async () => {
+    const plaintext = Buffer.from("not-a-real-silk-frame");
+    const aeskey = Buffer.alloc(16);
+    const encrypted = mediaTestables.encryptAesEcb(plaintext, aeskey);
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(new Uint8Array(encrypted), { status: 200 })));
+
+    const content = gatewayTestables.extractInboundContent(officialFixtures.inboundVoice);
+
+    expect(content.attachments[0]?.url).toContain("weixin-cdn://voice/");
+    const materialized = await materializeWeixinAttachments(
+      content.attachments as WeixinProcessableAttachment[],
+      { dir: join(tmpDir, "materialized-voice") },
+    );
+
+    expect(materialized.notices[0]).toContain("SILK");
+    expect(materialized.attachments[0]).toMatchObject({
+      name: "weixin-voice-2403002.silk",
+      contentType: "audio/silk",
       size: plaintext.length,
     });
     expect(readFileSync(new URL(materialized.attachments[0]!.url))).toEqual(plaintext);

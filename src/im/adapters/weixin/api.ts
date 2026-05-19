@@ -1,9 +1,10 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { WEIXIN_OFFICIAL_PACKAGE_VERSION } from "./protocol.js";
 
 export const DEFAULT_WEIXIN_BASE_URL = "https://ilinkai.weixin.qq.com";
 export const DEFAULT_WEIXIN_CDN_BASE_URL = "https://novac2c.cdn.weixin.qq.com/c2c";
 export const DEFAULT_WEIXIN_BOT_TYPE = "3";
-export const DEFAULT_WEIXIN_CHANNEL_VERSION = "2.4.3";
+export const DEFAULT_WEIXIN_CHANNEL_VERSION = WEIXIN_OFFICIAL_PACKAGE_VERSION;
 
 export const WeixinMessageItemType = {
   TEXT: 1,

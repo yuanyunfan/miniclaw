@@ -1,0 +1,91 @@
+{
+  "source": {
+    "package_name": "@tencent-weixin/openclaw-weixin",
+    "package_version": "2.4.3",
+    "notes": "Sanitized official-package protocol payload shapes. Secrets, CDN params, and message ids are fixtures."
+  },
+  "inboundImage": {
+    "message_id": 2403001,
+    "from_user_id": "owner@im.wechat",
+    "to_user_id": "bot@im.wechat",
+    "create_time_ms": 1779173523000,
+    "item_list": [
+      {
+        "type": 2,
+        "image_item": {
+          "media": {
+            "encrypt_query_param": "fixture-image-download-param",
+            "aes_key": "AAAAAAAAAAAAAAAAAAAAAA==",
+            "encrypt_type": 1,
+            "full_url": "https://cdn.test/fixture-image"
+          },
+          "aeskey": "00000000000000000000000000000000",
+          "mid_size": 16,
+          "thumb_size": 16
+        }
+      }
+    ]
+  },
+  "inboundVoice": {
+    "message_id": 2403002,
+    "from_user_id": "owner@im.wechat",
+    "to_user_id": "bot@im.wechat",
+    "create_time_ms": 1779173524000,
+    "item_list": [
+      {
+        "type": 3,
+        "voice_item": {
+          "media": {
+            "encrypt_query_param": "fixture-voice-download-param",
+            "aes_key": "AAAAAAAAAAAAAAAAAAAAAA==",
+            "encrypt_type": 1,
+            "full_url": "https://cdn.test/fixture-voice"
+          },
+          "encode_type": 6,
+          "sample_rate": 24000,
+          "playtime": 1800,
+          "len": "16"
+        }
+      }
+    ]
+  },
+  "outboundImageUpload": {
+    "getUploadUrlResp": {
+      "ret": 0,
+      "upload_param": "fixture-upload-param",
+      "upload_full_url": "https://cdn.test/fixture-upload"
+    },
+    "cdnUploadRespHeaders": {
+      "x-encrypted-param": "fixture-download-param"
+    }
+  },
+  "qr": {
+    "startResp": {
+      "qrcode": "fixture-qr-token",
+      "qrcode_img_content": "https://weixin.test/fixture-qr"
+    },
+    "expiredStatusResp": {
+      "status": "expired"
+    },
+    "confirmedStatusResp": {
+      "status": "confirmed",
+      "bot_token": "fixture-bot-token",
+      "ilink_bot_id": "fixture-bot-id",
+      "baseurl": "https://ilinkai.weixin.qq.com",
+      "ilink_user_id": "owner@im.wechat"
+    }
+  },
+  "sessionExpired": {
+    "getUpdatesResp": {
+      "ret": -14,
+      "errcode": -14,
+      "errmsg": "session expired"
+    }
+  },
+  "routing": {
+    "chatText": "hello MiniClaw",
+    "taskText": "/task check Weixin smoke state",
+    "taskConfirm": "y",
+    "taskDecline": "n"
+  }
+}

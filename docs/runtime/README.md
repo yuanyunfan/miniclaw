@@ -97,6 +97,29 @@ Current delivery shape:
 - Weixin chat sends `sendtyping` start, keepalive, and cancel signals when `getconfig` returns a typing ticket, so long LLM replies have visible in-chat activity.
 - Trace view: task events and trace-export commands provide operator-level details.
 
+## Weixin Protocol Compatibility
+
+MiniClaw's Weixin adapter is a native IM transport implementation aligned with the official source snapshot `tencent-weixin-openclaw-weixin 2.4.3` and npm package `@tencent-weixin/openclaw-weixin` version `2.4.3`. It does not import that package at runtime; the local adapter owns MiniClaw routing, credential storage, Smart Router confirmation, task reporting, and delivery semantics.
+
+Tracked official protocol files:
+
+```text
+src/api/types.ts
+src/media/media-download.ts
+src/messaging/send-media.ts
+src/cdn/upload.ts
+src/api/session-guard.ts
+src/auth/login-qr.ts
+```
+
+Upgrade workflow when the official package changes:
+
+1. Put the official package source on disk, then run `pnpm weixin:drift-check -- --package-dir /path/to/tencent-weixin-openclaw-weixin`.
+2. Update MiniClaw only when the drift report shows an official protocol anchor changed, then rerun `pnpm test src/im/__tests__/weixin-transport.test.ts`.
+3. Keep fixture coverage current in `src/im/__fixtures__/weixin-official-payloads.json`; it covers official-shape image media, voice media, media upload, QR expiration, session-expired `-14`, and chat/task confirmation payloads.
+4. Run live smoke after unit tests: `pnpm weixin:login`, stop the normal gateway, then run `pnpm weixin:smoke -- --account <accountId> --target <user@im.wechat> --image /path/to/image --save-buffer`.
+5. Restart MiniClaw and manually verify end-to-end routing: plain text should answer as chat, a task-like message should ask for `y` or `n`, `y` should execute a task, and `n` should continue as chat.
+
 ## Cron Runtime
 
 Owner code paths:

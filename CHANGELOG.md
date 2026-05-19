@@ -7,6 +7,8 @@
 ## [Unreleased]
 
 ### Added
+- 新增 Weixin 官方协议漂移治理：代码内标记当前对齐 `tencent-weixin-openclaw-weixin 2.4.3` / `@tencent-weixin/openclaw-weixin@2.4.3`，提供 `pnpm weixin:drift-check` 对比官方关键协议文件，并新增 `pnpm weixin:smoke` 操作辅助覆盖登录、文字/媒体收发和升级后 live smoke。
+- 新增 Weixin 官方 payload fixture 回归，覆盖官方形状的入站图片、入站语音、媒体上传、QR expired、`-14` session pause 和 chat/task y/n 确认。
 - 新增 Weixin direct channel：支持 `pnpm weixin:login` 保存个人微信 bot token、`im.transports.weixin` opt-in 长轮询、文字/语音/图片输入、独立 chat/task 入口、Smart Router y/n 文本确认转 task，以及 cron `delivery_route` 结果额外投递到微信 direct user。
 - 新增 `auth:refresh` / `wechat-mp:refresh` 登录态续期入口：WeChat MP 使用专用 persistent browser profile 做 headless refresh，Eastmoney JYWG 使用只读 `/Trade/Buy` 轻量刷新并原子写回 session secret，遇到扫码、验证码、短信或设备确认时 fail closed 并提示人工恢复。
 - 扩展 `third-party-health` hourly script，覆盖 provider health、Yahoo 行情 canary、WeChat MP 搜索、email IMAP、market-intel 官方源和 stock-portfolio 聚合配置，并在异常通知中保留分类、延迟和修复建议。

@@ -3,7 +3,7 @@ doc_id: runtime-index
 lang: zh
 translation_of: docs/runtime/README.md
 translation_status: current
-source_sha256: c2ae2e35e089e62fb63491bba0da7e3376a3866aec1cdc80a88f0b128a2d1e03
+source_sha256: c41026b2a9c029f196ed2e8bbfefd8ba3b0ddb202043acbdb03da3b50cfaef67
 ---
 # MiniClaw Runtime 文档
 
@@ -103,6 +103,29 @@ Current delivery shape:
 - Weixin delivery: 文本使用 `sendmessage`；文件投递使用官方 `getuploadurl -> CDN AES upload -> sendmessage` 链路，并把 caption 和媒体拆成独立 message item。Session expired `-14` 会让受影响账号暂停一小时。
 - Weixin chat 会在 `getconfig` 返回 typing ticket 时发送 `sendtyping` start、keepalive 和 cancel 信号，让较长 LLM 回复在微信里有可见的输入状态。
 - Trace view: task events 和 trace-export command 提供 operator 级细节。
+
+## Weixin 协议兼容
+
+MiniClaw 的 Weixin adapter 是 native IM transport 实现，当前对齐官方源码快照 `tencent-weixin-openclaw-weixin 2.4.3` 和 npm 包 `@tencent-weixin/openclaw-weixin` 版本 `2.4.3`。它运行时不直接 import 这个官方包；本地 adapter 负责 MiniClaw routing、credential storage、Smart Router confirmation、task reporting 和 delivery semantics。
+
+跟踪的官方协议文件：
+
+```text
+src/api/types.ts
+src/media/media-download.ts
+src/messaging/send-media.ts
+src/cdn/upload.ts
+src/api/session-guard.ts
+src/auth/login-qr.ts
+```
+
+官方包升级时的流程：
+
+1. 把官方包源码放到本地，然后运行 `pnpm weixin:drift-check -- --package-dir /path/to/tencent-weixin-openclaw-weixin`。
+2. 只有 drift report 显示官方协议 anchor 改变时，才更新 MiniClaw；改完后运行 `pnpm test src/im/__tests__/weixin-transport.test.ts`。
+3. 保持 `src/im/__fixtures__/weixin-official-payloads.json` fixture coverage 最新；它覆盖官方形状的 image media、voice media、media upload、QR expiration、session-expired `-14` 和 chat/task confirmation payloads。
+4. Unit tests 通过后跑 live smoke：`pnpm weixin:login`，停止正常 gateway，然后运行 `pnpm weixin:smoke -- --account <accountId> --target <user@im.wechat> --image /path/to/image --save-buffer`。
+5. 重启 MiniClaw 并手动验证 end-to-end routing：普通文字应该作为 chat 回复，像 task 的消息应该询问 `y` or `n`，回复 `y` 应执行 task，回复 `n` 应继续 chat。
 
 ## Cron Runtime 执行时
 
