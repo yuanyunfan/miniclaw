@@ -194,13 +194,14 @@ src/monitoring/connectivity-core.ts
 src/monitoring/connectivity-monitor.ts
 src/monitoring/recovery-outbox.ts
 src/monitoring/pre-client-ready-watchdog.ts
+src/im/adapters/weixin/transport.ts
 src/notifications/smtp-email.ts
 ```
 
 Operations contract:
 
 - Connectivity checks classify Discord, network, SMTP fallback, and startup readiness separately.
-- Email fallback is an operations notifier and is separate from the read-only Email capability in [`../providers/email.md`](../providers/email.md).
+- Discord/VPN/proxy outage alerts are delivered through Weixin when general network is still reachable; SMTP remains a diagnostic probe and a separate operations notifier capability.
 - Recovery outbox should backfill failed cron/task delivery after Discord connectivity recovers.
 - Pre-clientReady watchdog failures should be locally visible and redacted.
 

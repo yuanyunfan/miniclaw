@@ -54,7 +54,7 @@ describe("connectivity core", () => {
     expect(classifyConnectivity(checks({ smtp: fail("smtp timeout") }))).toBe("smtp_unreachable");
   });
 
-  it("sends one outage email after threshold and does not repeat during same outage", async () => {
+  it("sends one outage alert after threshold and does not repeat during same outage", async () => {
     const sent: string[] = [];
     const outage = checks({ discord_rest: fail("discord timeout") });
 
@@ -63,7 +63,7 @@ describe("connectivity core", () => {
         statePath,
         failureThreshold: 3,
         checkers: checkers(outage),
-        sendEmail: async (message) => {
+        sendAlert: async (message) => {
           sent.push(message.subject);
         },
         now: () => new Date(Date.UTC(2026, 4, 8, 10, i)),
@@ -77,7 +77,7 @@ describe("connectivity core", () => {
     expect(state.last_alert_at).toBeTruthy();
   });
 
-  it("sends recovery email after an alerted outage recovers", async () => {
+  it("sends recovery alert after an alerted outage recovers", async () => {
     const sent: string[] = [];
     const outage = checks({ discord_rest: fail("discord timeout") });
 
@@ -85,7 +85,7 @@ describe("connectivity core", () => {
       statePath,
       failureThreshold: 1,
       checkers: checkers(outage),
-      sendEmail: async (message) => {
+      sendAlert: async (message) => {
         sent.push(message.subject);
       },
       now: () => new Date("2026-05-08T10:00:00.000Z"),
@@ -94,7 +94,7 @@ describe("connectivity core", () => {
       statePath,
       failureThreshold: 1,
       checkers: checkers(checks()),
-      sendEmail: async (message) => {
+      sendAlert: async (message) => {
         sent.push(message.subject);
       },
       now: () => new Date("2026-05-08T10:14:00.000Z"),
@@ -106,19 +106,35 @@ describe("connectivity core", () => {
     expect(recovered.last_outage_started_at).toBe("2026-05-08T10:00:00.000Z");
   });
 
-  it("does not email when SMTP is skipped", async () => {
+  it("sends alert even when SMTP is skipped", async () => {
     const sent: string[] = [];
     const snapshot = await runConnectivityTick({
       statePath,
       failureThreshold: 1,
       checkers: checkers(checks({ discord_rest: fail("discord timeout"), smtp: skipped() })),
-      sendEmail: async (message) => {
+      sendAlert: async (message) => {
         sent.push(message.subject);
       },
       now: () => new Date("2026-05-08T10:00:00.000Z"),
     });
 
     expect(snapshot.status).toBe("discord_unreachable");
+    expect(sent).toEqual(["MiniClaw Discord 链路中断"]);
+  });
+
+  it("does not send alert when general network is down", async () => {
+    const sent: string[] = [];
+    const snapshot = await runConnectivityTick({
+      statePath,
+      failureThreshold: 1,
+      checkers: checkers(checks({ discord_rest: fail("discord timeout"), general_network: fail("network down") })),
+      sendAlert: async (message) => {
+        sent.push(message.subject);
+      },
+      now: () => new Date("2026-05-08T10:00:00.000Z"),
+    });
+
+    expect(snapshot.status).toBe("general_network_down");
     expect(sent).toEqual([]);
   });
 });

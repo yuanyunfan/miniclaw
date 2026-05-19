@@ -47,7 +47,7 @@ CMB credit-card email provider:
 SMTP fallback notifier:
 
 - Runtime path: `src/notifications/smtp-email.ts`.
-- Business meaning: operations fallback notification when Discord or connectivity paths fail.
+- Business meaning: reusable SMTP system alert sender. Connectivity outage alerts now use Weixin when general network is still reachable.
 - Boundary: this notifier sends system alerts and is not part of the read-only Email capability.
 
 ## Shared Read-only Email Capability

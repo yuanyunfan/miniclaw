@@ -1,8 +1,11 @@
 import type { Client } from "discord.js";
 import { config } from "../config.js";
+import { createWeixinTransport } from "../im/adapters/weixin/transport.js";
+import { resolveWeixinAccount, type WeixinAccountData } from "../im/adapters/weixin/store.js";
+import type { IMDeliveryTarget } from "../im/contracts.js";
 import { createLogger } from "../lib/log.js";
-import { sendSmtpEmail, verifySmtpReachability } from "../notifications/smtp-email.js";
-import { runConnectivityTick, type ProbeResult } from "./connectivity-core.js";
+import { verifySmtpReachability } from "../notifications/smtp-email.js";
+import { runConnectivityTick, type ConnectivityAlertMessage, type ProbeResult } from "./connectivity-core.js";
 import { flushRecoveryOutbox } from "./recovery-outbox.js";
 
 const log = createLogger("connectivity");
@@ -42,9 +45,58 @@ function smtpConfigured(): boolean {
   return Boolean(email.enabled && email.smtpHost);
 }
 
-function emailSendConfigured(): boolean {
-  const email = config.notifications.email;
-  return Boolean(email.enabled && email.smtpHost && email.to && email.username && email.password);
+function uniqueNonEmpty(values: Array<string | undefined>): string[] {
+  return [...new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)))];
+}
+
+function weixinAlertTargets(account: WeixinAccountData): IMDeliveryTarget[] {
+  const weixin = config.im.transports.weixin;
+  const explicitTargets = weixin.allowedUserIds.filter((id) => id !== "*");
+  const fallbackTargets = [
+    account.userId,
+    ...Object.keys(account.contextTokens ?? {}),
+  ];
+  return uniqueNonEmpty(explicitTargets.length ? explicitTargets : fallbackTargets).map((target) => ({
+    transport: "weixin",
+    target,
+    accountId: account.accountId,
+  }));
+}
+
+async function sendWeixinConnectivityAlert(message: ConnectivityAlertMessage): Promise<void> {
+  const weixin = config.im.transports.weixin;
+  const account = resolveWeixinAccount(weixin.defaultAccountId, weixin.stateDir);
+  const targets = weixinAlertTargets(account);
+  if (!targets.length) throw new Error("Weixin alert target is not configured");
+
+  const transport = createWeixinTransport({
+    stateDir: weixin.stateDir,
+    defaultAccountId: account.accountId,
+  });
+  const errors: string[] = [];
+  let delivered = 0;
+  for (const target of targets) {
+    try {
+      await transport.send({
+        target,
+        content: message.text,
+        metadata: {
+          kind: "connectivity_alert",
+          subject: message.subject,
+        },
+      });
+      delivered += 1;
+    } catch (err) {
+      errors.push(`${target.target}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  if (delivered === 0) {
+    throw new Error(`Weixin alert delivery failed: ${errors.join("; ") || "unknown error"}`);
+  }
+  if (errors.length) {
+    log.warn(`weixin connectivity alert partially failed delivered=${delivered} failed=${errors.length}: ${errors.join("; ")}`);
+  }
 }
 
 export function startConnectivityMonitor(client: Client): ConnectivityMonitorHandle {
@@ -87,11 +139,7 @@ export function startConnectivityMonitor(client: Client): ConnectivityMonitorHan
             });
           },
         },
-        sendEmail: emailSendConfigured()
-          ? async (message) => {
-            await sendSmtpEmail(config.notifications.email, message, config.connectivity.requestTimeoutMs);
-          }
-          : undefined,
+        sendAlert: config.im.transports.weixin.enabled ? sendWeixinConnectivityAlert : undefined,
       });
       if (snapshot.status !== lastStatus) {
         log.info(`connectivity status=${snapshot.status} consecutive=${snapshot.consecutive_failures}`);

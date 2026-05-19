@@ -1,6 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { EmailNotificationMessage } from "../notifications/smtp-email.js";
 
 export type ConnectivityStatus =
   | "discord_ok"
@@ -43,11 +42,16 @@ export interface ConnectivityCheckers {
   smtp(): Promise<ProbeResult>;
 }
 
+export interface ConnectivityAlertMessage {
+  subject: string;
+  text: string;
+}
+
 export interface ConnectivityTickOptions {
   statePath: string;
   failureThreshold: number;
   checkers: ConnectivityCheckers;
-  sendEmail?: (message: EmailNotificationMessage) => Promise<void>;
+  sendAlert?: (message: ConnectivityAlertMessage) => Promise<void>;
   now?: () => Date;
 }
 
@@ -105,7 +109,7 @@ function probeLine(name: string, probe: ProbeResult): string {
   return `- ${name}: ${status}${latency}${error}`;
 }
 
-export function buildConnectivityOutageEmail(snapshot: ConnectivitySnapshot): EmailNotificationMessage {
+export function buildConnectivityOutageAlert(snapshot: ConnectivitySnapshot): ConnectivityAlertMessage {
   return {
     subject: "MiniClaw Discord 链路中断",
     text: [
@@ -127,7 +131,7 @@ export function buildConnectivityOutageEmail(snapshot: ConnectivitySnapshot): Em
   };
 }
 
-export function buildConnectivityRecoveryEmail(previous: ConnectivitySnapshot, recoveredAt: string): EmailNotificationMessage {
+export function buildConnectivityRecoveryAlert(previous: ConnectivitySnapshot, recoveredAt: string): ConnectivityAlertMessage {
   const startedAt = previous.outage_started_at ?? previous.updated_at;
   const durationMs = Date.parse(recoveredAt) - Date.parse(startedAt);
   return {
@@ -188,10 +192,10 @@ export async function runConnectivityTick(options: ConnectivityTickOptions): Pro
   };
 
   const discordFailed = !discordOk(checks);
-  const canEmail = checks.general_network.ok && checks.smtp.ok && Boolean(options.sendEmail);
-  if (failed && consecutiveFailures >= Math.max(1, options.failureThreshold) && !previous?.last_alert_at && discordFailed && canEmail) {
+  const canAlert = checks.general_network.ok && Boolean(options.sendAlert);
+  if (failed && consecutiveFailures >= Math.max(1, options.failureThreshold) && !previous?.last_alert_at && discordFailed && canAlert) {
     try {
-      await options.sendEmail?.(buildConnectivityOutageEmail(snapshot));
+      await options.sendAlert?.(buildConnectivityOutageAlert(snapshot));
       const withoutAlertError = { ...snapshot };
       delete withoutAlertError.last_alert_error;
       snapshot = { ...withoutAlertError, last_alert_at: now.toISOString() };
@@ -200,9 +204,9 @@ export async function runConnectivityTick(options: ConnectivityTickOptions): Pro
     }
   }
 
-  if (status === "recovered" && previous?.last_alert_at && options.sendEmail && checks.smtp.ok) {
+  if (status === "recovered" && previous?.last_alert_at && options.sendAlert) {
     try {
-      await options.sendEmail(buildConnectivityRecoveryEmail(previous, now.toISOString()));
+      await options.sendAlert(buildConnectivityRecoveryAlert(previous, now.toISOString()));
       snapshot = {
         ...snapshot,
         last_recovery_alert_at: now.toISOString(),

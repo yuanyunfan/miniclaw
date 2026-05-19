@@ -30,6 +30,7 @@
 - 公开 docs/config 示例改用占位 channel ID 和通用路径，并让 G0 阻止 raw Discord snowflake 或本机用户目录路径进入公开文档。
 
 ### Changed
+- Connectivity monitor 的 Discord/VPN/proxy outage/recovery alert 改为在 general network 仍可达时通过 Weixin direct channel 发送，SMTP 仅保留为诊断 probe/独立 notifier。
 - Weixin Smart Router 的 chat 分支改为优先走轻量 LLM API path，先尝试 Anthropic/OpenAI-compatible chat completions，再 fallback 到配置的 agent runtime，避免普通聊天加载完整 Codex task 上下文。
 - 将 stock provider 文档重组为压缩的 data-system 结构：`README`、`data-and-sources`、`workflows`、`operations-and-security` 四篇文档统一描述数据源、标准数据语义、数据产品、cron workflow、运维与账号安全边界，并同步中文 mirror、migration map 和 website trace docs。
 - 以 English canonical 重写当前核心 docs：`docs/README.md`、`docs/architecture.md`、`docs/bot-routing.md`、`docs/chat-router-current-logic.md`、`docs/install-distribution-strategy.md`、`docs/prompts.md` 和 `docs/quality-gates.md`；对应中文 mirror 同步为 `docs/zh/**`。

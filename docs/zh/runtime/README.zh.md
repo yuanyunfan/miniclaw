@@ -3,7 +3,7 @@ doc_id: runtime-index
 lang: zh
 translation_of: docs/runtime/README.md
 translation_status: current
-source_sha256: c41026b2a9c029f196ed2e8bbfefd8ba3b0ddb202043acbdb03da3b50cfaef67
+source_sha256: 2a033e42f5825139236fcc5449b10d7ca09ec5ece3916472492ef9e503a7945d
 ---
 # MiniClaw Runtime 文档
 
@@ -201,13 +201,14 @@ src/monitoring/connectivity-core.ts
 src/monitoring/connectivity-monitor.ts
 src/monitoring/recovery-outbox.ts
 src/monitoring/pre-client-ready-watchdog.ts
+src/im/adapters/weixin/transport.ts
 src/notifications/smtp-email.ts
 ```
 
 Operations contract:
 
 - Connectivity check 会分别分类 Discord、network、SMTP fallback 和 startup readiness。
-- Email fallback 是 operations notifier，和只读 Email capability [`../../providers/email.md`](../../providers/email.md) 分离。
+- Discord/VPN/proxy outage alert 在 general network 仍可达时通过 Weixin 发送；SMTP 保留为诊断 probe 和独立 operations notifier 能力。
 - Recovery outbox 应在 Discord connectivity 恢复后回填失败的 cron/task delivery。
 - Pre-clientReady watchdog failure 应在本机可见，并且输出经过 redaction。
 
