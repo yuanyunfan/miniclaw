@@ -5,10 +5,15 @@ import {
   startWeixinQrLogin,
   DEFAULT_WEIXIN_BASE_URL,
 } from "../src/im/adapters/weixin/api.js";
-import { saveWeixinAccount } from "../src/im/adapters/weixin/store.js";
+import {
+  clearStaleWeixinAccountsForUserId,
+  recentWeixinBotTokens,
+  saveWeixinAccount,
+} from "../src/im/adapters/weixin/store.js";
 
 const timeoutMs = Number.parseInt(process.env.MINICLAW_WEIXIN_LOGIN_TIMEOUT_MS ?? "", 10) || 8 * 60_000;
 const pollIntervalMs = 1_000;
+const maxQrRefreshes = 3;
 
 function normalizeAccountId(raw: string): string {
   return raw.trim().replace(/[^A-Za-z0-9_-]+/g, "-");
@@ -23,20 +28,26 @@ async function askVerifyCode(prompt: string): Promise<string> {
   }
 }
 
-async function main(): Promise<void> {
-  const stateDir = process.env.MINICLAW_WEIXIN_STATE_DIR?.trim() || undefined;
-  const started = await startWeixinQrLogin();
+async function startLoginQr(stateDir: string | undefined) {
+  const localTokenList = recentWeixinBotTokens(stateDir);
+  const started = await startWeixinQrLogin({ localTokenList });
   if (!started.qrcode || !started.qrcode_img_content) {
     throw new Error("Weixin login did not return a QR code");
   }
-
   console.log("用手机微信打开下面链接或生成二维码扫码，以继续连接 MiniClaw：");
   console.log(started.qrcode_img_content);
   console.log("");
+  return started;
+}
+
+async function main(): Promise<void> {
+  const stateDir = process.env.MINICLAW_WEIXIN_STATE_DIR?.trim() || undefined;
+  let started = await startLoginQr(stateDir);
 
   const deadline = Date.now() + timeoutMs;
   let verifyCode: string | undefined;
   let pollingBaseUrl = DEFAULT_WEIXIN_BASE_URL;
+  let qrRefreshes = 0;
   while (Date.now() < deadline) {
     const status = await pollWeixinQrLogin({
       qrcode: started.qrcode,
@@ -51,6 +62,7 @@ async function main(): Promise<void> {
         baseUrl: status.baseurl || DEFAULT_WEIXIN_BASE_URL,
         userId: status.ilink_user_id,
       }, stateDir);
+      clearStaleWeixinAccountsForUserId(accountId, status.ilink_user_id, stateDir);
       console.log(`已保存 Weixin account：${accountId}`);
       return;
     }
@@ -61,7 +73,15 @@ async function main(): Promise<void> {
     }
 
     if (status.status === "expired") {
-      throw new Error("Weixin login QR code expired; rerun `pnpm weixin:login`");
+      qrRefreshes += 1;
+      if (qrRefreshes > maxQrRefreshes) {
+        throw new Error("Weixin login QR code expired too many times; rerun `pnpm weixin:login` later");
+      }
+      console.log(`二维码已过期，正在刷新 (${qrRefreshes}/${maxQrRefreshes})...`);
+      started = await startLoginQr(stateDir);
+      pollingBaseUrl = DEFAULT_WEIXIN_BASE_URL;
+      verifyCode = undefined;
+      continue;
     }
 
     if (status.status === "binded_redirect") {

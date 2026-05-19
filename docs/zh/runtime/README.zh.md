@@ -3,7 +3,7 @@ doc_id: runtime-index
 lang: zh
 translation_of: docs/runtime/README.md
 translation_status: current
-source_sha256: 60063239e9e0635d9543a0f9a85ab9967932d9e056071b45e03e5c477d56c00e
+source_sha256: de4fe39c9e78030fdaf20eeef702cd6cee43b38ad90698b6fb68f109744546ef
 ---
 # MiniClaw Runtime 文档
 
@@ -57,6 +57,8 @@ Routing contract:
 - Confirmation button 保存 pending task context，并且必须安全过期。
 - Per-channel cwd override 是 routing context，不是 prompt 文本。
 - Weixin chat 复用 `chat()` 边界，但会要求它优先使用 lightweight Anthropic/OpenAI-compatible API client，再 fallback 到配置的 agent runtime。
+- Weixin direct 可以作为唯一启用的 IM gateway；当 `im.transports.discord.enabled=false` 时，Discord credentials 变为可选，MiniClaw 仍会启动非 Discord gateway。
+- Weixin 入站媒体会在路由前标准化：官方 `image_item.media` 和 `voice_item.media` CDN 引用会被下载、按 AES-ECB 解密，语音 SILK 会尽量转成 WAV 后再进入附件处理链路。
 
 Smart Router resolution order:
 
@@ -98,6 +100,7 @@ Current delivery shape:
 - Progress stream: 持久 progress/update message。
 - Final result: 普通 Markdown message，必要时 chunking。Discord 正文 chunk 会 suppress link embeds，裸 URL 只会在最后的 link-preview footer 里重复，因此卡片出现在完整结果之后，而不是插在正文 chunk 中间。
 - Fanout and replay: Discord IM fanout、recovery outbox replay 和 script cron `DISCORD_MESSAGE` output 使用与 task results 相同的 deferred-link-preview helper。
+- Weixin delivery: 文本使用 `sendmessage`；文件投递使用官方 `getuploadurl -> CDN AES upload -> sendmessage` 链路，并把 caption 和媒体拆成独立 message item。Session expired `-14` 会让受影响账号暂停一小时。
 - Trace view: task events 和 trace-export command 提供 operator 级细节。
 
 ## Cron Runtime 执行时

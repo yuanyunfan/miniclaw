@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 
 export const DEFAULT_WEIXIN_BASE_URL = "https://ilinkai.weixin.qq.com";
+export const DEFAULT_WEIXIN_CDN_BASE_URL = "https://novac2c.cdn.weixin.qq.com/c2c";
 export const DEFAULT_WEIXIN_BOT_TYPE = "3";
 export const DEFAULT_WEIXIN_CHANNEL_VERSION = "2.4.3";
 
@@ -21,11 +22,28 @@ export const WeixinMessageState = {
   FINISH: 2,
 } as const;
 
+export const WeixinUploadMediaType = {
+  IMAGE: 1,
+  VIDEO: 2,
+  FILE: 3,
+  VOICE: 4,
+} as const;
+
 export interface WeixinTextItem {
   text?: string;
 }
 
+export interface WeixinCdnMedia {
+  encrypt_query_param?: string;
+  aes_key?: string;
+  encrypt_type?: number;
+  full_url?: string;
+}
+
 export interface WeixinMediaItem {
+  media?: WeixinCdnMedia;
+  thumb_media?: WeixinCdnMedia;
+  aeskey?: string;
   url?: string;
   image_url?: string;
   file_url?: string;
@@ -39,6 +57,13 @@ export interface WeixinMediaItem {
   mime_type?: string;
   size?: number | string;
   file_size?: number | string;
+  mid_size?: number | string;
+  thumb_size?: number | string;
+  video_size?: number | string;
+  len?: number | string;
+  playtime?: number;
+  encode_type?: number;
+  sample_rate?: number;
 }
 
 export interface WeixinMessageItem {
@@ -76,6 +101,29 @@ export interface SendMessageResp {
   ret?: number;
   errcode?: number;
   errmsg?: string;
+}
+
+export interface GetUploadUrlResp {
+  upload_param?: string;
+  thumb_upload_param?: string;
+  upload_full_url?: string;
+  ret?: number;
+  errcode?: number;
+  errmsg?: string;
+}
+
+export interface GetUploadUrlReq {
+  filekey?: string;
+  media_type?: number;
+  to_user_id?: string;
+  rawsize?: number;
+  rawfilemd5?: string;
+  filesize?: number;
+  thumb_rawsize?: number;
+  thumb_rawfilemd5?: string;
+  thumb_filesize?: number;
+  no_need_thumb?: boolean;
+  aeskey?: string;
 }
 
 export interface NotifyResp {
@@ -233,6 +281,21 @@ export function buildWeixinTextMessage(params: {
   };
 }
 
+export async function sendWeixinMessageBody(params: {
+  body: { msg?: WeixinMessage };
+  options: WeixinApiOptions;
+}): Promise<SendMessageResp> {
+  const resp = await postJson<SendMessageResp>(
+    "ilink/bot/sendmessage",
+    {
+      ...params.body,
+      base_info: baseInfo(params.options),
+    },
+    params.options,
+  );
+  return resp;
+}
+
 export async function sendWeixinText(params: {
   to: string;
   text: string;
@@ -240,24 +303,37 @@ export async function sendWeixinText(params: {
   options: WeixinApiOptions;
 }): Promise<{ messageId: string }> {
   const clientId = randomUUID();
-  const resp = await postJson<SendMessageResp>(
-    "ilink/bot/sendmessage",
-    {
-      ...buildWeixinTextMessage({
-        to: params.to,
-        text: params.text,
-        contextToken: params.contextToken,
-        clientId,
-      }),
-      base_info: baseInfo(params.options),
-    },
-    params.options,
-  );
+  const resp = await sendWeixinMessageBody({
+    body: buildWeixinTextMessage({
+      to: params.to,
+      text: params.text,
+      contextToken: params.contextToken,
+      clientId,
+    }),
+    options: params.options,
+  });
   const code = resp.errcode ?? resp.ret ?? 0;
   if (code !== 0) {
     throw new Error(`Weixin sendmessage error ${code}: ${resp.errmsg ?? "unknown error"}`);
   }
   return { messageId: clientId };
+}
+
+export async function getWeixinUploadUrl(params: GetUploadUrlReq & { options: WeixinApiOptions }): Promise<GetUploadUrlResp> {
+  return postJson<GetUploadUrlResp>("ilink/bot/getuploadurl", {
+    filekey: params.filekey,
+    media_type: params.media_type,
+    to_user_id: params.to_user_id,
+    rawsize: params.rawsize,
+    rawfilemd5: params.rawfilemd5,
+    filesize: params.filesize,
+    thumb_rawsize: params.thumb_rawsize,
+    thumb_rawfilemd5: params.thumb_rawfilemd5,
+    thumb_filesize: params.thumb_filesize,
+    no_need_thumb: params.no_need_thumb,
+    aeskey: params.aeskey,
+    base_info: baseInfo(params.options),
+  }, params.options);
 }
 
 export async function notifyWeixinStart(options: WeixinApiOptions): Promise<NotifyResp> {
@@ -278,10 +354,10 @@ export async function notifyWeixinStop(options: WeixinApiOptions): Promise<Notif
   });
 }
 
-export async function startWeixinQrLogin(options: WeixinApiOptions = {}): Promise<QrStartResp> {
+export async function startWeixinQrLogin(options: WeixinApiOptions & { localTokenList?: string[] } = {}): Promise<QrStartResp> {
   return postJson<QrStartResp>(
     `ilink/bot/get_bot_qrcode?bot_type=${encodeURIComponent(DEFAULT_WEIXIN_BOT_TYPE)}`,
-    { local_token_list: [] },
+    { local_token_list: options.localTokenList ?? [] },
     { ...options, baseUrl: DEFAULT_WEIXIN_BASE_URL, timeoutMs: options.timeoutMs ?? 35_000 },
   );
 }

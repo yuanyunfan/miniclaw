@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -68,6 +68,16 @@ export function listWeixinAccounts(stateDir?: string): WeixinAccountData[] {
     .filter((account): account is WeixinAccountData => Boolean(account));
 }
 
+export function recentWeixinBotTokens(stateDir?: string, limit = 10): string[] {
+  const ids = listWeixinAccountIds(stateDir).slice(-limit).reverse();
+  const tokens: string[] = [];
+  for (const id of ids) {
+    const token = loadWeixinAccount(id, stateDir)?.token?.trim();
+    if (token) tokens.push(token);
+  }
+  return tokens;
+}
+
 export function saveWeixinAccount(
   accountId: string,
   update: Omit<Partial<WeixinAccountData>, "accountId">,
@@ -86,6 +96,26 @@ export function saveWeixinAccount(
   const ids = listWeixinAccountIds(stateDir);
   if (!ids.includes(accountId)) writeJson(indexPath(stateDir), [...ids, accountId]);
   return next;
+}
+
+export function clearWeixinAccount(accountId: string, stateDir?: string): void {
+  try {
+    unlinkSync(accountPath(accountId, stateDir));
+  } catch {
+    // Missing account files are fine.
+  }
+  const ids = listWeixinAccountIds(stateDir).filter((id) => id !== accountId);
+  writeJson(indexPath(stateDir), ids);
+}
+
+export function clearStaleWeixinAccountsForUserId(currentAccountId: string, userId: string | undefined, stateDir?: string): void {
+  const cleanUserId = userId?.trim();
+  if (!cleanUserId) return;
+  for (const account of listWeixinAccounts(stateDir)) {
+    if (account.accountId !== currentAccountId && account.userId?.trim() === cleanUserId) {
+      clearWeixinAccount(account.accountId, stateDir);
+    }
+  }
 }
 
 export function resolveWeixinAccount(accountId?: string, stateDir?: string): WeixinAccountData {

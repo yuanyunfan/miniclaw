@@ -1,10 +1,12 @@
 import { v4 as uuid } from "uuid";
 import type { ContentBlockParam } from "@anthropic-ai/sdk/resources/messages.js";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { config } from "../../../config.js";
 import { chat, type ChatCallbacks } from "../../../agent/chat.js";
 import { executeTask } from "../../../agent/task.js";
 import { taskCapacityError } from "../../../discord/task-intake.js";
-import { cleanupAttachmentScope, processAttachments, type ProcessableAttachment } from "../../../discord/attachments.js";
+import { cleanupAttachmentScope, processAttachments } from "../../../discord/attachments.js";
 import { createLogger } from "../../../lib/log.js";
 import { resolveHome } from "../../../config/resolve.js";
 import {
@@ -23,6 +25,7 @@ import { createWeixinTransport } from "./transport.js";
 import { WeixinTaskViewReporter } from "./task-view.js";
 import {
   extractWeixinText,
+  type GetUpdatesResp,
   getWeixinUpdates,
   DEFAULT_WEIXIN_BASE_URL,
   notifyWeixinStart,
@@ -32,6 +35,17 @@ import {
   type WeixinMessage,
   type WeixinMessageItem,
 } from "./api.js";
+import {
+  buildWeixinCdnAttachment,
+  materializeWeixinAttachments,
+  type WeixinProcessableAttachment,
+} from "./media.js";
+import {
+  assertWeixinSessionActive,
+  getWeixinSessionPauseRemainingMs,
+  isWeixinSessionExpiredCode,
+  pauseWeixinSession,
+} from "./session.js";
 import {
   listWeixinAccounts,
   saveWeixinContextToken,
@@ -48,7 +62,7 @@ export interface WeixinGatewayHandle {
 interface PendingTask {
   prompt: string;
   message: WeixinMessage;
-  attachments: ProcessableAttachment[];
+  attachments: WeixinProcessableAttachment[];
   notices: string[];
   routeType: TaskRouteType;
   decisionLogId?: number;
@@ -57,7 +71,7 @@ interface PendingTask {
 
 interface WeixinInboundContent {
   prompt: string;
-  attachments: ProcessableAttachment[];
+  attachments: WeixinProcessableAttachment[];
   notices: string[];
   hasMedia: boolean;
 }
@@ -66,6 +80,12 @@ interface ProcessedWeixinAttachments {
   blocks: ContentBlockParam[];
   codexInputs: CodexInputEntry[];
   notices: string[];
+}
+
+interface WeixinPollAccountDeps {
+  getUpdates?: typeof getWeixinUpdates;
+  handleMessage?: typeof handleMessage;
+  sleep?: typeof sleep;
 }
 
 const pendingTasks = new Map<string, PendingTask>();
@@ -195,7 +215,7 @@ function attachmentFromMedia(
   item: WeixinMediaItem | undefined,
   fallbackName: string,
   fallbackContentType: string,
-): ProcessableAttachment | undefined {
+): WeixinProcessableAttachment | undefined {
   const url = mediaUrl(item);
   if (!url) return undefined;
   return {
@@ -214,7 +234,7 @@ function messageItemText(item: WeixinMessageItem): string | undefined {
 
 function extractInboundContent(message: WeixinMessage): WeixinInboundContent {
   const textParts: string[] = [];
-  const attachments: ProcessableAttachment[] = [];
+  const attachments: WeixinProcessableAttachment[] = [];
   const notices: string[] = [];
   let hasMedia = false;
   const suffix = message.message_id ?? message.create_time_ms ?? Date.now();
@@ -225,12 +245,25 @@ function extractInboundContent(message: WeixinMessage): WeixinInboundContent {
 
     if (item.type === WeixinMessageItemType.IMAGE) {
       hasMedia = true;
-      const attachment = attachmentFromMedia(item.image_item, `weixin-image-${suffix}.jpg`, "image/jpeg");
+      const size = numberField(item.image_item, ["size", "file_size", "mid_size", "hd_size"]);
+      const attachment = buildWeixinCdnAttachment({
+        kind: "image",
+        item: item.image_item,
+        fallbackName: `weixin-image-${suffix}.jpg`,
+        fallbackContentType: "image/jpeg",
+        size,
+      }) ?? attachmentFromMedia(item.image_item, `weixin-image-${suffix}.jpg`, "image/jpeg");
       if (attachment) attachments.push(attachment);
       else notices.push("收到图片，但当前 Weixin payload 未提供可下载图片地址，无法送入模型。");
     } else if (item.type === WeixinMessageItemType.VOICE && !item.voice_item?.text) {
       hasMedia = true;
-      const attachment = attachmentFromMedia(item.voice_item, `weixin-voice-${suffix}.ogg`, "audio/ogg");
+      const attachment = buildWeixinCdnAttachment({
+        kind: "voice",
+        item: item.voice_item,
+        fallbackName: `weixin-voice-${suffix}.silk`,
+        fallbackContentType: "audio/silk",
+        size: numberField(item.voice_item, ["size", "file_size", "len"]),
+      }) ?? attachmentFromMedia(item.voice_item, `weixin-voice-${suffix}.ogg`, "audio/ogg");
       if (attachment) attachments.push(attachment);
       else notices.push("收到语音，但 Weixin 未提供转写文本或可下载语音地址。");
     } else if (item.type === WeixinMessageItemType.FILE || item.type === WeixinMessageItemType.VIDEO) {
@@ -244,27 +277,36 @@ function extractInboundContent(message: WeixinMessage): WeixinInboundContent {
 }
 
 async function processWeixinAttachments(params: {
-  attachments: ProcessableAttachment[];
+  attachments: WeixinProcessableAttachment[];
   scope: string;
   cwd?: string;
 }): Promise<ProcessedWeixinAttachments> {
   if (!params.attachments.length) return { blocks: [], codexInputs: [], notices: [] };
-  const processed = await processAttachments(params.attachments, {
+  const materialized = await materializeWeixinAttachments(params.attachments, {
+    dir: weixinMaterializeDir(params.scope, params.cwd),
+  });
+  const processed = await processAttachments(materialized.attachments, {
     scope: params.scope,
     ...(params.cwd ? { cwd: params.cwd } : {}),
   });
   return {
     blocks: processed.blocks,
     codexInputs: processed.codexInputs,
-    notices: processed.notices,
+    notices: [...materialized.notices, ...processed.notices],
   };
+}
+
+function weixinMaterializeDir(scope: string, cwd?: string): string {
+  return cwd
+    ? join(cwd, ".miniclaw-attachments", scope, "weixin-cdn")
+    : join(tmpdir(), "miniclaw-attachments", scope, "weixin-cdn");
 }
 
 function buildWeixinTaskSource(
   account: WeixinAccountData,
   message: WeixinMessage,
   routeType: TaskRouteType,
-  attachments: ProcessableAttachment[],
+  attachments: WeixinProcessableAttachment[],
 ): TaskSourceMetadata {
   const from = message.from_user_id ?? "";
   return {
@@ -358,7 +400,7 @@ async function askForTaskConfirmation(params: {
   account: WeixinAccountData;
   message: WeixinMessage;
   prompt: string;
-  attachments: ProcessableAttachment[];
+  attachments: WeixinProcessableAttachment[];
   notices: string[];
   routeType: TaskRouteType;
   decision: RouteDecision;
@@ -399,7 +441,7 @@ async function runChat(params: {
   account: WeixinAccountData;
   message: WeixinMessage;
   prompt: string;
-  attachments: ProcessableAttachment[];
+  attachments: WeixinProcessableAttachment[];
   notices: string[];
 }): Promise<void> {
   const from = params.message.from_user_id ?? "";
@@ -461,7 +503,7 @@ async function runConfirmedTask(params: {
   account: WeixinAccountData;
   message: WeixinMessage;
   prompt: string;
-  attachments: ProcessableAttachment[];
+  attachments: WeixinProcessableAttachment[];
   notices: string[];
   routeType: TaskRouteType;
   decisionLogId?: number;
@@ -726,15 +768,19 @@ async function handleMessage(account: WeixinAccountData, message: WeixinMessage)
   await routeNewMessage(account, message, content);
 }
 
-async function pollAccount(account: WeixinAccountData, signal: AbortSignal): Promise<void> {
+async function pollAccount(account: WeixinAccountData, signal: AbortSignal, deps: WeixinPollAccountDeps = {}): Promise<void> {
   let getUpdatesBuf = account.getUpdatesBuf ?? "";
   let timeoutMs = 35_000;
   let failures = 0;
+  const getUpdatesFn = deps.getUpdates ?? getWeixinUpdates;
+  const handleMessageFn = deps.handleMessage ?? handleMessage;
+  const sleepFn = deps.sleep ?? sleep;
   log.info(`starting weixin direct poll account=${account.accountId}`);
 
   while (!signal.aborted) {
     try {
-      const resp = await getWeixinUpdates({
+      assertWeixinSessionActive(account.accountId);
+      const resp: GetUpdatesResp = await getUpdatesFn({
         getUpdatesBuf,
         options: {
           baseUrl: account.baseUrl || DEFAULT_WEIXIN_BASE_URL,
@@ -743,6 +789,16 @@ async function pollAccount(account: WeixinAccountData, signal: AbortSignal): Pro
         },
       });
       const code = resp.errcode ?? resp.ret ?? 0;
+      if (isWeixinSessionExpiredCode(code)) {
+        const until = pauseWeixinSession(account.accountId);
+        const pauseMs = getWeixinSessionPauseRemainingMs(account.accountId);
+        log.warn(
+          `weixin getupdates session expired account=${account.accountId}; paused until ${new Date(until).toISOString()}`
+        );
+        failures = 0;
+        await sleepFn(pauseMs, signal).catch(() => undefined);
+        continue;
+      }
       if (code !== 0) throw new Error(`getupdates error ${code}: ${resp.errmsg ?? "unknown error"}`);
       failures = 0;
       if (resp.longpolling_timeout_ms && resp.longpolling_timeout_ms > 0) timeoutMs = resp.longpolling_timeout_ms;
@@ -751,13 +807,13 @@ async function pollAccount(account: WeixinAccountData, signal: AbortSignal): Pro
         saveWeixinGetUpdatesBuf(account.accountId, getUpdatesBuf, config.im.transports.weixin.stateDir);
       }
       for (const message of resp.msgs ?? []) {
-        await handleMessage(account, message);
+        await handleMessageFn(account, message);
       }
     } catch (err) {
       if (signal.aborted) return;
       failures += 1;
       log.warn(`weixin poll failed account=${account.accountId} failure=${failures}: ${err instanceof Error ? err.message : String(err)}`);
-      await sleep(Math.min(30_000, 2_000 * failures), signal).catch(() => undefined);
+      await sleepFn(Math.min(30_000, 2_000 * failures), signal).catch(() => undefined);
     }
   }
 }
@@ -811,4 +867,5 @@ export const __testables = {
   buildTaskPrompt,
   buildChatRuntimeContext,
   extractInboundContent,
+  pollAccount,
 };

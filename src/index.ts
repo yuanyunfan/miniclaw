@@ -145,6 +145,16 @@ async function main(): Promise<void> {
     policy: config.agentRunManager.policy,
   });
   weixinGateway = startWeixinGateway();
+  const shutdown = (signal: NodeJS.Signals) => {
+    void beginGracefulShutdown(signal);
+  };
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+
+  if (!config.im.transports.discord.enabled) {
+    log.info("Discord transport disabled; running non-Discord IM gateways only");
+    return;
+  }
 
   if (config.registerCommandsOnStart) {
     await registerCommands();
@@ -158,11 +168,6 @@ async function main(): Promise<void> {
     timeoutMs: config.startupWatchdog.clientReadyTimeoutMs,
     macosNotificationEnabled: config.startupWatchdog.macosNotificationEnabled,
   });
-  const shutdown = (signal: NodeJS.Signals) => {
-    void beginGracefulShutdown(signal);
-  };
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
 
   bot.once("clientReady", (client) => {
     startupWatchdog?.markClientReady();

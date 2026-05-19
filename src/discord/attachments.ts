@@ -1,5 +1,5 @@
 import type { ContentBlockParam } from "@anthropic-ai/sdk/resources/messages.js";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, extname, basename } from "node:path";
 import { tmpdir } from "node:os";
 import { config } from "../config.js";
@@ -81,6 +81,8 @@ function escapeXmlAttr(value: string): string {
 }
 
 async function downloadToBuffer(url: string, timeoutMs = config.attachmentTimeoutMs): Promise<Buffer> {
+  if (url.startsWith("file://")) return readFileSync(new URL(url));
+  if (!url.includes("://")) return readFileSync(url);
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(new Error(`attachment download timeout after ${timeoutMs}ms`)), timeoutMs);
   timer.unref?.();

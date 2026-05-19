@@ -50,6 +50,8 @@ Routing contract:
 - Confirmation buttons store pending task context and must expire safely.
 - Per-channel cwd overrides are routing context, not prompt text.
 - Weixin chat uses the shared `chat()` boundary but asks it to prefer a lightweight Anthropic/OpenAI-compatible API client before falling back to the configured agent runtime.
+- Weixin direct may run as the only enabled IM gateway; when `im.transports.discord.enabled=false`, Discord credentials are optional and MiniClaw still starts non-Discord gateways.
+- Weixin inbound media is normalized before routing: official `image_item.media` and `voice_item.media` CDN references are downloaded, AES-ECB decrypted, and voice SILK is best-effort transcoded to WAV before attachment processing.
 
 Smart Router resolution order:
 
@@ -91,6 +93,7 @@ Current delivery shape:
 - Progress stream: persistent task progress/update message.
 - Final result: normal Markdown message with chunking when needed. Discord body chunks suppress link embeds, and bare URLs are repeated only in a final link-preview footer so cards appear after the full result rather than between body chunks.
 - Fanout and replay: Discord IM fanout, recovery outbox replay, and script cron `DISCORD_MESSAGE` output use the same deferred-link-preview helper as task results.
+- Weixin delivery: text uses `sendmessage`; file delivery uses the official `getuploadurl -> CDN AES upload -> sendmessage` chain and sends captions and media as separate message items. Session-expired `-14` pauses the affected account for one hour.
 - Trace view: task events and trace-export commands provide operator-level details.
 
 ## Cron Runtime

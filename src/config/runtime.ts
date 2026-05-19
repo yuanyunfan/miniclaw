@@ -58,6 +58,9 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
   if (!routing.autoReplyChannelIds.length) {
     log.warn("auto_reply_channels 已禁用，普通频道消息需 @mention 触发");
   }
+  const discordEnabled = im.im.transports.discord.enabled;
+  const discordRequiredString = (paths: Parameters<typeof reader.requiredString>[0], envKeys: Parameters<typeof reader.requiredString>[1]): string =>
+    discordEnabled ? reader.requiredString(paths, envKeys) : reader.optionalString(paths, envKeys) ?? "";
 
   const runtimeConfig = {
     configFile: {
@@ -65,16 +68,16 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
       loaded: configSource.loaded,
     },
     discord: {
-      token: reader.requiredString(["discord", "token"], "DISCORD_TOKEN"),
-      clientId: reader.requiredString(["discord", "client_id"], "DISCORD_CLIENT_ID"),
-      guildId: reader.requiredString(["discord", "guild_id"], "DISCORD_GUILD_ID"),
+      token: discordRequiredString(["discord", "token"], "DISCORD_TOKEN"),
+      clientId: discordRequiredString(["discord", "client_id"], "DISCORD_CLIENT_ID"),
+      guildId: discordRequiredString(["discord", "guild_id"], "DISCORD_GUILD_ID"),
     },
     ...agent,
     agentRunManager,
     ...model,
     ...im,
     ...provider,
-    allowedUserId: reader.requiredString(["discord", "allowed_user_id"], "MINICLAW_ALLOWED_USER_ID"),
+    allowedUserId: discordRequiredString(["discord", "allowed_user_id"], "MINICLAW_ALLOWED_USER_ID"),
     mcp: buildMcpRuntimeConfig(reader),
     ...routing,
     tasks: buildTaskRuntimeConfig(reader),

@@ -226,6 +226,40 @@ attachments:
       (frozen.items as Array<{ value: string }>).push({ value: "b" });
     }).toThrow(TypeError);
   });
+
+  it("allows Weixin-only runtime config without Discord credentials when Discord transport is disabled", () => {
+    const cfg = join(tmpDir, "config.yaml");
+    writeFileSync(cfg, `
+im:
+  transports:
+    discord:
+      enabled: false
+    weixin:
+      enabled: true
+      poll_enabled: true
+      state_dir: "${join(tmpDir, "weixin-state")}"
+      default_account_id: "acct-im-bot"
+      allow_from: ["owner@im.wechat"]
+agent:
+  provider: codex
+  default_cwd: "${tmpDir}"
+storage:
+  db_path: "${join(tmpDir, "runtime.db")}"
+  memory_path: "${join(tmpDir, "MEMORY.md")}"
+`);
+
+    const runtime = createRuntimeConfig({ MINICLAW_CONFIG: cfg } as NodeJS.ProcessEnv);
+
+    expect(runtime.im.transports.discord.enabled).toBe(false);
+    expect(runtime.discord).toEqual({ token: "", clientId: "", guildId: "" });
+    expect(runtime.allowedUserId).toBe("");
+    expect(runtime.im.transports.weixin).toMatchObject({
+      enabled: true,
+      pollEnabled: true,
+      defaultAccountId: "acct-im-bot",
+      allowedUserIds: ["owner@im.wechat"],
+    });
+  });
 });
 
 describe("config E2E guard boundary", () => {
