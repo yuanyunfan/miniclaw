@@ -73,16 +73,16 @@ describe("store schema migrations", () => {
       expect(getSchemaVersion(db)).toBe(SCHEMA_VERSION);
       expect(columnExists(db, "schema_version_history", "migration_name")).toBe(true);
       const history = listSchemaVersionHistory(db);
-      expect(history.map((row) => row.to_version)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+      expect(history.map((row) => row.to_version)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
       expect(history[0]).toMatchObject({
         from_version: 0,
         to_version: 1,
         migration_name: "001_progress_message_id",
       });
       expect(history.at(-1)).toMatchObject({
-        from_version: 14,
-        to_version: 15,
-        migration_name: "015_market_context",
+        from_version: 15,
+        to_version: 16,
+        migration_name: "016_cron_delivery_messages",
       });
     });
   });
@@ -102,7 +102,7 @@ describe("store schema migrations", () => {
       expect(columnExists(db, "market_context_items", "stable_key")).toBe(true);
       expect(columnExists(db, "cron_runs", "metadata_json")).toBe(true);
       expect(columnExists(db, "recovery_outbox", "payload_json")).toBe(true);
-      expect(listSchemaVersionHistory(db).map((row) => row.to_version)).toEqual([5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+      expect(listSchemaVersionHistory(db).map((row) => row.to_version)).toEqual([5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
     });
   });
 

@@ -1,5 +1,6 @@
 export type CronJobType = "task" | "script" | "skill" | "message";
 export type PreProviderPreflightMode = "off" | "health" | "dry_run";
+export type CronTaskResultDeliveryMode = "daily_message_group";
 
 export interface CronJobCooldownConfig {
   after_failure_ms: number;
@@ -49,6 +50,19 @@ export interface CronJobPreContextProvider {
   required?: boolean;
 }
 
+export interface CronTaskResultDeliveryConfig {
+  /**
+   * daily_message_group keeps one editable Discord message group per local day.
+   * It preserves full chunked Markdown output while avoiding a new batch of
+   * messages on every scheduled run.
+   */
+  mode: CronTaskResultDeliveryMode;
+  /**
+   * Local day boundary used for grouping. Defaults to the cron job timezone.
+   */
+  timezone?: string;
+}
+
 export interface CronJobBase {
   name: string;
   schedule: string | string[];
@@ -91,6 +105,7 @@ export interface CronJobTask extends CronJobBase {
   type: "task";
   prompt: string;
   cwd?: string;
+  result_delivery?: CronTaskResultDeliveryConfig;
   /**
    * 可选：在调用 LLM 之前先跑这个脚本（在 ~/.miniclaw/scripts/ 下），
    * stdout 会被拼到 prompt 顶部作为"采集到的数据"，让 LLM 基于真实数据做分析。

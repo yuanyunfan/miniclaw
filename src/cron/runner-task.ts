@@ -20,6 +20,7 @@ import { categorizeProviderError, type ProviderDryRunResult, type ProviderHealth
 import type { MarketContextProviderPayload } from "../stock/data/market-context-types.js";
 import type { MarketIntelPayload } from "../stock/data/market-intel-types.js";
 import { DRAINING_MESSAGE, isDraining } from "../runtime/shutdown.js";
+import { DailyMessageGroupReporter } from "./daily-message-group-reporter.js";
 
 const log = createLogger("cron");
 import { homedir } from "node:os";
@@ -573,6 +574,18 @@ export async function runTask(job: CronJobTask, client: Client, context: CronJob
     source_channel_id: job.channel,
     prepended_context_chars: prependedContext.length,
   });
+  const viewReporter = job.result_delivery?.mode === "daily_message_group"
+    ? new DailyMessageGroupReporter({
+        taskId,
+        channel,
+        channelId: job.channel,
+        jobName: job.name,
+        runAt,
+        timezone: job.result_delivery.timezone ?? job.timezone ?? "UTC",
+        route: "cron_task",
+        onDeliveryError: (operation, err) => reporter.discordDeliveryFailed(operation, err),
+      })
+    : undefined;
   let result: TaskResult;
   try {
     result = await executeTask({
@@ -581,6 +594,7 @@ export async function runTask(job: CronJobTask, client: Client, context: CronJob
       cwd,
       channel,
       outputMode: "raw",
+      ...(viewReporter ? { viewReporter } : {}),
       signal: context.signal,
       deliveryChannelId: job.channel,
       deliveryContext: { route: "cron_task", jobName: job.name },

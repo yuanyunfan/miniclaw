@@ -134,6 +134,30 @@ describe("cron task runner", () => {
     });
   });
 
+  it("uses a daily message group reporter when configured", async () => {
+    const { runTask } = await import("../runner-task.js");
+    mocks.executeTask.mockResolvedValue({
+      success: true,
+      sessionId: "codex:thread-1",
+      costUsd: 0,
+      durationMs: 1000,
+      turns: 1,
+      result: "ok",
+    });
+
+    await runTask({
+      ...taskJob(),
+      result_delivery: {
+        mode: "daily_message_group",
+        timezone: "Asia/Shanghai",
+      },
+    }, client());
+
+    const params = mocks.executeTask.mock.calls[0]?.[0] as { viewReporter?: unknown; outputMode?: string } | undefined;
+    expect(params?.outputMode).toBe("raw");
+    expect(params?.viewReporter).toBeDefined();
+  });
+
   it("skips the downstream task when a pre_provider returns skipTask", async () => {
     const { runTask } = await import("../runner-task.js");
     mocks.runPreProvider.mockResolvedValue({

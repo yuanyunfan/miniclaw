@@ -8,7 +8,7 @@ import type { SchemaMigration } from "./migrations/types.js";
 
 export { columnExists } from "./migrations/helpers.js";
 
-export const SCHEMA_VERSION = 15;
+export const SCHEMA_VERSION = 16;
 
 export interface SchemaVersionHistoryRow {
   id: number;
@@ -244,6 +244,21 @@ export function ensureBaseSchema(db: Database.Database): void {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_recovery_outbox_task_kind
       ON recovery_outbox(kind, task_id)
       WHERE task_id IS NOT NULL;
+    CREATE TABLE IF NOT EXISTS cron_delivery_messages (
+      id TEXT PRIMARY KEY,
+      job_name TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      delivery_key TEXT NOT NULL,
+      delivery_mode TEXT NOT NULL,
+      task_id TEXT,
+      message_ids_json TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (task_id) REFERENCES tasks(id),
+      UNIQUE(job_name, channel_id, delivery_key, delivery_mode)
+    );
+    CREATE INDEX IF NOT EXISTS idx_cron_delivery_messages_job_key
+      ON cron_delivery_messages(job_name, channel_id, delivery_key);
     CREATE TABLE IF NOT EXISTS agent_runs (
       id TEXT PRIMARY KEY,
       task_id TEXT NOT NULL,

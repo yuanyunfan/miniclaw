@@ -173,6 +173,32 @@ prompt: "盘后预测校准"
     }
   });
 
+  it("解析 type=task + daily message group result delivery", () => {
+    write("browser-tabs.yaml", `
+name: browser-tabs-hourly
+schedule: "0 * * * *"
+timezone: Asia/Shanghai
+enabled: true
+type: task
+channel: "${VALID_CHANNEL}"
+result_delivery:
+  mode: daily_message_group
+  timezone: Asia/Shanghai
+prompt: "整理浏览器标签页"
+`);
+    const r = loadCronJobs();
+    expect(r.errors).toEqual([]);
+    expect(r.jobs.length).toBe(1);
+    const j = r.jobs[0];
+    expect(j.type).toBe("task");
+    if (j.type === "task") {
+      expect(j.result_delivery).toEqual({
+        mode: "daily_message_group",
+        timezone: "Asia/Shanghai",
+      });
+    }
+  });
+
   it("解析同一 job 的多条 schedule", () => {
     write("market-pulse.yaml", `
 name: market-pulse
@@ -410,6 +436,20 @@ prompt: hi
 `);
     const r = loadCronJobs();
     expect(r.errors[0].error).toMatch(/需要同时配置/);
+  });
+
+  it("未知 result_delivery.mode → 拒绝", () => {
+    write("bad-result-delivery.yaml", `
+name: x
+schedule: "0 9 * * *"
+type: task
+channel: "${VALID_CHANNEL}"
+result_delivery:
+  mode: edit_everything
+prompt: hi
+`);
+    const r = loadCronJobs();
+    expect(r.errors[0].error).toMatch(/result_delivery\.mode/);
   });
 
   it("timeout_sec > 1800 → 拒绝", () => {

@@ -204,6 +204,7 @@ flowchart LR
   PreProvider --> Task["agent/task.ts"]
   Runner --> State["cron/state.json"]
   Runner --> Runs[("cron_runs")]
+  Runner --> DeliveryGroups[("cron_delivery_messages")]
   Runner --> Retry["failure notifier + retry button"]
 ```
 
@@ -215,7 +216,7 @@ Stock provider names remain cron-facing compatibility contracts in `src/provider
 
 ## Storage Model
 
-MiniClaw uses `~/.miniclaw/data.db` in SQLite WAL mode. Schema migrations are managed through `PRAGMA user_version`; the current schema is defined by `src/store/schema.ts` as `SCHEMA_VERSION = 15`.
+MiniClaw uses `~/.miniclaw/data.db` in SQLite WAL mode. Schema migrations are managed through `PRAGMA user_version`; the current schema is defined by `src/store/schema.ts` as `SCHEMA_VERSION = 16`.
 
 ```mermaid
 erDiagram
@@ -228,6 +229,7 @@ erDiagram
   tasks ||--o{ recovery_outbox : delivers
   tasks ||--o{ market_context_daily : writes
   cron_runs ||--o{ recovery_outbox : alerts
+  tasks ||--o{ cron_delivery_messages : updates
   incidents ||--o{ repair_runs : repairs
   chat_history ||--o{ smart_router_decisions : informs
   market_context_daily ||--o{ market_context_items : updates
@@ -275,6 +277,16 @@ erDiagram
     TEXT status
     TEXT last_updated_at
   }
+
+  cron_delivery_messages {
+    TEXT id
+    TEXT job_name
+    TEXT channel_id
+    TEXT delivery_key
+    TEXT delivery_mode
+    TEXT task_id
+    TEXT message_ids_json
+  }
 ```
 
 State retention is configured through `state.retention.*`. Cleanup is dry-run first through `pnpm run state:cleanup -- --dry-run`; destructive cleanup requires `--execute`.
@@ -284,6 +296,8 @@ State retention is configured through `state.retention.*`. Cleanup is dry-run fi
 ## Delivery And Recovery
 
 `recovery_outbox` separates local execution results from IM delivery. `cron_failure_alert` stores retryable cron failure alerts when Discord delivery is unavailable. `task_result_delivery` stores task result fragments for later delivery recovery. Discord remains the primary full-fidelity gateway; Feishu is outbound-only; Weixin direct is opt-in text/voice/image interaction backed by local `~/.miniclaw/weixin` account state. After login, the Weixin long-poll gateway can start without Discord `clientReady`, route chat through the normal chat runtime, and run confirmed tasks through a Weixin task view reporter that sends progress and final results back to Weixin.
+
+Cron task results normally send a new chunked Markdown result per run. Jobs that configure `result_delivery.mode: daily_message_group` keep one editable Discord message group per local day, keyed by job, channel, delivery mode, and timezone-derived date in `cron_delivery_messages`. Each new successful run edits the existing chunks for that day, adds chunks when the full Markdown grows, and best-effort deletes extra old chunks when the report shrinks. This preserves full Discord Markdown output for long reports such as browser-tab snapshots without creating a fresh batch of channel messages every hour.
 
 ## Observability And Operations
 

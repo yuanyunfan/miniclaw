@@ -17,6 +17,7 @@ export { SCHEMA_VERSION };
 export { getDb } from "./connection.js";
 export * from "./agent-run-manager.js";
 export * from "./cron-runs.js";
+export * from "./cron-delivery-messages.js";
 export * from "./market-context.js";
 export * from "./recovery-outbox.js";
 export * from "./repositories/chat-history.js";

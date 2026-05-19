@@ -13,6 +13,7 @@ import { migration012RecoveryOutbox } from "./012-recovery-outbox.js";
 import { migration013AgentRunManager } from "./013-agent-run-manager.js";
 import { migration014AgentSchedulerState } from "./014-agent-scheduler-state.js";
 import { migration015MarketContext } from "./015-market-context.js";
+import { migration016CronDeliveryMessages } from "./016-cron-delivery-messages.js";
 import type { SchemaMigration } from "./types.js";
 
 export const migrations: SchemaMigration[] = [
@@ -31,4 +32,5 @@ export const migrations: SchemaMigration[] = [
   migration013AgentRunManager,
   migration014AgentSchedulerState,
   migration015MarketContext,
+  migration016CronDeliveryMessages,
 ];

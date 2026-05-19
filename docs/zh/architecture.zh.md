@@ -3,7 +3,7 @@ doc_id: architecture
 lang: zh
 translation_of: docs/architecture.md
 translation_status: current
-source_sha256: deb21df41bca7d7bcd46ce16764c2c2cb4fe9f89d6f44f204c5af740485d254f
+source_sha256: 1ebd7bc02affee1ef62c17b1267432d99ddaafa7cb6847bbab573969f4d1fc7e
 ---
 # MiniClaw 架构
 
@@ -211,6 +211,7 @@ flowchart LR
   PreProvider --> Task["agent/task.ts"]
   Runner --> State["cron/state.json"]
   Runner --> Runs[("cron_runs")]
+  Runner --> DeliveryGroups[("cron_delivery_messages")]
   Runner --> Retry["failure notifier + retry button"]
 ```
 
@@ -222,7 +223,7 @@ Stock provider names 仍然是 `src/providers/index.ts` 中的 cron-facing compa
 
 ## 存储模型
 
-MiniClaw 使用 `~/.miniclaw/data.db`，SQLite WAL mode。schema migration 通过 `PRAGMA user_version` 管理；当前 schema 由 `src/store/schema.ts` 定义为 `SCHEMA_VERSION = 15`。
+MiniClaw 使用 `~/.miniclaw/data.db`，SQLite WAL mode。schema migration 通过 `PRAGMA user_version` 管理；当前 schema 由 `src/store/schema.ts` 定义为 `SCHEMA_VERSION = 16`。
 
 ```mermaid
 erDiagram
@@ -235,6 +236,7 @@ erDiagram
   tasks ||--o{ recovery_outbox : delivers
   tasks ||--o{ market_context_daily : writes
   cron_runs ||--o{ recovery_outbox : alerts
+  tasks ||--o{ cron_delivery_messages : updates
   incidents ||--o{ repair_runs : repairs
   chat_history ||--o{ smart_router_decisions : informs
   market_context_daily ||--o{ market_context_items : updates
@@ -282,6 +284,16 @@ erDiagram
     TEXT status
     TEXT last_updated_at
   }
+
+  cron_delivery_messages {
+    TEXT id
+    TEXT job_name
+    TEXT channel_id
+    TEXT delivery_key
+    TEXT delivery_mode
+    TEXT task_id
+    TEXT message_ids_json
+  }
 ```
 
 state retention 通过 `state.retention.*` 配置。cleanup 先 dry-run：`pnpm run state:cleanup -- --dry-run`；破坏性清理必须显式传入 `--execute`。
@@ -291,6 +303,8 @@ state retention 通过 `state.retention.*` 配置。cleanup 先 dry-run：`pnpm 
 ## 投递与恢复
 
 `recovery_outbox` 把本地执行结果和 IM delivery 分离。`cron_failure_alert` 保存 Discord delivery 不可用时可重试的 cron failure alert；`task_result_delivery` 保存 task result fragments 以便后续 delivery recovery。Discord 仍是主要的完整能力 gateway；Feishu 是 outbound-only；Weixin direct 是 opt-in 文字/语音/图片交互入口，依赖本地 `~/.miniclaw/weixin` account state。登录后，Weixin long-poll gateway 可以不等待 Discord `clientReady` 就启动，把 chat 路由到普通 chat runtime，并通过 Weixin task view reporter 执行已确认 task，把进度和最终结果发回微信。
+
+Cron task 结果默认每次运行发送一组新的 chunked Markdown result。配置 `result_delivery.mode: daily_message_group` 的 job 会按本地日期保留一组可编辑的 Discord messages，key 由 job、channel、delivery mode 和 timezone-derived date 组成，并存入 `cron_delivery_messages`。同一天后续成功运行会编辑已有 chunks，报告变长时补发新增 chunk，报告变短时 best-effort 删除多余旧 chunk。这样 browser-tabs snapshot 这类长报告仍保留完整 Discord Markdown 输出，但不会每小时在频道里刷出一批新消息。
 
 ## 可观测性与运维
 

@@ -10,6 +10,8 @@ import type {
   CronJobLoadResult,
   CronJobMissedRunConfig,
   CronJobPreContextProvider,
+  CronTaskResultDeliveryConfig,
+  CronTaskResultDeliveryMode,
   CronJobType,
   PreProviderPreflightMode,
 } from "./types.js";
@@ -18,6 +20,7 @@ import { isPreProviderName } from "../providers/index.js";
 const CRON_DIR_DEFAULT = join(homedir(), ".miniclaw/cron");
 const VALID_TYPES: CronJobType[] = ["task", "script", "skill", "message"];
 const VALID_PRE_PROVIDER_PREFLIGHT_MODES: PreProviderPreflightMode[] = ["off", "health", "dry_run"];
+const VALID_TASK_RESULT_DELIVERY_MODES: CronTaskResultDeliveryMode[] = ["daily_message_group"];
 const MAX_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 const MAX_CONCURRENCY = 50;
 const MAX_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
@@ -205,6 +208,25 @@ function parseMissedRunConfig(value: unknown, file: string): CronJobMissedRunCon
   };
 }
 
+function parseTaskResultDeliveryConfig(value: unknown, file: string): CronTaskResultDeliveryConfig | undefined {
+  if (value === undefined) return undefined;
+  if (!isPlainObject(value)) throw new Error(`${file}: 'result_delivery' 必须是对象`);
+  if (typeof value.mode !== "string") {
+    throw new Error(`${file}: 'result_delivery.mode' 必须是 ${VALID_TASK_RESULT_DELIVERY_MODES.join("|")}`);
+  }
+  const mode = value.mode.trim();
+  if (!VALID_TASK_RESULT_DELIVERY_MODES.includes(mode as CronTaskResultDeliveryMode)) {
+    throw new Error(`${file}: 'result_delivery.mode' 必须是 ${VALID_TASK_RESULT_DELIVERY_MODES.join("|")}`);
+  }
+  const timezone = typeof value.timezone === "string" && value.timezone.trim()
+    ? value.timezone.trim()
+    : undefined;
+  return {
+    mode: mode as CronTaskResultDeliveryMode,
+    ...(timezone ? { timezone } : {}),
+  };
+}
+
 function parseProviderName(value: unknown, file: string, field: string): string {
   if (typeof value !== "string" || !value.trim()) {
     throw new Error(`${file}: '${field}' 必须是 provider 名称`);
@@ -294,6 +316,7 @@ function validateJob(raw: unknown, file: string): CronJob {
 
   if (type === "task") {
     if (typeof r.prompt !== "string" || !r.prompt.trim()) throw new Error(`${file}: type=task 需 'prompt'`);
+    const resultDelivery = parseTaskResultDeliveryConfig(r.result_delivery, file);
     const preScript = typeof r.pre_script === "string" ? r.pre_script.trim() : undefined;
     const preProvider = typeof r.pre_provider === "string" ? r.pre_provider.trim() : undefined;
     if (preScript && preProvider) {
@@ -328,6 +351,7 @@ function validateJob(raw: unknown, file: string): CronJob {
       type: "task",
       prompt: r.prompt.trim(),
       cwd: typeof r.cwd === "string" ? r.cwd : undefined,
+      ...(resultDelivery ? { result_delivery: resultDelivery } : {}),
       ...(preContextProviders ? { pre_context_providers: preContextProviders } : {}),
       ...(preScript ? {
         pre_script: preScript,

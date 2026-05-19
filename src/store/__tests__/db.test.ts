@@ -182,6 +182,12 @@ describe("schema migrations", () => {
     expect(__testables.columnExists("recovery_outbox", "payload_json")).toBe(true);
   });
 
+  it("ensures cron delivery message table exists", () => {
+    expect(__testables.columnExists("cron_delivery_messages", "job_name")).toBe(true);
+    expect(__testables.columnExists("cron_delivery_messages", "delivery_key")).toBe(true);
+    expect(__testables.columnExists("cron_delivery_messages", "message_ids_json")).toBe(true);
+  });
+
   it("ensures Agent Run Manager tables exist", () => {
     expect(__testables.columnExists("agent_runs", "task_id")).toBe(true);
     expect(__testables.columnExists("agent_runs", "can_send_kinds_json")).toBe(true);

@@ -7,6 +7,7 @@
 ## [Unreleased]
 
 ### Added
+- 新增 cron task `result_delivery.mode: daily_message_group`，可按本地日期复用并编辑同一组 Discord result messages；`browser-tabs-hourly` 可保留完整 Markdown 分块展示，同时避免每小时刷出一批新消息。
 - 新增 Weixin 官方协议漂移治理：代码内标记当前对齐 `tencent-weixin-openclaw-weixin 2.4.3` / `@tencent-weixin/openclaw-weixin@2.4.3`，提供 `pnpm weixin:drift-check` 对比官方关键协议文件，并新增 `pnpm weixin:smoke` 操作辅助覆盖登录、文字/媒体收发和升级后 live smoke。
 - 新增 Weixin 官方 payload fixture 回归，覆盖官方形状的入站图片、入站语音、媒体上传、QR expired、`-14` session pause 和 chat/task y/n 确认。
 - 新增 Weixin direct channel：支持 `pnpm weixin:login` 保存个人微信 bot token、`im.transports.weixin` opt-in 长轮询、文字/语音/图片输入、独立 chat/task 入口、Smart Router y/n 文本确认转 task，以及 cron `delivery_route` 结果额外投递到微信 direct user。
