@@ -1,9 +1,13 @@
 import type { TaskResult } from "../../../agent/task.js";
 import type { TaskTerminalStatus, TaskViewProgressSnapshot, TaskViewReporter } from "../../../agent/task-view.js";
 import type { TaskViewEvent } from "../../../agent/task-view-events.js";
+import { createLogger } from "../../../lib/log.js";
 
 const PROGRESS_INTERVAL_MS = 15_000;
 const MAX_WEIXIN_CHARS = 3500;
+const SEND_RETRY_DELAY_MS = 1_000;
+
+const log = createLogger("weixin-task-view");
 
 interface ViewProgressState {
   lines: string[];
@@ -17,6 +21,7 @@ export interface WeixinTaskViewReporterOptions {
   cwd: string;
   send: (text: string) => Promise<void>;
   progressIntervalMs?: number;
+  sendRetryDelayMs?: number;
 }
 
 function formatSeconds(ms: number): string {
@@ -64,18 +69,32 @@ export class WeixinTaskViewReporter implements TaskViewReporter {
   private readonly state: ViewProgressState = { lines: [], turns: 0, toolCount: 0 };
   private lastProgressAt = 0;
   private readonly progressIntervalMs: number;
+  private readonly sendRetryDelayMs: number;
 
   constructor(private readonly options: WeixinTaskViewReporterOptions) {
     this.progressIntervalMs = options.progressIntervalMs ?? PROGRESS_INTERVAL_MS;
+    this.sendRetryDelayMs = options.sendRetryDelayMs ?? SEND_RETRY_DELAY_MS;
+  }
+
+  private sendBestEffort(text: string, stage: string): void {
+    void Promise.resolve().then(() => this.options.send(text)).catch((err) => {
+      const message = err instanceof Error ? err.message : String(err);
+      log.warn(`task ${this.options.taskId.slice(0, 8)} ${stage} send failed; retrying once: ${message}`);
+      void retryAfter(this.sendRetryDelayMs, () => this.options.send(text)).catch((retryErr) => {
+        const retryMessage = retryErr instanceof Error ? retryErr.message : String(retryErr);
+        log.warn(`task ${this.options.taskId.slice(0, 8)} ${stage} retry failed; suppressing delivery error: ${retryMessage}`);
+      });
+    });
   }
 
   async start(): Promise<void> {
-    await this.options.send(
+    this.sendBestEffort(
       [
         `▶ MiniClaw task ${this.options.taskId.slice(0, 8)} 开始执行`,
         `cwd：${this.options.cwd}`,
         `任务：${this.options.prompt.slice(0, 500)}`,
       ].join("\n"),
+      "start",
     );
   }
 
@@ -92,12 +111,13 @@ export class WeixinTaskViewReporter implements TaskViewReporter {
         const now = Date.now();
         if (added && now - this.lastProgressAt >= this.progressIntervalMs) {
           this.lastProgressAt = now;
-          await this.options.send(
+          this.sendBestEffort(
             [
               `⏳ task ${this.options.taskId.slice(0, 8)} 执行中`,
               `turns：${this.state.turns || 0} · tools：${this.state.toolCount}`,
               `最近步骤：${line}`,
             ].join("\n"),
+            "progress",
           );
         }
         return;
@@ -126,11 +146,16 @@ export class WeixinTaskViewReporter implements TaskViewReporter {
       ? result.result.trim() || "[无文字回复]"
       : `任务失败：${result.result.trim() || "unknown error"}`;
     for (const [idx, chunk] of chunks(body).entries()) {
-      await this.options.send(idx === 0 ? `${header}\n\n${chunk}` : chunk);
+      this.sendBestEffort(idx === 0 ? `${header}\n\n${chunk}` : chunk, "finish");
     }
   }
 
   async renderTaskError(message: string): Promise<void> {
-    await this.options.send(`❌ MiniClaw task ${this.options.taskId.slice(0, 8)} 出错：${message.slice(0, 3000)}`);
+    this.sendBestEffort(`❌ MiniClaw task ${this.options.taskId.slice(0, 8)} 出错：${message.slice(0, 3000)}`, "error");
   }
+}
+
+async function retryAfter(ms: number, send: () => Promise<void>): Promise<void> {
+  if (ms > 0) await new Promise((resolve) => setTimeout(resolve, ms));
+  await send();
 }

@@ -445,6 +445,7 @@ async function runChat(params: {
       callbacks,
       attachmentCodexInputs,
       buildChatRuntimeContext(params.account, params.message),
+      { preferApiClient: true, apiClientReason: "weixin_chat_route" },
     );
     await sendWeixinReply(params.account, from, reply);
   } catch (err) {

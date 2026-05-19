@@ -16,12 +16,19 @@ import { codexInput, codexThreadOptions, formatCodexItemLine, getCodexClient, wi
 import { formatCodexUsage } from "./usage.js";
 import { buildFakeChatReply } from "../e2e/fake-agent.js";
 import { beginActiveChat } from "./chat-runtime.js";
+import { createOpenAiChatModelClient } from "../runtime/model-client-adapters.js";
+import type { ModelCompletionResult } from "../runtime/model-client.js";
 
 const log = createLogger("chat");
 
 export interface ChatCallbacks {
   onToolUse: (display: string) => void;
   onText: (text: string) => void;
+}
+
+export interface ChatOptions {
+  preferApiClient?: boolean;
+  apiClientReason?: string;
 }
 
 const MAX_ITERATIONS = 10;
@@ -48,6 +55,34 @@ function getClient(): Anthropic {
   return client;
 }
 
+type LightweightApiProvider = "anthropic" | "openai" | "openai_compatible";
+
+function resolveLightweightApiProvider(attachmentBlocks?: ContentBlockParam[]): LightweightApiProvider | null {
+  if (config.anthropicApiKey) return "anthropic";
+  if (attachmentBlocks?.length) return null;
+  if (config.openaiApiKey) return "openai";
+  if (config.openaiBaseUrl) return "openai_compatible";
+  return null;
+}
+
+function apiChatInstruction(providerLabel: string): string {
+  return [
+    `你正在处理 ${providerLabel} 轻量聊天。`,
+    "直接回答用户；不要声称已经检查本地文件、日志、数据库、网页或运行命令。",
+    "如果用户需求需要这些能力，说明需要转为 task。用中文回复。",
+  ].join("\n");
+}
+
+function formatModelUsage(usage: ModelCompletionResult["usage"]): string | undefined {
+  if (!usage) return undefined;
+  const parts: string[] = [];
+  if (usage.inputTokens !== undefined) parts.push(`in: ${usage.inputTokens}`);
+  if (usage.outputTokens !== undefined) parts.push(`out: ${usage.outputTokens}`);
+  if (usage.cacheReadTokens !== undefined) parts.push(`cache hit: ${usage.cacheReadTokens}`);
+  if (usage.cacheCreationTokens !== undefined) parts.push(`cache write: ${usage.cacheCreationTokens}`);
+  return parts.length ? parts.join(" · ") : undefined;
+}
+
 export async function chat(
   channelId: string,
   userId: string,
@@ -56,6 +91,7 @@ export async function chat(
   callbacks?: ChatCallbacks,
   attachmentCodexInputs?: CodexInputEntry[],
   runtimeContext?: string,
+  options: ChatOptions = {},
 ): Promise<string> {
   const startedAt = Date.now();
   const chShort = channelId.slice(-6);
@@ -80,6 +116,36 @@ export async function chat(
   const historyContext = buildHistoryContext(history.slice(0, -1));
   const systemParts = [IDENTITY_LINE, memoryBlock].filter(Boolean);
   const system = systemParts.join("\n\n");
+
+  if (options.preferApiClient) {
+    try {
+      const result = await chatWithLightweightApi(
+        system,
+        prompt,
+        historyContext,
+        attachmentBlocks,
+        callbacks,
+        runtimeContext,
+        activeChat.signal,
+      );
+      log.info(
+        `✓ chat/api ch=${chShort} ${Date.now() - startedAt}ms provider=${result.provider}` +
+        `${options.apiClientReason ? ` reason=${options.apiClientReason}` : ""} ` +
+        `reply.len=${result.reply.length}` +
+        (result.tokensSummary ? ` ${result.tokensSummary}` : "")
+      );
+      addChatMessage(channelId, userId, "assistant", result.reply);
+      extractMemories(prompt, result.reply).catch((err) => {
+        log.error("Background memory extraction error:", err);
+      });
+      return result.reply;
+    } catch (err) {
+      log.warn(
+        `chat/api ch=${chShort} failed; falling back to ${config.agentProvider}: ` +
+        `${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  }
 
   if (config.agentProvider === "codex") {
     const result = await chatWithCodex(
@@ -247,6 +313,14 @@ function chatAbortError(signal: AbortSignal): Error {
   return new Error(`chat timeout after ${config.chatTimeoutMs}ms`);
 }
 
+function textFromAnthropicContent(content: Anthropic.Messages.ContentBlock[]): string {
+  return content
+    .filter((block): block is Anthropic.Messages.TextBlock => block.type === "text")
+    .map((block) => block.text)
+    .join("\n")
+    .trim();
+}
+
 function buildHistoryContext(rows: Array<{ role: string; content: string }>): string {
   if (!rows.length) return "";
   const recent = rows.slice(-HISTORY_LIMIT * 2);
@@ -266,7 +340,130 @@ function buildHistoryContext(rows: Array<{ role: string; content: string }>): st
 
 const buildHistoryPrompt = buildHistoryContext;
 
-export const __testables = { formatToolLine, buildHistoryContext, buildHistoryPrompt, IDENTITY_LINE };
+export const __testables = {
+  formatToolLine,
+  buildHistoryContext,
+  buildHistoryPrompt,
+  IDENTITY_LINE,
+  chatWithLightweightApi,
+};
+
+async function chatWithLightweightApi(
+  system: string,
+  prompt: string,
+  historyContext?: string,
+  attachmentBlocks?: ContentBlockParam[],
+  callbacks?: ChatCallbacks,
+  runtimeContext?: string,
+  activeSignal?: AbortSignal,
+): Promise<{ reply: string; tokensSummary?: string; provider: LightweightApiProvider }> {
+  const provider = resolveLightweightApiProvider(attachmentBlocks);
+  if (!provider) {
+    throw new Error("no lightweight chat API client configured");
+  }
+
+  if (provider === "anthropic") {
+    return chatWithAnthropicApi(system, prompt, historyContext, attachmentBlocks, callbacks, runtimeContext, activeSignal);
+  }
+  return chatWithOpenAiApi(provider, system, prompt, historyContext, callbacks, runtimeContext, activeSignal);
+}
+
+async function chatWithAnthropicApi(
+  system: string,
+  prompt: string,
+  historyContext?: string,
+  attachmentBlocks?: ContentBlockParam[],
+  callbacks?: ChatCallbacks,
+  runtimeContext?: string,
+  activeSignal?: AbortSignal,
+): Promise<{ reply: string; tokensSummary?: string; provider: "anthropic" }> {
+  const fallbackCtrl = new AbortController();
+  const timeoutCtrl = withCodexTimeout(activeSignal ?? fallbackCtrl.signal, config.chatTimeoutMs);
+  const userContent: ContentBlockParam[] = [
+    ...(runtimeContext ? [{ type: "text", text: runtimeContext } as TextBlockParam] : []),
+    ...(historyContext ? [{ type: "text", text: historyContext } as TextBlockParam] : []),
+    ...(attachmentBlocks ?? []),
+    { type: "text", text: prompt } as TextBlockParam,
+  ];
+
+  try {
+    const stream = getClient().messages.stream({
+      model: config.claudeModel,
+      max_tokens: MAX_TOKENS_PER_TURN,
+      temperature: 0,
+      system: [system, apiChatInstruction("IM")].filter(Boolean).join("\n\n"),
+      messages: [{ role: "user", content: userContent }],
+    }, { signal: timeoutCtrl.signal });
+
+    stream.on("text", (delta) => {
+      if (delta) callbacks?.onText(delta);
+    });
+
+    const finalMsg = await stream.finalMessage();
+    return {
+      reply: textFromAnthropicContent(finalMsg.content) || "[无文字回复]",
+      provider: "anthropic",
+      tokensSummary: formatModelUsage({
+        inputTokens: finalMsg.usage?.input_tokens,
+        outputTokens: finalMsg.usage?.output_tokens,
+        cacheReadTokens: finalMsg.usage?.cache_read_input_tokens ?? undefined,
+        cacheCreationTokens: finalMsg.usage?.cache_creation_input_tokens ?? undefined,
+      }),
+    };
+  } catch (err) {
+    if (timeoutCtrl.signal.aborted) throw chatAbortError(timeoutCtrl.signal);
+    throw err;
+  } finally {
+    if (!timeoutCtrl.signal.aborted) timeoutCtrl.abort();
+  }
+}
+
+async function chatWithOpenAiApi(
+  provider: "openai" | "openai_compatible",
+  system: string,
+  prompt: string,
+  historyContext?: string,
+  callbacks?: ChatCallbacks,
+  runtimeContext?: string,
+  activeSignal?: AbortSignal,
+): Promise<{ reply: string; tokensSummary?: string; provider: "openai" | "openai_compatible" }> {
+  const fallbackCtrl = new AbortController();
+  const timeoutCtrl = withCodexTimeout(activeSignal ?? fallbackCtrl.signal, config.chatTimeoutMs);
+  try {
+    const client = createOpenAiChatModelClient({
+      id: `chat-${provider}`,
+      provider,
+      model: config.codex.model ?? "gpt-4o-mini",
+      timeoutMs: config.chatTimeoutMs,
+      apiKey: config.openaiApiKey,
+      baseUrl: config.openaiBaseUrl,
+    });
+    const result = await client.complete({
+      messages: [
+        { role: "system", content: [system, apiChatInstruction("IM")].filter(Boolean).join("\n\n") },
+        ...([runtimeContext, historyContext].filter(Boolean).length
+          ? [{ role: "user" as const, content: [runtimeContext, historyContext].filter(Boolean).join("\n\n") }]
+          : []),
+        { role: "user", content: prompt },
+      ],
+      temperature: 0,
+      maxTokens: MAX_TOKENS_PER_TURN,
+      signal: timeoutCtrl.signal,
+    });
+    const reply = result.text.trim() || "[无文字回复]";
+    callbacks?.onText(reply);
+    return {
+      reply,
+      provider,
+      tokensSummary: formatModelUsage(result.usage),
+    };
+  } catch (err) {
+    if (timeoutCtrl.signal.aborted) throw chatAbortError(timeoutCtrl.signal);
+    throw err;
+  } finally {
+    if (!timeoutCtrl.signal.aborted) timeoutCtrl.abort();
+  }
+}
 
 async function chatWithCodex(
   system: string,

@@ -3,7 +3,7 @@ doc_id: runtime-index
 lang: zh
 translation_of: docs/runtime/README.md
 translation_status: current
-source_sha256: 9463eea6878686aaafcf61018daff2eead3a16f8944761af704d8a0460f647c0
+source_sha256: 60063239e9e0635d9543a0f9a85ab9967932d9e056071b45e03e5c477d56c00e
 ---
 # MiniClaw Runtime 文档
 
@@ -15,7 +15,7 @@ source_sha256: 9463eea6878686aaafcf61018daff2eead3a16f8944761af704d8a0460f647c0
 flowchart TD
   Discord[Discord / IM intake] --> Intake[Message and slash intake]
   Intake --> Router[Routing / Smart Router]
-  Router --> Chat[Chat runtime]
+  Router --> Chat[Chat runtime<br/>API fast path]
   Router --> Task[Task runtime]
   Cron[Cron scheduler] --> ProviderContext[Pre-provider context]
   ProviderContext --> Task
@@ -43,7 +43,9 @@ Owner code paths:
 src/bot.ts
 src/commands/**
 src/discord/**
+src/im/adapters/weixin/**
 src/routing/**
+src/agent/chat.ts
 src/store/repositories/smart-router-decisions.ts
 ```
 
@@ -54,6 +56,7 @@ Routing contract:
 - Smart Router 可以把像 task 的 prompt 转入 task path，但不能提升普通 chat 权限。
 - Confirmation button 保存 pending task context，并且必须安全过期。
 - Per-channel cwd override 是 routing context，不是 prompt 文本。
+- Weixin chat 复用 `chat()` 边界，但会要求它优先使用 lightweight Anthropic/OpenAI-compatible API client，再 fallback 到配置的 agent runtime。
 
 Smart Router resolution order:
 

@@ -3,7 +3,7 @@ doc_id: chat-router-current-logic
 lang: zh
 translation_of: docs/chat-router-current-logic.md
 translation_status: current
-source_sha256: 2fb8089024e80e2fededa6da90b0e1519131ffc4dcdd4c36104eca4172c53729
+source_sha256: af9f7f067cb44d055be240f2cb4029f99d6e54b9b8ef6465e63916cd0f751840
 ---
 # MiniClaw Chat Router 当前逻辑
 
@@ -18,7 +18,7 @@ MiniClaw router 有两层：
 
 当前策略是 LLM-first 但保守。regex task/chat signals 不再拥有决策权。attachments、URL-only messages、empty messages 等 objective facts 在 classifier disabled 或 unavailable 时仍作为 fallback facts。
 
-Weixin direct 在 Discord hard route 之前有自己的 gateway path。它先执行 Weixin allowlist，提取文字/语音/图片输入，再复用同一套 Smart Router classifier 判断 chat-vs-task。Smart Router 在 Weixin 上判断为 task 时，MiniClaw 一律用 y/n 文本确认，不使用 Discord buttons，也不自动创建 task。
+Weixin direct 在 Discord hard route 之前有自己的 gateway path。它先执行 Weixin allowlist，提取文字/语音/图片输入，再复用同一套 Smart Router classifier 判断 chat-vs-task。Smart Router 在 Weixin 上判断为 task 时，MiniClaw 一律用 y/n 文本确认，不使用 Discord buttons，也不自动创建 task。最终 route 保持 chat 时，Weixin 调用 `chat()` 并优先使用 lightweight API，所以会先尝试 Anthropic/OpenAI-compatible chat completions，再 fallback 到配置的 agent runtime。
 
 ## 路由流程
 
@@ -70,7 +70,7 @@ flowchart TD
   V -->|cancel| V2[Cancel]
 ```
 
-上图是 Discord message flow。Weixin direct 先经过自己的 long-poll receive path：media extraction -> optional Smart Router classification -> 对 task-like prompt 发 y/n 文本确认 -> chat runtime 或 Weixin task view reporter。
+上图是 Discord message flow。Weixin direct 先经过自己的 long-poll receive path：media extraction -> optional Smart Router classification -> 对 task-like prompt 发 y/n 文本确认 -> 带 agent-runtime fallback 的 lightweight API chat path，或 Weixin task view reporter。
 
 ## 代码地图
 
@@ -85,8 +85,8 @@ flowchart TD
 - `src/routing/llm.ts`：可选 LLM capability classifier。
 - `src/routing/confirmations.ts`：短生命周期 Smart Router confirmation state。
 - `src/discord/task-intake.ts`：task creation 和 `executeTask()` 入口。
-- `src/im/adapters/weixin/gateway.ts`：Weixin allowlist、media extraction、Smart Router y/n confirmation、direct chat 和 direct task execution。
-- `src/agent/chat.ts`：真实 chat runtime execution。
+- `src/im/adapters/weixin/gateway.ts`：Weixin allowlist、media extraction、Smart Router y/n confirmation、API 优先的 direct chat 和 direct task execution。
+- `src/agent/chat.ts`：真实 chat runtime execution、lightweight API fast path 和 agent-runtime fallback。
 - `src/routing/context.ts`、`src/routing/task-context.ts`、`src/routing/chat-context.ts`：recent context 和 source metadata。
 
 ## 第 1 层：Discord 消息路由
@@ -180,4 +180,5 @@ Discord channel policy 决定 task intent 最终是 automatic task、confirmatio
 - classifier 判断 capability requirements，不判断用户价值或答案质量。
 - Discord `/task` 和 task-channel intake 会绕过 Smart Router，因为用户或 channel 已经选择 task mode。
 - Weixin `/task ...` 仍然会询问 y/n，让移动聊天入口只有一条可反悔的 task conversion path。
+- Weixin chat 的 lightweight API path 只做 direct answer；需要 local files、commands、durable output 或 runtime inspection 的 prompt 应转为 task。
 - chat 保持 read-oriented；workspace-changing work 必须通过 task mode。

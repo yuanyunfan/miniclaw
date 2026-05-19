@@ -8,7 +8,7 @@
 flowchart TD
   Discord[Discord / IM intake] --> Intake[Message and slash intake]
   Intake --> Router[Routing / Smart Router]
-  Router --> Chat[Chat runtime]
+  Router --> Chat[Chat runtime<br/>API fast path]
   Router --> Task[Task runtime]
   Cron[Cron scheduler] --> ProviderContext[Pre-provider context]
   ProviderContext --> Task
@@ -36,7 +36,9 @@ Owner code paths:
 src/bot.ts
 src/commands/**
 src/discord/**
+src/im/adapters/weixin/**
 src/routing/**
+src/agent/chat.ts
 src/store/repositories/smart-router-decisions.ts
 ```
 
@@ -47,6 +49,7 @@ Routing contract:
 - Smart Router may turn a task-like prompt into a task path, but it must not upgrade normal chat privileges.
 - Confirmation buttons store pending task context and must expire safely.
 - Per-channel cwd overrides are routing context, not prompt text.
+- Weixin chat uses the shared `chat()` boundary but asks it to prefer a lightweight Anthropic/OpenAI-compatible API client before falling back to the configured agent runtime.
 
 Smart Router resolution order:
 
