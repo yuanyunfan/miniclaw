@@ -94,6 +94,7 @@ Current delivery shape:
 - Final result: normal Markdown message with chunking when needed. Discord body chunks suppress link embeds, and bare URLs are repeated only in a final link-preview footer so cards appear after the full result rather than between body chunks.
 - Fanout and replay: Discord IM fanout, recovery outbox replay, and script cron `DISCORD_MESSAGE` output use the same deferred-link-preview helper as task results.
 - Weixin delivery: text uses `sendmessage`; file delivery uses the official `getuploadurl -> CDN AES upload -> sendmessage` chain and sends captions and media as separate message items. Session-expired `-14` pauses the affected account for one hour.
+- Weixin chat sends `sendtyping` start, keepalive, and cancel signals when `getconfig` returns a typing ticket, so long LLM replies have visible in-chat activity.
 - Trace view: task events and trace-export commands provide operator-level details.
 
 ## Cron Runtime

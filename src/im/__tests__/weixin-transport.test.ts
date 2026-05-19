@@ -2,7 +2,17 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { buildWeixinTextMessage, extractWeixinText, getWeixinUpdates, sendWeixinText, startWeixinQrLogin, __testables } from "../adapters/weixin/api.js";
+import {
+  buildWeixinTextMessage,
+  extractWeixinText,
+  getWeixinConfig,
+  getWeixinUpdates,
+  sendWeixinText,
+  sendWeixinTyping,
+  startWeixinQrLogin,
+  WeixinTypingStatus,
+  __testables,
+} from "../adapters/weixin/api.js";
 import { parseWeixinTaskCommand, __testables as gatewayTestables } from "../adapters/weixin/gateway.js";
 import { materializeWeixinAttachments, __testables as mediaTestables, type WeixinProcessableAttachment } from "../adapters/weixin/media.js";
 import { __resetWeixinSessionPauseForTests, getWeixinSessionPauseRemainingMs, pauseWeixinSession } from "../adapters/weixin/session.js";
@@ -18,6 +28,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   __resetWeixinSessionPauseForTests();
+  gatewayTestables.resetTypingTicketCache();
   rmSync(tmpDir, { recursive: true, force: true });
 });
 
@@ -120,6 +131,38 @@ describe("Weixin API helpers", () => {
     expect(calls[0]?.url).toContain("/ilink/bot/get_bot_qrcode?bot_type=3");
     expect(JSON.parse(String(calls[0]?.init.body))).toMatchObject({
       local_token_list: ["token-a", "token-b"],
+    });
+  });
+
+  it("fetches typing config and sends typing status payloads", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const fetchFn = (async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), init: init ?? {} });
+      return jsonResponse(String(url).endsWith("/ilink/bot/getconfig")
+        ? { ret: 0, typing_ticket: "ticket" }
+        : { ret: 0 });
+    }) as typeof fetch;
+
+    const configResp = await getWeixinConfig({
+      ilinkUserId: "user@im.wechat",
+      contextToken: "ctx",
+      options: { baseUrl: "https://weixin.test/", token: "token", fetchFn },
+    });
+    await sendWeixinTyping({
+      to: "user@im.wechat",
+      typingTicket: configResp.typing_ticket ?? "",
+      status: WeixinTypingStatus.TYPING,
+      options: { baseUrl: "https://weixin.test/", token: "token", fetchFn },
+    });
+
+    expect(JSON.parse(String(calls[0]?.init.body))).toMatchObject({
+      ilink_user_id: "user@im.wechat",
+      context_token: "ctx",
+    });
+    expect(JSON.parse(String(calls[1]?.init.body))).toMatchObject({
+      ilink_user_id: "user@im.wechat",
+      typing_ticket: "ticket",
+      status: 1,
     });
   });
 
@@ -269,6 +312,33 @@ describe("Weixin gateway helpers", () => {
     expect(sleep).toHaveBeenCalledTimes(1);
     expect(sleep.mock.calls[0]?.[0]).toBeGreaterThan(59 * 60 * 1000);
     expect(getWeixinSessionPauseRemainingMs("acct")).toBeGreaterThan(59 * 60 * 1000);
+  });
+
+  it("starts and cancels Weixin typing with the cached getconfig ticket", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), init: init ?? {} });
+      return jsonResponse(String(url).endsWith("/ilink/bot/getconfig")
+        ? { ret: 0, typing_ticket: "ticket" }
+        : { ret: 0 });
+    }));
+
+    const handle = await gatewayTestables.startWeixinTyping(
+      { accountId: "acct", token: "token", baseUrl: "https://weixin.test/" },
+      "user@im.wechat",
+      "ctx",
+    );
+    await handle?.stop();
+
+    const bodies = calls.map((call) => JSON.parse(String(call.init.body)));
+    expect(calls.map((call) => call.url)).toEqual([
+      "https://weixin.test/ilink/bot/getconfig",
+      "https://weixin.test/ilink/bot/sendtyping",
+      "https://weixin.test/ilink/bot/sendtyping",
+    ]);
+    expect(bodies[0]).toMatchObject({ ilink_user_id: "user@im.wechat", context_token: "ctx" });
+    expect(bodies[1]).toMatchObject({ typing_ticket: "ticket", status: WeixinTypingStatus.TYPING });
+    expect(bodies[2]).toMatchObject({ typing_ticket: "ticket", status: WeixinTypingStatus.CANCEL });
   });
 
   it("extracts Weixin text, voice transcript, and image attachments for model input", () => {

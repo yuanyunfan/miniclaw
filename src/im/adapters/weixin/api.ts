@@ -29,6 +29,11 @@ export const WeixinUploadMediaType = {
   VOICE: 4,
 } as const;
 
+export const WeixinTypingStatus = {
+  TYPING: 1,
+  CANCEL: 2,
+} as const;
+
 export interface WeixinTextItem {
   text?: string;
 }
@@ -124,6 +129,19 @@ export interface GetUploadUrlReq {
   thumb_filesize?: number;
   no_need_thumb?: boolean;
   aeskey?: string;
+}
+
+export interface GetConfigResp {
+  ret?: number;
+  errcode?: number;
+  errmsg?: string;
+  typing_ticket?: string;
+}
+
+export interface SendTypingResp {
+  ret?: number;
+  errcode?: number;
+  errmsg?: string;
 }
 
 export interface NotifyResp {
@@ -334,6 +352,38 @@ export async function getWeixinUploadUrl(params: GetUploadUrlReq & { options: We
     aeskey: params.aeskey,
     base_info: baseInfo(params.options),
   }, params.options);
+}
+
+export async function getWeixinConfig(params: {
+  ilinkUserId: string;
+  contextToken?: string;
+  options: WeixinApiOptions;
+}): Promise<GetConfigResp> {
+  return postJson<GetConfigResp>("ilink/bot/getconfig", {
+    ilink_user_id: params.ilinkUserId,
+    context_token: params.contextToken,
+    base_info: baseInfo(params.options),
+  }, {
+    ...params.options,
+    timeoutMs: params.options.timeoutMs ?? 5_000,
+  });
+}
+
+export async function sendWeixinTyping(params: {
+  to: string;
+  typingTicket: string;
+  status: number;
+  options: WeixinApiOptions;
+}): Promise<SendTypingResp> {
+  return postJson<SendTypingResp>("ilink/bot/sendtyping", {
+    ilink_user_id: params.to,
+    typing_ticket: params.typingTicket,
+    status: params.status,
+    base_info: baseInfo(params.options),
+  }, {
+    ...params.options,
+    timeoutMs: params.options.timeoutMs ?? 5_000,
+  });
 }
 
 export async function notifyWeixinStart(options: WeixinApiOptions): Promise<NotifyResp> {

@@ -3,7 +3,7 @@ doc_id: runtime-index
 lang: zh
 translation_of: docs/runtime/README.md
 translation_status: current
-source_sha256: de4fe39c9e78030fdaf20eeef702cd6cee43b38ad90698b6fb68f109744546ef
+source_sha256: c2ae2e35e089e62fb63491bba0da7e3376a3866aec1cdc80a88f0b128a2d1e03
 ---
 # MiniClaw Runtime 文档
 
@@ -101,6 +101,7 @@ Current delivery shape:
 - Final result: 普通 Markdown message，必要时 chunking。Discord 正文 chunk 会 suppress link embeds，裸 URL 只会在最后的 link-preview footer 里重复，因此卡片出现在完整结果之后，而不是插在正文 chunk 中间。
 - Fanout and replay: Discord IM fanout、recovery outbox replay 和 script cron `DISCORD_MESSAGE` output 使用与 task results 相同的 deferred-link-preview helper。
 - Weixin delivery: 文本使用 `sendmessage`；文件投递使用官方 `getuploadurl -> CDN AES upload -> sendmessage` 链路，并把 caption 和媒体拆成独立 message item。Session expired `-14` 会让受影响账号暂停一小时。
+- Weixin chat 会在 `getconfig` 返回 typing ticket 时发送 `sendtyping` start、keepalive 和 cancel 信号，让较长 LLM 回复在微信里有可见的输入状态。
 - Trace view: task events 和 trace-export command 提供 operator 级细节。
 
 ## Cron Runtime 执行时

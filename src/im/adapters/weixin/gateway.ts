@@ -26,11 +26,14 @@ import { WeixinTaskViewReporter } from "./task-view.js";
 import {
   extractWeixinText,
   type GetUpdatesResp,
+  getWeixinConfig,
   getWeixinUpdates,
   DEFAULT_WEIXIN_BASE_URL,
   notifyWeixinStart,
   notifyWeixinStop,
+  sendWeixinTyping,
   WeixinMessageItemType,
+  WeixinTypingStatus,
   type WeixinMediaItem,
   type WeixinMessage,
   type WeixinMessageItem,
@@ -54,6 +57,10 @@ import {
 } from "./store.js";
 
 const log = createLogger("weixin");
+const TYPING_KEEPALIVE_MS = 5_000;
+const TYPING_CONFIG_TTL_MS = 24 * 60 * 60 * 1000;
+const TYPING_CONFIG_INITIAL_RETRY_MS = 2_000;
+const TYPING_CONFIG_MAX_RETRY_MS = 60 * 60 * 1000;
 
 export interface WeixinGatewayHandle {
   stop(): void;
@@ -88,9 +95,25 @@ interface WeixinPollAccountDeps {
   sleep?: typeof sleep;
 }
 
+interface WeixinTypingHandle {
+  stop(): Promise<void>;
+}
+
+interface TypingTicketCacheEntry {
+  ticket: string;
+  nextFetchAt: number;
+  retryDelayMs: number;
+  everSucceeded: boolean;
+}
+
 const pendingTasks = new Map<string, PendingTask>();
+const typingTicketCache = new Map<string, TypingTicketCacheEntry>();
 
 function pendingKey(accountId: string, userId: string): string {
+  return `${accountId}:${userId}`;
+}
+
+function typingCacheKey(accountId: string, userId: string): string {
   return `${accountId}:${userId}`;
 }
 
@@ -177,6 +200,88 @@ async function sendWeixinReply(account: WeixinAccountData, to: string, text: str
     },
     content: text,
   });
+}
+
+async function getWeixinTypingTicket(account: WeixinAccountData, to: string, contextToken?: string): Promise<string> {
+  const key = typingCacheKey(account.accountId, to);
+  const now = Date.now();
+  const cached = typingTicketCache.get(key);
+  if (cached && now < cached.nextFetchAt) return cached.ticket;
+
+  try {
+    const resp = await getWeixinConfig({
+      ilinkUserId: to,
+      contextToken,
+      options: {
+        baseUrl: account.baseUrl || DEFAULT_WEIXIN_BASE_URL,
+        token: account.token,
+        timeoutMs: 5_000,
+      },
+    });
+    const code = resp.errcode ?? resp.ret ?? 0;
+    if (code !== 0) throw new Error(`getconfig error ${code}: ${resp.errmsg ?? "unknown error"}`);
+    const ticket = resp.typing_ticket ?? "";
+    typingTicketCache.set(key, {
+      ticket,
+      everSucceeded: true,
+      nextFetchAt: now + Math.random() * TYPING_CONFIG_TTL_MS,
+      retryDelayMs: TYPING_CONFIG_INITIAL_RETRY_MS,
+    });
+    return ticket;
+  } catch (err) {
+    const previousDelay = cached?.retryDelayMs ?? TYPING_CONFIG_INITIAL_RETRY_MS;
+    const retryDelayMs = Math.min(previousDelay * 2, TYPING_CONFIG_MAX_RETRY_MS);
+    typingTicketCache.set(key, {
+      ticket: cached?.ticket ?? "",
+      everSucceeded: cached?.everSucceeded ?? false,
+      nextFetchAt: now + retryDelayMs,
+      retryDelayMs,
+    });
+    log.warn(`weixin getconfig typing ticket failed account=${account.accountId} to=${to}: ${err instanceof Error ? err.message : String(err)}`);
+    return cached?.ticket ?? "";
+  }
+}
+
+async function startWeixinTyping(account: WeixinAccountData, to: string, contextToken?: string): Promise<WeixinTypingHandle | null> {
+  const ticket = await getWeixinTypingTicket(account, to, contextToken);
+  if (!ticket) return null;
+
+  const sendStatus = async (status: number): Promise<void> => {
+    const resp = await sendWeixinTyping({
+      to,
+      typingTicket: ticket,
+      status,
+      options: {
+        baseUrl: account.baseUrl || DEFAULT_WEIXIN_BASE_URL,
+        token: account.token,
+        timeoutMs: 5_000,
+      },
+    });
+    const code = resp.errcode ?? resp.ret ?? 0;
+    if (code !== 0) throw new Error(`sendtyping error ${code}: ${resp.errmsg ?? "unknown error"}`);
+  };
+
+  let stopped = false;
+  await sendStatus(WeixinTypingStatus.TYPING).catch((err) => {
+    log.warn(`weixin typing start failed account=${account.accountId} to=${to}: ${err instanceof Error ? err.message : String(err)}`);
+  });
+  const interval = setInterval(() => {
+    void sendStatus(WeixinTypingStatus.TYPING).catch((err) => {
+      log.warn(`weixin typing keepalive failed account=${account.accountId} to=${to}: ${err instanceof Error ? err.message : String(err)}`);
+    });
+  }, TYPING_KEEPALIVE_MS);
+  interval.unref?.();
+
+  return {
+    async stop(): Promise<void> {
+      if (stopped) return;
+      stopped = true;
+      clearInterval(interval);
+      await sendStatus(WeixinTypingStatus.CANCEL).catch((err) => {
+        log.warn(`weixin typing cancel failed account=${account.accountId} to=${to}: ${err instanceof Error ? err.message : String(err)}`);
+      });
+    },
+  };
 }
 
 function stringField(obj: WeixinMediaItem | undefined, keys: readonly string[]): string | undefined {
@@ -459,8 +564,10 @@ async function runChat(params: {
   let attachmentBlocks: ContentBlockParam[] = [];
   let attachmentCodexInputs: CodexInputEntry[] = [];
   const attachmentScope = params.attachments.length ? { scope: messageIdString(params.message) } : null;
+  let typing: WeixinTypingHandle | null = null;
 
   try {
+    typing = await startWeixinTyping(params.account, from, params.message.context_token);
     if (params.notices.length) await sendWeixinReply(params.account, from, params.notices.join("\n"));
     if (attachmentScope) {
       const processed = await processWeixinAttachments({
@@ -495,6 +602,7 @@ async function runChat(params: {
     log.error(`weixin chat failed account=${params.account.accountId} from=${from}: ${messageText}`);
     await sendWeixinReply(params.account, from, `回复出错：${messageText.slice(0, 300)}`);
   } finally {
+    await typing?.stop();
     if (attachmentScope) cleanupAttachmentScope(attachmentScope);
   }
 }
@@ -868,4 +976,6 @@ export const __testables = {
   buildChatRuntimeContext,
   extractInboundContent,
   pollAccount,
+  startWeixinTyping,
+  resetTypingTicketCache: () => typingTicketCache.clear(),
 };
