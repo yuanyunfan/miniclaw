@@ -13,33 +13,44 @@ MiniClaw keeps long framework-owned system prompts in the repo-level `prompts/` 
 | `prompts/templates/cron-pre-provider-block.md` | Wrapper for injecting cron provider output into a task prompt | `src/cron/runner-task.ts` | `provider_name`, `output` |
 | `prompts/templates/cron-task-prompt.md` | Outer wrapper for cron `type=task` prompts | `src/cron/runner-task.ts` | `job_name`, `prepended_context`, `output_contract`, `user_prompt` |
 | `prompts/templates/cron-skill-prompt.md` | Wrapper for cron `type=skill` prompts | `src/cron/runner-task.ts` | `job_name`, `skill_name`, `args_block` |
-| `prompts/templates/cron-output/markdown-report-v1.md` | Generic Markdown report output contract for cron `type=task` jobs | `src/cron/output-contract.ts` | `audience` |
 
 Prompt assets are different from `agents/*.md` role definitions, `personas/*.md` Stage personas, and `~/.miniclaw/memories/MEMORY.md` long-term memory. Those are domain or user assets. `prompts/` contains framework-level runtime contracts.
 
 ## Cron Output Templates
 
-Cron `type=task` jobs can opt into a prompt-level output contract:
+Cron `type=task` jobs can opt into a prompt-level output contract by putting an inline template directly in the per-job YAML under `~/.miniclaw/cron/*.yaml`:
 
 ```yaml
-output_template: markdown-report-v1
+output_template: |
+  Use Markdown suitable for {{audience}} readers.
+
+  Required structure:
+  ## Summary
+  Give the direct conclusion first.
+
+  ## Key Findings
+  List the important observations.
 output_template_vars:
   audience: personal
 ```
 
-Advanced jobs can use the normalized form:
+`output_template_vars` is optional. If omitted, MiniClaw renders the template with built-in date/time variables only and otherwise uses the inline text as written.
+
+Advanced jobs can use the normalized form when they need to set the reserved validator field:
 
 ```yaml
 output_contract:
-  template: markdown-report-v1
+  template: |
+    Use Markdown suitable for {{audience}} readers.
+    Start with `## Summary`.
   vars:
     audience: personal
   validator: none
 ```
 
-The loader normalizes both forms into `output_contract`. `output_template` and `output_contract` are mutually exclusive. Template ids must be slugs matching `[a-zA-Z0-9][a-zA-Z0-9._-]*` and must not contain `..` or path separators.
+The loader normalizes both forms into `output_contract`. `output_template` and `output_contract` are mutually exclusive.
 
-Output templates live under `prompts/templates/cron-output/<id>.md` and can be overridden at `~/.miniclaw/prompts/templates/cron-output/<id>.md`. They use the same frontmatter `vars` validation as every other prompt asset. The rendered contract is injected after provider/script context and before the job prompt. It guides the LLM output shape but does not rewrite the final message after execution.
+Cron output templates are cron-job configuration, not repo prompt assets: MiniClaw does not load `prompts/templates/cron-output/<id>.md`. The rendered contract is injected after provider/script context and before the job prompt. It guides the LLM output shape but does not rewrite the final message after execution.
 
 `output_contract.validator` is reserved for runtime validation. v1 supports only `none`; the validator hook still runs after a successful task result and before extra delivery, attachment delivery, and provider commit callbacks so future validators can block delivery and retries at a single point.
 

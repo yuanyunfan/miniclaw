@@ -1,8 +1,7 @@
-import { loadPrompt } from "../agent/prompts.js";
+import { renderTemplate } from "./template.js";
 import type { CronJobTask } from "./types.js";
 
 export interface ResolvedCronOutputContract {
-  template: string;
   validator: string;
   renderedTemplate: string;
 }
@@ -17,16 +16,15 @@ export function resolveCronOutputContract(job: CronJobTask): ResolvedCronOutputC
   if (!job.output_contract) return undefined;
   const contract = job.output_contract;
   return {
-    template: contract.template,
     validator: contract.validator,
-    renderedTemplate: loadPrompt(`templates/cron-output/${contract.template}`, contract.vars ?? {}),
+    renderedTemplate: renderTemplate(contract.template, contract.vars ?? {}),
   };
 }
 
 export function buildCronOutputContractBlock(contract?: ResolvedCronOutputContract): string {
   if (!contract) return "";
   return [
-    `<cron_output_contract template="${contract.template}" validator="${contract.validator}">`,
+    `<cron_output_contract source="cron-yaml" validator="${contract.validator}">`,
     "Treat this as the prompt-level output contract for this scheduled cron task.",
     "Format the final task result according to the rendered template below.",
     "Do not mention the contract itself unless the user explicitly asks about formatting.",
@@ -48,6 +46,6 @@ export function validateCronTaskOutput(
   return {
     ok: false,
     category: "unsupported_output_contract_validator",
-    message: `Unsupported cron output validator '${contract.validator}' for ${contract.template}; output length=${output.length}`,
+    message: `Unsupported cron output validator '${contract.validator}'; output length=${output.length}`,
   };
 }

@@ -66,11 +66,11 @@ export interface CronTaskResultDeliveryConfig {
 
 export interface CronTaskOutputContractConfig {
   /**
-   * Prompt template id loaded from prompts/templates/cron-output/<id>.md.
+   * Inline prompt-level output template text from the cron YAML.
    */
   template: string;
   /**
-   * Template variables passed through the prompt loader.
+   * Optional variables rendered into the inline template.
    */
   vars?: Record<string, string>;
   /**

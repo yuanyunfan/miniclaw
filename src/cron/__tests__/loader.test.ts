@@ -199,14 +199,16 @@ prompt: "整理浏览器标签页"
     }
   });
 
-  it("解析 type=task + output_template shorthand", () => {
+  it("解析 type=task + inline output_template shorthand", () => {
     write("daily-report.yaml", `
 name: daily-report
 schedule: "0 9 * * *"
 enabled: true
 type: task
 channel: "${VALID_CHANNEL}"
-output_template: markdown-report-v1
+output_template: |
+  Use Markdown suitable for {{audience}} readers.
+  ## Summary
 output_template_vars:
   audience: personal
 prompt: "整理日报"
@@ -218,8 +220,32 @@ prompt: "整理日报"
     expect(j.type).toBe("task");
     if (j.type === "task") {
       expect(j.output_contract).toEqual({
-        template: "markdown-report-v1",
+        template: "Use Markdown suitable for {{audience}} readers.\n## Summary",
         vars: { audience: "personal" },
+        validator: "none",
+      });
+    }
+  });
+
+  it("解析 type=task + inline output_template 且不传 vars", () => {
+    write("daily-report.yaml", `
+name: daily-report
+schedule: "0 9 * * *"
+enabled: true
+type: task
+channel: "${VALID_CHANNEL}"
+output_template: |
+  ## Summary
+  Give the conclusion first.
+prompt: "整理日报"
+`);
+    const r = loadCronJobs();
+    expect(r.errors).toEqual([]);
+    const j = r.jobs[0];
+    expect(j.type).toBe("task");
+    if (j.type === "task") {
+      expect(j.output_contract).toEqual({
+        template: "## Summary\nGive the conclusion first.",
         validator: "none",
       });
     }
@@ -233,7 +259,9 @@ enabled: true
 type: task
 channel: "${VALID_CHANNEL}"
 output_contract:
-  template: markdown-report-v1
+  template: |
+    Use Markdown suitable for {{audience}} readers.
+    ## Summary
   vars:
     audience: operator
   validator: none
@@ -246,7 +274,7 @@ prompt: "整理日报"
     expect(j.type).toBe("task");
     if (j.type === "task") {
       expect(j.output_contract).toEqual({
-        template: "markdown-report-v1",
+        template: "Use Markdown suitable for {{audience}} readers.\n## Summary",
         vars: { audience: "operator" },
         validator: "none",
       });
@@ -530,26 +558,28 @@ name: x
 schedule: "0 9 * * *"
 type: task
 channel: "${VALID_CHANNEL}"
-output_template: markdown-report-v1
+output_template: |
+  ## Summary
 output_contract:
-  template: markdown-report-v1
+  template: |
+    ## Summary
 prompt: hi
 `);
     const r = loadCronJobs();
     expect(r.errors[0].error).toMatch(/output_template.*output_contract/);
   });
 
-  it("非法 output_template id → 拒绝", () => {
+  it("空 output_template → 拒绝", () => {
     write("bad-output-template.yaml", `
 name: x
 schedule: "0 9 * * *"
 type: task
 channel: "${VALID_CHANNEL}"
-output_template: ../secret
+output_template: ""
 prompt: hi
 `);
     const r = loadCronJobs();
-    expect(r.errors[0].error).toMatch(/output_template.*slug/);
+    expect(r.errors[0].error).toMatch(/output_template.*非空模板字符串/);
   });
 
   it("未知 output_contract.validator → 拒绝", () => {
@@ -559,7 +589,8 @@ schedule: "0 9 * * *"
 type: task
 channel: "${VALID_CHANNEL}"
 output_contract:
-  template: markdown-report-v1
+  template: |
+    ## Summary
   validator: headings
 prompt: hi
 `);

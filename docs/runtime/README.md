@@ -151,7 +151,7 @@ Runtime contract:
 
 - Provider commit callbacks must run only after the downstream task succeeds.
 - Provider failures should fail closed unless the provider config explicitly allows partial data.
-- `type=task` jobs may set `output_template` or `output_contract` to inject a prompt-level output contract after provider/script context and before the job prompt.
+- `type=task` jobs may set inline `output_template` or `output_contract.template` text in the cron YAML to inject a prompt-level output contract after provider/script context and before the job prompt.
 - Output contracts are formatting instructions for the LLM, not deterministic renderers; v1 does not rewrite the final message after task execution.
 - `output_contract.validator` is reserved for runtime validation. v1 supports only `none`, but the hook runs after a successful task result and before extra delivery, attachment delivery, and provider commit callbacks.
 - `cron.active_window` is a global scheduled-dispatch guard. Outside the window, MiniClaw writes a skipped `cron_runs` row with `error_category=outside_active_window` and does not call scripts, providers, or task runtime.

@@ -3,7 +3,7 @@ doc_id: runtime-index
 lang: zh
 translation_of: docs/runtime/README.md
 translation_status: current
-source_sha256: b6fb235bbc75910189c1dc20c037a4472d485fa997462599d0141c7e72209395
+source_sha256: 27e79067b6251a63e6a44f5b9709ac88114fbcde526a3483a5f7d4a7029d8cdf
 ---
 # MiniClaw Runtime 文档
 
@@ -158,7 +158,7 @@ Runtime contract:
 
 - Provider commit callback 只能在 downstream task 成功后运行。
 - Provider failure 默认 fail closed，除非 provider config 明确允许 partial data。
-- `type=task` job 可以配置 `output_template` 或 `output_contract`，在 provider/script context 之后、job prompt 之前注入 prompt-level output contract。
+- `type=task` job 可以在 cron YAML 内配置 inline `output_template` 或 `output_contract.template` 文本，在 provider/script context 之后、job prompt 之前注入 prompt-level output contract。
 - Output contract 是给 LLM 的格式指令，不是 deterministic renderer；v1 不会在 task 执行后重写最终消息。
 - `output_contract.validator` 预留 runtime validation。v1 只支持 `none`，但 hook 会在 task result 成功后、extra delivery、attachment delivery 和 provider commit callback 之前运行。
 - `cron.active_window` 是全局 scheduled-dispatch guard。窗口外 MiniClaw 写入 `error_category=outside_active_window` 的 skipped `cron_runs` row，不调用 script、provider 或 task runtime。

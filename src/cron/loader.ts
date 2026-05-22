@@ -24,7 +24,6 @@ const VALID_TYPES: CronJobType[] = ["task", "script", "skill", "message"];
 const VALID_PRE_PROVIDER_PREFLIGHT_MODES: PreProviderPreflightMode[] = ["off", "health", "dry_run"];
 const VALID_TASK_RESULT_DELIVERY_MODES: CronTaskResultDeliveryMode[] = ["daily_message_group"];
 const VALID_TASK_OUTPUT_CONTRACT_VALIDATORS: CronTaskOutputContractValidator[] = ["none"];
-const OUTPUT_TEMPLATE_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 const MAX_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 const MAX_CONCURRENCY = 50;
 const MAX_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
@@ -231,15 +230,11 @@ function parseTaskResultDeliveryConfig(value: unknown, file: string): CronTaskRe
   };
 }
 
-function parseOutputTemplateId(value: unknown, file: string, field: string): string {
+function parseOutputTemplateText(value: unknown, file: string, field: string): string {
   if (typeof value !== "string" || !value.trim()) {
-    throw new Error(`${file}: '${field}' 必须是模板 id`);
+    throw new Error(`${file}: '${field}' 必须是非空模板字符串`);
   }
-  const template = value.trim();
-  if (!OUTPUT_TEMPLATE_ID_RE.test(template) || template.includes("..")) {
-    throw new Error(`${file}: '${field}' 只能是 slug（${OUTPUT_TEMPLATE_ID_RE.source}），不能包含路径或 '..'`);
-  }
-  return template;
+  return value.trim();
 }
 
 function parseOutputContractVars(value: unknown, file: string, field: string): Record<string, string> | undefined {
@@ -266,14 +261,14 @@ function parseTaskOutputContractConfig(raw: Record<string, unknown>, file: strin
   if (shorthandTemplate !== undefined) {
     const vars = parseOutputContractVars(shorthandVars, file, "output_template_vars");
     return {
-      template: parseOutputTemplateId(shorthandTemplate, file, "output_template"),
+      template: parseOutputTemplateText(shorthandTemplate, file, "output_template"),
       ...(vars ? { vars } : {}),
       validator: "none",
     };
   }
   if (advanced === undefined) return undefined;
   if (!isPlainObject(advanced)) throw new Error(`${file}: 'output_contract' 必须是对象`);
-  const template = parseOutputTemplateId(advanced.template, file, "output_contract.template");
+  const template = parseOutputTemplateText(advanced.template, file, "output_contract.template");
   const vars = parseOutputContractVars(advanced.vars, file, "output_contract.vars");
   if (advanced.validator !== undefined && typeof advanced.validator !== "string") {
     throw new Error(`${file}: 'output_contract.validator' 必须是 ${VALID_TASK_OUTPUT_CONTRACT_VALIDATORS.join("|")}`);

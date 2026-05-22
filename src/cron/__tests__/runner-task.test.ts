@@ -178,7 +178,7 @@ describe("cron task runner", () => {
     await runTask({
       ...taskJob(),
       output_contract: {
-        template: "markdown-report-v1",
+        template: "Use Markdown suitable for {{audience}} readers.\n\n## Key Findings",
         vars: { audience: "operator" },
         validator: "none",
       },
@@ -187,7 +187,7 @@ describe("cron task runner", () => {
     const createdTask = mocks.createTask.mock.calls[0]?.[0] as { prompt?: string } | undefined;
     const taskInput = mocks.executeTask.mock.calls[0]?.[0] as { prompt?: string } | undefined;
     expect(createdTask?.prompt).toBe(taskInput?.prompt);
-    expect(taskInput?.prompt).toContain('<cron_output_contract template="markdown-report-v1" validator="none">');
+    expect(taskInput?.prompt).toContain('<cron_output_contract source="cron-yaml" validator="none">');
     expect(taskInput?.prompt).toContain("Use Markdown suitable for operator readers.");
     expect(taskInput?.prompt).toContain("## Key Findings");
     expect(taskInput?.prompt).toContain("summarize AI news");
