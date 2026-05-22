@@ -10,10 +10,38 @@ MiniClaw keeps long framework-owned system prompts in the repo-level `prompts/` 
 | `prompts/memory-extractor.md` | System prompt for extracting long-term memory candidates from conversation text; forbids raw JSON, blob, logs, and similar payloads from becoming memory content directly | `src/memory/extract.ts` | none |
 | `prompts/stage-manager.md` | Stage auto-mode `next_speaker` decider | `src/stage/stage-manager.ts` | none |
 | `prompts/templates/cron-pre-script-block.md` | Wrapper for injecting cron `pre_script` stdout into a task prompt | `src/cron/runner-task.ts` | `script_name`, `output` |
-| `prompts/templates/cron-task-prompt.md` | Outer wrapper for cron `type=task` prompts | `src/cron/runner-task.ts` | `job_name`, `prepended_context`, `user_prompt` |
+| `prompts/templates/cron-pre-provider-block.md` | Wrapper for injecting cron provider output into a task prompt | `src/cron/runner-task.ts` | `provider_name`, `output` |
+| `prompts/templates/cron-task-prompt.md` | Outer wrapper for cron `type=task` prompts | `src/cron/runner-task.ts` | `job_name`, `prepended_context`, `output_contract`, `user_prompt` |
 | `prompts/templates/cron-skill-prompt.md` | Wrapper for cron `type=skill` prompts | `src/cron/runner-task.ts` | `job_name`, `skill_name`, `args_block` |
+| `prompts/templates/cron-output/markdown-report-v1.md` | Generic Markdown report output contract for cron `type=task` jobs | `src/cron/output-contract.ts` | `audience` |
 
 Prompt assets are different from `agents/*.md` role definitions, `personas/*.md` Stage personas, and `~/.miniclaw/memories/MEMORY.md` long-term memory. Those are domain or user assets. `prompts/` contains framework-level runtime contracts.
+
+## Cron Output Templates
+
+Cron `type=task` jobs can opt into a prompt-level output contract:
+
+```yaml
+output_template: markdown-report-v1
+output_template_vars:
+  audience: personal
+```
+
+Advanced jobs can use the normalized form:
+
+```yaml
+output_contract:
+  template: markdown-report-v1
+  vars:
+    audience: personal
+  validator: none
+```
+
+The loader normalizes both forms into `output_contract`. `output_template` and `output_contract` are mutually exclusive. Template ids must be slugs matching `[a-zA-Z0-9][a-zA-Z0-9._-]*` and must not contain `..` or path separators.
+
+Output templates live under `prompts/templates/cron-output/<id>.md` and can be overridden at `~/.miniclaw/prompts/templates/cron-output/<id>.md`. They use the same frontmatter `vars` validation as every other prompt asset. The rendered contract is injected after provider/script context and before the job prompt. It guides the LLM output shape but does not rewrite the final message after execution.
+
+`output_contract.validator` is reserved for runtime validation. v1 supports only `none`; the validator hook still runs after a successful task result and before extra delivery, attachment delivery, and provider commit callbacks so future validators can block delivery and retries at a single point.
 
 ## Code-Owned Prompt Fragments
 

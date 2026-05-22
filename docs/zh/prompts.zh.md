@@ -3,7 +3,7 @@ doc_id: prompts
 lang: zh
 translation_of: docs/prompts.md
 translation_status: current
-source_sha256: 6a017bf5dbb678640c9f2ec375be1260a3ca23c90debb3b6e4f473a07818785d
+source_sha256: 1d080d229d3a95da044980b582e1d7ad66139bae4f04b953f7d49c4493a27355
 ---
 # Prompt 资产管理
 
@@ -17,10 +17,38 @@ MiniClaw 把较长的 framework-owned system prompt 放在 repo 级 `prompts/` �
 | `prompts/memory-extractor.md` | 从对话文本提取长期 memory candidate 的 system prompt；禁止 raw JSON、blob、log 等 payload 直接成为 memory content | `src/memory/extract.ts` | 无 |
 | `prompts/stage-manager.md` | Stage auto-mode 的 `next_speaker` 决策器 | `src/stage/stage-manager.ts` | 无 |
 | `prompts/templates/cron-pre-script-block.md` | 把 cron `pre_script` stdout 注入 task prompt 的 wrapper | `src/cron/runner-task.ts` | `script_name`, `output` |
-| `prompts/templates/cron-task-prompt.md` | cron `type=task` prompt 的外层 wrapper | `src/cron/runner-task.ts` | `job_name`, `prepended_context`, `user_prompt` |
+| `prompts/templates/cron-pre-provider-block.md` | 把 cron provider output 注入 task prompt 的 wrapper | `src/cron/runner-task.ts` | `provider_name`, `output` |
+| `prompts/templates/cron-task-prompt.md` | cron `type=task` prompt 的外层 wrapper | `src/cron/runner-task.ts` | `job_name`, `prepended_context`, `output_contract`, `user_prompt` |
 | `prompts/templates/cron-skill-prompt.md` | cron `type=skill` prompt 的 wrapper | `src/cron/runner-task.ts` | `job_name`, `skill_name`, `args_block` |
+| `prompts/templates/cron-output/markdown-report-v1.md` | cron `type=task` job 的通用 Markdown report output contract | `src/cron/output-contract.ts` | `audience` |
 
 prompt 资产不同于 `agents/*.md` role definition、`personas/*.md` Stage persona 和 `~/.miniclaw/memories/MEMORY.md` 长期记忆。那些是 domain 或 user asset；`prompts/` 是 framework-level runtime contract。
+
+## Cron Output Templates
+
+Cron `type=task` job 可以选择注入 prompt-level output contract：
+
+```yaml
+output_template: markdown-report-v1
+output_template_vars:
+  audience: personal
+```
+
+高级写法使用规范化字段：
+
+```yaml
+output_contract:
+  template: markdown-report-v1
+  vars:
+    audience: personal
+  validator: none
+```
+
+loader 会把两种写法统一成 `output_contract`。`output_template` 和 `output_contract` 不能同时配置。template id 必须是匹配 `[a-zA-Z0-9][a-zA-Z0-9._-]*` 的 slug，不能包含 `..` 或路径分隔符。
+
+Output template 存放在 `prompts/templates/cron-output/<id>.md`，用户可在 `~/.miniclaw/prompts/templates/cron-output/<id>.md` override。它们复用所有 prompt asset 的 frontmatter `vars` 校验。渲染后的 contract 会注入到 provider/script context 之后、job prompt 之前。它只约束 LLM 输出格式，不会在 execution 之后重写最终消息。
+
+`output_contract.validator` 预留 runtime validation。v1 只支持 `none`；validator hook 仍会在 successful task result 之后、extra delivery、attachment delivery 和 provider commit callback 之前运行，方便后续 validator 在单一位置阻止投递并交给 scheduler retry。
 
 ## 代码内置 Prompt 片段
 

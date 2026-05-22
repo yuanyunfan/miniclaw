@@ -1,6 +1,7 @@
 export type CronJobType = "task" | "script" | "skill" | "message";
 export type PreProviderPreflightMode = "off" | "health" | "dry_run";
 export type CronTaskResultDeliveryMode = "daily_message_group";
+export type CronTaskOutputContractValidator = "none";
 
 export interface CronJobCooldownConfig {
   after_failure_ms: number;
@@ -63,6 +64,21 @@ export interface CronTaskResultDeliveryConfig {
   timezone?: string;
 }
 
+export interface CronTaskOutputContractConfig {
+  /**
+   * Prompt template id loaded from prompts/templates/cron-output/<id>.md.
+   */
+  template: string;
+  /**
+   * Template variables passed through the prompt loader.
+   */
+  vars?: Record<string, string>;
+  /**
+   * v1 only supports "none"; the field reserves the runtime validation hook.
+   */
+  validator: CronTaskOutputContractValidator;
+}
+
 export interface CronJobBase {
   name: string;
   schedule: string | string[];
@@ -106,6 +122,10 @@ export interface CronJobTask extends CronJobBase {
   prompt: string;
   cwd?: string;
   result_delivery?: CronTaskResultDeliveryConfig;
+  /**
+   * Optional prompt-level output contract for scheduled task results.
+   */
+  output_contract?: CronTaskOutputContractConfig;
   /**
    * 可选：在调用 LLM 之前先跑这个脚本（在 ~/.miniclaw/scripts/ 下），
    * stdout 会被拼到 prompt 顶部作为"采集到的数据"，让 LLM 基于真实数据做分析。

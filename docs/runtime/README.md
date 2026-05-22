@@ -140,7 +140,9 @@ cron schedule
   -> optional provider health/dry-run preflight
   -> run pre_provider when configured
   -> inject provider text into task prompt
+  -> inject task output contract when configured
   -> execute task runtime
+  -> run output validator hook
   -> commit provider state only after downstream task success
   -> persist cron run and recovery metadata
 ```
@@ -149,6 +151,9 @@ Runtime contract:
 
 - Provider commit callbacks must run only after the downstream task succeeds.
 - Provider failures should fail closed unless the provider config explicitly allows partial data.
+- `type=task` jobs may set `output_template` or `output_contract` to inject a prompt-level output contract after provider/script context and before the job prompt.
+- Output contracts are formatting instructions for the LLM, not deterministic renderers; v1 does not rewrite the final message after task execution.
+- `output_contract.validator` is reserved for runtime validation. v1 supports only `none`, but the hook runs after a successful task result and before extra delivery, attachment delivery, and provider commit callbacks.
 - `cron.active_window` is a global scheduled-dispatch guard. Outside the window, MiniClaw writes a skipped `cron_runs` row with `error_category=outside_active_window` and does not call scripts, providers, or task runtime.
 - Missed-run audit ignores expected schedules outside `cron.active_window` so sleep/off-hours do not create false missed-run incidents.
 - Manual `pnpm cron:test` bypasses `cron.active_window` because it is an explicit operator action.

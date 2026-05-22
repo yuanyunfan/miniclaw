@@ -194,6 +194,20 @@ cron:
     timezone: Asia/Shanghai
     start: "08:00"
     end: "00:00"
+  # Per-job cron YAML lives under ~/.miniclaw/cron/*.yaml. type=task jobs may
+  # add a prompt-level output contract. This guides the LLM output shape but is
+  # not a deterministic renderer:
+  #
+  # name: daily-report
+  # schedule: "0 9 * * *"
+  # timezone: Asia/Shanghai
+  # enabled: true
+  # type: task
+  # channel: "REPLACE_WITH_DISCORD_CHANNEL_ID"
+  # output_template: markdown-report-v1
+  # output_template_vars:
+  #   audience: personal
+  # prompt: "Summarize today's signals."
 
 startup_watchdog:
   # Runs before Discord clientReady. If bot.login hangs or fails, MiniClaw can

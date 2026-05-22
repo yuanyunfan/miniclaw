@@ -1,9 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Client } from "discord.js";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CronJobTask } from "../types.js";
+import { __clearPromptCache } from "../../agent/prompts.js";
 
 const mocks = vi.hoisted(() => ({
   createTask: vi.fn(),
@@ -16,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   recordMarketForecastFromPayload: vi.fn(() => "forecast-1"),
   updateMarketForecastReport: vi.fn(() => ({ hasJson: true, insertedItemCount: 4 })),
 }));
+
+let promptTmp: string | undefined;
 
 vi.mock("../../store/db.js", () => ({
   createTask: mocks.createTask,
@@ -74,6 +77,9 @@ function client(send = vi.fn(async () => ({ id: "message-1" }))): Client {
 
 beforeEach(() => {
   delete process.env.MINICLAW_CRON_TEST_RUN_AT;
+  promptTmp = mkdtempSync(join(tmpdir(), "miniclaw-cron-prompts-"));
+  process.env.MINICLAW_PROMPTS_DIR = promptTmp;
+  __clearPromptCache();
   mocks.createTask.mockReset();
   mocks.executeTask.mockReset();
   mocks.getActiveTaskCount.mockReset();
@@ -87,6 +93,13 @@ beforeEach(() => {
   mocks.recordMarketForecastFromPayload.mockReturnValue("forecast-1");
   mocks.updateMarketForecastReport.mockReset();
   mocks.updateMarketForecastReport.mockReturnValue({ hasJson: true, insertedItemCount: 4 });
+});
+
+afterEach(() => {
+  if (promptTmp) rmSync(promptTmp, { recursive: true, force: true });
+  promptTmp = undefined;
+  delete process.env.MINICLAW_PROMPTS_DIR;
+  __clearPromptCache();
 });
 
 describe("cron task runner", () => {
@@ -132,6 +145,52 @@ describe("cron task runner", () => {
       status: "success",
       taskId: expect.any(String),
     });
+  });
+
+  it("keeps the task prompt unchanged when no output contract is configured", async () => {
+    const { runTask } = await import("../runner-task.js");
+    mocks.executeTask.mockResolvedValue({
+      success: true,
+      sessionId: "codex:thread-1",
+      costUsd: 0,
+      durationMs: 1000,
+      turns: 1,
+      result: "ok",
+    });
+
+    await runTask(taskJob(), client());
+
+    const taskInput = mocks.executeTask.mock.calls[0]?.[0] as { prompt?: string } | undefined;
+    expect(taskInput?.prompt).toBe("[cron:daily-ai-news]\n\nsummarize AI news");
+  });
+
+  it("injects a rendered output contract into createTask and executeTask prompts", async () => {
+    const { runTask } = await import("../runner-task.js");
+    mocks.executeTask.mockResolvedValue({
+      success: true,
+      sessionId: "codex:thread-1",
+      costUsd: 0,
+      durationMs: 1000,
+      turns: 1,
+      result: "## Summary\nok",
+    });
+
+    await runTask({
+      ...taskJob(),
+      output_contract: {
+        template: "markdown-report-v1",
+        vars: { audience: "operator" },
+        validator: "none",
+      },
+    }, client());
+
+    const createdTask = mocks.createTask.mock.calls[0]?.[0] as { prompt?: string } | undefined;
+    const taskInput = mocks.executeTask.mock.calls[0]?.[0] as { prompt?: string } | undefined;
+    expect(createdTask?.prompt).toBe(taskInput?.prompt);
+    expect(taskInput?.prompt).toContain('<cron_output_contract template="markdown-report-v1" validator="none">');
+    expect(taskInput?.prompt).toContain("Use Markdown suitable for operator readers.");
+    expect(taskInput?.prompt).toContain("## Key Findings");
+    expect(taskInput?.prompt).toContain("summarize AI news");
   });
 
   it("uses a daily message group reporter when configured", async () => {

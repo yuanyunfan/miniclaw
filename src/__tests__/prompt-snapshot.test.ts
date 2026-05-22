@@ -5,6 +5,7 @@ import { __testables as chatT } from "../agent/chat.js";
 import { __testables as extractT } from "../memory/extract.js";
 import { __testables as stageT } from "../stage/stage-manager.js";
 import { __testables as cronT } from "../cron/runner-task.js";
+import { buildCronOutputContractBlock } from "../cron/output-contract.js";
 import { config } from "../config.js";
 
 function hash(s: string): string {
@@ -66,6 +67,16 @@ describe("prompt snapshot baseline", () => {
   it("cron.taskPrompt.fixture", () => {
     const out = cronT.buildCronTaskPrompt("morning-brief", "PRE_CTX\n\n", "do the thing");
     expect(hash(out)).toMatchInlineSnapshot(`"a822eed2bd677d6f"`);
+  });
+
+  it("cron.taskPrompt.outputContract.fixture", () => {
+    const outputContract = buildCronOutputContractBlock({
+      template: "markdown-report-v1",
+      validator: "none",
+      renderedTemplate: "## Summary\nReport first.",
+    });
+    const out = cronT.buildCronTaskPrompt("morning-brief", "", "do the thing", outputContract);
+    expect(hash(out)).toMatchInlineSnapshot(`"048ff9782d823df7"`);
   });
 
   it("cron.skillPrompt.fixture (无 args)", () => {

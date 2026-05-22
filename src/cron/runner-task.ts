@@ -21,6 +21,11 @@ import type { MarketContextProviderPayload } from "../stock/data/market-context-
 import type { MarketIntelPayload } from "../stock/data/market-intel-types.js";
 import { DRAINING_MESSAGE, isDraining } from "../runtime/shutdown.js";
 import { DailyMessageGroupReporter } from "./daily-message-group-reporter.js";
+import {
+  buildCronOutputContractBlock,
+  resolveCronOutputContract,
+  validateCronTaskOutput,
+} from "./output-contract.js";
 
 const log = createLogger("cron");
 import { homedir } from "node:os";
@@ -115,10 +120,16 @@ function buildCronPreProviderBlock(providerName: string, output: string): string
   return loadPrompt("templates/cron-pre-provider-block", { provider_name: providerName, output: truncated }) + "\n\n";
 }
 
-function buildCronTaskPrompt(jobName: string, prependedContext: string, renderedPrompt: string): string {
+function buildCronTaskPrompt(
+  jobName: string,
+  prependedContext: string,
+  renderedPrompt: string,
+  outputContract = "",
+): string {
   return loadPrompt("templates/cron-task-prompt", {
     job_name: jobName,
     prepended_context: prependedContext,
+    output_contract: outputContract,
     user_prompt: renderedPrompt,
   });
 }
@@ -542,7 +553,9 @@ export async function runTask(job: CronJobTask, client: Client, context: CronJob
 
   throwIfAborted(context.signal);
   const renderedPrompt = renderTemplate(job.prompt, { "cron.name": job.name });
-  const prompt = buildCronTaskPrompt(job.name, prependedContext, renderedPrompt);
+  const outputContract = resolveCronOutputContract(job);
+  const outputContractBlock = buildCronOutputContractBlock(outputContract);
+  const prompt = buildCronTaskPrompt(job.name, prependedContext, renderedPrompt, outputContractBlock);
 
   assertNotDraining(job.name);
   createTask({
@@ -608,6 +621,18 @@ export async function runTask(job: CronJobTask, client: Client, context: CronJob
       ...(job.pre_provider ? { providerName: job.pre_provider, providerStatus: "failed" } : {}),
     });
   }
+  assertTaskResultOk(job.name, result, {
+    taskId,
+    ...(job.pre_provider ? { providerName: job.pre_provider, providerStatus: "failed" } : {}),
+  });
+  const outputValidation = validateCronTaskOutput(outputContract, result.result);
+  if (!outputValidation.ok) {
+    throw new CronTaskRunError(`${job.name} output validation failed: ${outputValidation.message}`, {
+      taskId,
+      errorCategory: outputValidation.category,
+      ...(job.pre_provider ? { providerName: job.pre_provider, providerStatus: "failed" } : {}),
+    });
+  }
   if (marketForecastId) {
     const extraction = updateMarketForecastReport(marketForecastId, result.result);
     reporter.contextCaptured({
@@ -642,10 +667,6 @@ export async function runTask(job: CronJobTask, client: Client, context: CronJob
       throw new CronTaskRunError(`${job.name} market-context update did not include a valid <market_context_json> block`, { taskId });
     }
   }
-  assertTaskResultOk(job.name, result, {
-    taskId,
-    ...(job.pre_provider ? { providerName: job.pre_provider, providerStatus: "failed" } : {}),
-  });
   await sendExtraCronResultDelivery(
     client,
     job,

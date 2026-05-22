@@ -10,6 +10,8 @@ import type {
   CronJobLoadResult,
   CronJobMissedRunConfig,
   CronJobPreContextProvider,
+  CronTaskOutputContractConfig,
+  CronTaskOutputContractValidator,
   CronTaskResultDeliveryConfig,
   CronTaskResultDeliveryMode,
   CronJobType,
@@ -21,6 +23,8 @@ const CRON_DIR_DEFAULT = join(homedir(), ".miniclaw/cron");
 const VALID_TYPES: CronJobType[] = ["task", "script", "skill", "message"];
 const VALID_PRE_PROVIDER_PREFLIGHT_MODES: PreProviderPreflightMode[] = ["off", "health", "dry_run"];
 const VALID_TASK_RESULT_DELIVERY_MODES: CronTaskResultDeliveryMode[] = ["daily_message_group"];
+const VALID_TASK_OUTPUT_CONTRACT_VALIDATORS: CronTaskOutputContractValidator[] = ["none"];
+const OUTPUT_TEMPLATE_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 const MAX_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 const MAX_CONCURRENCY = 50;
 const MAX_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
@@ -227,6 +231,66 @@ function parseTaskResultDeliveryConfig(value: unknown, file: string): CronTaskRe
   };
 }
 
+function parseOutputTemplateId(value: unknown, file: string, field: string): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`${file}: '${field}' 必须是模板 id`);
+  }
+  const template = value.trim();
+  if (!OUTPUT_TEMPLATE_ID_RE.test(template) || template.includes("..")) {
+    throw new Error(`${file}: '${field}' 只能是 slug（${OUTPUT_TEMPLATE_ID_RE.source}），不能包含路径或 '..'`);
+  }
+  return template;
+}
+
+function parseOutputContractVars(value: unknown, file: string, field: string): Record<string, string> | undefined {
+  if (value === undefined) return undefined;
+  if (!isPlainObject(value)) throw new Error(`${file}: '${field}' 必须是对象`);
+  return Object.fromEntries(Object.entries(value).map(([key, raw]) => {
+    if (raw === null || typeof raw === "object") {
+      throw new Error(`${file}: '${field}.${key}' 必须是字符串、数字或 boolean`);
+    }
+    return [key, String(raw)];
+  }));
+}
+
+function parseTaskOutputContractConfig(raw: Record<string, unknown>, file: string): CronTaskOutputContractConfig | undefined {
+  const shorthandTemplate = raw.output_template;
+  const shorthandVars = raw.output_template_vars;
+  const advanced = raw.output_contract;
+  if (shorthandTemplate !== undefined && advanced !== undefined) {
+    throw new Error(`${file}: 'output_template' 和 'output_contract' 不能同时配置`);
+  }
+  if (shorthandVars !== undefined && shorthandTemplate === undefined) {
+    throw new Error(`${file}: 'output_template_vars' 需要同时配置 'output_template'`);
+  }
+  if (shorthandTemplate !== undefined) {
+    const vars = parseOutputContractVars(shorthandVars, file, "output_template_vars");
+    return {
+      template: parseOutputTemplateId(shorthandTemplate, file, "output_template"),
+      ...(vars ? { vars } : {}),
+      validator: "none",
+    };
+  }
+  if (advanced === undefined) return undefined;
+  if (!isPlainObject(advanced)) throw new Error(`${file}: 'output_contract' 必须是对象`);
+  const template = parseOutputTemplateId(advanced.template, file, "output_contract.template");
+  const vars = parseOutputContractVars(advanced.vars, file, "output_contract.vars");
+  if (advanced.validator !== undefined && typeof advanced.validator !== "string") {
+    throw new Error(`${file}: 'output_contract.validator' 必须是 ${VALID_TASK_OUTPUT_CONTRACT_VALIDATORS.join("|")}`);
+  }
+  const validator = typeof advanced.validator === "string" && advanced.validator.trim()
+    ? advanced.validator.trim()
+    : "none";
+  if (!VALID_TASK_OUTPUT_CONTRACT_VALIDATORS.includes(validator as CronTaskOutputContractValidator)) {
+    throw new Error(`${file}: 'output_contract.validator' 必须是 ${VALID_TASK_OUTPUT_CONTRACT_VALIDATORS.join("|")}`);
+  }
+  return {
+    template,
+    ...(vars ? { vars } : {}),
+    validator: validator as CronTaskOutputContractValidator,
+  };
+}
+
 function parseProviderName(value: unknown, file: string, field: string): string {
   if (typeof value !== "string" || !value.trim()) {
     throw new Error(`${file}: '${field}' 必须是 provider 名称`);
@@ -317,6 +381,7 @@ function validateJob(raw: unknown, file: string): CronJob {
   if (type === "task") {
     if (typeof r.prompt !== "string" || !r.prompt.trim()) throw new Error(`${file}: type=task 需 'prompt'`);
     const resultDelivery = parseTaskResultDeliveryConfig(r.result_delivery, file);
+    const outputContract = parseTaskOutputContractConfig(r, file);
     const preScript = typeof r.pre_script === "string" ? r.pre_script.trim() : undefined;
     const preProvider = typeof r.pre_provider === "string" ? r.pre_provider.trim() : undefined;
     if (preScript && preProvider) {
@@ -352,6 +417,7 @@ function validateJob(raw: unknown, file: string): CronJob {
       prompt: r.prompt.trim(),
       cwd: typeof r.cwd === "string" ? r.cwd : undefined,
       ...(resultDelivery ? { result_delivery: resultDelivery } : {}),
+      ...(outputContract ? { output_contract: outputContract } : {}),
       ...(preContextProviders ? { pre_context_providers: preContextProviders } : {}),
       ...(preScript ? {
         pre_script: preScript,

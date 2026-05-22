@@ -67,6 +67,19 @@ describe("loadPrompt", () => {
     expect(loadPrompt("plain")).toBe("plain text only");
   });
 
+  it("repo cron output template validates declared vars", () => {
+    const out = loadPrompt("templates/cron-output/markdown-report-v1", { audience: "operator" });
+    expect(out).toContain("Use Markdown suitable for operator readers.");
+    expect(out).toContain("## Summary");
+  });
+
+  it("repo cron output template rejects undeclared caller vars", () => {
+    expect(() => loadPrompt("templates/cron-output/markdown-report-v1", {
+      audience: "operator",
+      extra: "nope",
+    })).toThrow(/undeclared vars/);
+  });
+
   it("热重载：mtime 变化后重新读", () => {
     write("hot.md", "---\ndescription: x\nvars: []\n---\nv1");
     expect(loadPrompt("hot")).toBe("v1");

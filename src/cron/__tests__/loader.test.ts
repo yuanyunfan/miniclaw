@@ -199,6 +199,78 @@ prompt: "整理浏览器标签页"
     }
   });
 
+  it("解析 type=task + output_template shorthand", () => {
+    write("daily-report.yaml", `
+name: daily-report
+schedule: "0 9 * * *"
+enabled: true
+type: task
+channel: "${VALID_CHANNEL}"
+output_template: markdown-report-v1
+output_template_vars:
+  audience: personal
+prompt: "整理日报"
+`);
+    const r = loadCronJobs();
+    expect(r.errors).toEqual([]);
+    expect(r.jobs.length).toBe(1);
+    const j = r.jobs[0];
+    expect(j.type).toBe("task");
+    if (j.type === "task") {
+      expect(j.output_contract).toEqual({
+        template: "markdown-report-v1",
+        vars: { audience: "personal" },
+        validator: "none",
+      });
+    }
+  });
+
+  it("解析 type=task + output_contract advanced config", () => {
+    write("daily-report.yaml", `
+name: daily-report
+schedule: "0 9 * * *"
+enabled: true
+type: task
+channel: "${VALID_CHANNEL}"
+output_contract:
+  template: markdown-report-v1
+  vars:
+    audience: operator
+  validator: none
+prompt: "整理日报"
+`);
+    const r = loadCronJobs();
+    expect(r.errors).toEqual([]);
+    expect(r.jobs.length).toBe(1);
+    const j = r.jobs[0];
+    expect(j.type).toBe("task");
+    if (j.type === "task") {
+      expect(j.output_contract).toEqual({
+        template: "markdown-report-v1",
+        vars: { audience: "operator" },
+        validator: "none",
+      });
+    }
+  });
+
+  it("未配置 output contract 时 type=task 保持不带 output_contract", () => {
+    write("plain-task.yaml", `
+name: plain-task
+schedule: "0 9 * * *"
+enabled: true
+type: task
+channel: "${VALID_CHANNEL}"
+prompt: "整理日报"
+`);
+    const r = loadCronJobs();
+    expect(r.errors).toEqual([]);
+    const j = r.jobs[0];
+    expect(j.type).toBe("task");
+    if (j.type === "task") {
+      expect(j.output_contract).toBeUndefined();
+    }
+  });
+
   it("解析同一 job 的多条 schedule", () => {
     write("market-pulse.yaml", `
 name: market-pulse
@@ -450,6 +522,49 @@ prompt: hi
 `);
     const r = loadCronJobs();
     expect(r.errors[0].error).toMatch(/result_delivery\.mode/);
+  });
+
+  it("同时配置 output_template 和 output_contract → 拒绝", () => {
+    write("bad-output-contract.yaml", `
+name: x
+schedule: "0 9 * * *"
+type: task
+channel: "${VALID_CHANNEL}"
+output_template: markdown-report-v1
+output_contract:
+  template: markdown-report-v1
+prompt: hi
+`);
+    const r = loadCronJobs();
+    expect(r.errors[0].error).toMatch(/output_template.*output_contract/);
+  });
+
+  it("非法 output_template id → 拒绝", () => {
+    write("bad-output-template.yaml", `
+name: x
+schedule: "0 9 * * *"
+type: task
+channel: "${VALID_CHANNEL}"
+output_template: ../secret
+prompt: hi
+`);
+    const r = loadCronJobs();
+    expect(r.errors[0].error).toMatch(/output_template.*slug/);
+  });
+
+  it("未知 output_contract.validator → 拒绝", () => {
+    write("bad-output-validator.yaml", `
+name: x
+schedule: "0 9 * * *"
+type: task
+channel: "${VALID_CHANNEL}"
+output_contract:
+  template: markdown-report-v1
+  validator: headings
+prompt: hi
+`);
+    const r = loadCronJobs();
+    expect(r.errors[0].error).toMatch(/output_contract\.validator/);
   });
 
   it("timeout_sec > 1800 → 拒绝", () => {
