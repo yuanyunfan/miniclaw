@@ -250,6 +250,7 @@ Runtime boundary:
 
 - Agent Run Manager is task-scoped orchestration, not the default chat path.
 - It owns managed child runtime scheduling, Agent Bus state, final synthesis, ACP lifecycle, and managed runtime routing.
+- Optional `agent_run_manager.model_routing` can choose provider/model/reasoning per child role, so planner can use a stronger model while generator/evaluator use cheaper models. Escalation can retry later generator turns with a stronger model after runtime failure or evaluator `FAIL`.
 - Child runtimes receive injected task context through controlled adapters, not arbitrary access to live MiniClaw state.
 - Final synthesis should cite child outcomes and preserve failed/partial child state.
 - Sweeper and guardrails must prevent stuck runs and unbounded child-runtime growth.

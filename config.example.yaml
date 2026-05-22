@@ -83,6 +83,35 @@ agent_run_manager:
   max_ping_pong_turns: 8
   cleanup_ttl_ms: 86400000 # 24 hours, used by sweeper/recovery cleanup
   max_fix_iterations: 2
+  model_routing:
+    # Role-aware model routing for managed child runs. Disabled by default so
+    # normal Agent Run Manager behavior keeps using runtime.default_agent.
+    enabled: false
+    defaults:
+      provider: inherit # inherit | claude | codex
+      model: inherit
+    roles:
+      planner:
+        provider: codex
+        model: gpt-5.5
+        reasoning_effort: high
+      generator:
+        provider: codex
+        model: gpt-5-mini
+        reasoning_effort: medium
+      evaluator:
+        provider: codex
+        model: gpt-5-mini
+        reasoning_effort: medium
+    escalation:
+      # When enabled, a failing or rejected generator turn can retry once with
+      # the escalation override instead of rerunning the planner.
+      enabled: false
+      roles: [generator]
+      provider: codex
+      model: gpt-5.5
+      reasoning_effort: high
+      max_attempts: 1
   acp:
     # Task-scoped localhost ACP-style server. Disabled by default; when enabled
     # it starts only for managed tasks and stops when the task completes.

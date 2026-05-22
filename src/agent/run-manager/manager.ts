@@ -14,9 +14,11 @@ import {
   type DiscordRouteState,
 } from "../../store/agent-run-manager.js";
 import type { AgentRuntime } from "../../runtime/agent-runtime.js";
-import type { AgentTaskResult } from "../../runtime/agent-runtime.js";
+import type { AgentTaskResult, AgentTaskRuntimeOverride } from "../../runtime/agent-runtime.js";
+import type { AgentProvider } from "../../config/types.js";
 import { taskViewEvents, type TaskViewEvent } from "../task-view-events.js";
 import type { TaskReporter } from "../task-reporter.js";
+import { getAgentRuntime, isAgentRuntimeId } from "../runtimes/registry.js";
 import { AgentBus } from "./bus.js";
 import {
   extractManagedChildEnvelope,
@@ -28,6 +30,11 @@ import {
 import { createManagedAgentBusContext } from "./mcp/injection.js";
 import { resolveAgentRunManagerPolicy, type AgentRunManagerPolicy, type AgentRunManagerPolicyInput } from "./policy.js";
 import { buildManagedRuntimeRolePolicy } from "./role-policy.js";
+import {
+  canEscalateManagedRole,
+  resolveManagedModelRoute,
+  type AgentRunManagerModelRoutingConfig,
+} from "./model-routing.js";
 import {
   AgentRunScheduler,
   createDagExecutionBatches,
@@ -64,6 +71,7 @@ export interface AgentRunManagerParams {
   statusMessage?: Message;
   deliveryChannelId?: string;
   policy?: AgentRunManagerPolicyInput;
+  modelRouting?: AgentRunManagerModelRoutingConfig;
   acp?: AgentRunAcpLifecycleConfig;
 }
 
@@ -77,6 +85,7 @@ export interface ManagedRuntimeRunInput {
   prompt: string;
   signal: AbortSignal;
   runtime: AgentRuntime;
+  runtimeResolver?: (provider: AgentProvider) => AgentRuntime;
   onViewEvent: (event: TaskViewEvent) => Promise<void> | void;
   maxFixIterations?: number;
   schedulerPlan?: ManagedDagPlanInput;
@@ -86,6 +95,7 @@ interface SpawnInput {
   parent: AgentRun;
   role: string;
   toolPolicyId: string;
+  runtime?: AgentRuntimeId;
   controlScope?: AgentControlScope;
   contextMode?: AgentContextMode;
   canSpawn?: boolean;
@@ -100,6 +110,13 @@ interface ManagedChildTurn {
   envelope: ManagedChildEnvelope;
   messages: AgentMessage[];
   artifactIds: string[];
+}
+
+interface PreparedManagedChild {
+  run: AgentRun;
+  runtime: AgentRuntime;
+  runtimeOverride?: AgentTaskRuntimeOverride;
+  escalated: boolean;
 }
 
 const MANAGED_ROLE_CAPABILITIES: Record<string, Pick<SpawnInput, "toolPolicyId" | "canWriteWorkspace" | "canSendKinds" | "canReceiveKinds">> = {
@@ -402,15 +419,23 @@ export class AgentRunManager {
         return this.cancelledResult(startedAt, sessionId);
       }
 
-      const planner = this.spawnManagedRole(root, "planner");
+      let generatorEscalationAttempts = 0;
+      const planner = this.prepareManagedRole({
+        parent: root,
+        role: "planner",
+        baseRuntime: input.runtime,
+        runtimeResolver: input.runtimeResolver,
+      });
       const { result: plannerTurn } = await scheduler.yieldUntilChildEvent({
         currentStep: "planner",
-        childRunId: planner.id,
+        childRunId: planner.run.id,
         waitKinds: ["handoff"],
         signal: input.signal,
         runChild: () => this.runProviderChild({
-          run: planner,
-          runtime: input.runtime,
+          run: planner.run,
+          runtime: planner.runtime,
+          ...(planner.runtimeOverride ? { runtimeOverride: planner.runtimeOverride } : {}),
+          ...(planner.escalated ? { escalated: planner.escalated } : {}),
           prompt: this.buildChildPrompt({
             role: "planner",
             taskPrompt: input.prompt,
@@ -430,16 +455,23 @@ export class AgentRunManager {
 
       let totalCostUsd = plannerTurn.result.costUsd;
       let totalTurns = plannerTurn.result.turns;
-      const firstGenerator = this.spawnManagedRole(root, "generator");
+      let firstGenerator = this.prepareManagedRole({
+        parent: root,
+        role: "generator",
+        baseRuntime: input.runtime,
+        runtimeResolver: input.runtimeResolver,
+      });
       let generatorTurn = (await scheduler.yieldUntilChildEvent({
         currentStep: "generator",
-        childRunId: firstGenerator.id,
+        childRunId: firstGenerator.run.id,
         waitKinds: ["artifact", "finding"],
         signal: input.signal,
         runChild: () => this.runGeneratorTurn({
           root,
-          run: firstGenerator,
-          runtime: input.runtime,
+          run: firstGenerator.run,
+          runtime: firstGenerator.runtime,
+          ...(firstGenerator.runtimeOverride ? { runtimeOverride: firstGenerator.runtimeOverride } : {}),
+          ...(firstGenerator.escalated ? { escalated: firstGenerator.escalated } : {}),
           taskPrompt: input.prompt,
           plannerSummary: plannerTurn.envelope.summary,
           signal: input.signal,
@@ -451,6 +483,43 @@ export class AgentRunManager {
       totalCostUsd += generatorTurn.result.costUsd;
       totalTurns += generatorTurn.result.turns;
       if (input.signal.aborted) return this.cancelledResult(startedAt, sessionId);
+      if (!generatorTurn.result.success && this.canEscalate("generator", generatorEscalationAttempts)) {
+        generatorEscalationAttempts++;
+        this.params.reporter.event("agent_model_escalated", {
+          severity: "warning",
+          message: "generator failed; retrying with escalation model",
+          payload: { role: "generator", attempt: generatorEscalationAttempts },
+        });
+        firstGenerator = this.prepareManagedRole({
+          parent: root,
+          role: "generator",
+          baseRuntime: input.runtime,
+          runtimeResolver: input.runtimeResolver,
+          escalated: true,
+        });
+        generatorTurn = (await scheduler.yieldUntilChildEvent({
+          currentStep: `generator:escalated:${generatorEscalationAttempts}`,
+          childRunId: firstGenerator.run.id,
+          waitKinds: ["artifact", "finding"],
+          signal: input.signal,
+          runChild: () => this.runGeneratorTurn({
+            root,
+            run: firstGenerator.run,
+            runtime: firstGenerator.runtime,
+            ...(firstGenerator.runtimeOverride ? { runtimeOverride: firstGenerator.runtimeOverride } : {}),
+            ...(firstGenerator.escalated ? { escalated: firstGenerator.escalated } : {}),
+            taskPrompt: input.prompt,
+            plannerSummary: plannerTurn.envelope.summary,
+            signal: input.signal,
+            onViewEvent: input.onViewEvent,
+          }),
+          shouldWaitForResult: (turn) => turn.result.success,
+          ensureCompletionMessage: (turn) => this.ensureSchedulerWakeMessage(root, turn, ["artifact", "finding"]),
+        })).result;
+        totalCostUsd += generatorTurn.result.costUsd;
+        totalTurns += generatorTurn.result.turns;
+      }
+      if (input.signal.aborted) return this.cancelledResult(startedAt, sessionId);
       if (!generatorTurn.result.success) {
         scheduler.fail("generator", `generator failed: ${generatorTurn.result.result}`);
         return this.failedResult(startedAt, sessionId, root.id, `generator failed: ${generatorTurn.result.result}`);
@@ -460,16 +529,23 @@ export class AgentRunManager {
       let finalSummary = "";
       let finalFixList: string[] = [];
       for (let iteration = 0; iteration <= maxFixIterations; iteration++) {
-        const evaluator = this.spawnManagedRole(root, "evaluator");
+        const evaluator = this.prepareManagedRole({
+          parent: root,
+          role: "evaluator",
+          baseRuntime: input.runtime,
+          runtimeResolver: input.runtimeResolver,
+        });
         const evaluatorStep = `evaluator:${iteration}`;
         const evaluatorTurn = (await scheduler.yieldUntilChildEvent({
           currentStep: evaluatorStep,
-          childRunId: evaluator.id,
+          childRunId: evaluator.run.id,
           waitKinds: ["verdict"],
           signal: input.signal,
           runChild: () => this.runProviderChild({
-            run: evaluator,
-            runtime: input.runtime,
+            run: evaluator.run,
+            runtime: evaluator.runtime,
+            ...(evaluator.runtimeOverride ? { runtimeOverride: evaluator.runtimeOverride } : {}),
+            ...(evaluator.escalated ? { escalated: evaluator.escalated } : {}),
             prompt: this.buildChildPrompt({
               role: "evaluator",
               taskPrompt: input.prompt,
@@ -529,16 +605,33 @@ export class AgentRunManager {
         }
 
         if (iteration >= maxFixIterations) break;
-        const fixGenerator = this.spawnManagedRole(root, "generator");
+        const shouldEscalateFix = this.canEscalate("generator", generatorEscalationAttempts);
+        if (shouldEscalateFix) {
+          generatorEscalationAttempts++;
+          this.params.reporter.event("agent_model_escalated", {
+            severity: "warning",
+            message: "evaluator returned FAIL; retrying generator with escalation model",
+            payload: { role: "generator", attempt: generatorEscalationAttempts, verdict: finalVerdict },
+          });
+        }
+        const fixGenerator = this.prepareManagedRole({
+          parent: root,
+          role: "generator",
+          baseRuntime: input.runtime,
+          runtimeResolver: input.runtimeResolver,
+          escalated: shouldEscalateFix,
+        });
         generatorTurn = (await scheduler.yieldUntilChildEvent({
           currentStep: `generator:fix:${iteration + 1}`,
-          childRunId: fixGenerator.id,
+          childRunId: fixGenerator.run.id,
           waitKinds: ["artifact", "finding"],
           signal: input.signal,
           runChild: () => this.runGeneratorTurn({
             root,
-            run: fixGenerator,
-            runtime: input.runtime,
+            run: fixGenerator.run,
+            runtime: fixGenerator.runtime,
+            ...(fixGenerator.runtimeOverride ? { runtimeOverride: fixGenerator.runtimeOverride } : {}),
+            ...(fixGenerator.escalated ? { escalated: fixGenerator.escalated } : {}),
             taskPrompt: input.prompt,
             plannerSummary: plannerTurn.envelope.summary,
             fixList: evaluatorTurn.envelope.fix_list ?? ["Evaluator returned FAIL without a structured fix list."],
@@ -550,6 +643,44 @@ export class AgentRunManager {
         })).result;
         totalCostUsd += generatorTurn.result.costUsd;
         totalTurns += generatorTurn.result.turns;
+        if (input.signal.aborted) return this.cancelledResult(startedAt, sessionId);
+        if (!generatorTurn.result.success && this.canEscalate("generator", generatorEscalationAttempts)) {
+          generatorEscalationAttempts++;
+          this.params.reporter.event("agent_model_escalated", {
+            severity: "warning",
+            message: "generator fix failed; retrying with escalation model",
+            payload: { role: "generator", attempt: generatorEscalationAttempts },
+          });
+          const retryGenerator = this.prepareManagedRole({
+            parent: root,
+            role: "generator",
+            baseRuntime: input.runtime,
+            runtimeResolver: input.runtimeResolver,
+            escalated: true,
+          });
+          generatorTurn = (await scheduler.yieldUntilChildEvent({
+            currentStep: `generator:fix:${iteration + 1}:escalated:${generatorEscalationAttempts}`,
+            childRunId: retryGenerator.run.id,
+            waitKinds: ["artifact", "finding"],
+            signal: input.signal,
+            runChild: () => this.runGeneratorTurn({
+              root,
+              run: retryGenerator.run,
+              runtime: retryGenerator.runtime,
+              ...(retryGenerator.runtimeOverride ? { runtimeOverride: retryGenerator.runtimeOverride } : {}),
+              ...(retryGenerator.escalated ? { escalated: retryGenerator.escalated } : {}),
+              taskPrompt: input.prompt,
+              plannerSummary: plannerTurn.envelope.summary,
+              fixList: evaluatorTurn.envelope.fix_list ?? ["Evaluator returned FAIL without a structured fix list."],
+              signal: input.signal,
+              onViewEvent: input.onViewEvent,
+            }),
+            shouldWaitForResult: (turn) => turn.result.success,
+            ensureCompletionMessage: (turn) => this.ensureSchedulerWakeMessage(root, turn, ["artifact", "finding"]),
+          })).result;
+          totalCostUsd += generatorTurn.result.costUsd;
+          totalTurns += generatorTurn.result.turns;
+        }
         if (input.signal.aborted) return this.cancelledResult(startedAt, sessionId);
         if (!generatorTurn.result.success) {
           scheduler.fail(`generator:fix:${iteration + 1}`, `generator fix failed: ${generatorTurn.result.result}`);
@@ -650,15 +781,22 @@ export class AgentRunManager {
 
         for (const node of batch) {
           if (input.signal.aborted) return this.cancelledResult(startedAt, sessionId);
-          const child = this.spawnManagedRole(root, node.role);
+          const child = this.prepareManagedRole({
+            parent: root,
+            role: node.role,
+            baseRuntime: input.runtime,
+            runtimeResolver: input.runtimeResolver,
+          });
           const turn = (await scheduler.yieldUntilChildEvent({
             currentStep: `dag:${node.id}`,
-            childRunId: child.id,
+            childRunId: child.run.id,
             waitKinds: node.waits_for,
             signal: input.signal,
             runChild: () => this.runProviderChild({
-              run: child,
-              runtime: input.runtime,
+              run: child.run,
+              runtime: child.runtime,
+              ...(child.runtimeOverride ? { runtimeOverride: child.runtimeOverride } : {}),
+              ...(child.escalated ? { escalated: child.escalated } : {}),
               prompt: this.buildChildPrompt({
                 role: node.role,
                 taskPrompt: input.prompt,
@@ -863,7 +1001,7 @@ export class AgentRunManager {
       controllerRunId: input.parent.id,
       requesterRunId: input.parent.id,
       role: input.role,
-      runtime: this.params.provider,
+      runtime: input.runtime ?? this.params.provider,
       controlScope: input.controlScope ?? "child",
       contextMode: input.contextMode ?? "isolated",
       cwd: this.params.cwd,
@@ -873,7 +1011,7 @@ export class AgentRunManager {
       canSendKinds: input.canSendKinds ?? [],
       canReceiveKinds: input.canReceiveKinds ?? [],
       spawnDepth,
-      providerSessionId: `${this.params.provider}:${input.role}:${this.params.taskId}`,
+      providerSessionId: `${input.runtime ?? this.params.provider}:${input.role}:${this.params.taskId}`,
     });
     this.params.reporter.event("agent_run_started", {
       payload: {
@@ -887,20 +1025,49 @@ export class AgentRunManager {
     return run;
   }
 
-  private spawnManagedRole(parent: AgentRun, role: string): AgentRun {
+  private spawnManagedRole(parent: AgentRun, role: string, options: { runtime?: AgentRuntimeId } = {}): AgentRun {
     const capabilities = MANAGED_ROLE_CAPABILITIES[role];
     if (!capabilities) throw new Error(`Unknown managed role: ${role}`);
     return this.spawnAgent({
       parent,
       role,
+      ...(options.runtime ? { runtime: options.runtime } : {}),
       ...capabilities,
     });
+  }
+
+  private prepareManagedRole(input: {
+    parent: AgentRun;
+    role: string;
+    baseRuntime: AgentRuntime;
+    runtimeResolver?: (provider: AgentProvider) => AgentRuntime;
+    escalated?: boolean;
+  }): PreparedManagedChild {
+    const route = resolveManagedModelRoute(this.params.modelRouting, input.role, { escalated: input.escalated });
+    const provider = route.runtimeOverride?.provider;
+    const runtime = provider
+      ? (input.runtimeResolver ?? getAgentRuntime)(provider)
+      : input.baseRuntime;
+    const runtimeId = provider ?? (isAgentRuntimeId(runtime.id) ? runtime.id : this.params.provider);
+    const run = this.spawnManagedRole(input.parent, input.role, { runtime: runtimeId });
+    return {
+      run,
+      runtime,
+      ...(route.runtimeOverride ? { runtimeOverride: route.runtimeOverride } : {}),
+      escalated: route.escalated,
+    };
+  }
+
+  private canEscalate(role: string, attemptsUsed: number): boolean {
+    return canEscalateManagedRole(this.params.modelRouting, role, attemptsUsed);
   }
 
   private async runGeneratorTurn(input: {
     root: AgentRun;
     run?: AgentRun;
     runtime: AgentRuntime;
+    runtimeOverride?: AgentTaskRuntimeOverride;
+    escalated?: boolean;
     taskPrompt: string;
     plannerSummary?: string;
     fixList?: string[];
@@ -911,6 +1078,8 @@ export class AgentRunManager {
     return await this.runProviderChild({
       run: generator,
       runtime: input.runtime,
+      ...(input.runtimeOverride ? { runtimeOverride: input.runtimeOverride } : {}),
+      ...(input.escalated ? { escalated: input.escalated } : {}),
       prompt: this.buildChildPrompt({
         role: "generator",
         taskPrompt: input.taskPrompt,
@@ -930,6 +1099,8 @@ export class AgentRunManager {
   private async runProviderChild(input: {
     run: AgentRun;
     runtime: AgentRuntime;
+    runtimeOverride?: AgentTaskRuntimeOverride;
+    escalated?: boolean;
     prompt: string;
     signal: AbortSignal;
     onViewEvent: (event: TaskViewEvent) => Promise<void> | void;
@@ -939,6 +1110,17 @@ export class AgentRunManager {
       title: `${input.run.role}: child run started`,
       countAsTool: false,
     }));
+    this.params.reporter.event("agent_model_resolved", {
+      payload: {
+        run_id: input.run.id,
+        role: input.run.role,
+        runtime: input.runtime.id,
+        provider: input.runtimeOverride?.provider ?? input.runtime.id,
+        model: input.runtimeOverride?.model ?? "inherit",
+        reasoning_effort: input.runtimeOverride?.reasoningEffort ?? "inherit",
+        escalated: Boolean(input.escalated),
+      },
+    });
     const managedContext = createManagedAgentBusContext({
       taskId: this.params.taskId,
       runId: input.run.id,
@@ -970,6 +1152,7 @@ export class AgentRunManager {
         prompt: promptWithLiveBus,
         cwd: this.params.cwd,
         managedContext,
+        ...(input.runtimeOverride ? { runtimeOverride: input.runtimeOverride } : {}),
         signal: childController.signal,
         onViewEvent: async (event) => {
           if (event.type === "task_completed" || event.type === "task_failed" || event.type === "session_started") return;

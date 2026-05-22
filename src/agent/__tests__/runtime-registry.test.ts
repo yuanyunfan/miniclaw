@@ -72,6 +72,11 @@ describe("agent runtime registry", () => {
           runId: "run-1",
           role: "planner",
         },
+        runtimeOverride: {
+          provider: "codex",
+          model: "gpt-test",
+          reasoningEffort: "high",
+        },
         signal,
         onViewEvent: () => undefined,
         onTraceEvent: () => undefined,
@@ -87,6 +92,11 @@ describe("agent runtime registry", () => {
           taskId: "task-1",
           runId: "run-1",
           role: "planner",
+        },
+        runtimeOverride: {
+          provider: "codex",
+          model: "gpt-test",
+          reasoningEffort: "high",
         },
         signal,
       }));

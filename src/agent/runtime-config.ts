@@ -17,6 +17,12 @@ export interface AgentRuntimeSummary {
   runtime: {
     defaultAgent: string;
   };
+  agentRunManager: {
+    modelRoutingEnabled: boolean;
+    modelRoutingRoles: string[];
+    escalationEnabled: boolean;
+    escalationRoles: string[];
+  };
   modelClient: {
     defaultClient: string;
     smartRouterClient: string;
@@ -137,6 +143,21 @@ export function getAgentRuntimeSummary(): AgentRuntimeSummary {
     runtime: {
       defaultAgent: config.runtime.defaultAgent,
     },
+    agentRunManager: {
+      modelRoutingEnabled: config.agentRunManager.modelRouting.enabled,
+      modelRoutingRoles: Object.entries(config.agentRunManager.modelRouting.roles)
+        .filter(([, override]) => Boolean(
+          override.provider ||
+          override.model ||
+          override.reasoningEffort ||
+          override.maxTurns !== undefined ||
+          override.budgetUsd !== undefined
+        ))
+        .map(([role, override]) => `${role}:${override.provider ?? "inherit"}/${override.model ?? "inherit"}`)
+        .sort(),
+      escalationEnabled: config.agentRunManager.modelRouting.escalation.enabled,
+      escalationRoles: [...config.agentRunManager.modelRouting.escalation.roles],
+    },
     modelClient: {
       defaultClient: config.modelClient.defaultClient,
       smartRouterClient: config.smartRouter.llmClassifier.provider,
@@ -181,6 +202,8 @@ export function formatAgentRuntimeSummary(summary = getAgentRuntimeSummary()): s
   return [
     "**Agent Config**",
     `AgentRuntime: ${code(summary.runtime.defaultAgent)} / Model: ${code(summary.model)}`,
+    `Managed model routing: ${summary.agentRunManager.modelRoutingEnabled ? "enabled" : "disabled"} roles=${joinNames(summary.agentRunManager.modelRoutingRoles)}`,
+    `Managed escalation: ${summary.agentRunManager.escalationEnabled ? "enabled" : "disabled"} roles=${joinNames(summary.agentRunManager.escalationRoles)}`,
     `Legacy provider alias: ${code(summary.provider)}`,
     `ModelClient: default=${code(summary.modelClient.defaultClient)} smart-router=${code(summary.modelClient.smartRouterClient)}`,
     `IMTransport: default=${code(summary.transport.defaultTransport)} implemented=${joinNames(summary.transport.implemented)}`,

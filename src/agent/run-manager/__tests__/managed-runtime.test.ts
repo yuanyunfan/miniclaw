@@ -10,6 +10,7 @@ import { getAgentSchedulerState, listActiveFacts, listArtifactsForRun, listRunsF
 import type { AgentRuntime, AgentTaskInput, AgentTaskResult } from "../../../runtime/agent-runtime.js";
 import { TaskReporter } from "../../task-reporter.js";
 import { AgentRunManager } from "../manager.js";
+import type { AgentRunManagerModelRoutingConfig } from "../model-routing.js";
 
 let db: Database.Database;
 let tmp: string;
@@ -54,6 +55,22 @@ function fakeRuntime(results: AgentTaskResult[]): AgentRuntime {
     }),
   };
 }
+
+const modelRoutingFixture: AgentRunManagerModelRoutingConfig = {
+  enabled: true,
+  defaults: { provider: "codex" },
+  roles: {
+    planner: { model: "gpt-planner", reasoningEffort: "high" },
+    generator: { model: "gpt-generator", reasoningEffort: "medium" },
+    evaluator: { model: "gpt-evaluator", reasoningEffort: "low" },
+  },
+  escalation: {
+    enabled: true,
+    roles: ["generator"],
+    override: { provider: "codex", model: "gpt-escalated", reasoningEffort: "high" },
+    maxAttempts: 1,
+  },
+};
 
 beforeEach(() => {
   db = new Database(":memory:");
@@ -241,6 +258,114 @@ describe("AgentRunManager managed runtime fallback", () => {
       "workspace-write",
       "read-only",
     ]);
+  });
+
+  it("routes managed child runs through role-specific model overrides", async () => {
+    const childInputs: AgentTaskInput[] = [];
+    const resolvedProviders: string[] = [];
+    const runtime: AgentRuntime = {
+      id: "codex",
+      kind: "coding_agent",
+      capabilities: { resumeSession: true, cancel: true, toolEvents: true, workspaceWrite: true },
+      startTask: vi.fn(async (input) => {
+        childInputs.push(input);
+        if (childInputs.length === 1) return taskResult(envelope({ summary: "planner ready" }), "codex:planner");
+        if (childInputs.length === 2) return taskResult(envelope({ summary: "implementation" }), "codex:generator");
+        return taskResult(envelope({ summary: "accepted", verdict: "PASS" }), "codex:evaluator");
+      }),
+    };
+    const manager = new AgentRunManager({
+      taskId: "task-managed-runtime",
+      cwd: tmp,
+      provider: "codex",
+      reporter: new TaskReporter("task-managed-runtime"),
+      channel: fakeChannel() as never,
+      modelRouting: modelRoutingFixture,
+    });
+
+    const result = await manager.runManagedRuntime({
+      prompt: "managed runtime task",
+      runtime,
+      runtimeResolver: (provider) => {
+        resolvedProviders.push(provider);
+        return runtime;
+      },
+      signal: new AbortController().signal,
+      onViewEvent: () => undefined,
+    });
+
+    expect(result.success).toBe(true);
+    expect(resolvedProviders).toEqual(["codex", "codex", "codex"]);
+    expect(childInputs.map((input) => ({
+      role: input.managedContext?.role,
+      override: input.runtimeOverride,
+    }))).toEqual([
+      {
+        role: "planner",
+        override: { provider: "codex", model: "gpt-planner", reasoningEffort: "high" },
+      },
+      {
+        role: "generator",
+        override: { provider: "codex", model: "gpt-generator", reasoningEffort: "medium" },
+      },
+      {
+        role: "evaluator",
+        override: { provider: "codex", model: "gpt-evaluator", reasoningEffort: "low" },
+      },
+    ]);
+  });
+
+  it("escalates the next generator run after evaluator FAIL", async () => {
+    const childInputs: AgentTaskInput[] = [];
+    const runtime: AgentRuntime = {
+      id: "codex",
+      kind: "coding_agent",
+      capabilities: { resumeSession: true, cancel: true, toolEvents: true, workspaceWrite: true },
+      startTask: vi.fn(async (input) => {
+        childInputs.push(input);
+        if (childInputs.length === 1) return taskResult(envelope({ summary: "planner ready" }), "codex:planner");
+        if (childInputs.length === 2) return taskResult(envelope({ summary: "implementation" }), "codex:generator-1");
+        if (childInputs.length === 3) return taskResult(envelope({ summary: "needs fix", verdict: "FAIL", fix_list: ["revise"] }), "codex:evaluator-1");
+        if (childInputs.length === 4) return taskResult(envelope({ summary: "fixed implementation" }), "codex:generator-2");
+        return taskResult(envelope({ summary: "accepted", verdict: "PASS" }), "codex:evaluator-2");
+      }),
+    };
+    const manager = new AgentRunManager({
+      taskId: "task-managed-runtime",
+      cwd: tmp,
+      provider: "codex",
+      reporter: new TaskReporter("task-managed-runtime"),
+      channel: fakeChannel() as never,
+      modelRouting: modelRoutingFixture,
+    });
+
+    const result = await manager.runManagedRuntime({
+      prompt: "managed runtime task",
+      runtime,
+      runtimeResolver: () => runtime,
+      signal: new AbortController().signal,
+      maxFixIterations: 1,
+      onViewEvent: () => undefined,
+    });
+
+    expect(result.success).toBe(true);
+    expect(childInputs.map((input) => input.managedContext?.role)).toEqual([
+      "planner",
+      "generator",
+      "evaluator",
+      "generator",
+      "evaluator",
+    ]);
+    expect(childInputs[1]?.runtimeOverride).toMatchObject({
+      provider: "codex",
+      model: "gpt-generator",
+      reasoningEffort: "medium",
+    });
+    expect(childInputs[3]?.runtimeOverride).toMatchObject({
+      provider: "codex",
+      model: "gpt-escalated",
+      reasoningEffort: "high",
+    });
   });
 
   it("runs an opt-in arbitrary DAG scheduler plan with fan-out before generation", async () => {

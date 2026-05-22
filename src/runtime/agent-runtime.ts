@@ -1,4 +1,5 @@
 import type { TaskViewEvent } from "../agent/task-view-events.js";
+import type { AgentProvider, CodexReasoningEffort } from "../config/types.js";
 
 export type AgentRuntimeKind = "coding_agent";
 export type AgentRuntimeTraceSeverity = "info" | "warning" | "error";
@@ -68,6 +69,14 @@ export interface AgentTaskManagedContext {
   };
 }
 
+export interface AgentTaskRuntimeOverride {
+  provider?: AgentProvider;
+  model?: string;
+  reasoningEffort?: CodexReasoningEffort;
+  maxTurns?: number;
+  budgetUsd?: number;
+}
+
 export interface AgentTaskInput {
   taskId: string;
   prompt: string;
@@ -75,6 +84,7 @@ export interface AgentTaskInput {
   resumeSessionId?: string;
   attachments?: AgentTaskAttachments;
   managedContext?: AgentTaskManagedContext;
+  runtimeOverride?: AgentTaskRuntimeOverride;
   signal: AbortSignal;
   onViewEvent: (event: TaskViewEvent) => Promise<void> | void;
   onTraceEvent: (eventType: string, options?: AgentRuntimeTraceOptions) => void;

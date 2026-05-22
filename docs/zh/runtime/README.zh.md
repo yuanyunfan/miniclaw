@@ -3,7 +3,7 @@ doc_id: runtime-index
 lang: zh
 translation_of: docs/runtime/README.md
 translation_status: current
-source_sha256: 2a033e42f5825139236fcc5449b10d7ca09ec5ece3916472492ef9e503a7945d
+source_sha256: d9a297e77e361596105ed17d750aa1b628fc605aacaf86af190290a09b551800
 ---
 # MiniClaw Runtime 文档
 
@@ -257,6 +257,7 @@ Runtime boundary:
 
 - Agent Run Manager 是 task-scoped orchestration，不是默认 chat path。
 - 它负责 managed child runtime scheduling、Agent Bus state、final synthesis、ACP lifecycle 和 managed runtime routing。
+- 可选的 `agent_run_manager.model_routing` 可以按 child role 选择 provider/model/reasoning，让 planner 使用更强模型，同时让 generator/evaluator 使用更便宜模型。Escalation 可在 runtime failure 或 evaluator 返回 `FAIL` 后，用更强模型重试后续 generator turn。
 - Child runtime 通过受控 adapter 接收 injected task context，不能任意访问 live MiniClaw state。
 - Final synthesis 应引用 child outcomes，并保留 failed/partial child state。
 - Sweeper 和 guardrails 必须防止 stuck run 和无界 child-runtime 增长。

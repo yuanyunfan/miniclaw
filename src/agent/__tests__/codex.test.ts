@@ -127,6 +127,37 @@ describe("codexThreadOptions", () => {
       approvalPolicy: "never",
     });
   });
+
+  it("applies per-run model overrides while preserving managed sandbox policy", async () => {
+    process.env.MINICLAW_CODEX_MODEL = "gpt-global";
+    process.env.MINICLAW_CODEX_REASONING_EFFORT = "medium";
+    process.env.MINICLAW_CODEX_TASK_SANDBOX = "workspace-write";
+
+    const { codexThreadOptions } = await import("../codex.js");
+    const { buildManagedRuntimeRolePolicy } = await import("../run-manager/role-policy.js");
+    const opts = codexThreadOptions("task", "/tmp/project", {
+      taskId: "task-codex-model-route",
+      runId: "run-planner",
+      role: "planner",
+      rolePolicy: buildManagedRuntimeRolePolicy({
+        role: "planner",
+        toolPolicyId: "read-only",
+        canWriteWorkspace: false,
+      }),
+    }, {
+      provider: "codex",
+      model: "gpt-planner",
+      reasoningEffort: "high",
+    });
+
+    expect(opts).toMatchObject({
+      model: "gpt-planner",
+      modelReasoningEffort: "high",
+      sandboxMode: "read-only",
+      approvalPolicy: "never",
+      workingDirectory: "/tmp/project",
+    });
+  });
 });
 
 describe("codex managed Agent Bus overrides", () => {

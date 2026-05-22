@@ -176,6 +176,7 @@ export const claudeTaskRunner: TaskRunner = {
       prompt: promptParam,
       options: {
         model: config.claudeModel,
+        ...(input.runtimeOverride?.model ? { model: input.runtimeOverride.model } : {}),
         cwd: input.cwd,
         permissionMode: managedRolePolicy?.claude.permissionMode ?? "acceptEdits",
         settingSources: config.claude.settingSources,
@@ -229,8 +230,12 @@ export const claudeTaskRunner: TaskRunner = {
           }
           return { behavior: "allow" as const, updatedInput: toolInput };
         },
-        ...(config.defaultMaxTurns !== undefined ? { maxTurns: config.defaultMaxTurns } : {}),
-        ...(config.defaultBudgetUsd !== undefined ? { maxBudgetUsd: config.defaultBudgetUsd } : {}),
+        ...(input.runtimeOverride?.maxTurns !== undefined || config.defaultMaxTurns !== undefined
+          ? { maxTurns: input.runtimeOverride?.maxTurns ?? config.defaultMaxTurns }
+          : {}),
+        ...(input.runtimeOverride?.budgetUsd !== undefined || config.defaultBudgetUsd !== undefined
+          ? { maxBudgetUsd: input.runtimeOverride?.budgetUsd ?? config.defaultBudgetUsd }
+          : {}),
         abortController,
         ...(resumeRawId ? { resume: resumeRawId } : {}),
       },

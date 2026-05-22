@@ -1,5 +1,15 @@
 import type { ConfigReader } from "../env.js";
+import {
+  agentProviderValues,
+  codexReasoningEffortValues,
+  isPlainObject,
+} from "../schema.js";
+import type { AgentProvider, CodexReasoningEffort, ConfigPath } from "../types.js";
 import { DEFAULT_AGENT_RUN_MANAGER_POLICY } from "../../agent/run-manager/policy.js";
+import type {
+  AgentRunManagerModelRoutingConfig,
+  AgentRunManagerRoleModelOverride,
+} from "../../agent/run-manager/model-routing.js";
 
 const DEFAULT_AGENT_RUN_MANAGER_ACP_CONFIG = {
   enabled: false,
@@ -12,6 +22,171 @@ const DEFAULT_AGENT_RUN_MANAGER_ACP_CONFIG = {
   traceMaxEvents: 200,
   traceMaxBytes: 96_000,
 };
+
+const MODEL_ROUTING_KNOWN_ROLES = ["planner", "researcher", "generator", "evaluator", "final-synthesizer"] as const;
+
+function envPrefixForRole(role: string): string {
+  return `MINICLAW_AGENT_RUN_MANAGER_${role.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}`;
+}
+
+function parseStringOrInherit(raw: unknown, label: string, reader: ConfigReader): string | undefined {
+  const value = reader.scalarString(raw, label);
+  if (!value) return undefined;
+  return value.toLowerCase() === "inherit" ? undefined : value;
+}
+
+function parseProvider(raw: unknown, label: string, reader: ConfigReader): AgentProvider | undefined {
+  const value = parseStringOrInherit(raw, label, reader);
+  if (!value) return undefined;
+  if ((agentProviderValues as readonly string[]).includes(value)) return value as AgentProvider;
+  throw new Error(`Invalid config ${label}: ${value}. Expected one of: inherit, ${agentProviderValues.join(", ")}`);
+}
+
+function parseReasoningEffort(raw: unknown, label: string, reader: ConfigReader): CodexReasoningEffort | undefined {
+  const value = parseStringOrInherit(raw, label, reader);
+  if (!value) return undefined;
+  if ((codexReasoningEffortValues as readonly string[]).includes(value)) return value as CodexReasoningEffort;
+  throw new Error(`Invalid config ${label}: ${value}. Expected one of: inherit, ${codexReasoningEffortValues.join(", ")}`);
+}
+
+function parseOptionalPositiveInt(raw: unknown, label: string, reader: ConfigReader): number | undefined {
+  const value = parseStringOrInherit(raw, label, reader);
+  if (!value) return undefined;
+  const numberValue = typeof raw === "number" ? raw : Number(value);
+  if (!Number.isInteger(numberValue) || numberValue <= 0) {
+    throw new Error(`Invalid config ${label}: expected positive integer`);
+  }
+  return numberValue;
+}
+
+function parseOptionalPositiveNumber(raw: unknown, label: string, reader: ConfigReader): number | undefined {
+  const value = parseStringOrInherit(raw, label, reader);
+  if (!value) return undefined;
+  const numberValue = typeof raw === "number" ? raw : Number(value);
+  if (!Number.isFinite(numberValue) || numberValue <= 0) {
+    throw new Error(`Invalid config ${label}: expected positive number`);
+  }
+  return numberValue;
+}
+
+function parseModelOverrideObject(
+  value: unknown,
+  label: string,
+  reader: ConfigReader,
+): AgentRunManagerRoleModelOverride {
+  if (value === undefined || value === null) return {};
+  if (!isPlainObject(value)) throw new Error(`Invalid config ${label}: expected object`);
+  const provider = parseProvider(value.provider, `${label}.provider`, reader);
+  const model = parseStringOrInherit(value.model, `${label}.model`, reader);
+  const reasoningEffort = parseReasoningEffort(value.reasoning_effort ?? value.reasoningEffort, `${label}.reasoning_effort`, reader);
+  const maxTurns = parseOptionalPositiveInt(value.max_turns ?? value.maxTurns, `${label}.max_turns`, reader);
+  const budgetUsd = parseOptionalPositiveNumber(value.budget_usd ?? value.budgetUsd, `${label}.budget_usd`, reader);
+  return {
+    ...(provider ? { provider } : {}),
+    ...(model ? { model } : {}),
+    ...(reasoningEffort ? { reasoningEffort } : {}),
+    ...(maxTurns !== undefined ? { maxTurns } : {}),
+    ...(budgetUsd !== undefined ? { budgetUsd } : {}),
+  };
+}
+
+function mergeModelOverrides(
+  base: AgentRunManagerRoleModelOverride | undefined,
+  next: AgentRunManagerRoleModelOverride | undefined,
+): AgentRunManagerRoleModelOverride {
+  return {
+    ...(base ?? {}),
+    ...(next ?? {}),
+  };
+}
+
+function parseModelOverrideFromReader(
+  reader: ConfigReader,
+  path: ConfigPath,
+  envPrefix: string,
+): AgentRunManagerRoleModelOverride {
+  const provider = parseProvider(reader.readRaw([...path, "provider"], `${envPrefix}_PROVIDER`), `${envPrefix}_PROVIDER / ${path.join(".")}.provider`, reader);
+  const model = parseStringOrInherit(reader.readRaw([...path, "model"], `${envPrefix}_MODEL`), `${envPrefix}_MODEL / ${path.join(".")}.model`, reader);
+  const reasoningEffort = parseReasoningEffort(
+    reader.readRaw([[...path, "reasoning_effort"], [...path, "reasoningEffort"]], `${envPrefix}_REASONING_EFFORT`),
+    `${envPrefix}_REASONING_EFFORT / ${path.join(".")}.reasoning_effort`,
+    reader,
+  );
+  const maxTurns = parseOptionalPositiveInt(
+    reader.readRaw([[...path, "max_turns"], [...path, "maxTurns"]], `${envPrefix}_MAX_TURNS`),
+    `${envPrefix}_MAX_TURNS / ${path.join(".")}.max_turns`,
+    reader,
+  );
+  const budgetUsd = parseOptionalPositiveNumber(
+    reader.readRaw([[...path, "budget_usd"], [...path, "budgetUsd"]], `${envPrefix}_BUDGET_USD`),
+    `${envPrefix}_BUDGET_USD / ${path.join(".")}.budget_usd`,
+    reader,
+  );
+  return {
+    ...(provider ? { provider } : {}),
+    ...(model ? { model } : {}),
+    ...(reasoningEffort ? { reasoningEffort } : {}),
+    ...(maxTurns !== undefined ? { maxTurns } : {}),
+    ...(budgetUsd !== undefined ? { budgetUsd } : {}),
+  };
+}
+
+function buildModelRoutingRuntimeConfig(reader: ConfigReader): AgentRunManagerModelRoutingConfig {
+  const basePath = ["agent_run_manager", "model_routing"] as const;
+  const roles: Record<string, AgentRunManagerRoleModelOverride> = {};
+  const rawRoles = reader.getPath([...basePath, "roles"]);
+  if (rawRoles !== undefined) {
+    if (!isPlainObject(rawRoles)) throw new Error("Invalid config agent_run_manager.model_routing.roles: expected object");
+    for (const [role, value] of Object.entries(rawRoles)) {
+      roles[role] = parseModelOverrideObject(value, `agent_run_manager.model_routing.roles.${role}`, reader);
+    }
+  }
+
+  for (const role of MODEL_ROUTING_KNOWN_ROLES) {
+    const override = parseModelOverrideFromReader(
+      reader,
+      [...basePath, "roles", role],
+      envPrefixForRole(role),
+    );
+    roles[role] = mergeModelOverrides(roles[role], override);
+  }
+
+  return {
+    enabled: reader.boolValue(
+      [...basePath, "enabled"],
+      "MINICLAW_AGENT_RUN_MANAGER_MODEL_ROUTING_ENABLED",
+      false
+    ),
+    defaults: parseModelOverrideFromReader(
+      reader,
+      [...basePath, "defaults"],
+      "MINICLAW_AGENT_RUN_MANAGER_MODEL_ROUTING_DEFAULT",
+    ),
+    roles,
+    escalation: {
+      enabled: reader.boolValue(
+        [...basePath, "escalation", "enabled"],
+        "MINICLAW_AGENT_RUN_MANAGER_ESCALATION_ENABLED",
+        false
+      ),
+      roles: reader.stringArray(
+        [...basePath, "escalation", "roles"],
+        "MINICLAW_AGENT_RUN_MANAGER_ESCALATION_ROLES",
+        ["generator"]
+      ),
+      override: parseModelOverrideFromReader(
+        reader,
+        [...basePath, "escalation"],
+        "MINICLAW_AGENT_RUN_MANAGER_ESCALATION",
+      ),
+      maxAttempts: reader.positiveInt(
+        [[...basePath, "escalation", "max_attempts"], [...basePath, "escalation", "maxAttempts"]],
+        "MINICLAW_AGENT_RUN_MANAGER_ESCALATION_MAX_ATTEMPTS",
+        1
+      ),
+    },
+  };
+}
 
 export function buildAgentRunManagerRuntimeConfig(reader: ConfigReader) {
   return {
@@ -30,6 +205,7 @@ export function buildAgentRunManagerRuntimeConfig(reader: ConfigReader) {
       "MINICLAW_AGENT_RUN_MANAGER_COMPLEXITY_MIN_SCORE",
       4
     ),
+    modelRouting: buildModelRoutingRuntimeConfig(reader),
     acp: {
       enabled: reader.boolValue(
         ["agent_run_manager", "acp", "enabled"],

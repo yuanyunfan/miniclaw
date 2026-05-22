@@ -75,7 +75,7 @@ export const codexTaskRunner: TaskRunner = {
     ].filter(Boolean).join("\n\n");
 
     const codex = getCodexClient(codexManagedAgentBusOverrides(input.managedContext));
-    const threadOptions = codexThreadOptions("task", input.cwd, input.managedContext);
+    const threadOptions = codexThreadOptions("task", input.cwd, input.managedContext, input.runtimeOverride);
     const thread = resumeRawId
       ? codex.resumeThread(resumeRawId, threadOptions)
       : codex.startThread(threadOptions);

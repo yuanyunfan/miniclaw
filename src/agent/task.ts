@@ -16,7 +16,7 @@ import { buildSupervisorBlock } from "./supervisor.js";
 import { createFakeTaskRunner } from "./runners/fake-task-runner.js";
 import type { AgentRuntime, AgentRuntimeTraceOptions, AgentTaskResult } from "../runtime/agent-runtime.js";
 import { createTaskRunnerRuntime } from "./runtimes/task-runner-runtime.js";
-import { getDefaultAgentRuntime, isAgentRuntimeId, type DefaultAgentRuntimeConfig } from "./runtimes/registry.js";
+import { getAgentRuntime, getDefaultAgentRuntime, isAgentRuntimeId, type DefaultAgentRuntimeConfig } from "./runtimes/registry.js";
 import type { TaskViewEvent } from "./task-view-events.js";
 import { AgentRunManager } from "./run-manager/manager.js";
 import { resolveAgentRunManagerRoute } from "./run-manager/complexity.js";
@@ -375,6 +375,7 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
           reporter,
           channel: params.channel,
           policy: config.agentRunManager.policy,
+          modelRouting: config.agentRunManager.modelRouting,
           acp: config.agentRunManager.acp,
           ...(params.statusMessage ? { statusMessage: params.statusMessage } : {}),
           ...(params.deliveryChannelId ? { deliveryChannelId: params.deliveryChannelId } : {}),
@@ -396,6 +397,7 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
             prompt: params.prompt,
             signal: abortController.signal,
             runtime: selectedRuntime.runtime,
+            runtimeResolver: getAgentRuntime,
             onViewEvent: managedViewHandler,
           })
       : await selectedRuntime.runtime.startTask({

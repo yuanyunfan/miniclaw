@@ -6,7 +6,7 @@ import {
   type UserInput,
 } from "@openai/codex-sdk";
 import { config } from "../config.js";
-import type { AgentTaskManagedContext } from "../runtime/agent-runtime.js";
+import type { AgentTaskManagedContext, AgentTaskRuntimeOverride } from "../runtime/agent-runtime.js";
 
 export type CodexInputEntry = UserInput;
 export type CodexMode = "task" | "chat" | "stage";
@@ -40,19 +40,26 @@ export function getCodexClient(overrides?: CodexClientOverrides): Codex {
   return client;
 }
 
-export function codexThreadOptions(mode: CodexMode, cwd?: string, managedContext?: AgentTaskManagedContext): ThreadOptions {
+export function codexThreadOptions(
+  mode: CodexMode,
+  cwd?: string,
+  managedContext?: AgentTaskManagedContext,
+  runtimeOverride?: AgentTaskRuntimeOverride,
+): ThreadOptions {
   const rolePolicy = managedContext?.rolePolicy;
   const sandboxMode = rolePolicy?.codex.sandboxMode ?? (mode === "task" ? config.codex.taskSandbox : config.codex.chatSandbox);
   const approvalPolicy = rolePolicy?.codex.approvalPolicy ?? config.codex.approvalPolicy;
+  const reasoningEffort = runtimeOverride?.reasoningEffort ?? config.codex.reasoningEffort;
+  const model = runtimeOverride?.model ?? config.codex.model;
   const opts: ThreadOptions = {
     skipGitRepoCheck: true,
   };
   if (sandboxMode) opts.sandboxMode = sandboxMode;
   if (approvalPolicy) opts.approvalPolicy = approvalPolicy;
-  if (config.codex.reasoningEffort) opts.modelReasoningEffort = config.codex.reasoningEffort;
+  if (reasoningEffort) opts.modelReasoningEffort = reasoningEffort;
   if (config.codex.webSearchMode) opts.webSearchMode = config.codex.webSearchMode;
   if (config.codex.networkAccess !== undefined) opts.networkAccessEnabled = config.codex.networkAccess;
-  if (config.codex.model) opts.model = config.codex.model;
+  if (model) opts.model = model;
   if (cwd) opts.workingDirectory = cwd;
   return opts;
 }

@@ -111,6 +111,27 @@ agent_run_manager:
   auto_enabled: true
   complexity_min_score: 5
   max_turns: 9
+  model_routing:
+    enabled: true
+    defaults:
+      provider: codex
+    roles:
+      planner:
+        model: gpt-planner
+        reasoning_effort: high
+      generator:
+        model: gpt-generator
+        reasoning_effort: medium
+      evaluator:
+        provider: inherit
+        model: inherit
+    escalation:
+      enabled: true
+      roles: [generator]
+      provider: codex
+      model: gpt-escalated
+      reasoning_effort: high
+      max_attempts: 2
   acp:
     enabled: true
     host: 127.0.0.1
@@ -204,6 +225,21 @@ attachments:
         traceMaxBytes: 22222,
       },
       policy: expect.objectContaining({ maxTurns: 9 }),
+      modelRouting: {
+        enabled: true,
+        defaults: { provider: "codex" },
+        roles: expect.objectContaining({
+          planner: { model: "gpt-planner", reasoningEffort: "high" },
+          generator: { model: "gpt-generator", reasoningEffort: "medium" },
+          evaluator: {},
+        }),
+        escalation: {
+          enabled: true,
+          roles: ["generator"],
+          override: { provider: "codex", model: "gpt-escalated", reasoningEffort: "high" },
+          maxAttempts: 2,
+        },
+      },
     });
     expect(runtime.doctor.summaryChannelName).toBe("runtime-auto-improve");
     expect(runtime.maxAttachments).toBe(2);
@@ -225,6 +261,49 @@ attachments:
     expect(() => {
       (frozen.items as Array<{ value: string }>).push({ value: "b" });
     }).toThrow(TypeError);
+  });
+
+  it("reads Agent Run Manager model routing env overrides", () => {
+    const cfg = join(tmpDir, "config-env.yaml");
+    writeFileSync(cfg, `
+discord:
+  client_id: client-env
+  guild_id: guild-env
+  allowed_user_id: user-env
+agent:
+  provider: codex
+  default_cwd: "${tmpDir}"
+storage:
+  db_path: "${join(tmpDir, "env.db")}"
+  memory_path: "${join(tmpDir, "ENV_MEMORY.md")}"
+`);
+    const runtime = createRuntimeConfig({
+      MINICLAW_CONFIG: cfg,
+      DISCORD_TOKEN: "token-env",
+      MINICLAW_AGENT_RUN_MANAGER_MODEL_ROUTING_ENABLED: "true",
+      MINICLAW_AGENT_RUN_MANAGER_GENERATOR_PROVIDER: "codex",
+      MINICLAW_AGENT_RUN_MANAGER_GENERATOR_MODEL: "gpt-generator-env",
+      MINICLAW_AGENT_RUN_MANAGER_GENERATOR_REASONING_EFFORT: "low",
+      MINICLAW_AGENT_RUN_MANAGER_ESCALATION_ENABLED: "true",
+      MINICLAW_AGENT_RUN_MANAGER_ESCALATION_MODEL: "gpt-escalated-env",
+    } as NodeJS.ProcessEnv);
+
+    expect(runtime.agentRunManager.modelRouting).toMatchObject({
+      enabled: true,
+      roles: {
+        generator: {
+          provider: "codex",
+          model: "gpt-generator-env",
+          reasoningEffort: "low",
+        },
+      },
+      escalation: {
+        enabled: true,
+        roles: ["generator"],
+        override: { model: "gpt-escalated-env" },
+        maxAttempts: 1,
+      },
+    });
   });
 
   it("allows Weixin-only runtime config without Discord credentials when Discord transport is disabled", () => {

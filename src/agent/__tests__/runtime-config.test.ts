@@ -45,6 +45,12 @@ describe("formatAgentRuntimeSummary", () => {
       runtime: {
         defaultAgent: "codex",
       },
+      agentRunManager: {
+        modelRoutingEnabled: true,
+        modelRoutingRoles: ["generator:codex/gpt-5-mini", "planner:codex/gpt-5.5"],
+        escalationEnabled: true,
+        escalationRoles: ["generator"],
+      },
       modelClient: {
         defaultClient: "openai",
         smartRouterClient: "openai_compatible",
@@ -83,6 +89,8 @@ describe("formatAgentRuntimeSummary", () => {
 
     const text = formatAgentRuntimeSummary(summary);
     expect(text).toContain("AgentRuntime: `codex` / Model: `inherit`");
+    expect(text).toContain("Managed model routing: enabled roles=`generator:codex/gpt-5-mini`, `planner:codex/gpt-5.5`");
+    expect(text).toContain("Managed escalation: enabled roles=`generator`");
     expect(text).toContain("Legacy provider alias: `codex`");
     expect(text).toContain("ModelClient: default=`openai` smart-router=`openai_compatible`");
     expect(text).toContain("IMTransport: default=`discord` implemented=`discord`");
