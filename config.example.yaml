@@ -205,8 +205,11 @@ cron:
   # type: task
   # channel: "REPLACE_WITH_DISCORD_CHANNEL_ID"
   # output_template: |
-  #   Use Markdown suitable for {{audience}} readers.
-  #   Start with ## Summary and then list key findings.
+  #   ## Summary
+  #   Give the direct {{audience}} conclusion.
+  #
+  #   ## Key Findings
+  #   List the important observations.
   # output_template_vars:
   #   audience: personal
   # prompt: "Summarize today's signals."

@@ -186,11 +186,22 @@ describe("cron task runner", () => {
 
     const createdTask = mocks.createTask.mock.calls[0]?.[0] as { prompt?: string } | undefined;
     const taskInput = mocks.executeTask.mock.calls[0]?.[0] as { prompt?: string } | undefined;
+    const prompt = taskInput?.prompt ?? "";
     expect(createdTask?.prompt).toBe(taskInput?.prompt);
-    expect(taskInput?.prompt).toContain('<cron_output_contract source="cron-yaml" validator="none">');
-    expect(taskInput?.prompt).toContain("Use Markdown suitable for operator readers.");
-    expect(taskInput?.prompt).toContain("## Key Findings");
-    expect(taskInput?.prompt).toContain("summarize AI news");
+    expect(prompt).toContain('<cron_output_contract source="cron-yaml" validator="none">');
+    expect(prompt).toContain("Output surface policy:");
+    expect(prompt).toContain("Use concise Markdown suitable for chat/IM delivery.");
+    expect(prompt).toContain("Avoid Markdown pipe tables; use bullets, compact sections, or lists instead.");
+    expect(prompt).toContain("Job-specific output template:");
+    expect(prompt).toContain("Use Markdown suitable for operator readers.");
+    expect(prompt).toContain("## Key Findings");
+    expect(prompt).toContain("summarize AI news");
+    expect(prompt.indexOf("Output surface policy:")).toBeLessThan(
+      prompt.indexOf("Job-specific output template:")
+    );
+    expect(prompt.indexOf("Job-specific output template:")).toBeLessThan(
+      prompt.indexOf("Use Markdown suitable for operator readers.")
+    );
   });
 
   it("uses a daily message group reporter when configured", async () => {

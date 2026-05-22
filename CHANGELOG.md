@@ -26,6 +26,9 @@
 - 文档策略收尾：`docs/zh/**` required 中文 pair 全部提升为 `translation_status: current`，并让 `quality:docs-i18n` 阻止 missing / pending required translations。
 - `quality:website-docs` 收紧为 blocking gate：canonical docs 变更影响 website page 时，必须同 patch 更新对应 website page、显式标记 unaffected reason，或使用紧急 bypass。
 - 文档迁移收尾：`docs/features/*.md` 统一归档到 `docs/archive/features/`，早期平铺中文翻译迁移到 `docs/zh/plans/` 或 `docs/zh/archive/**`，并补齐标准 frontmatter。
+
+### Changed
+- Cron task output contract 现在由 runtime 统一注入 shared chat/IM output surface policy，per-job `output_template` 只需描述报告结构、机器块和 job-specific 例外，避免在每个 cron YAML 中重复通用 Markdown/最终报告约束。
 - GitHub Pages workflow 增加 Pages 配置 preflight；仓库未启用 Pages 时保留 website build/artifact 成功路径，跳过 deploy 而不是在 `actions/configure-pages` 阶段失败。
 
 ### Security

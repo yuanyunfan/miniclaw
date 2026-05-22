@@ -75,7 +75,7 @@ describe("prompt snapshot baseline", () => {
       renderedTemplate: "## Summary\nReport first.",
     });
     const out = cronT.buildCronTaskPrompt("morning-brief", "", "do the thing", outputContract);
-    expect(hash(out)).toMatchInlineSnapshot(`"901a15fe7edd9057"`);
+    expect(hash(out)).toMatchInlineSnapshot(`"e1afdd1080b9b4b3"`);
   });
 
   it("cron.skillPrompt.fixture (无 args)", () => {

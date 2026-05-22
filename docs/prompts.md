@@ -22,11 +22,9 @@ Cron `type=task` jobs can opt into a prompt-level output contract by putting an 
 
 ```yaml
 output_template: |
-  Use Markdown suitable for {{audience}} readers.
-
   Required structure:
   ## Summary
-  Give the direct conclusion first.
+  Give the direct {{audience}} conclusion.
 
   ## Key Findings
   List the important observations.
@@ -41,8 +39,9 @@ Advanced jobs can use the normalized form when they need to set the reserved val
 ```yaml
 output_contract:
   template: |
-    Use Markdown suitable for {{audience}} readers.
-    Start with `## Summary`.
+    Required structure:
+    ## Summary
+    Give the direct {{audience}} conclusion.
   vars:
     audience: personal
   validator: none
@@ -51,6 +50,8 @@ output_contract:
 The loader normalizes both forms into `output_contract`. `output_template` and `output_contract` are mutually exclusive.
 
 Cron output templates are cron-job configuration, not repo prompt assets: MiniClaw does not load `prompts/templates/cron-output/<id>.md`. The rendered contract is injected after provider/script context and before the job prompt. It guides the LLM output shape but does not rewrite the final message after execution.
+
+MiniClaw prepends a shared output surface policy before the job-specific template whenever an output contract is configured: concise Markdown for chat/IM delivery, no Markdown pipe tables, conclusion before evidence, and final report only. Per-job cron YAML should not repeat those generic rules; keep `output_template` focused on the report structure, required machine blocks, and job-specific exceptions such as privacy boundaries, link style, or length limits.
 
 `output_contract.validator` is reserved for runtime validation. v1 supports only `none`; the validator hook still runs after a successful task result and before extra delivery, attachment delivery, and provider commit callbacks so future validators can block delivery and retries at a single point.
 

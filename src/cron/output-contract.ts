@@ -12,6 +12,14 @@ export interface CronTaskOutputValidationResult {
   message: string;
 }
 
+export const CRON_OUTPUT_SURFACE_POLICY = [
+  "Output surface policy:",
+  "- Use concise Markdown suitable for chat/IM delivery.",
+  "- Avoid Markdown pipe tables; use bullets, compact sections, or lists instead.",
+  "- Start with the conclusion, then give supporting evidence.",
+  "- Return only the final report. Do not explain the output contract.",
+].join("\n");
+
 export function resolveCronOutputContract(job: CronJobTask): ResolvedCronOutputContract | undefined {
   if (!job.output_contract) return undefined;
   const contract = job.output_contract;
@@ -28,6 +36,10 @@ export function buildCronOutputContractBlock(contract?: ResolvedCronOutputContra
     "Treat this as the prompt-level output contract for this scheduled cron task.",
     "Format the final task result according to the rendered template below.",
     "Do not mention the contract itself unless the user explicitly asks about formatting.",
+    "",
+    CRON_OUTPUT_SURFACE_POLICY,
+    "",
+    "Job-specific output template:",
     "",
     contract.renderedTemplate.trim(),
     "</cron_output_contract>",

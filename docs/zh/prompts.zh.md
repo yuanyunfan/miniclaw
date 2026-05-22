@@ -3,7 +3,7 @@ doc_id: prompts
 lang: zh
 translation_of: docs/prompts.md
 translation_status: current
-source_sha256: 1a69e0947ff487a69ca37d3b85928467aeccbdfaadfee64cdd3fd6528f8c8320
+source_sha256: 8c44f79d4f90d28ffc4b6d95dd5bf069d2a952ad669533203536248756a517c1
 ---
 # Prompt 资产管理
 
@@ -29,11 +29,9 @@ Cron `type=task` job 可以把 inline template 直接写在每个 job 的 `~/.mi
 
 ```yaml
 output_template: |
-  Use Markdown suitable for {{audience}} readers.
-
   Required structure:
   ## Summary
-  Give the direct conclusion first.
+  Give the direct {{audience}} conclusion.
 
   ## Key Findings
   List the important observations.
@@ -48,8 +46,9 @@ output_template_vars:
 ```yaml
 output_contract:
   template: |
-    Use Markdown suitable for {{audience}} readers.
-    Start with `## Summary`.
+    Required structure:
+    ## Summary
+    Give the direct {{audience}} conclusion.
   vars:
     audience: personal
   validator: none
@@ -58,6 +57,8 @@ output_contract:
 loader 会把两种写法统一成 `output_contract`。`output_template` 和 `output_contract` 不能同时配置。
 
 Cron output template 属于 cron job 配置，不是 repo prompt asset：MiniClaw 不会再加载 `prompts/templates/cron-output/<id>.md`。渲染后的 contract 会注入到 provider/script context 之后、job prompt 之前。它只约束 LLM 输出格式，不会在 execution 之后重写最终消息。
+
+配置 output contract 时，MiniClaw 会先注入一段共享 output surface policy：面向 chat/IM delivery 的紧凑 Markdown、不要 Markdown pipe table、先结论后证据、只输出最终报告。每个 job 的 cron YAML 不要重复这些通用规则；`output_template` 应只写报告结构、必需机器块，以及 privacy、link style、长度限制等 job-specific 例外。
 
 `output_contract.validator` 预留 runtime validation。v1 只支持 `none`；validator hook 仍会在 successful task result 之后、extra delivery、attachment delivery 和 provider commit callback 之前运行，方便后续 validator 在单一位置阻止投递并交给 scheduler retry。
 
