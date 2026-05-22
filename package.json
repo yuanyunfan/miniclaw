@@ -93,7 +93,7 @@
     "@anthropic-ai/sdk": "^0.39.0",
     "@modelcontextprotocol/sdk": "1.29.0",
     "@openai/codex-sdk": "^0.125.0",
-    "better-sqlite3": "^11.8.1",
+    "better-sqlite3": "^12.10.0",
     "discord.js": "^14.18.0",
     "dotenv": "^16.5.0",
     "fast-xml-parser": "^5.7.3",
@@ -127,7 +127,7 @@
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^3.0.0",
     "eslint": "^10.3.0",
-    "tsx": "^4.19.4",
+    "tsx": "^4.22.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.59.2",
     "vitest": "^3.0.0"

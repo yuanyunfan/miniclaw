@@ -49,6 +49,7 @@
 - App Trending 默认频道从 `daily-app-trending` 改为 `weekly-app-trending`，频道初始化脚本会把旧频道原地重命名并清理旧 channel-map key。
 
 ### Fixed
+- 升级 `tsx` 到 `4.22.3` 并更新 `better-sqlite3` 到 Node 26 兼容版本，避免 cron script 通过 `tsx` 启动时向 Discord 输出 `DEP0205 module.register()` deprecation warning，并保持 SQLite 测试可运行。
 - 修复 Weixin 官方 CDN 媒体协议兼容：入站图片/语音会读取 `media.full_url`、`media.encrypt_query_param` 和 `aes_key`，下载后按 AES-ECB 解密，语音尽量从 SILK 转 WAV 后再送入附件处理链路。
 - Weixin outbound `sendFile` 改为官方 `getuploadurl -> CDN AES upload -> sendmessage` 链路，并把 caption 与媒体按官方行为拆成独立 `sendmessage` item。
 - Weixin `getupdates` 遇到 `errcode=-14` / session expired 时会暂停该账号 1 小时，不再按普通 poll failure 每 30 秒持续重试。
