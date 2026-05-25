@@ -8,6 +8,7 @@ import { buildAttachmentRuntimeConfig } from "./domains/attachments.js";
 import { buildCronRuntimeConfig } from "./domains/cron.js";
 import { buildE2eRuntimeConfig } from "./domains/e2e.js";
 import { buildIMRuntimeConfig } from "./domains/im.js";
+import { buildHookdRuntimeConfig } from "./domains/hookd.js";
 import { buildMcpRuntimeConfig } from "./domains/mcp.js";
 import { buildModelRuntimeConfig } from "./domains/model.js";
 import { buildOperationalRuntimeConfig } from "./domains/operations.js";
@@ -52,6 +53,7 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
   const operations = buildOperationalRuntimeConfig(reader, e2e.mode);
   const attachments = buildAttachmentRuntimeConfig(reader);
   const im = buildIMRuntimeConfig(reader);
+  const hookd = buildHookdRuntimeConfig(reader);
 
   applyProviderBaseUrlEnv(provider, env);
 
@@ -76,6 +78,7 @@ export function createRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
     agentRunManager,
     ...model,
     ...im,
+    ...hookd,
     ...provider,
     allowedUserId: discordRequiredString(["discord", "allowed_user_id"], "MINICLAW_ALLOWED_USER_ID"),
     mcp: buildMcpRuntimeConfig(reader),

@@ -7,10 +7,12 @@ import {
 } from "discord.js";
 import { v4 as uuid } from "uuid";
 import { config } from "../config.js";
-import { createTask, getActiveTasks, getInterruptedTasks, getRecentTasks, getTask, updateTask } from "../store/db.js";
+import { createTask, getActiveTasks, getInterruptedTasks, getRecentTasks, getTask, listCliSessions, updateTask } from "../store/db.js";
 import { executeTask, getActiveTaskCount, cancelTask, listActiveTaskIds } from "../agent/task.js";
 import { TaskReporter } from "../agent/task-reporter.js";
 import { taskStartEmbed, statusOverviewEmbed, taskErrorEmbed, healthEmbed } from "../discord/formatter.js";
+import { buildCliSessionDashboardMessage } from "../discord/cli-session-dashboard.js";
+import { isCliSessionProvider } from "../hookd/state.js";
 import { addMemory, deleteMemory, getAllMemories, getMemoriesByType } from "../store/memory.js";
 import { createLogger } from "../lib/log.js";
 import { assertProviderSession } from "../agent/session.js";
@@ -129,6 +131,41 @@ export async function handleStatus(interaction: ChatInputCommandInteraction): Pr
 
   await interaction.reply({
     embeds: [statusOverviewEmbed({ active, interrupted, recent })],
+    ephemeral: true,
+  });
+}
+
+export async function handleSessions(interaction: ChatInputCommandInteraction): Promise<void> {
+  if (!isAllowed(interaction.user.id)) {
+    await interaction.reply({ content: "No permission.", ephemeral: true });
+    return;
+  }
+
+  const providerRaw = interaction.options.getString("provider") ?? undefined;
+  const provider = providerRaw && isCliSessionProvider(providerRaw) ? providerRaw : undefined;
+  const status = interaction.options.getString("status") as "all" | "active" | "idle" | "closed" | "hidden" | null;
+  const project = interaction.options.getString("project") ?? undefined;
+  const limit = interaction.options.getInteger("limit") ?? config.hookd.dashboardLimit;
+  const sessions = listCliSessions({
+    ...(provider ? { provider } : {}),
+    ...(status ? { status } : {}),
+    ...(project ? { cwdContains: project } : {}),
+    includeClosed: status === "closed",
+    includeHidden: status === "hidden",
+    limit: 200,
+  });
+
+  await interaction.reply({
+    ...buildCliSessionDashboardMessage({
+      sessions,
+      filters: {
+        ...(provider ? { provider } : {}),
+        ...(status ? { status } : {}),
+        ...(project ? { project } : {}),
+      },
+      staleActiveMs: config.hookd.staleActiveMs,
+      limit,
+    }),
     ephemeral: true,
   });
 }

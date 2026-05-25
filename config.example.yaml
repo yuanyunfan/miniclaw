@@ -61,6 +61,16 @@ runtime:
   # Preferred task runtime selector. Keep values aligned with implemented AgentRuntime ids.
   default_agent: codex # claude | codex
 
+hookd:
+  # Local Unix-socket daemon for observing ordinary Claude Code / Codex CLI
+  # sessions through provider hooks. Disabled until hooks are installed.
+  enabled: false
+  socket_path: "~/.miniclaw/runtime/hookd.sock"
+  max_payload_bytes: 262144
+  zombie_scan_interval_ms: 30000
+  stale_active_ms: 900000
+  dashboard_limit: 8
+
 agent_run_manager:
   # Managed multi-agent path. Disabled by default; enabling it routes /task
   # through the Agent Run Manager instead of the single-agent runtime.

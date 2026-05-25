@@ -73,16 +73,16 @@ describe("store schema migrations", () => {
       expect(getSchemaVersion(db)).toBe(SCHEMA_VERSION);
       expect(columnExists(db, "schema_version_history", "migration_name")).toBe(true);
       const history = listSchemaVersionHistory(db);
-      expect(history.map((row) => row.to_version)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+      expect(history.map((row) => row.to_version)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]);
       expect(history[0]).toMatchObject({
         from_version: 0,
         to_version: 1,
         migration_name: "001_progress_message_id",
       });
       expect(history.at(-1)).toMatchObject({
-        from_version: 15,
-        to_version: 16,
-        migration_name: "016_cron_delivery_messages",
+        from_version: 16,
+        to_version: 17,
+        migration_name: "017_cli_sessions",
       });
     });
   });
@@ -102,7 +102,9 @@ describe("store schema migrations", () => {
       expect(columnExists(db, "market_context_items", "stable_key")).toBe(true);
       expect(columnExists(db, "cron_runs", "metadata_json")).toBe(true);
       expect(columnExists(db, "recovery_outbox", "payload_json")).toBe(true);
-      expect(listSchemaVersionHistory(db).map((row) => row.to_version)).toEqual([5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+      expect(columnExists(db, "cli_sessions", "provider_session_id")).toBe(true);
+      expect(columnExists(db, "cli_session_events", "payload_json")).toBe(true);
+      expect(listSchemaVersionHistory(db).map((row) => row.to_version)).toEqual([5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]);
     });
   });
 

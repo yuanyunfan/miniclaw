@@ -3,7 +3,7 @@ doc_id: discord-agent-control-plane
 lang: zh
 translation_of: docs/plans/2026-05-25-discord-agent-control-plane.md
 translation_status: current
-source_sha256: e6566567a832abf4d1f41bffda12c8476c1d0003a4692cca6d543420a9f82733
+source_sha256: 042348ed5965b04deca7b2fbcac5c56b307eb3e46ee37a3b5c46c0c835202fb9
 ---
 # Discord Agent Control Plane
 
@@ -521,3 +521,4 @@ Provider switching 明确不在范围内。如果 operator 想用另一个 provi
 
 - 2026-05-25：初始分析整理为 Discord control-plane design plan。
 - 2026-05-25：检查 MioIsland 的 hook-based Claude 和 Codex session discovery 后，把计划更新为 `hookd` first implementation layer，并移除过期 wrapper-first assumption。
+- 2026-05-25：已发布首个 implementation slice：SQLite `cli_sessions` / `cli_session_events`、hookd Unix-socket event ingestion、canonical phase mapping、dead-pid cleanup、Discord `/sessions` dashboard、`Details` / `Hide` buttons，以及 idle-session `Continue` modal，可启动 same-provider MiniClaw continuation。Hook installation 和 blocking approval relay 仍是后续 slice。

@@ -188,6 +188,13 @@ describe("schema migrations", () => {
     expect(__testables.columnExists("cron_delivery_messages", "message_ids_json")).toBe(true);
   });
 
+  it("ensures CLI session observation tables exist", () => {
+    expect(__testables.columnExists("cli_sessions", "provider_session_id")).toBe(true);
+    expect(__testables.columnExists("cli_sessions", "phase")).toBe(true);
+    expect(__testables.columnExists("cli_sessions", "observed_prompt_count")).toBe(true);
+    expect(__testables.columnExists("cli_session_events", "payload_json")).toBe(true);
+  });
+
   it("ensures Agent Run Manager tables exist", () => {
     expect(__testables.columnExists("agent_runs", "task_id")).toBe(true);
     expect(__testables.columnExists("agent_runs", "can_send_kinds_json")).toBe(true);

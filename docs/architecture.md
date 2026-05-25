@@ -10,8 +10,8 @@ flowchart LR
 
   subgraph Discord["Discord"]
     Msg["Messages<br/>mentions, auto-reply channels, task channels"]
-    Slash["Slash commands<br/>/task /status /health /doctor /task-log /cron-runs"]
-    Btn["Buttons<br/>smart-router confirmation, cron retry, doctor actions"]
+    Slash["Slash commands<br/>/task /status /sessions /health /doctor /task-log /cron-runs"]
+    Btn["Buttons<br/>smart-router confirmation, cron retry, CLI session details/continue/hide, doctor actions"]
   end
 
   subgraph MiniClaw["MiniClaw Node process"]
@@ -20,6 +20,7 @@ flowchart LR
     Task["agent/task.ts<br/>task lifecycle"]
     Runtime["runtime registry<br/>Claude / Codex / fake"]
     RunMgr["Agent Run Manager<br/>optional managed multi-agent path"]
+    Hookd["hookd<br/>CLI session observation"]
     Cron["cron/scheduler.ts<br/>cron runner and retry"]
     Providers["providers + capabilities<br/>stock, content, email"]
     Ops["ops/doctor* + safe-restart<br/>diagnosis, incidents, guarded repair"]
@@ -31,6 +32,7 @@ flowchart LR
     Jobs["cron/*.yaml + cron/state.json"]
     Memory["memories/MEMORY.md"]
     Scripts["scripts/*"]
+    Hooks["runtime/hookd.sock<br/>provider hook client"]
     ProviderState["providers/* + secrets/*"]
     Logs["logs/miniclaw-*.log"]
     DB[("data.db<br/>SQLite WAL")]
@@ -42,6 +44,7 @@ flowchart LR
     SMTP["SMTP fallback"]
     MCP["MCP servers"]
     Weixin["Weixin iLink API<br/>optional direct channel"]
+    ExternalCLI["Claude Code / Codex CLI<br/>ordinary terminal sessions"]
   end
 
   User --> Msg
@@ -56,6 +59,8 @@ flowchart LR
   Bot --> Ops
   Chat --> Runtime
   Task --> Runtime
+  Hookd --> DB
+  Hookd --> Bot
   Task --> RunMgr
   Cron --> Task
   Cron --> Providers
@@ -75,10 +80,12 @@ flowchart LR
   Memory --> Chat
   Memory --> Task
   Scripts --> Cron
+  Hooks --> Hookd
   ProviderState --> Providers
   Logs --> Ops
   Runtime --> Claude
   Runtime --> Codex
+  ExternalCLI --> Hooks
   Task -.-> MCP
   Ops --> SMTP
 ```
@@ -93,6 +100,8 @@ MiniClaw keeps hard boundaries between code, user state, and public docs:
 - `docs/` is the implementation source of truth; `website/` is a presentation layer.
 
 The runtime registry separates agent execution from routing. `src/runtime/agent-runtime.ts` defines the common runtime interface. `src/agent/runtimes/registry.ts` maps the configured runtime to Claude, Codex, or fake task runners. `runtime.default_agent` is the preferred config key; legacy `agent.provider` remains a compatibility fallback.
+
+`hookd` is a separate observation surface for ordinary Claude Code and Codex CLI sessions launched outside MiniClaw. When `hookd.enabled=true`, MiniClaw listens on a local Unix socket, accepts provider hook events, stores normalized CLI session state, scans dead PIDs, and exposes a Discord-native `/sessions` dashboard. This does not turn every external CLI into a MiniClaw task row. Same-provider continuation is only started explicitly from Discord and resumes Claude sessions through Claude or Codex sessions through Codex.
 
 ## Message And Task Flow
 
@@ -216,7 +225,7 @@ Stock provider names remain cron-facing compatibility contracts in `src/provider
 
 ## Storage Model
 
-MiniClaw uses `~/.miniclaw/data.db` in SQLite WAL mode. Schema migrations are managed through `PRAGMA user_version`; the current schema is defined by `src/store/schema.ts` as `SCHEMA_VERSION = 16`.
+MiniClaw uses `~/.miniclaw/data.db` in SQLite WAL mode. Schema migrations are managed through `PRAGMA user_version`; the current schema is defined by `src/store/schema.ts` as `SCHEMA_VERSION = 17`.
 
 ```mermaid
 erDiagram
@@ -230,6 +239,7 @@ erDiagram
   tasks ||--o{ market_context_daily : writes
   cron_runs ||--o{ recovery_outbox : alerts
   tasks ||--o{ cron_delivery_messages : updates
+  cli_sessions ||--o{ cli_session_events : records
   incidents ||--o{ repair_runs : repairs
   chat_history ||--o{ smart_router_decisions : informs
   market_context_daily ||--o{ market_context_items : updates
@@ -287,6 +297,31 @@ erDiagram
     TEXT task_id
     TEXT message_ids_json
   }
+
+  cli_sessions {
+    TEXT id
+    TEXT provider
+    TEXT provider_session_id
+    TEXT cwd
+    INTEGER pid
+    TEXT tty
+    TEXT phase
+    TEXT attention_kind
+    TEXT last_event_name
+    TEXT last_activity_at
+    TEXT ended_at
+    TEXT hidden_at
+  }
+
+  cli_session_events {
+    TEXT id
+    TEXT cli_session_id
+    TEXT provider
+    TEXT event_name
+    TEXT phase
+    TEXT payload_json
+    TEXT created_at
+  }
 ```
 
 State retention is configured through `state.retention.*`. Cleanup is dry-run first through `pnpm run state:cleanup -- --dry-run`; destructive cleanup requires `--execute`.
@@ -302,6 +337,7 @@ Cron task results normally send a new chunked Markdown result per run. Jobs that
 ## Observability And Operations
 
 - `task_events` records lifecycle, protocol/tool events, and Discord status transitions.
+- `cli_sessions` and `cli_session_events` record hookd-observed external Claude/Codex CLI session state separately from MiniClaw-owned task rows.
 - `src/store/task-trace-export.ts` and `src/store/agent-run-trace-export.ts` produce redacted Markdown traces for `/task-log`, incident views, and local CLI review.
 - `/doctor` and scheduled scans aggregate DB, cron state, config, PM2, logs, and Git evidence.
 - Guarded repair and ship flows require explicit operator approval and work through a repair branch before touching `main`.

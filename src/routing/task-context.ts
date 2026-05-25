@@ -2,6 +2,7 @@ export type TaskRouteType =
   | "chat_message"
   | "slash_command"
   | "slash_resume"
+  | "cli_session_continue"
   | "task_channel"
   | "thread_continuation"
   | "smart_router_auto"

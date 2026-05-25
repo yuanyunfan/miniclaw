@@ -3,7 +3,7 @@ doc_id: architecture
 lang: zh
 translation_of: docs/architecture.md
 translation_status: current
-source_sha256: 1ebd7bc02affee1ef62c17b1267432d99ddaafa7cb6847bbab573969f4d1fc7e
+source_sha256: 5d6dca5a5e9f6a87b4a9d02d0ec415196304485b2e2b48838608ab065ee81d17
 ---
 # MiniClaw 架构
 
@@ -17,8 +17,8 @@ flowchart LR
 
   subgraph Discord["Discord"]
     Msg["Messages<br/>mentions, auto-reply channels, task channels"]
-    Slash["Slash commands<br/>/task /status /health /doctor /task-log /cron-runs"]
-    Btn["Buttons<br/>smart-router confirmation, cron retry, doctor actions"]
+    Slash["Slash commands<br/>/task /status /sessions /health /doctor /task-log /cron-runs"]
+    Btn["Buttons<br/>smart-router confirmation, cron retry, CLI session details/continue/hide, doctor actions"]
   end
 
   subgraph MiniClaw["MiniClaw Node process"]
@@ -27,6 +27,7 @@ flowchart LR
     Task["agent/task.ts<br/>task lifecycle"]
     Runtime["runtime registry<br/>Claude / Codex / fake"]
     RunMgr["Agent Run Manager<br/>optional managed multi-agent path"]
+    Hookd["hookd<br/>CLI session observation"]
     Cron["cron/scheduler.ts<br/>cron runner and retry"]
     Providers["providers + capabilities<br/>stock, content, email"]
     Ops["ops/doctor* + safe-restart<br/>diagnosis, incidents, guarded repair"]
@@ -38,6 +39,7 @@ flowchart LR
     Jobs["cron/*.yaml + cron/state.json"]
     Memory["memories/MEMORY.md"]
     Scripts["scripts/*"]
+    Hooks["runtime/hookd.sock<br/>provider hook client"]
     ProviderState["providers/* + secrets/*"]
     Logs["logs/miniclaw-*.log"]
     DB[("data.db<br/>SQLite WAL")]
@@ -49,6 +51,7 @@ flowchart LR
     SMTP["SMTP fallback"]
     MCP["MCP servers"]
     Weixin["Weixin iLink API<br/>optional direct channel"]
+    ExternalCLI["Claude Code / Codex CLI<br/>ordinary terminal sessions"]
   end
 
   User --> Msg
@@ -63,6 +66,8 @@ flowchart LR
   Bot --> Ops
   Chat --> Runtime
   Task --> Runtime
+  Hookd --> DB
+  Hookd --> Bot
   Task --> RunMgr
   Cron --> Task
   Cron --> Providers
@@ -82,10 +87,12 @@ flowchart LR
   Memory --> Chat
   Memory --> Task
   Scripts --> Cron
+  Hooks --> Hookd
   ProviderState --> Providers
   Logs --> Ops
   Runtime --> Claude
   Runtime --> Codex
+  ExternalCLI --> Hooks
   Task -.-> MCP
   Ops --> SMTP
 ```
@@ -100,6 +107,8 @@ MiniClaw 把 code、user state 和 public docs 做硬边界隔离：
 - `docs/` 是 implementation source of truth；`website/` 是 presentation layer。
 
 runtime registry 把 agent execution 和 routing 分离。`src/runtime/agent-runtime.ts` 定义统一 runtime interface，`src/agent/runtimes/registry.ts` 把配置映射到 Claude、Codex 或 fake task runner。`runtime.default_agent` 是推荐配置键；legacy `agent.provider` 仍作为兼容 fallback。
+
+`hookd` 是普通 Claude Code 和 Codex CLI sessions 的独立观测面，这些 session 可以是在 MiniClaw 外部启动的。启用 `hookd.enabled=true` 后，MiniClaw 会监听本地 Unix socket，接收 provider hook events，保存 normalized CLI session state，扫描 dead PID，并通过 Discord 原生 `/sessions` dashboard 展示。这不会把每个外部 CLI 都变成 MiniClaw task row。same-provider continuation 只会在 Discord 中显式触发，并且 Claude session 仍通过 Claude resume，Codex session 仍通过 Codex resume。
 
 ## 消息与任务流程
 
@@ -223,7 +232,7 @@ Stock provider names 仍然是 `src/providers/index.ts` 中的 cron-facing compa
 
 ## 存储模型
 
-MiniClaw 使用 `~/.miniclaw/data.db`，SQLite WAL mode。schema migration 通过 `PRAGMA user_version` 管理；当前 schema 由 `src/store/schema.ts` 定义为 `SCHEMA_VERSION = 16`。
+MiniClaw 使用 `~/.miniclaw/data.db`，SQLite WAL mode。schema migration 通过 `PRAGMA user_version` 管理；当前 schema 由 `src/store/schema.ts` 定义为 `SCHEMA_VERSION = 17`。
 
 ```mermaid
 erDiagram
@@ -237,6 +246,7 @@ erDiagram
   tasks ||--o{ market_context_daily : writes
   cron_runs ||--o{ recovery_outbox : alerts
   tasks ||--o{ cron_delivery_messages : updates
+  cli_sessions ||--o{ cli_session_events : records
   incidents ||--o{ repair_runs : repairs
   chat_history ||--o{ smart_router_decisions : informs
   market_context_daily ||--o{ market_context_items : updates
@@ -294,6 +304,31 @@ erDiagram
     TEXT task_id
     TEXT message_ids_json
   }
+
+  cli_sessions {
+    TEXT id
+    TEXT provider
+    TEXT provider_session_id
+    TEXT cwd
+    INTEGER pid
+    TEXT tty
+    TEXT phase
+    TEXT attention_kind
+    TEXT last_event_name
+    TEXT last_activity_at
+    TEXT ended_at
+    TEXT hidden_at
+  }
+
+  cli_session_events {
+    TEXT id
+    TEXT cli_session_id
+    TEXT provider
+    TEXT event_name
+    TEXT phase
+    TEXT payload_json
+    TEXT created_at
+  }
 ```
 
 state retention 通过 `state.retention.*` 配置。cleanup 先 dry-run：`pnpm run state:cleanup -- --dry-run`；破坏性清理必须显式传入 `--execute`。
@@ -309,6 +344,7 @@ Cron task 结果默认每次运行发送一组新的 chunked Markdown result。�
 ## 可观测性与运维
 
 - `task_events` 记录 lifecycle、protocol/tool events 和 Discord status transitions。
+- `cli_sessions` 和 `cli_session_events` 独立记录 hookd 观测到的外部 Claude/Codex CLI session state，不与 MiniClaw-owned task rows 混在一起。
 - `src/store/task-trace-export.ts` 与 `src/store/agent-run-trace-export.ts` 生成 redacted Markdown traces，供 `/task-log`、incident view 和本地 CLI review 使用。
 - `/doctor` 和 scheduled scans 汇总 DB、cron state、config、PM2、logs 和 Git evidence。
 - guarded repair/ship flow 必须经过 operator approval，并先通过 repair branch，不能直接碰 `main`。

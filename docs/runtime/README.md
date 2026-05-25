@@ -10,6 +10,8 @@ flowchart TD
   Intake --> Router[Routing / Smart Router]
   Router --> Chat[Chat runtime<br/>API fast path]
   Router --> Task[Task runtime]
+  Hookd[hookd Unix socket] --> Sessions[CLI session dashboard]
+  Sessions --> Delivery
   Cron[Cron scheduler] --> ProviderContext[Pre-provider context]
   ProviderContext --> Task
   Task --> AgentRuntime[Claude / Codex / managed runtime]
@@ -52,6 +54,7 @@ Routing contract:
 - Weixin chat uses the shared `chat()` boundary but asks it to prefer a lightweight Anthropic/OpenAI-compatible API client before falling back to the configured agent runtime.
 - Weixin direct may run as the only enabled IM gateway; when `im.transports.discord.enabled=false`, Discord credentials are optional and MiniClaw still starts non-Discord gateways.
 - Weixin inbound media is normalized before routing: official `image_item.media` and `voice_item.media` CDN references are downloaded, AES-ECB decrypted, and voice SILK is best-effort transcoded to WAV before attachment processing.
+- `/sessions` renders the hookd-observed CLI session dashboard. It is separate from `/status`: `/status` is MiniClaw-owned tasks, while `/sessions` is ordinary Claude Code or Codex CLI sessions observed from provider hooks.
 
 Smart Router resolution order:
 
@@ -96,6 +99,29 @@ Current delivery shape:
 - Weixin delivery: text uses `sendmessage`; file delivery uses the official `getuploadurl -> CDN AES upload -> sendmessage` chain and sends captions and media as separate message items. Session-expired `-14` pauses the affected account for one hour.
 - Weixin chat sends `sendtyping` start, keepalive, and cancel signals when `getconfig` returns a typing ticket, so long LLM replies have visible in-chat activity.
 - Trace view: task events and trace-export commands provide operator-level details.
+
+## External CLI Session Control
+
+Owner code paths:
+
+```text
+src/hookd/**
+src/store/cli-sessions.ts
+src/discord/cli-session-dashboard.ts
+src/bot/cli-session-buttons.ts
+src/bot/cli-session-modals.ts
+```
+
+Runtime contract:
+
+- `hookd` is opt-in through `hookd.enabled`; the first shipped slice does not auto-edit `~/.claude/settings.json` or `~/.codex/hooks.json`.
+- Provider hooks send newline-delimited JSON to `hookd.sock`; MiniClaw normalizes provider, session id, cwd, pid, tty, terminal hints, transcript path, event name, and phase.
+- CLI session state lives in `cli_sessions` and `cli_session_events`, not in `tasks`, until the operator explicitly starts a same-provider continuation.
+- Dashboard ordering is state-prioritized: approval, active, stale active, idle, then history/hidden. Older active work stays above newer idle sessions.
+- Empty Codex startup sessions are hidden from the default dashboard until a real prompt or transcript activity appears.
+- `Details` and `Hide` are available from Discord buttons. `Continue` is available only for idle sessions and opens a Discord modal for the follow-up instruction.
+- Same-provider continuation forces the runtime to match the observed session provider. A Claude session resumes through Claude; a Codex session resumes through Codex.
+- Active external CLI sessions do not receive blind iTerm2 keystroke injection. Until provider-native interrupt/input APIs are available, MiniClaw refuses same-provider continuation while the observed session is still active.
 
 ## Weixin Protocol Compatibility
 

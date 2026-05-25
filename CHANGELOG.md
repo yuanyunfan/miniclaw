@@ -7,6 +7,7 @@
 ## [Unreleased]
 
 ### Added
+- 新增 `hookd` CLI session control MVP：通过本地 Unix socket 接收 Claude Code / Codex hook events，持久化 `cli_sessions` / `cli_session_events`，提供 Discord `/sessions` dashboard、Details/Hide buttons，以及 idle session 的 same-provider Continue modal。
 - 新增 Discord Agent Control Plane 设计文档，记录 MiniClaw 通过 Discord 手机端观察、审批、取消、排队 follow-up，并接力 Claude Code 或 Codex 任务的实现路线。
 - 新增 Discord startup login retry：`bot.login` 失败时会通过 Weixin direct 发送启动失败通知，并按 10m / 20m / 40m backoff 重试，重试预算耗尽后才降级到非 Discord IM gateway。
 - 新增 cron task output contract：`type=task` 可在 cron YAML 中通过 inline `output_template` 或 `output_contract.template` 注入 prompt-level 输出格式契约，支持不传 vars，并预留 `validator: none` 运行时 hook。

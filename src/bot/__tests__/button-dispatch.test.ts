@@ -29,6 +29,7 @@ function dependencies(
 ): ButtonDispatchDependencies {
   return {
     handleCronRetryButton: vi.fn(async (_interaction: ButtonInteraction) => false),
+    handleCliSessionButton: vi.fn(async (_interaction: ButtonInteraction) => false),
     handleSmartRouterButton: vi.fn(async (_interaction: ButtonInteraction) => false),
     logError: vi.fn(),
     ...overrides,
@@ -46,10 +47,25 @@ describe("dispatchButtonInteraction", () => {
     await expect(dispatchButtonInteraction(interaction, deps)).resolves.toBe(true);
 
     expect(deps.handleCronRetryButton).toHaveBeenCalledWith(interaction);
+    expect(deps.handleCliSessionButton).not.toHaveBeenCalled();
     expect(deps.handleSmartRouterButton).not.toHaveBeenCalled();
   });
 
-  it("falls through to smart router buttons when cron retry does not claim the interaction", async () => {
+  it("handles CLI session buttons before smart router buttons", async () => {
+    const { interaction } = fakeButtonInteraction();
+    const deps = dependencies({
+      handleCliSessionButton: vi.fn(async (_interaction: ButtonInteraction) => true),
+      handleSmartRouterButton: vi.fn(async (_interaction: ButtonInteraction) => true),
+    });
+
+    await expect(dispatchButtonInteraction(interaction, deps)).resolves.toBe(true);
+
+    expect(deps.handleCronRetryButton).toHaveBeenCalledWith(interaction);
+    expect(deps.handleCliSessionButton).toHaveBeenCalledWith(interaction);
+    expect(deps.handleSmartRouterButton).not.toHaveBeenCalled();
+  });
+
+  it("falls through to smart router buttons when earlier handlers do not claim the interaction", async () => {
     const { interaction } = fakeButtonInteraction();
     const deps = dependencies({
       handleSmartRouterButton: vi.fn(async (_interaction: ButtonInteraction) => true),
@@ -58,6 +74,7 @@ describe("dispatchButtonInteraction", () => {
     await expect(dispatchButtonInteraction(interaction, deps)).resolves.toBe(true);
 
     expect(deps.handleCronRetryButton).toHaveBeenCalledWith(interaction);
+    expect(deps.handleCliSessionButton).toHaveBeenCalledWith(interaction);
     expect(deps.handleSmartRouterButton).toHaveBeenCalledWith(interaction);
   });
 

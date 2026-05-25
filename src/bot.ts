@@ -14,6 +14,7 @@ import { resolveDiscordMessageRoute } from "./routing/message-route.js";
 import { isAllowedDiscordMessageAuthor } from "./e2e/safety.js";
 import { dispatchButtonInteraction } from "./bot/button-dispatch.js";
 import { dispatchSlashCommand } from "./bot/slash-dispatch.js";
+import { handleCliSessionModal } from "./bot/cli-session-modals.js";
 import { handleChatMessage } from "./bot/message-chat.js";
 import { handleTaskChannelMessage } from "./bot/message-task-channel.js";
 import { handleThreadContinuationMessage } from "./bot/message-thread-continuation.js";
@@ -103,6 +104,10 @@ export function createBot(): Client {
       if (handled) return;
     }
 
+    if (interaction.isModalSubmit()) {
+      const handled = await handleCliSessionModal(interaction);
+      if (handled) return;
+    }
     if (!interaction.isChatInputCommand()) return;
     await dispatchSlashCommand(interaction);
   });

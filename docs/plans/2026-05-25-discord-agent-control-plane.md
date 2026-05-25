@@ -514,3 +514,4 @@ Provider switching is intentionally out of scope. If the operator wants to start
 
 - 2026-05-25: Initial analysis captured as a Discord control-plane design plan.
 - 2026-05-25: Updated the plan to make `hookd` the first implementation layer after inspecting MioIsland's hook-based Claude and Codex session discovery. The outdated wrapper-first assumption was removed.
+- 2026-05-25: Shipped the first implementation slice: SQLite `cli_sessions` / `cli_session_events`, hookd Unix-socket event ingestion, canonical phase mapping, dead-pid cleanup, Discord `/sessions` dashboard, `Details` / `Hide` buttons, and idle-session `Continue` modal that starts same-provider MiniClaw continuation. Hook installation and blocking approval relay remain future slices.

@@ -16,6 +16,7 @@ import {
 import { startPreClientReadyWatchdog, type PreClientReadyWatchdogHandle } from "./monitoring/pre-client-ready-watchdog.js";
 import { startDoctorScheduler, type DoctorSchedulerHandle } from "./ops/doctor-scheduler.js";
 import { startWeixinGateway, type WeixinGatewayHandle } from "./im/adapters/weixin/gateway.js";
+import { startHookd, type HookdHandle } from "./hookd/server.js";
 import { createLogger } from "./lib/log.js";
 import {
   beginDraining,
@@ -49,6 +50,7 @@ let agentRunManagerSweeper: AgentRunManagerSweeperHandle | null = null;
 let startupWatchdog: PreClientReadyWatchdogHandle | null = null;
 let doctorScheduler: DoctorSchedulerHandle | null = null;
 let weixinGateway: WeixinGatewayHandle | null = null;
+let hookd: HookdHandle | null = null;
 let shutdownPromise: Promise<void> | null = null;
 let signalCount = 0;
 
@@ -91,6 +93,7 @@ async function beginGracefulShutdown(reason: string, force = false): Promise<voi
     startupWatchdog?.stop();
     doctorScheduler?.stop();
     weixinGateway?.stop();
+    await hookd?.stop();
     stopScheduler();
     await bot?.destroy();
     process.exit(1);
@@ -110,6 +113,7 @@ async function beginGracefulShutdown(reason: string, force = false): Promise<voi
     startupWatchdog?.stop();
     doctorScheduler?.stop();
     weixinGateway?.stop();
+    await hookd?.stop();
     stopScheduler();
 
     const activeAtStart = listActiveTaskIds();
@@ -148,6 +152,7 @@ async function beginGracefulShutdown(reason: string, force = false): Promise<voi
     startupWatchdog?.stop();
     doctorScheduler?.stop();
     weixinGateway?.stop();
+    await hookd?.stop();
     stopScheduler();
     await bot?.destroy();
     process.exit(1);
@@ -168,6 +173,7 @@ async function main(): Promise<void> {
   initDb();
   log.info("Database initialized");
 
+  hookd = startHookd(config.hookd);
   memoryMaintenanceScheduler = startMemoryMaintenanceScheduler(config.memoryMaintenance);
   agentRunManagerSweeper = startAgentRunManagerSweeper({
     enabled: config.agentRunManager.enabled || config.agentRunManager.autoEnabled,
@@ -223,6 +229,7 @@ main().catch(async (err) => {
   startupWatchdog?.stop();
   doctorScheduler?.stop();
   weixinGateway?.stop();
+  await hookd?.stop();
   void bot?.destroy();
   process.exit(1);
 });

@@ -3,7 +3,7 @@ doc_id: runtime-index
 lang: zh
 translation_of: docs/runtime/README.md
 translation_status: current
-source_sha256: 5aa9695b36f2c82c1ba08e5d0dd7ba02ac4c421aea5cbf876cbc28edbbfddf7e
+source_sha256: bcdfffa987930206516086f6181d838109fb61c4a81e8334d6a35cc03e433650
 ---
 # MiniClaw Runtime 文档
 
@@ -17,6 +17,8 @@ flowchart TD
   Intake --> Router[Routing / Smart Router]
   Router --> Chat[Chat runtime<br/>API fast path]
   Router --> Task[Task runtime]
+  Hookd[hookd Unix socket] --> Sessions[CLI session dashboard]
+  Sessions --> Delivery
   Cron[Cron scheduler] --> ProviderContext[Pre-provider context]
   ProviderContext --> Task
   Task --> AgentRuntime[Claude / Codex / managed runtime]
@@ -59,6 +61,7 @@ Routing contract:
 - Weixin chat 复用 `chat()` 边界，但会要求它优先使用 lightweight Anthropic/OpenAI-compatible API client，再 fallback 到配置的 agent runtime。
 - Weixin direct 可以作为唯一启用的 IM gateway；当 `im.transports.discord.enabled=false` 时，Discord credentials 变为可选，MiniClaw 仍会启动非 Discord gateway。
 - Weixin 入站媒体会在路由前标准化：官方 `image_item.media` 和 `voice_item.media` CDN 引用会被下载、按 AES-ECB 解密，语音 SILK 会尽量转成 WAV 后再进入附件处理链路。
+- `/sessions` 渲染 hookd 观测到的 CLI session dashboard。它和 `/status` 分离：`/status` 展示 MiniClaw-owned tasks，`/sessions` 展示通过 provider hooks 观测到的普通 Claude Code 或 Codex CLI sessions。
 
 Smart Router resolution order:
 
@@ -103,6 +106,29 @@ Current delivery shape:
 - Weixin delivery: 文本使用 `sendmessage`；文件投递使用官方 `getuploadurl -> CDN AES upload -> sendmessage` 链路，并把 caption 和媒体拆成独立 message item。Session expired `-14` 会让受影响账号暂停一小时。
 - Weixin chat 会在 `getconfig` 返回 typing ticket 时发送 `sendtyping` start、keepalive 和 cancel 信号，让较长 LLM 回复在微信里有可见的输入状态。
 - Trace view: task events 和 trace-export command 提供 operator 级细节。
+
+## 外部 CLI Session 控制
+
+Owner code paths:
+
+```text
+src/hookd/**
+src/store/cli-sessions.ts
+src/discord/cli-session-dashboard.ts
+src/bot/cli-session-buttons.ts
+src/bot/cli-session-modals.ts
+```
+
+Runtime contract:
+
+- `hookd` 通过 `hookd.enabled` opt-in；首个 shipped slice 不会自动编辑 `~/.claude/settings.json` 或 `~/.codex/hooks.json`。
+- Provider hooks 把 newline-delimited JSON 发送到 `hookd.sock`；MiniClaw 会 normalize provider、session id、cwd、pid、tty、terminal hints、transcript path、event name 和 phase。
+- CLI session state 存在 `cli_sessions` 和 `cli_session_events`，不会进入 `tasks`；只有 operator 显式启动 same-provider continuation 后才会创建 MiniClaw task。
+- Dashboard 排序按状态优先：approval、active、stale active、idle，然后才是 history/hidden。较早打开但仍 active 的工作会排在较新的 idle sessions 上方。
+- 空 Codex startup sessions 默认不显示，直到出现真实 prompt 或 transcript activity。
+- Discord buttons 支持 `Details` 和 `Hide`。`Continue` 只对 idle sessions 可用，并打开 Discord modal 填写 follow-up instruction。
+- Same-provider continuation 会强制 runtime 与被观测 session 的 provider 一致。Claude session 通过 Claude 继续，Codex session 通过 Codex 继续。
+- Active external CLI sessions 不做盲目 iTerm2 keystroke injection。在 provider-native interrupt/input API 可用前，MiniClaw 会拒绝仍 active session 的 same-provider continuation。
 
 ## Weixin 协议兼容
 

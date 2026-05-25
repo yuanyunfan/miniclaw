@@ -31,6 +31,44 @@ const commands = [
     .setDescription("查看当前活跃任务"),
 
   new SlashCommandBuilder()
+    .setName("sessions")
+    .setDescription("查看 hookd 观测到的 Claude/Codex CLI sessions")
+    .addStringOption((opt) =>
+      opt
+        .setName("provider")
+        .setDescription("按 provider 筛选")
+        .setRequired(false)
+        .addChoices(
+          { name: "claude", value: "claude" },
+          { name: "codex", value: "codex" },
+        )
+    )
+    .addStringOption((opt) =>
+      opt
+        .setName("status")
+        .setDescription("按状态筛选")
+        .setRequired(false)
+        .addChoices(
+          { name: "all", value: "all" },
+          { name: "active", value: "active" },
+          { name: "idle", value: "idle" },
+          { name: "closed", value: "closed" },
+          { name: "hidden", value: "hidden" },
+        )
+    )
+    .addStringOption((opt) =>
+      opt.setName("project").setDescription("按 cwd/project 关键字筛选").setRequired(false)
+    )
+    .addIntegerOption((opt) =>
+      opt
+        .setName("limit")
+        .setDescription("最多显示多少个 session（默认跟随 hookd.dashboard_limit）")
+        .setRequired(false)
+        .setMinValue(1)
+        .setMaxValue(20)
+    ),
+
+  new SlashCommandBuilder()
     .setName("task-log")
     .setDescription("导出最近任务的安全 Markdown trace")
     .addStringOption((opt) =>

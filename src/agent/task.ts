@@ -16,7 +16,7 @@ import { buildSupervisorBlock } from "./supervisor.js";
 import { createFakeTaskRunner } from "./runners/fake-task-runner.js";
 import type { AgentRuntime, AgentRuntimeTraceOptions, AgentTaskResult } from "../runtime/agent-runtime.js";
 import { createTaskRunnerRuntime } from "./runtimes/task-runner-runtime.js";
-import { getAgentRuntime, getDefaultAgentRuntime, isAgentRuntimeId, type DefaultAgentRuntimeConfig } from "./runtimes/registry.js";
+import { getAgentRuntime, getDefaultAgentRuntime, isAgentRuntimeId, type AgentRuntimeId, type DefaultAgentRuntimeConfig } from "./runtimes/registry.js";
 import type { TaskViewEvent } from "./task-view-events.js";
 import { AgentRunManager } from "./run-manager/manager.js";
 import { resolveAgentRunManagerRoute } from "./run-manager/complexity.js";
@@ -183,13 +183,26 @@ interface SelectedTaskRuntime {
   runtime: AgentRuntime;
   provider: string;
   logProvider: string;
+  model: string;
   includeToolCount: boolean;
 }
 
-function selectTaskRuntime(runtimeConfig: TaskRuntimeConfig): SelectedTaskRuntime {
-  const runtime = getDefaultAgentRuntime(runtimeConfig);
+function modelForRuntime(runtimeId: string): string {
+  if (runtimeId === "claude") return config.claudeModel;
+  if (runtimeId === "codex") return config.codex.model ?? "inherit";
+  return config.model;
+}
+
+function selectTaskRuntime(runtimeConfig: TaskRuntimeConfig, runtimeId?: string): SelectedTaskRuntime {
+  const runtime = runtimeId ? getAgentRuntime(runtimeId) : getDefaultAgentRuntime(runtimeConfig);
   if (!runtimeConfig.e2e.fakeAgent) {
-    return { runtime, provider: runtime.id, logProvider: runtime.id, includeToolCount: true };
+    return {
+      runtime,
+      provider: runtime.id,
+      logProvider: runtime.id,
+      model: modelForRuntime(runtime.id),
+      includeToolCount: true,
+    };
   }
 
   if (!isAgentRuntimeId(runtime.id)) {
@@ -203,6 +216,7 @@ function selectTaskRuntime(runtimeConfig: TaskRuntimeConfig): SelectedTaskRuntim
     }),
     provider: runtime.id,
     logProvider: "e2e-fake",
+    model: modelForRuntime(runtime.id),
     includeToolCount: false,
   };
 }
@@ -213,6 +227,7 @@ interface ExecuteTaskParams {
   cwd: string;
   channel?: SendableChannels;
   viewReporter?: TaskViewReporter;
+  runtimeId?: AgentRuntimeId;
   resumeSessionId?: string;
   attachmentBlocks?: ContentBlockParam[];
   attachmentCodexInputs?: CodexInputEntry[];
@@ -309,7 +324,7 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
   activeTasks.set(params.taskId, abortController);
   const outputMode = params.outputMode ?? "embed";
   const reporter = new TaskReporter(params.taskId);
-  const selectedRuntime = selectTaskRuntime(config);
+  const selectedRuntime = selectTaskRuntime(config, params.runtimeId);
   if (!params.channel && !params.viewReporter) {
     throw new Error("executeTask requires either a Discord channel or a task view reporter");
   }
@@ -319,7 +334,7 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
     cwd: params.cwd,
     channel: params.channel!,
     provider: selectedRuntime.provider,
-    model: config.model,
+    model: selectedRuntime.model,
     outputMode,
     traceAutoAttach: config.tasks.traceAutoAttach,
     ...(params.deliveryChannelId ? { deliveryChannelId: params.deliveryChannelId } : {}),
@@ -332,7 +347,7 @@ export async function executeTask(params: ExecuteTaskParams): Promise<TaskResult
   const shortId = params.taskId.slice(0, 8);
   reporter.started({
     provider: selectedRuntime.provider,
-    model: config.model,
+    model: selectedRuntime.model,
     cwd: params.cwd,
     output_mode: outputMode,
     resume: Boolean(params.resumeSessionId),

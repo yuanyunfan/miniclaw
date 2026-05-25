@@ -1,6 +1,7 @@
 import type { AnyThreadChannel, Attachment, Message } from "discord.js";
 import { v4 as uuid } from "uuid";
 import { config } from "../config.js";
+import type { AgentRuntimeId } from "../agent/runtimes/registry.js";
 import { executeTask, getActiveTaskCount, type TaskResult } from "../agent/task.js";
 import { TaskReporter } from "../agent/task-reporter.js";
 import { createTask } from "../store/db.js";
@@ -29,6 +30,8 @@ export interface DiscordTaskIntakeParams {
   userId: string;
   attachments?: Attachment[];
   taskContext?: TaskContextEnvelope;
+  runtimeId?: AgentRuntimeId;
+  resumeSessionId?: string;
   createThread: (name: string) => Promise<CreatedThread>;
   onCreated?: (result: DiscordTaskIntakeResult) => Promise<void>;
   onCompleted?: (result: DiscordTaskIntakeResult, taskResult: TaskResult) => Promise<void>;
@@ -106,6 +109,7 @@ export async function createAndRunDiscordTask(params: DiscordTaskIntakeParams): 
     thread_id: thread.id,
     source_channel_id: sourceMetadata?.source_channel_id,
     source_message_id: sourceMetadata?.source_message_id,
+    resume_session_id: params.resumeSessionId,
     attachments: attachments.length,
   });
   reporter.contextCaptured({
@@ -120,7 +124,7 @@ export async function createAndRunDiscordTask(params: DiscordTaskIntakeParams): 
   try {
     statusMessage = await thread.send({
       embeds: [taskStartEmbed(taskId, displayPrompt, params.cwd, {
-        provider: config.runtime.defaultAgent,
+        provider: params.runtimeId ?? config.runtime.defaultAgent,
         model: config.model,
       })],
     });
@@ -143,6 +147,8 @@ export async function createAndRunDiscordTask(params: DiscordTaskIntakeParams): 
     attachmentBlocks,
     attachmentCodexInputs,
     statusMessage,
+    ...(params.runtimeId ? { runtimeId: params.runtimeId } : {}),
+    ...(params.resumeSessionId ? { resumeSessionId: params.resumeSessionId } : {}),
   }).then(async (taskResult) => {
     try {
       await params.onCompleted?.(result, taskResult);

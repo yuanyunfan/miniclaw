@@ -14,6 +14,7 @@ import { migration013AgentRunManager } from "./013-agent-run-manager.js";
 import { migration014AgentSchedulerState } from "./014-agent-scheduler-state.js";
 import { migration015MarketContext } from "./015-market-context.js";
 import { migration016CronDeliveryMessages } from "./016-cron-delivery-messages.js";
+import { migration017CliSessions } from "./017-cli-sessions.js";
 import type { SchemaMigration } from "./types.js";
 
 export const migrations: SchemaMigration[] = [
@@ -33,4 +34,5 @@ export const migrations: SchemaMigration[] = [
   migration014AgentSchedulerState,
   migration015MarketContext,
   migration016CronDeliveryMessages,
+  migration017CliSessions,
 ];
