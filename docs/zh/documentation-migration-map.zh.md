@@ -3,7 +3,7 @@ doc_id: documentation-migration-map
 lang: zh
 translation_of: docs/documentation-migration-map.md
 translation_status: current
-source_sha256: 6bf91b8cb91cc696efb0820716b3ee28a0000abf94b4f9195c9c20d511d80a1a
+source_sha256: 6fefea41da2f896a134f76335110fe72d02e2f9f2485e91f9376d07ec9a31375
 ---
 # MiniClaw 文档迁移地图
 
@@ -30,6 +30,17 @@ source_sha256: 6bf91b8cb91cc696efb0820716b3ee28a0000abf94b4f9195c9c20d511d80a1a
 
 ```json
 [
+  {
+    "doc_id": "discord-agent-control-plane",
+    "source_path": "docs/plans/2026-05-25-discord-agent-control-plane.md",
+    "zh_path": "docs/zh/plans/2026-05-25-discord-agent-control-plane.zh.md",
+    "category": "plan",
+    "status": "keep",
+    "merge_group": "task-runtime",
+    "website_exposure": "internal",
+    "translation_required": true,
+    "translation_status": "current"
+  },
   {
     "doc_id": "documentation-strategy",
     "source_path": "docs/plans/2026-05-15-documentation-strategy.md",

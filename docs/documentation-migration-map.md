@@ -25,6 +25,17 @@ Field meanings:
 ```json
 [
   {
+    "doc_id": "discord-agent-control-plane",
+    "source_path": "docs/plans/2026-05-25-discord-agent-control-plane.md",
+    "zh_path": "docs/zh/plans/2026-05-25-discord-agent-control-plane.zh.md",
+    "category": "plan",
+    "status": "keep",
+    "merge_group": "task-runtime",
+    "website_exposure": "internal",
+    "translation_required": true,
+    "translation_status": "current"
+  },
+  {
     "doc_id": "documentation-strategy",
     "source_path": "docs/plans/2026-05-15-documentation-strategy.md",
     "zh_path": "docs/zh/plans/2026-05-15-documentation-strategy.zh.md",

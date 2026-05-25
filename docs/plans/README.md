@@ -6,6 +6,7 @@ Use a plan document before editing production code when a task changes architect
 
 ## Current Planning Notes
 
+- [`2026-05-25-discord-agent-control-plane.md`](2026-05-25-discord-agent-control-plane.md): draft design for Discord-based mobile control of Claude or Codex tasks, including task control events, live approvals, same-provider relay/resume, and a Codex app-server runtime.
 - [`2026-05-17-stock-provider-data-layer-migration.md`](2026-05-17-stock-provider-data-layer-migration.md): completed compatibility migration; stock providers keep cron-facing names while implementation moves into `src/stock/` source, data, signal, and report layers.
 - [`2026-05-15-documentation-strategy.md`](2026-05-15-documentation-strategy.md): completed; layered documentation policy,`docs/`Docs-driving development source of truth, GitHub Pages as human-facing portal.
 

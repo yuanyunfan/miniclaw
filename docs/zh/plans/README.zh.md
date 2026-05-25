@@ -3,7 +3,7 @@ doc_id: plans-index
 lang: zh
 translation_of: docs/plans/README.md
 translation_status: current
-source_sha256: 9aa2df9feb53fbc4104676cde25df447a5c19ab17a5ec288c73ac3876eeba16c
+source_sha256: 0beb6ac42f51d591407a9ea3716fc0f916380d3ade228269bbd264929e40ebd9
 ---
 # 发展计划文件
 
@@ -13,6 +13,7 @@ source_sha256: 9aa2df9feb53fbc4104676cde25df447a5c19ab17a5ec288c73ac3876eeba16c
 
 ## 当前规划说明
 
+- [`2026-05-25-discord-agent-control-plane.md`](../../plans/2026-05-25-discord-agent-control-plane.md): draft design，覆盖通过 Discord mobile control Claude 或 Codex tasks，包括 task control events、live approvals、same-provider relay/resume 和 Codex app-server runtime。
 - [`2026-05-17-stock-provider-data-layer-migration.md`](../../plans/2026-05-17-stock-provider-data-layer-migration.md): completed compatibility migration；stock providers 保持 cron-facing names，implementation 迁入 `src/stock/` source、data、signal 和 report layers。
 - [`2026-05-15-documentation-strategy.md`](2026-05-15-documentation-strategy.md):完成;分层文件政策,`docs/`Docs-driving development source of truth, GitHub Pages 作为人造门户.
 
