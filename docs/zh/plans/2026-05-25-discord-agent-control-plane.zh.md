@@ -3,143 +3,328 @@ doc_id: discord-agent-control-plane
 lang: zh
 translation_of: docs/plans/2026-05-25-discord-agent-control-plane.md
 translation_status: current
-source_sha256: 90eda05c1ae51e44c99dabadafd590d5f35b662a3074f34282c46023770e74bd
+source_sha256: abd382b73ae1eb2b38403074617da53f72313171eb4bbb87e6d947b223aa31bc
 ---
 # Discord Agent Control Plane
 
 状态：draft
 日期：2026-05-25
+更新：2026-05-25
 
 ## 背景
 
-MiniClaw 已经拥有 Discord task intake 路径，也拥有 Claude 或 Codex task runtime。这个需求的目标是 mobile operational control：当操作者离开工作电脑时，Discord 应该能显示 live task progress，并允许操作者从手机插手任务。
+MiniClaw 已经拥有自己启动任务的 Discord task intake。现在缺的能力不同：操作者通常会在多个 iTerm2 窗口里直接启动 `claude` 或 `codex`，离开 Mac 后，希望 Discord 能显示哪些 CLI session 仍在执行、哪些只是完成了当前 turn 并等待下一句输入、哪些已经因为终端关闭而结束。
 
-目标行为不只是“把最终结果发到 Discord”。控制面需要支持：
+目标行为不只是“把任务最终结果发到 Discord”。控制面需要支持：
 
-- 从 task thread 观察正在运行的 Claude 和 Codex task；
-- 在 task 活跃时发送 follow-up instruction；
-- 审批或拒绝高风险 tool operation；
-- 从 Discord 取消或暂停 task；
-- 通过 Discord 接力 Claude Code task 或 Codex task，并保留该 provider 自己的 task context。
+- 同时观察 MiniClaw 启动的 task，以及手动启动的 Claude Code 或 Codex CLI session；
+- 区分 running turn 和正在等待下一句 prompt 的 idle session；
+- 终端关闭后，把对应 session 从 Discord active surface 中移除；
+- 从 Discord 审批或拒绝高风险 tool operation；
+- 通过最可靠的 same-provider path 发送 follow-up instruction；
+- Claude session 继续 Claude，Codex session 继续 Codex，不把 provider context 包装成可以互相转换。
 
-三个参考项目展示了可借鉴的模式：
-
-- MioIsland：用 hooks 观察 Claude Code session，把手机消息路由进精确 terminal session，并把 permission request 回传到手机。
-- Happy：包装 Claude 和 Codex 启动，拥有 remote message queue，并能在本机和手机远程模式之间切换 running session。
-- Remodex：让 Codex 执行留在 Mac 上，通过 local bridge 把手机流量用 JSON-RPC 转发给 `codex app-server`。
-
-MiniClaw 应借鉴 control-plane 思路，而不是照搬完整产品形态。Discord 已经是 mobile UI，MiniClaw 对自己创建的任务也已经拥有 runtime creation。
+参考项目分析后的关键修正是：MiniClaw 不必要求用户通过 `mc-claude` 或 `mc-codex` 这类 wrapper 才能可靠发现 session。MioIsland 证明，只要安装 host-level hook bridge，普通 `claude` 和 `codex` 调用也可以被观察。因此 MiniClaw 应先增加一个本地 hook daemon，本计划称为 `hookd`，再做更重的 terminal-control 能力。
 
 ## 目标
 
-- 保持 MiniClaw 作为 task lifecycle、provider selection、task row、task event、Discord rendering 和 cancellation 的权威 owner。
-- 增加 task-scoped control bus，让 Discord message 和 button 可以变成结构化 control event。
-- 保留现有 one-thread-per-task Discord 模型。
-- 通过 `TaskViewEvent` 同时支持 Claude 和 Codex live progress。
-- 通过现有 Claude Agent SDK `canUseTool` 边界支持 Claude live tool approval。
-- 保持当前 Codex SDK runner 作为稳定默认 streamed one-shot turn 路径。
-- 增加独立 Codex app-server runtime，用于真正的 Codex live interruption、approval 和 bidirectional control。
-- 支持 same-provider continuation：Discord thread 应能继续创建它的 Claude 或 Codex session。
+- 增加 `hookd`，作为 Claude Code 和 Codex CLI 的本地 session-discovery daemon。
+- 安装 hooks 后，可以观察从 iTerm2、tmux、cmux、Ghostty、Terminal.app 或其他支持终端中直接启动的普通 `claude` 和 `codex` session。
+- 持久化 provider session id、provider、cwd、pid、tty、terminal surface hints、transcript path、phase 和 last activity。
+- 在 Discord 中展示 active 和 idle CLI session，但不把每个外部 CLI session 都变成 MiniClaw task row。
+- MiniClaw-created task 继续保持 one Discord thread per task，同时为手动启动的 session 增加独立的 Discord CLI-session surface。
+- 支持 same-provider continuation：Claude session resume Claude context；Codex session resume Codex context。
+- 当 CLI provider 暴露 blocking hook 时，通过 hook request/response 支持 Claude permission approval。
+- `TaskControlBus` 继续用于 MiniClaw-owned task，但外部 CLI session 的观察不应先依赖它。
+- 当前 Codex SDK runner 继续作为 MiniClaw-started task 的稳定路径；`codex app-server` 作为后续更深 Codex live control 的 opt-in runtime。
 
 ## 非目标
 
-- 不把 terminal injection 作为 MiniClaw-owned task 的主路径。
-- 不实现 Claude 和 Codex 之间的 provider switching。Claude session id 和 Codex thread id 是不同 provider context，不应被迁移或转换。
-- 不把这个能力主要做成 Agent Run Manager 功能。内部 multi-agent orchestration 和 operator control 是两层。
-- Discord 已能覆盖 mobile surface 时，不新建 mobile app 或 relay service。
-- 在 access control 重新设计前，不暴露 multi-user 或 public Discord control。生产环境仍保持 single-operator。
+- 不要求用户把每个本地 `claude` 或 `codex` command 替换成 MiniClaw wrapper。
+- 不只根据 terminal output 判断 active 或 idle state。
+- 不把 iTerm2 title、cwd matching 或 terminal pane capture 当作 source of truth。
+- 不实现 Claude 和 Codex 之间的 provider switching。Claude session id 和 Codex thread id 是不同 provider context。
+- 在 access control 重新设计前，不暴露 multi-user 或 public Discord control。生产环境保持 single-operator。
 - 不把 raw provider payload 或未脱敏 tool input 直接发到 Discord。
+- 不把 terminal input injection 作为 iTerm2 的默认 continuation path。它只能在 session identity 已知后作为 best-effort 操作，而不是可靠性基础。
 
 ## 现有架构证据
 
 - `docs/runtime/README.md`：当前 runtime map 是 Discord 或 IM intake -> task runtime -> Claude、Codex 或 managed runtime -> task events -> delivery。
-- `docs/bot-routing.md`：thread continuation 已经优先于 task-channel 和 chat routing，并通过 `resumeSessionId` resume 之前的 provider session。
-- `src/agent/task.ts`：`executeTask()` 拥有 task lifecycle、`AbortController`、task DB state、`TaskReporter` 和 `DiscordTaskViewReporter` wiring。
+- `docs/bot-routing.md`：thread continuation 已优先于 task-channel 和 chat routing，并通过 `resumeSessionId` resume 之前的 provider session。
+- `src/agent/task.ts`：`executeTask()` 拥有 MiniClaw task lifecycle、`AbortController`、task DB state、`TaskReporter` 和 `DiscordTaskViewReporter` wiring。
 - `src/agent/runners/types.ts`：当前 runner contract 包含 `signal`、`onViewEvent`、`onTraceEvent` 和 `resumeSessionId`，但没有 control queue 或 approval callback。
-- `src/agent/runners/claude-task-runner.ts`：Claude 已使用 async `canUseTool` callback 做 policy decision，可扩展为 Discord approval wait point。
-- `src/agent/runners/codex-task-runner.ts`：Codex 当前使用 `@openai/codex-sdk` 的 `thread.runStreamed(...)`，能 stream progress 和 abort，但不是完整 interactive control protocol。
-- `src/bot/button-dispatch.ts`：button dispatch 已集中处理 cron retry 和 Smart Router button；task control button 应使用独立 `miniclaw:task-control:*` 前缀。
-- `src/store/schema.ts`：已有 `tasks` 和 `task_events`，但没有 durable task control event table。
-- `src/agent/run-manager/**`：Agent Run Manager 之后可以暴露内部 orchestration events，但第一阶段应先解决 manager 外部的 operator control。
+- `src/agent/runners/claude-task-runner.ts`：Claude SDK task 已经使用 async `canUseTool` callback 做 MiniClaw-started policy decision。
+- `src/agent/runners/codex-task-runner.ts`：Codex SDK task 当前使用 `@openai/codex-sdk` 的 `thread.runStreamed(...)`，能 stream progress 和 abort，但不是完整 interactive terminal control protocol。
+- `src/store/schema.ts`：已有 `tasks` 和 `task_events`，但没有 durable external CLI session 或 hook event table。
+- `src/bot/button-dispatch.ts`：button dispatch 已集中处理 cron retry 和 Smart Router button；task button 和 hook approval button 应使用不同前缀。
 
 ## 参考项目结论
 
 ### MioIsland
 
-MioIsland 最适合作为 external-session companion。它检测 Claude 或 Codex 相关 session state，用 hooks 传递 state 和 permission event，并可把手机消息路由到选定 terminal session。
+MioIsland 是 `hookd` 层最值得参考的实现。它不是靠 terminal output 判断 session 是否 active，而是安装 provider hooks，通过本地 Unix socket 接收 event payload，把 event 映射到显式 state machine，再用 process liveness 作为 cleanup fallback。
 
 可借鉴：
 
-- phase-oriented live status；
-- 带 allow 或 deny decision 的 permission request relay；
-- 对远端注入消息做 echo deduplication；
-- 明确区分 observation、terminal input 和 permission request。
+- Claude Code 和 Codex 的 host-level hook installation；
+- 用本地 Unix socket bridge 传递低延迟 hook event；
+- hook payload enrichment：parent pid、tty、cwd、terminal app hint、cmux 或 tmux identifier、Codex transcript path；
+- 把 provider event 映射为 `processing`、`running_tool`、`waiting_for_approval`、`waiting_for_input`、`compacting` 和 `ended`；
+- 用 `kill(pid, 0)` 做 zombie scanning，识别没有 clean provider end event 但 terminal window 或 CLI process 已死亡的 session；
+- 解析 transcript，用于 summary 和 recent message；
+- 延迟展示 Codex startup event，避免只是打开空 Codex TUI 就产生噪音 session。
 
-不适合作为主路径：
+不照搬：
 
-- 依赖 terminal pane capture 作为 source of truth；
-- 对 MiniClaw 自己启动的任务使用 terminal injection；
-- 把 cwd 或 terminal title matching 变成正常 task routing 的一部分。
-
-Terminal injection 可以作为未来 fallback，用来处理 MiniClaw 没有启动的外部 Claude Code session。
+- 不让 terminal pane capture 成为权威状态源；
+- 多个 iTerm2 window、tab、pane 共享 cwd 时，不假设 iTerm2 injection 足够精准；
+- 不把 MiniClaw task row 直接绑定到每个被观察到的外部 CLI session。
 
 ### Happy
 
-Happy 最适合作为 wrapper-owned remote execution loop。它通过自己的 command 启动 Claude 或 Codex，拥有 remote mode，维护 next-message queue，并通过 wrapper 处理 permission request。
+Happy 仍适合作为 wrapper-owned execution 的参考，但不应成为 MiniClaw 默认 discovery model。
 
 可借鉴：
 
-- task-scoped remote input queue；
-- 显式 local vs remote control mode；
-- ready 和 attention-required notification；
+- remote input queue semantics；
+- 显式 local versus remote control mode；
+- attention-required notification；
 - abort-current-turn semantics 与 kill whole session 分离。
 
-不适合作为主产品形态：
+不照搬：
 
-- 要求用户把所有本地 `claude` 或 `codex` command 换成 MiniClaw wrapper；
-- Discord 已经提供 mobile interaction surface 时，再引入单独 mobile application。
+- 要求每个用户命令都走 wrapper；
+- 用单独 mobile application 替代 Discord。
 
 ### Remodex
 
-Remodex 是 Codex live control 最好的参考。关键设计点是 Mac 仍是 execution host，bridge 只把 JSON-RPC message 转发给 `codex app-server`。
+Remodex 仍适合作为未来 Codex deep control 的参考。关键设计点是执行留在 Mac 上，本地 bridge 只把 JSON-RPC traffic 转发给 `codex app-server`。
 
-可借鉴：
+后续可借鉴：
 
-- 把 `codex app-server` 作为 true Codex live control 的底座；
-- 在 transient mobile reconnect 期间保持 Codex process warm；
+- 把 `codex app-server` 作为 true Codex interrupt、approval 和 bidirectional control 的底座；
 - 显式 thread 和 turn lifecycle；
-- 用 persisted Codex session 作为 durable history source，同时把 bridge 作为 live control path。
+- persisted Codex session 作为 durable history source。
 
-不适合照搬：
+第一阶段不照搬：
 
-- 在 Discord control 仍然足够之前，为 MiniClaw 构建 iOS app 或 relay layer；
-- 假设 Codex desktop 是 externally driven app-server activity 的 live subscriber。
+- 不把 app-server 作为 basic active 或 idle detection 的前置条件；
+- app-server runtime 没有 fake-server 和 live smoke coverage 前，不替换当前 Codex SDK task path。
 
 ## 目标架构
 
 ```mermaid
 flowchart TD
-  D[Discord task thread] --> I[Message and button intake]
-  I --> C[Task Control Bus]
-  C --> Q[(task_control_events)]
+  CC[Claude Code CLI] --> HC[Claude hooks]
+  CX[Codex CLI] --> HX[Codex hooks]
+  HC --> HS[hookd hook script]
+  HX --> HS
+  HS --> S[hookd Unix socket]
+  S --> H[hookd daemon]
+  H --> CS[(cli_sessions)]
+  H --> CE[(cli_session_events)]
+  H --> AP[approval wait registry]
 
-  T[executeTask] --> R[Task Runner]
-  R --> V[TaskViewEvent]
-  V --> P[Discord progress message]
-  R --> E[(task_events)]
+  D[Discord session dashboard] --> H
+  D --> B[Discord button and message intake]
+  B --> AP
+  B --> R[Same-provider resume]
 
-  C --> R
-  R --> A[Attention required]
-  A --> P
-
-  R --> CL[Claude SDK runner]
-  R --> CX[Codex SDK runner]
-  R --> AS[Codex app-server runtime]
-
-  C --> S[Same-provider session continuation]
+  MT[MiniClaw task thread] --> TC[Task Control Bus]
+  TC --> TE[(task_control_events)]
+  TC --> TR[Task Runner]
+  TR --> TV[TaskViewEvent]
+  TV --> MT
 ```
 
-`TaskControlBus` 应该是 task-scoped。它应提供低延迟 live run 使用的 in-memory queue，同时用 SQLite append table 做 restart recovery、audit 和 stale-state cleanup。
+`hookd` 和 `TaskControlBus` 相关，但应分层处理。
+
+- `hookd` 观察和控制可能不是 MiniClaw 启动的 host CLI session。
+- `TaskControlBus` 控制已经在 `executeTask()` 内运行的 MiniClaw-started task。
+- Discord 可以渲染两个 surface，但在 session 被显式转换为 MiniClaw task continuation 前，不应共享 persistence table。
+
+## hookd 职责
+
+`hookd` 应是 MiniClaw runtime process 内的 long-running local service，或一个受 MiniClaw 监管的 close child process。
+
+最小职责：
+
+- install、verify、repair、uninstall MiniClaw-managed Claude Code hooks；
+- 当 Codex hook support enabled 时，install、verify、repair、uninstall MiniClaw-managed Codex hooks；
+- 监听本地 Unix socket，例如 `~/.miniclaw/runtime/hookd.sock`；
+- 接收 providers 调用的小 hook script 发来的 JSON hook event；
+- 使用 hook script 收集的 process metadata enrich event；
+- 把 provider event 映射成 MiniClaw canonical CLI session phases；
+- 持久化 session state，并追加保存脱敏后的 raw events；
+- 对 blocking permission request 保持等待，直到 Discord 或 local policy 返回 allow、deny 或 ask；
+- timeout 或 daemon restart 时 expire abandoned permission request；
+- 扫描 dead pid，在 provider 漏发 end event 时把 session 标记为 ended；
+- 为 Discord rendering 和 operational commands 暴露 read-only session snapshots。
+
+## Hook 安装
+
+`hookd` 应幂等管理 hooks，并保留 manifest，让 MiniClaw 能区分自己的 hook entry 和用户管理的 hook entry。
+
+Claude hook target：
+
+- 文件：`~/.claude/settings.json`；
+- 脚本：`~/.miniclaw/hooks/miniclaw-hookd.py`；
+- 事件：`UserPromptSubmit`、`PreToolUse`、`PostToolUse`、`PermissionRequest`、`Notification`、`Stop`、`SubagentStop`、`SessionStart`、`SessionEnd` 和 `PreCompact`；
+- timeout：`PermissionRequest` 需要足够长以支持 interactive approval，但 MiniClaw 侧必须有 timeout 和 deny-by-default policy。
+
+Codex hook target：
+
+- 文件：`~/.codex/hooks.json`；
+- 配置：只有当 MiniClaw 管理该 feature flag 时，才启用 `[features] codex_hooks = true`；
+- 脚本：`~/.miniclaw/hooks/miniclaw-hookd.py`；
+- 第一阶段必需事件：带 startup 或 resume matcher 的 `SessionStart`、`UserPromptSubmit` 和 `Stop`；
+- 后续可选事件：如果已安装 Codex 版本暴露 tool 和 approval event，再接入。
+
+hook script 应保持 provider-neutral。它从 stdin 读取 hook JSON，并向 `hookd` 发送紧凑 event。应包含：
+
+- `source`：`claude` 或 `codex`；
+- `session_id`；
+- `cwd`；
+- `hook_event_name`；
+- 必要时由 script 映射出的 provider status；
+- `os.getppid()` 得到的 parent process pid；
+- 通过 `ps -p <pid> -o tty=` 取得 tty；
+- 从 `ITERM_SESSION_ID`、`TERM_PROGRAM`、`TMUX`、`CMUX_WORKSPACE_ID` 和 `CMUX_SURFACE_ID` 等环境变量取得 terminal hint；
+- 可用时包含 tool name、tool input 和 tool use id；
+- Codex hook payload 提供时包含 Codex transcript path。
+
+## Session State Model
+
+建议 tables：
+
+```sql
+CREATE TABLE cli_sessions (
+  id TEXT PRIMARY KEY,
+  provider TEXT NOT NULL,
+  provider_session_id TEXT NOT NULL,
+  cwd TEXT NOT NULL,
+  pid INTEGER,
+  tty TEXT,
+  terminal_app TEXT,
+  terminal_surface_json TEXT,
+  transcript_path TEXT,
+  phase TEXT NOT NULL,
+  attention_kind TEXT,
+  last_activity_at TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  ended_at TEXT,
+  hidden_at TEXT,
+  UNIQUE(provider, provider_session_id)
+);
+
+CREATE TABLE cli_session_events (
+  id TEXT PRIMARY KEY,
+  cli_session_id TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  event_name TEXT NOT NULL,
+  phase TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+```
+
+Canonical phases：
+
+- `starting`：provider session 已启动，但还没有看到 user prompt；
+- `processing`：provider 正在生成或协调工作；
+- `running_tool`：tool 正在执行；
+- `waiting_for_approval`：provider 被 approval decision 阻塞；
+- `waiting_for_input`：当前 turn 已完成，CLI 正在等待下一句 prompt；
+- `compacting`：正在做 context compaction；
+- `ended`：provider 已结束，或背后的 process 已消失；
+- `unknown`：event 无法分类。
+
+Display buckets：
+
+- Active：`processing`、`running_tool`、`waiting_for_approval` 和 `compacting`。
+- Idle：`waiting_for_input` 且 pid 仍 alive。
+- Closed：`ended`、dead pid、dead tty，或超过 retention 的 stale session。
+- Hidden：用户 archive 了 session，但保留 history。
+
+Codex-specific rule：不要把 Codex `SessionStart` 直接显示成 active session。只有出现真实 `UserPromptSubmit` 或 transcript activity 后再展示，避免空 TUI 启动污染 Discord。
+
+## Discord UX
+
+Discord 应暴露两个相关 surface。
+
+MiniClaw task threads：
+
+- 保持一个 MiniClaw-created task 一个 thread；
+- 显示 task id、provider、model、cwd、provider session id、current phase、recent tool steps、queued operator instruction count 和有效 buttons；
+- 使用 `TaskControlBus` 处理 task-scoped messages、cancellation、pause 和 MiniClaw-owned approval flow。
+
+CLI session dashboard：
+
+- 按 cwd 或 project 分组 observed CLI sessions；
+- 显示每个 project 的 active count；
+- active sessions 优先，idle sessions 次之，closed sessions 只出现在 history 或 archive；
+- 展示 provider badge、phase、elapsed time、cwd、latest user prompt 或 summary、terminal hint 和 last activity time；
+- ended sessions 在短 retention window 后从 active surface 隐藏；
+- 为不想继续看的 idle session 保留手动 `Archive` 或 `Hide` action。
+
+建议 CLI session buttons：
+
+- `miniclaw:cli-session:open:<sessionId>`：显示 detail 和 transcript summary；
+- `miniclaw:cli-session:approve:<requestId>`：approve pending permission request；
+- `miniclaw:cli-session:deny:<requestId>`：deny pending permission request；
+- `miniclaw:cli-session:continue:<sessionId>`：支持时，使用存储的 provider session id 启动 same-provider MiniClaw continuation；
+- `miniclaw:cli-session:hide:<sessionId>`：从 active Discord lists 中 hide 或 archive session；
+- `miniclaw:cli-session:jump:<sessionId>`：仅当存在安全 terminal target 时，做可选 local terminal jump。
+
+Thread message behavior：
+
+- 如果 MiniClaw task 正在等待 input，通过 `TaskControlBus` 交付 message。
+- 如果 MiniClaw task 正在 running，把 message 排队到 next safe point，并在 thread 中确认。
+- 如果 observed CLI session 是 idle，优先通过 MiniClaw 做 same-provider continuation，而不是盲目 iTerm2 injection。
+- 如果 observed CLI session 正在 running，除非 provider 暴露明确 interrupt 或 input API，否则 Discord message 只应被确认成 queued 或 advisory。
+- 如果 session 属于 cron task，除非增加 explicit manual resume path，否则不允许 user continuation。
+
+## Approval Flow
+
+对于 Claude Code external CLI sessions，hooks 可以提供 blocking `PermissionRequest`。`hookd` 应：
+
+1. 接收 permission event；如果 provider 没带 tool use id，则和最近匹配的 `PreToolUse` 关联；
+2. 持久化脱敏 approval request；
+3. 把 CLI session phase 更新为 `waiting_for_approval`；
+4. 在 Discord 渲染 approval card，包含安全 tool name、redacted input summary、cwd 和 provider；
+5. 等待 `Approve`、`Deny`、timeout、provider stop 或 process death；
+6. 返回 provider-specific hook response；
+7. 标记 request resolved，并把 session 转回 `processing`、`waiting_for_input` 或 `ended`。
+
+Timeout behavior 必须默认 deny，除非 local policy 明确允许 ask-through。Restart behavior 必须 expire pending approvals，因为原始 hook socket 已经不存在。
+
+Codex approval 不应在已安装 Codex hook 或 app-server runtime 暴露可靠 approval response path 前承诺。
+
+## Continuation And Terminal Input
+
+控制路径按可靠性从高到低分三类：
+
+1. Provider-native resume 或 MiniClaw runner continuation。
+2. Provider hook 或 app-server control API。
+3. Terminal input injection。
+
+MiniClaw 应优先使用 path 1 或 path 2。Terminal input injection 对 jump-back 或 cmux-style exact routing 有价值，但不应成为 state detection 的基础。
+
+对 iTerm2：
+
+- tty matching 可以用于识别 hosting tab 或 pane，从而支持 jump-to-terminal；
+- 多 session 开启时，向 iTerm2 写入文本是 best effort；
+- Discord `continue` 默认应创建 same-provider MiniClaw continuation，而不是向当前前台 iTerm2 pane 发送 keystrokes。
+
+对 cmux 或 tmux：
+
+- workspace、surface、session、window、pane 等精确 identifiers 可以让 terminal routing 更安全；
+- MiniClaw 应在 hookd state model 稳定后再增加 terminal injection。
+
+## MiniClaw-Owned Task Control
+
+`TaskControlBus` 仍然对 MiniClaw 自己启动的 task 很重要。
 
 候选 event shape：
 
@@ -164,166 +349,150 @@ interface TaskRunnerControl {
 }
 ```
 
-`TaskRunnerInput` 应增加 `control?: TaskRunnerControl` 字段。single-shot runner 初期可以忽略它。interactive runtime 应用它处理 approvals、queued follow-up instructions、pause 和 cancel decisions。
-
-## Discord UX
-
-保持一个 task 一个 Discord thread。persistent progress message 应显示：
-
-- task id、provider、model、cwd 和 provider session id；
-- 当前 phase：running、waiting for approval、waiting for input、paused、cancelled、failed 或 completed；
-- recent tool steps；
-- queued operator instruction count；
-- 当前 phase 有效的 action buttons。
-
-建议 button 前缀：
-
-- `miniclaw:task-control:cancel:<taskId>`
-- `miniclaw:task-control:pause:<taskId>`
-- `miniclaw:task-control:approve:<requestId>`
-- `miniclaw:task-control:deny:<requestId>`
-
-Thread message behavior：
-
-- 如果 task 正在等待 input，立即通过 `TaskControlBus` 交付 message。
-- 如果 task 正在运行，把 message 排队为 next operator instruction，并在 thread 中确认。
-- 如果 task 已完成且有 `session_id`，保留现有 continuation behavior，创建 resumed task。
-- 如果 thread 属于 cron task，除非增加 explicit manual resume path，否则不允许 user continuation。
-
-## Claude Runtime Plan
-
-Claude 应作为第一个获得 live approval 支持的 provider。
-
-实现：
-
-1. 扩展 `TaskRunnerInput`，加入 `control`。
-2. 在 `claude-task-runner.ts` 中，先保留 deterministic policy checks。
-3. 当 tool use 需要 operator approval 时，从 `canUseTool` 调用 `control.requestApproval(...)`。
-4. 发出 attention-required `TaskViewEvent`，让 Discord 更新 persistent progress message 并添加 approve 或 deny button。
-5. operator 点击 button 后，由 `button-dispatch.ts` resolve pending `canUseTool` promise。
-6. timeout 时默认 deny，并记录 `task_events` warning。
-
-第一阶段不应尝试 arbitrary mid-turn prompt injection。Follow-up message 可以排队，在下一个 safe point 应用，或通过现有 resume path 处理。
+`TaskRunnerInput` 应增加 `control?: TaskRunnerControl` 字段。single-shot runner 初期可以忽略。interactive runtime 应用它处理 approvals、queued follow-up instructions、pause 和 cancel decisions。
 
 ## Codex Runtime Plan
 
-Codex 需要两个 runtime：
+Codex 有两个独立需求。
 
-1. `codex-sdk` runtime：保留当前 `@openai/codex-sdk` streamed runner，用于稳定 one-shot task execution、live progress、cancellation，以及 turn completion 之后的自然 continuation。
-2. `codex-app-server` runtime：增加新 runtime，启动或连接 `codex app-server`，通过 stdio 或 configured endpoint 说 JSON-RPC，并支持 `thread/start`、`thread/resume`、`turn/start`、`turn/interrupt` 和 approval request handling。
+第一阶段：
 
-app-server runtime 在验证前应保持 opt-in。它不应在同一 slice 替换现有 SDK 路径。
+- 使用 Codex hooks 做 session discovery、active versus idle state 和 transcript summary；
+- MiniClaw-started tasks 继续使用现有 `@openai/codex-sdk` runner；
+- 除非存在可靠 hook response path，否则不承诺 approval 和 true mid-turn interrupt。
 
-最小 app-server runtime 职责：
+后续阶段：
 
+- 在 `runtime.codex.mode: sdk | app_server` 这类配置后增加 `codex-app-server` runtime；
 - start 或 reuse app-server process；
 - initialize JSON-RPC client state；
 - 为 MiniClaw task start 或 resume thread；
-- 把 thread、turn、item 和 approval event stream 转成 `TaskViewEvent` 和 `task_events`；
+- 把 thread、turn、item 和 approval events stream 转成 `TaskViewEvent` 和 `task_events`；
 - 把 Discord approve 或 deny button 映射到 app-server approval responses；
 - 把 Discord cancel 或 pause 映射到 turn interruption；
 - 把 `codex:<threadId>` 持久化为 provider session id。
 
 ## Same-Provider Relay Model
 
-Discord relay 指 operator 可以继续或插手 task thread 已经归属的 provider session。
+Discord relay 指 operator 可以继续或插手 Discord surface 已归属的 provider session。
 
-- Claude task thread resume 现有 Claude session。
-- Codex task thread resume 现有 Codex thread。
-- running task 可以在 runner 到达 safe point 时，通过 `TaskControlBus` 接收 queued operator instructions。
-- completed task 可以保留现有 thread-continuation behavior，并用 `resumeSessionId` 启动新的 MiniClaw task。
+- Claude CLI session resume Claude context。
+- Codex CLI session resume Codex context。
+- MiniClaw task thread resume task row 记录的 provider session。
+- running task 或 session 只有在 runner 或 provider 到达明确 safe point 时，才消费 queued operator instructions。
 
-Provider switching 明确不在范围内。如果 operator 想用另一个 provider 启动新 task，应显式发起单独 prompt。MiniClaw 不应把这包装成自动 continuation。
+Provider switching 明确不在范围内。如果 operator 想用另一个 provider 启动新 task，应显式发起单独 prompt。MiniClaw 不应把它包装成自动 continuation。
 
 ## 实施计划
 
-1. 增加 durable task control storage。
+1. 增加 `hookd` storage。
+   - 创建 `cli_sessions` 和 `cli_session_events`。
+   - 增加 repository helpers：upsert session、append event、list active or idle sessions、mark ended、hide session、expire stale approvals。
+   - 增加 hook payload 和 tool input 的 redaction helpers。
+
+2. 增加 `hookd` socket 和 hook script。
+   - 在 MiniClaw-managed user config 下增加小型 provider-neutral script。
+   - 从 stdin 读取 JSON，并 enrich pid、tty、terminal hints、cmux 或 tmux identifiers、transcript path。
+   - 通过 Unix socket 向 `hookd` 发送一个 JSON object。
+   - 对 blocking approval hooks，用 bounded timeout 等待 decision response。
+
+3. 增加 hook installers 和 diagnostics。
+   - 幂等 install 和 repair Claude Code hooks。
+   - 仅当 Codex hook feature enabled 时 install Codex hooks。
+   - 保存 MiniClaw hook manifest，用于 uninstall 和 drift checks。
+   - 增加 doctor output：hook installed、socket reachable、last event time、stale hook entries。
+
+4. 增加 hook session state machine。
+   - 把 provider events 映射成 canonical phases。
+   - 跳过空 Codex startup sessions，直到出现真实 prompt 或 transcript activity。
+   - 用 zombie scan 清理 dead pid 和 stale tty。
+   - closed sessions 保留短 history window，并从 active Discord lists 隐藏。
+
+5. 增加 Discord CLI session dashboard。
+   - 按 cwd 或 project 分组。
+   - 分开展示 active 和 idle sessions。
+   - 增加 details、hide、same-provider continue 和 approval buttons。
+   - 不把 raw hook payloads 暴露到 Discord。
+
+6. 增加 Claude external approval relay。
+   - 在 `hookd` 中保持 hook request open。
+   - 由 Discord button dispatch resolve。
+   - timeout、stop event、process death 或 daemon restart 时默认 deny。
+   - 增加 fake hook tests，覆盖 allow、deny、timeout 和 socket failure。
+
+7. 在 hookd 后增加 MiniClaw-owned task control。
    - 创建 `task_control_events`。
-   - 增加 repository helpers：append、list pending、resolve pending approval、expire stale events。
-   - 增加 ordering、deduplication、restart recovery shape 的 unit tests。
+   - 增加 `TaskControlBus`。
+   - 接入 task-thread buttons 和 running-thread messages。
+   - 在 session 明确作为 MiniClaw task resume 前，与 `cli_sessions` 保持分离。
 
-2. 增加 `TaskControlBus`。
-   - 为每个 active task 提供 in-memory live queue。
-   - 每个 control event 同步 mirror 到 SQLite。
-   - 增加 pending approval registry，带 timeout 和 deny-by-default behavior。
-
-3. 接入 Discord controls。
-   - 扩展 `button-dispatch.ts` 支持 `miniclaw:task-control:*`。
-   - 扩展 task thread message handling：task 仍在 running 时 queue operator messages。
-   - 更新 persistent progress renderer，显示 waiting approval、queued input 和 pause states。
-
-4. 实现 Claude approvals。
-   - 只在 local policy 允许升级后，从 `canUseTool` 调用 `control.requestApproval`。
-   - 发出 attention-required events。
-   - 增加 fake control tests 和 Claude runner unit tests，覆盖 approve、deny、timeout 和 abort。
-
-5. 增加 same-provider relay 和 resume polish。
-   - 让 running-thread operator messages 变成 queued control events。
-   - completed-thread continuation 继续走现有 `resumeSessionId` path。
-   - 当用户要求切换 provider 时，在 Discord 中明确说明 provider switching 会启动 separate task。
-
-6. 增加 Codex app-server runtime。
-   - 放在 `runtime.codex.mode: sdk | app_server` 这类配置后面。
-   - 实现 JSON-RPC transport、initialize、thread start/resume、turn start、turn interrupt 和 approval response。
-   - live 使用前先增加 fake app-server tests。
-
-7. 增加 recovery 和 operations cleanup。
-   - startup 时把 stale pending approvals 标记为 expired。
-   - 为 active 或 interrupted tasks rehydrate pending control events。
-   - 在 task-log 中展示 control events。
-   - 当 app-server runtime enabled 时，在 doctor checks 中检查 app-server availability。
+8. 后续增加 Codex app-server runtime。
+   - 放在 config 后面。
+   - live 使用前实现 JSON-RPC transport 和 fake app-server tests。
 
 ## 验证计划
 
 - Type check：`pnpm run typecheck`。
 - Unit tests：
-  - task control repository；
-  - `TaskControlBus`；
-  - task-control custom ids 的 button dispatch；
-  - Claude approval allow、deny、timeout 和 abort；
-  - same-provider relay 和 resume behavior；
-  - 使用 fake server 的 Codex app-server JSON-RPC transport。
+  - Claude settings 和 Codex hooks 的 hook installer pure mutations；
+  - 使用 fixture payloads 验证 hook script event normalization；
+  - `hookd` socket request 和 response behavior；
+  - CLI session repository 的 upsert、phase transition、hide、end 和 expiry；
+  - zombie scan dead-pid detection；
+  - CLI session custom ids 的 Discord button dispatch；
+  - Claude approval allow、deny、timeout、process death 和 daemon restart。
 - Integration tests：
-  - fake task running 时，Discord task thread 能 queue follow-up input；
-  - approval button 能 resolve pending fake provider request；
-  - cancel 仍落为 `cancelled`；
-  - completed provider sessions 的 resume 仍可用。
+  - fake Claude hook stream 能把 session 从 processing 转到 waiting for input；
+  - fake Codex startup 会被隐藏，直到 `UserPromptSubmit`；
+  - fake iTerm2 session close 会通过 zombie scan 把 CLI session 标记 ended；
+  - Discord dashboard 显示 active sessions，并隐藏 ended sessions；
+  - same-provider continuation 会用存储的 provider session id 创建 MiniClaw task。
 - Manual live checks：
-  - 启动一个需要 risky tool 的 Claude task，从 Discord mobile approve，并确认 task 继续；
-  - deny 同一个 request，并确认 task 收到清晰 denial；
-  - 启动 Codex SDK task，验证 progress、cancel 和 post-turn continuation；
-  - 在 opt-in mode 运行 app-server runtime，验证 interrupt、approval 和 resume。
+  - 在 iTerm2 直接启动 `claude`，确认它先显示 active，`Stop` 后显示 waiting for input；
+  - 关闭 iTerm2 window，确认 session 离开 active Discord surface；
+  - 在 iTerm2 直接启动 `codex`，确认空 TUI startup 不展示，提交 prompt 后才展示；
+  - 触发 Claude permission request，并从 Discord mobile approve 或 deny；
+  - 确认多个相同 cwd 的 iTerm2 windows 不会触发 terminal-injection claim，除非存在精确 tty 或 terminal target。
 - Docs gates：
   - `pnpm run quality:docs`。
   - implementation slice 中更新 `CHANGELOG.md`。
 
 ## 风险与回滚
 
-- Risk：Discord approvals 可能让 provider turn 永久挂起。
+- Risk：provider hook schemas 变化。
+  - Mitigation：版本化 hook payload fixtures，把 unknown events 作为 append-only records 保存，并对 approvals fail closed。
+  - Rollback：关闭 managed hook installation，保持 MiniClaw-started task execution 不变。
+
+- Risk：hook installation 覆盖用户管理的 hooks。
+  - Mitigation：只追加 MiniClaw-managed entries，保留 manifest，写入前验证 JSON 或 TOML round-trip。
+  - Rollback：用 manifest uninstall MiniClaw-managed hooks。
+
+- Risk：terminal 关闭后 stale sessions 仍可见。
+  - Mitigation：provider end events、dead-pid scan、stale tty cleanup、retention TTL 和 manual hide。
+  - Rollback：从 Discord 隐藏 hookd sessions，同时保留本地 event logs。
+
+- Risk：Discord approvals 让 provider turn 永久挂起。
   - Mitigation：approval timeout、deny-by-default、可见 stale state，以及 startup expiry。
-  - Rollback：关闭 interactive approval mode，恢复 local policy decisions。
+  - Rollback：本地返回 `ask` 或 deny，并移除 Discord approval buttons。
 
-- Risk：queued operator messages 在不安全时机被应用。
-  - Mitigation：只在 explicit safe points 消费 queued input，例如 turn 后、provider 请求 input 后、或 operator-triggered pause 后。
-  - Rollback：保留 queued messages 作为 thread notes，并依赖 `/resume`。
-
-- Risk：app-server JSON-RPC behavior 随 Codex 版本变化。
-  - Mitigation：隔离 app-server runtime，SDK runtime 继续作为默认值，并增加 version 和 capability detection。
-  - Rollback：把 `runtime.codex.mode` 切回 `sdk`。
+- Risk：terminal injection 发到错误 iTerm2 pane。
+  - Mitigation：默认不做 iTerm2 injection；jump 或 input 需要 precise tty 或更强 terminal target evidence。
+  - Rollback：Discord continuation 只保留 provider-native path。
 
 - Risk：operator 和 agent 并发编辑 workspace。
-  - Mitigation：在 progress 中显示当前 cwd 和 git status，并只在 safe points 消费 queued operator instructions。
-  - Rollback：要求 cancel 或 completion 后才能接受进一步 operator instructions。
+  - Mitigation：接受 same-provider continuation 前显示 cwd、git status 和 phase。
+  - Rollback：要求 cancel 或 completion 后再接受进一步 operator instructions。
 
 ## 文档同步
 
-- Runtime docs：control bus 实现后更新 `docs/runtime/README.md`。
-- Bot routing docs：task control buttons 和 running-thread message behavior 落地时更新 `docs/bot-routing.md`。
-- Task view boundary docs：只有当 `TaskViewEvent` 增加持久新 event type 时再更新。
-- Agent Run Manager docs：只有当 Manager events 通过 operator control layer 可见时再更新。
+- Runtime docs：`hookd` 实现后更新 `docs/runtime/README.md`。
+- Bot routing docs：CLI session dashboard routes 和 custom ids 落地时更新 `docs/bot-routing.md`。
+- Task view boundary docs：只有 `TaskViewEvent` 增加持久新 event type 时再更新。
+- Agent Run Manager docs：只有 Manager events 通过 operator control layer 可见时再更新。
 - Website：仅有 plan 不更新；真正发布 public user-visible Discord control 时再更新。
 - Changelog：每个 implementation slice 加 entry。
 
 ## 执行记录
 
-- 2026-05-25：初始分析整理为 design plan。本 slice 没有修改 production code。
+- 2026-05-25：初始分析整理为 Discord control-plane design plan。
+- 2026-05-25：检查 MioIsland 的 hook-based Claude 和 Codex session discovery 后，把计划更新为 `hookd` first implementation layer，并移除过期 wrapper-first assumption。
