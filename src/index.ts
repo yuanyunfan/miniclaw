@@ -73,6 +73,7 @@ function attachDiscordRuntime(client: ReturnType<typeof createBot>): void {
         updateDebounceMs: config.hookd.dashboardUpdateDebounceMs,
         dashboardLimit: config.hookd.dashboardLimit,
         staleActiveMs: config.hookd.staleActiveMs,
+        liveTerminalContinueEnabled: config.hookd.liveTerminalContinueEnabled,
         guildId: config.discord.guildId,
       });
       setCliSessionDashboardRefreshCallback(() => cliSessionDashboardUpdater?.scheduleRefresh());

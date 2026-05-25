@@ -5,6 +5,7 @@ import {
   EmbedBuilder,
 } from "discord.js";
 import { sortCliSessionsForDashboard } from "../hookd/state.js";
+import { isCliSessionLiveTerminalEligible } from "../hookd/live-terminal-input.js";
 import type {
   CliSessionApprovalRow,
   CliSessionDashboardBucket,
@@ -105,6 +106,7 @@ function groupByBucket(items: CliSessionDashboardItem[]): Map<CliSessionDashboar
 function buildActionRows(
   items: CliSessionDashboardItem[],
   pendingApprovals: Record<string, CliSessionApprovalRow | undefined> = {},
+  options: { liveTerminalContinueEnabled?: boolean } = {},
 ): ActionRowBuilder<ButtonBuilder>[] {
   const rows: ActionRowBuilder<ButtonBuilder>[] = [];
   const visible = items
@@ -141,7 +143,12 @@ function buildActionRows(
   }
   rows.push(detailRow);
 
-  const idle = visible.filter((item) => item.bucket === "idle").slice(0, 5);
+  const idle = visible
+    .filter((item) => item.bucket === "idle")
+    .filter((item) => isCliSessionLiveTerminalEligible(item.session, {
+      enabled: options.liveTerminalContinueEnabled,
+    }))
+    .slice(0, 5);
   if (idle.length) {
     const continueRow = new ActionRowBuilder<ButtonBuilder>();
     for (const item of idle) {
@@ -203,6 +210,7 @@ export function buildCliSessionDashboardMessage(input: {
   staleActiveMs?: number;
   limit?: number;
   pendingApprovals?: Record<string, CliSessionApprovalRow | undefined>;
+  liveTerminalContinueEnabled?: boolean;
 }): CliSessionDashboardMessage {
   const limit = Math.min(Math.max(input.limit ?? 8, 1), 20);
   const includeClosed = input.filters?.status === "closed";
@@ -262,7 +270,9 @@ export function buildCliSessionDashboardMessage(input: {
 
   return {
     embeds: [embed],
-    components: buildActionRows(items, input.pendingApprovals),
+    components: buildActionRows(items, input.pendingApprovals, {
+      liveTerminalContinueEnabled: input.liveTerminalContinueEnabled,
+    }),
   };
 }
 

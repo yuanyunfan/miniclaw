@@ -40,6 +40,7 @@ function config(overrides: Partial<CliSessionDashboardUpdaterConfig> = {}): CliS
     updateDebounceMs: 1500,
     dashboardLimit: 8,
     staleActiveMs: 15 * 60_000,
+    liveTerminalContinueEnabled: true,
     ...overrides,
   };
 }

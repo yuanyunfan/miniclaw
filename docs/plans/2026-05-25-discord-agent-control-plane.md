@@ -26,7 +26,7 @@ The important correction from the reference analysis is that MiniClaw does not h
 - Persist provider session id, provider, cwd, pid, tty, terminal surface hints, transcript path, phase, and last activity.
 - Show active and idle CLI sessions in Discord without turning every external CLI session into a MiniClaw task row.
 - Keep one Discord task thread per MiniClaw-started task, and add a separate Discord CLI-session surface for manually-started sessions.
-- Support same-provider continuation: a Claude session resumes Claude context; a Codex session resumes Codex context.
+- Support Discord-driven follow-up for observed sessions, defaulting to precise live iTerm2 input for idle iTerm2-backed sessions.
 - Support Claude permission approval through hook request and response when the CLI provider exposes a blocking hook.
 - Keep `TaskControlBus` for MiniClaw-owned tasks, but do not make it the first dependency for observing external CLI sessions.
 - Keep the current Codex SDK runner as the stable MiniClaw-started task path; treat `codex app-server` as a later opt-in runtime for deeper Codex live control.
@@ -39,7 +39,7 @@ The important correction from the reference analysis is that MiniClaw does not h
 - Do not implement provider switching between Claude and Codex. A Claude session id and a Codex thread id are different provider contexts.
 - Do not expose multi-user or public Discord control. Production remains single-operator unless access control is redesigned.
 - Do not send raw provider payloads or unredacted tool input directly to Discord.
-- Do not make terminal input injection the default continuation path for iTerm2. It can be a best-effort operation after session identity is known, not the reliability base.
+- Do not inject into unsupported terminals or active sessions. The default live-input path is iTerm2-only and requires a recorded iTerm2 session id or unique tty match.
 
 ## Existing Architecture Evidence
 
@@ -268,7 +268,7 @@ Discord-native rendering constraints:
 - Use one pinned or otherwise discoverable "current sessions" dashboard message as the stable entry point. Hook events should edit this current snapshot rather than only appending ordinary chronological messages.
 - Support a `/sessions` command and a `Refresh` button that can regenerate the current snapshot when the pinned message is buried or stale.
 - Use select menus for project, provider, and status filters. Use buttons for `Approve`, `Deny`, `Continue`, `Queue Instruction`, `Hide`, and `Details`.
-- Use modals for operator text input, especially same-provider continuation and queued instructions.
+- Use modals for operator text input, especially live iTerm2 continuation and queued instructions.
 - Render session detail through an updated embed, an ephemeral follow-up, or a modal-friendly summary. Do not depend on a web-style sidebar or fixed three-column layout.
 - Respect Discord message and component limits by paginating or collapsing long session lists. The dashboard should summarize first and expose detail on demand.
 
@@ -287,7 +287,7 @@ Suggested CLI session buttons:
 - `miniclaw:cli-session:open:<sessionId>`: show detail and transcript summary;
 - `miniclaw:cli-session:approve:<requestId>`: approve a pending permission request;
 - `miniclaw:cli-session:deny:<requestId>`: deny a pending permission request;
-- `miniclaw:cli-session:continue:<sessionId>`: start a same-provider MiniClaw continuation using the stored provider session id when supported;
+- `miniclaw:cli-session:continue:<sessionId>`: write follow-up text to the original idle iTerm2 live process when a precise terminal target is available;
 - `miniclaw:cli-session:hide:<sessionId>`: hide or archive the session from active Discord lists;
 - `miniclaw:cli-session:jump:<sessionId>`: optional local terminal jump, only when a safe terminal target is known.
 
@@ -295,7 +295,7 @@ Thread message behavior:
 
 - If a MiniClaw task is waiting for input, deliver the message through `TaskControlBus`.
 - If a MiniClaw task is running, queue the message for the next safe point and acknowledge it in the thread.
-- If an observed CLI session is idle, prefer same-provider continuation through MiniClaw rather than blind iTerm2 injection.
+- If an observed CLI session is idle and has a precise iTerm2 target, send the Discord follow-up to that live terminal process.
 - If an observed CLI session is running, acknowledge the Discord message as queued or advisory unless the provider exposes an explicit interrupt or input API.
 - If the session belongs to a cron task, do not allow user continuation unless an explicit manual resume path is added.
 
@@ -323,13 +323,13 @@ There are three control paths, in reliability order:
 2. Provider hook or app-server control API.
 3. Terminal input injection.
 
-MiniClaw should prefer path 1 or path 2 whenever possible. Terminal input injection is useful for jump-back or cmux-style exact routing, but it should not be the foundation for state detection.
+MiniClaw should still use hook events, not terminal output, as the foundation for state detection. For Discord dashboard `Continue`, operator preference is to use terminal input injection by default only when the observed session is idle and the iTerm2 target is precise.
 
 For iTerm2 specifically:
 
 - tty matching can identify the hosting tab or pane for jump-to-terminal behavior;
-- writing text into iTerm2 is best effort when multiple sessions are open;
-- Discord "continue" should default to creating a same-provider MiniClaw continuation rather than sending keystrokes into the current foreground iTerm2 pane.
+- writing text into iTerm2 is allowed only after matching the recorded iTerm2 session id or a unique tty;
+- Discord `Continue` defaults to sending text to that original iTerm2 live process and does not create a MiniClaw resume task.
 
 For cmux or tmux:
 
@@ -464,7 +464,7 @@ Provider switching is intentionally out of scope. If the operator wants to start
   - Discord dashboard labels quiet active sessions as stale or possibly stuck;
   - Discord dashboard shows active sessions and hides ended sessions;
   - Discord native `Continue` or `Queue Instruction` actions open a modal-shaped input flow;
-  - same-provider continuation creates a MiniClaw task with the stored provider session id.
+  - live iTerm2 `Continue` writes to the original terminal process and does not create a MiniClaw task row.
 - Manual live checks:
   - start `claude` directly in iTerm2 and confirm it appears as active, then waiting for input after `Stop`;
   - close the iTerm2 window and confirm the session leaves the active Discord surface;
@@ -494,11 +494,11 @@ Provider switching is intentionally out of scope. If the operator wants to start
   - Rollback: return `ask` or deny locally and remove Discord approval buttons.
 
 - Risk: terminal injection goes to the wrong iTerm2 pane.
-  - Mitigation: do not default to iTerm2 injection; require precise tty or stronger terminal target evidence for jump or input.
-  - Rollback: keep Discord continuation provider-native only.
+  - Mitigation: require the recorded iTerm2 session id or a unique tty match, reject GUID/tty mismatches, and fail closed without provider-native fallback.
+  - Rollback: disable `hookd.live_terminal_continue_enabled`.
 
 - Risk: operator and agent edit the workspace concurrently.
-  - Mitigation: show cwd, git status, and phase before accepting same-provider continuation.
+  - Mitigation: show cwd, terminal target, and phase before accepting live terminal input.
   - Rollback: require cancel or completion before accepting further operator instructions.
 
 ## Documentation Sync
@@ -514,8 +514,9 @@ Provider switching is intentionally out of scope. If the operator wants to start
 
 - 2026-05-25: Initial analysis captured as a Discord control-plane design plan.
 - 2026-05-25: Updated the plan to make `hookd` the first implementation layer after inspecting MioIsland's hook-based Claude and Codex session discovery. The outdated wrapper-first assumption was removed.
-- 2026-05-25: Shipped the first implementation slice: SQLite `cli_sessions` / `cli_session_events`, hookd Unix-socket event ingestion, canonical phase mapping, dead-pid cleanup, Discord `/sessions` dashboard, `Details` / `Hide` buttons, and idle-session `Continue` modal that starts same-provider MiniClaw continuation.
+- 2026-05-25: Shipped the first implementation slice: SQLite `cli_sessions` / `cli_session_events`, hookd Unix-socket event ingestion, canonical phase mapping, dead-pid cleanup, Discord `/sessions` dashboard, `Details` / `Hide` buttons, and the initial idle-session `Continue` modal.
 - 2026-05-25: Shipped the second implementation slice: schema v19 adds `cli_session_approvals` and `task_control_events`; hookd can hold Claude `PermissionRequest` hooks open, surface pending approvals in the Discord session dashboard, and resolve allow or deny from Discord buttons with timeout and startup-expiry deny-by-default behavior.
 - 2026-05-25: Added explicit hook installer tooling. `pnpm hookd:install` is dry-run by default, `--execute` writes only MiniClaw-managed Claude or Codex hook entries, `--uninstall` removes those entries, and `pnpm hookd:doctor` reports managed hook count, socket-path status, and Codex hook feature state. Codex hook feature enablement remains opt-in through `--enable-codex-feature`.
 - 2026-05-25: Added the first MiniClaw-owned task control queue. Replies in a running task thread now persist an `operator_message` row in `task_control_events` and acknowledge the queue instead of launching a concurrent resume task. Current runners do not consume the queue yet; that remains the next interactive-runner slice.
 - 2026-05-25: `codex app-server` was reviewed as an experimental later runtime path. It remains out of this slice and does not replace the stable `@openai/codex-sdk` MiniClaw task runner.
+- 2026-05-25: Updated dashboard `Continue` to default to live iTerm2 input for idle iTerm2-backed sessions. It resolves by recorded iTerm2 session id or unique tty, writes the modal follow-up to the original terminal process, and fails closed without creating a MiniClaw resume task.

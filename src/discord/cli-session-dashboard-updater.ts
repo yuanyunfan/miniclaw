@@ -19,6 +19,7 @@ export interface CliSessionDashboardUpdaterConfig {
   updateDebounceMs: number;
   dashboardLimit: number;
   staleActiveMs: number;
+  liveTerminalContinueEnabled: boolean;
   guildId?: string;
 }
 
@@ -68,6 +69,7 @@ function buildPayload(state: CliSessionDashboardState, config: CliSessionDashboa
     limit: config.dashboardLimit,
     pendingApprovals: state.pendingApprovals,
     now,
+    liveTerminalContinueEnabled: config.liveTerminalContinueEnabled,
   });
   return {
     embeds: message.embeds,

@@ -3,7 +3,7 @@ doc_id: discord-agent-control-plane
 lang: zh
 translation_of: docs/plans/2026-05-25-discord-agent-control-plane.md
 translation_status: current
-source_sha256: 7291c7f52c759939b96f27958141a2a3c3b43da025bb4c5e503be2cb7270d2e0
+source_sha256: f3336ea05ce434da0cdfb66116a88d6da8d777be6ed8d99526c21c7bbdcc3177
 ---
 # Discord Agent Control Plane
 
@@ -33,7 +33,7 @@ MiniClaw 已经拥有自己启动任务的 Discord task intake。现在缺的能
 - 持久化 provider session id、provider、cwd、pid、tty、terminal surface hints、transcript path、phase 和 last activity。
 - 在 Discord 中展示 active 和 idle CLI session，但不把每个外部 CLI session 都变成 MiniClaw task row。
 - MiniClaw-created task 继续保持 one Discord thread per task，同时为手动启动的 session 增加独立的 Discord CLI-session surface。
-- 支持 same-provider continuation：Claude session resume Claude context；Codex session resume Codex context。
+- 支持通过 Discord 给 observed sessions 发送 follow-up；idle 且由 iTerm2 承载的 session 默认走精确 live iTerm2 input。
 - 当 CLI provider 暴露 blocking hook 时，通过 hook request/response 支持 Claude permission approval。
 - `TaskControlBus` 继续用于 MiniClaw-owned task，但外部 CLI session 的观察不应先依赖它。
 - 当前 Codex SDK runner 继续作为 MiniClaw-started task 的稳定路径；`codex app-server` 作为后续更深 Codex live control 的 opt-in runtime。
@@ -46,7 +46,7 @@ MiniClaw 已经拥有自己启动任务的 Discord task intake。现在缺的能
 - 不实现 Claude 和 Codex 之间的 provider switching。Claude session id 和 Codex thread id 是不同 provider context。
 - 在 access control 重新设计前，不暴露 multi-user 或 public Discord control。生产环境保持 single-operator。
 - 不把 raw provider payload 或未脱敏 tool input 直接发到 Discord。
-- 不把 terminal input injection 作为 iTerm2 的默认 continuation path。它只能在 session identity 已知后作为 best-effort 操作，而不是可靠性基础。
+- 不向不支持的 terminals 或 active sessions 注入输入。默认 live-input path 仅支持 iTerm2，并要求 recorded iTerm2 session id 或唯一 tty match。
 
 ## 现有架构证据
 
@@ -275,7 +275,7 @@ Discord-native rendering constraints：
 - 使用一条 pinned 或其他容易发现的 “current sessions” dashboard message 作为稳定入口。hook event 应编辑这个当前 snapshot，而不是只追加普通时间线消息。
 - 提供 `/sessions` command 和 `Refresh` button，在 pinned message 被埋掉或变 stale 时重新生成当前 snapshot。
 - project、provider、status filter 使用 select menus。`Approve`、`Deny`、`Continue`、`Queue Instruction`、`Hide` 和 `Details` 使用 buttons。
-- operator text input 使用 modals，尤其用于 same-provider continuation 和 queued instructions。
+- operator text input 使用 modals，尤其用于 live iTerm2 continuation 和 queued instructions。
 - session detail 通过更新 embed、ephemeral follow-up 或 modal-friendly summary 渲染。不要依赖 web-style sidebar 或固定三栏 layout。
 - 尊重 Discord message 和 component limits，对长 session list 做 pagination 或 collapse。dashboard 先做 summary，再按需展开 detail。
 
@@ -294,7 +294,7 @@ Dashboard ordering and anti-burial rules：
 - `miniclaw:cli-session:open:<sessionId>`：显示 detail 和 transcript summary；
 - `miniclaw:cli-session:approve:<requestId>`：approve pending permission request；
 - `miniclaw:cli-session:deny:<requestId>`：deny pending permission request；
-- `miniclaw:cli-session:continue:<sessionId>`：支持时，使用存储的 provider session id 启动 same-provider MiniClaw continuation；
+- `miniclaw:cli-session:continue:<sessionId>`：存在精确 terminal target 时，把 follow-up text 写入原始 idle iTerm2 live process；
 - `miniclaw:cli-session:hide:<sessionId>`：从 active Discord lists 中 hide 或 archive session；
 - `miniclaw:cli-session:jump:<sessionId>`：仅当存在安全 terminal target 时，做可选 local terminal jump。
 
@@ -302,7 +302,7 @@ Thread message behavior：
 
 - 如果 MiniClaw task 正在等待 input，通过 `TaskControlBus` 交付 message。
 - 如果 MiniClaw task 正在 running，把 message 排队到 next safe point，并在 thread 中确认。
-- 如果 observed CLI session 是 idle，优先通过 MiniClaw 做 same-provider continuation，而不是盲目 iTerm2 injection。
+- 如果 observed CLI session 是 idle 且有精确 iTerm2 target，把 Discord follow-up 发送到该 live terminal process。
 - 如果 observed CLI session 正在 running，除非 provider 暴露明确 interrupt 或 input API，否则 Discord message 只应被确认成 queued 或 advisory。
 - 如果 session 属于 cron task，除非增加 explicit manual resume path，否则不允许 user continuation。
 
@@ -330,13 +330,13 @@ Codex approval 不应在已安装 Codex hook 或 app-server runtime 暴露可靠
 2. Provider hook 或 app-server control API。
 3. Terminal input injection。
 
-MiniClaw 应优先使用 path 1 或 path 2。Terminal input injection 对 jump-back 或 cmux-style exact routing 有价值，但不应成为 state detection 的基础。
+MiniClaw 仍应使用 hook events，而不是 terminal output，作为 state detection 基础。对 Discord dashboard `Continue`，operator preference 是只在 observed session idle 且 iTerm2 target 精确时，默认使用 terminal input injection。
 
 对 iTerm2：
 
 - tty matching 可以用于识别 hosting tab 或 pane，从而支持 jump-to-terminal；
-- 多 session 开启时，向 iTerm2 写入文本是 best effort；
-- Discord `continue` 默认应创建 same-provider MiniClaw continuation，而不是向当前前台 iTerm2 pane 发送 keystrokes。
+- 只有匹配 recorded iTerm2 session id 或唯一 tty 后，才允许向 iTerm2 写入文本；
+- Discord `Continue` 默认把文本发送到原始 iTerm2 live process，不创建 MiniClaw resume task。
 
 对 cmux 或 tmux：
 
@@ -471,7 +471,7 @@ Provider switching 明确不在范围内。如果 operator 想用另一个 provi
   - Discord dashboard 会把长时间安静的 active session 标记为 stale 或 possibly stuck；
   - Discord dashboard 显示 active sessions，并隐藏 ended sessions；
   - Discord-native `Continue` 或 `Queue Instruction` actions 会打开 modal-shaped input flow；
-  - same-provider continuation 会用存储的 provider session id 创建 MiniClaw task。
+  - live iTerm2 `Continue` 会写入原始 terminal process，不创建 MiniClaw task row。
 - Manual live checks：
   - 在 iTerm2 直接启动 `claude`，确认它先显示 active，`Stop` 后显示 waiting for input；
   - 关闭 iTerm2 window，确认 session 离开 active Discord surface；
@@ -501,11 +501,11 @@ Provider switching 明确不在范围内。如果 operator 想用另一个 provi
   - Rollback：本地返回 `ask` 或 deny，并移除 Discord approval buttons。
 
 - Risk：terminal injection 发到错误 iTerm2 pane。
-  - Mitigation：默认不做 iTerm2 injection；jump 或 input 需要 precise tty 或更强 terminal target evidence。
-  - Rollback：Discord continuation 只保留 provider-native path。
+  - Mitigation：要求 recorded iTerm2 session id 或唯一 tty match，拒绝 GUID/tty mismatch，并 fail closed，不做 provider-native fallback。
+  - Rollback：关闭 `hookd.live_terminal_continue_enabled`。
 
 - Risk：operator 和 agent 并发编辑 workspace。
-  - Mitigation：接受 same-provider continuation 前显示 cwd、git status 和 phase。
+  - Mitigation：接受 live terminal input 前显示 cwd、terminal target 和 phase。
   - Rollback：要求 cancel 或 completion 后再接受进一步 operator instructions。
 
 ## 文档同步
@@ -521,8 +521,9 @@ Provider switching 明确不在范围内。如果 operator 想用另一个 provi
 
 - 2026-05-25：初始分析整理为 Discord control-plane design plan。
 - 2026-05-25：检查 MioIsland 的 hook-based Claude 和 Codex session discovery 后，把计划更新为 `hookd` first implementation layer，并移除过期 wrapper-first assumption。
-- 2026-05-25：已发布首个 implementation slice：SQLite `cli_sessions` / `cli_session_events`、hookd Unix-socket event ingestion、canonical phase mapping、dead-pid cleanup、Discord `/sessions` dashboard、`Details` / `Hide` buttons，以及 idle-session `Continue` modal，可启动 same-provider MiniClaw continuation。
+- 2026-05-25：已发布首个 implementation slice：SQLite `cli_sessions` / `cli_session_events`、hookd Unix-socket event ingestion、canonical phase mapping、dead-pid cleanup、Discord `/sessions` dashboard、`Details` / `Hide` buttons，以及初版 idle-session `Continue` modal。
 - 2026-05-25：已发布第二个 implementation slice：schema v19 增加 `cli_session_approvals` 和 `task_control_events`；hookd 可以保持 Claude `PermissionRequest` hook open，在 Discord session dashboard 中显示 pending approvals，并通过 Discord buttons resolve allow 或 deny，同时 timeout 和 startup expiry 默认 deny。
 - 2026-05-25：增加显式 hook installer tooling。`pnpm hookd:install` 默认 dry-run，`--execute` 只写入 MiniClaw-managed Claude 或 Codex hook entries，`--uninstall` 移除这些 entries，`pnpm hookd:doctor` 报告 managed hook count、socket-path status 和 Codex hook feature state。Codex hook feature enablement 仍需通过 `--enable-codex-feature` opt-in。
 - 2026-05-25：增加首个 MiniClaw-owned task control queue。running task thread 中的 replies 现在会持久化一条 `task_control_events` 的 `operator_message` row，并 ack queue，而不是启动并发 resume task。当前 runners 还不会消费这个 queue；这仍是下一个 interactive-runner slice。
 - 2026-05-25：已 review `codex app-server` 作为实验性后续 runtime path。它不在本 slice 内，也不会替换稳定的 `@openai/codex-sdk` MiniClaw task runner。
+- 2026-05-25：dashboard `Continue` 已改为对 idle 且由 iTerm2 承载的 sessions 默认执行 live iTerm2 input。它按 recorded iTerm2 session id 或唯一 tty 解析目标，把 modal follow-up 写入原始 terminal process，并在失败时 fail closed，不创建 MiniClaw resume task。

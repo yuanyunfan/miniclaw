@@ -70,6 +70,21 @@ describe("CLI session dashboard", () => {
     )).toBe(true);
   });
 
+  it("omits live Continue buttons when the idle session is not iTerm2-backed", () => {
+    const message = buildCliSessionDashboardMessage({
+      sessions: [session({
+        terminal_app: "Apple_Terminal",
+        terminal_surface_json: null,
+      })],
+      now: new Date("2026-05-25T00:01:00.000Z"),
+    });
+
+    const customIds = message.components.flatMap((row) =>
+      row.components.map((component) => (component.data as { custom_id?: string }).custom_id)
+    );
+    expect(customIds.some((id) => id?.includes(":continue:"))).toBe(false);
+  });
+
   it("adds approve and deny buttons for pending approval sessions", () => {
     const message = buildCliSessionDashboardMessage({
       sessions: [session({

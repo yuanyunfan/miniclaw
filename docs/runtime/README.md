@@ -122,16 +122,16 @@ Runtime contract:
 - Hook entries call the built `dist/hookd/hook-client.js` bridge with a `MINICLAW_HOOKD_MANAGED=1` marker. The installer removes and replaces only entries with that marker, then writes a manifest under `~/.miniclaw/hooks/manifest.json`.
 - Claude hooks cover session, prompt, tool, notification, compaction, stop, and blocking `PermissionRequest` events. Codex hooks are installed only when `[features] codex_hooks = true` is already enabled, unless the operator passes `--enable-codex-feature`.
 - Provider hooks send newline-delimited JSON to `hookd.sock`; MiniClaw normalizes provider, session id, cwd, pid, tty, terminal hints, transcript path, event name, and phase.
-- CLI session state lives in `cli_sessions` and `cli_session_events`, not in `tasks`, until the operator explicitly starts a same-provider continuation.
+- CLI session state lives in `cli_sessions` and `cli_session_events`, not in `tasks`. Dashboard `Continue` sends follow-up text to the original iTerm2 live process and does not create a MiniClaw task row.
 - Blocking Claude `PermissionRequest` events create redacted `cli_session_approvals` rows and hold the hook response open until Discord approval, Discord denial, timeout, or daemon startup expiry. Timeout and startup expiry deny by default.
 - The automatic control surface is one editable Discord message in `hookd.dashboard_channel_id` or `hookd.dashboard_channel_name` (default `miniclaw-cli-sessions`). If `hookd.dashboard_message_id` is configured, MiniClaw edits that message; otherwise it creates and best-effort pins a new dashboard message and logs the message id for config writeback.
-- Hook events, approval lifecycle changes, dead-PID zombie scans, Hide, Approve, Deny, and successful same-provider Continue operations schedule a debounced dashboard refresh through `hookd.dashboard_update_debounce_ms`.
+- Hook events, approval lifecycle changes, dead-PID zombie scans, Hide, Approve, Deny, and successful live Continue operations schedule a debounced dashboard refresh through `hookd.dashboard_update_debounce_ms`.
 - Dashboard ordering is state-prioritized: approval, active, stale active, idle, then history/hidden. Older active work stays above newer idle sessions.
 - Empty Codex startup sessions are hidden from the default dashboard until a real prompt or transcript activity appears.
 - The automatic fixed dashboard shows only currently relevant approval, active, stale active, and idle sessions. Closed or hidden history remains available through `/sessions status:closed` and `/sessions status:hidden`.
-- `Details`, `Hide`, `Approve`, and `Deny` are available from Discord buttons. `Continue` is available only for idle sessions and opens a Discord modal for the follow-up instruction.
-- Same-provider continuation forces the runtime to match the observed session provider. A Claude session resumes through Claude; a Codex session resumes through Codex.
-- Active external CLI sessions do not receive blind iTerm2 keystroke injection. Until provider-native interrupt/input APIs are available, MiniClaw refuses same-provider continuation while the observed session is still active.
+- `Details`, `Hide`, `Approve`, and `Deny` are available from Discord buttons. `Continue` is available only for idle iTerm2-backed sessions and opens a Discord modal for the follow-up instruction.
+- Live terminal Continue targets the recorded iTerm2 session id from `terminal_surface_json.iterm_session_id`; if that is missing, MiniClaw falls back to a unique recorded tty match. Missing, ambiguous, dead, or mismatched targets fail closed and do not fall back to provider-native resume.
+- Active external CLI sessions do not receive input injection. MiniClaw only writes to the original iTerm2 live process when the observed session is idle and the target can be resolved precisely.
 - Running MiniClaw-owned task threads now persist operator replies as queued `task_control_events` instead of launching a second resume task. Current runners do not consume the queue yet; it is the durable control-plane contract for the next interactive runtime slice.
 
 ## Weixin Protocol Compatibility

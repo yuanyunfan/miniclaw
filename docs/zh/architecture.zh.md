@@ -3,7 +3,7 @@ doc_id: architecture
 lang: zh
 translation_of: docs/architecture.md
 translation_status: current
-source_sha256: 6e5bfa2c3a1bd42a5d4b7f9465bdbf0695e170c10f39f7625e0c7b654b8bdf10
+source_sha256: 9eda8fdb7182981f59dee55a32804a88ffb9616346192fd4f493f9cfac0303c4
 ---
 # MiniClaw 架构
 
@@ -108,7 +108,7 @@ MiniClaw 把 code、user state 和 public docs 做硬边界隔离：
 
 runtime registry 把 agent execution 和 routing 分离。`src/runtime/agent-runtime.ts` 定义统一 runtime interface，`src/agent/runtimes/registry.ts` 把配置映射到 Claude、Codex 或 fake task runner。`runtime.default_agent` 是推荐配置键；legacy `agent.provider` 仍作为兼容 fallback。
 
-`hookd` 是普通 Claude Code 和 Codex CLI sessions 的独立观测面，这些 session 可以是在 MiniClaw 外部启动的。启用 `hookd.enabled=true` 后，MiniClaw 会监听本地 Unix socket，接收 provider hook events，保存 normalized CLI session state，扫描 dead PID，并在配置的 CLI sessions channel 里维护一条 pinned Discord dashboard message。`/sessions` 保留为手动 ephemeral 查询路径，用于 filtered views 和 history。这不会把每个外部 CLI 都变成 MiniClaw task row。same-provider continuation 只会在 Discord 中显式触发，并且 Claude session 仍通过 Claude resume，Codex session 仍通过 Codex resume。
+`hookd` 是普通 Claude Code 和 Codex CLI sessions 的独立观测与控制面，这些 session 可以是在 MiniClaw 外部启动的。启用 `hookd.enabled=true` 后，MiniClaw 会监听本地 Unix socket，接收 provider hook events，保存 normalized CLI session state，扫描 dead PID，并在配置的 CLI sessions channel 里维护一条 pinned Discord dashboard message。`/sessions` 保留为手动 ephemeral 查询路径，用于 filtered views 和 history。这不会把每个外部 CLI 都变成 MiniClaw task row。Dashboard `Continue` 默认把 follow-up text 发送到原始 idle iTerm2 live process；terminal target 缺失或歧义时 fail closed，不会创建 provider-native resume task。
 
 ## 消息与任务流程
 

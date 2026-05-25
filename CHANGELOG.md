@@ -7,6 +7,7 @@
 ## [Unreleased]
 
 ### Added
+- 新增 CLI session dashboard 的 live iTerm2 Continue：idle 且由 iTerm2 承载的 session 会把 Discord modal follow-up 直接写回原始 terminal process，按 recorded iTerm2 session id 或唯一 tty 精确匹配，失败时 fail closed。
 - 新增 `hookd` 固定 CLI sessions dashboard：MiniClaw 可在配置的 Discord channel 维护一条自动刷新的 pinned dashboard message，并在 hook events、zombie scan、approval/buttons/Continue 操作后 debounce 刷新；`/sessions` 保留为手动 ephemeral 查询入口。
 - 新增 `hookd` CLI session control MVP：通过本地 Unix socket 接收 Claude Code / Codex hook events，持久化 `cli_sessions` / `cli_session_events`，提供 Discord `/sessions` dashboard、Details/Hide buttons，以及 idle session 的 same-provider Continue modal。
 - 扩展 `hookd` Discord control plane：新增显式 dry-run hook installer/doctor、Claude `PermissionRequest` blocking approval relay、Discord Approve/Deny buttons、`cli_session_approvals` 持久化，以及 running task thread 的 `task_control_events` operator message queue。
@@ -33,6 +34,7 @@
 - 文档迁移收尾：`docs/features/*.md` 统一归档到 `docs/archive/features/`，早期平铺中文翻译迁移到 `docs/zh/plans/` 或 `docs/zh/archive/**`，并补齐标准 frontmatter。
 
 ### Changed
+- CLI session dashboard 的 `Continue` 不再创建 MiniClaw same-provider resume task/thread；输出留在原 iTerm2 live process，可通过 `hookd.live_terminal_continue_enabled` 关闭。
 - 补充 Discord Agent Control Plane 的 UI/UX 设计：明确 Discord 内使用 native embeds/components/modals 而非 HTML 原样渲染，并规定 approval、active、stale active、idle、hidden history 的状态优先排序，避免历史 active session 被 idle 消息淹没。
 - 更新 Discord Agent Control Plane 设计文档：将首阶段实现调整为 `hookd` hook-based CLI session discovery，覆盖普通 iTerm2 `claude` / `codex` 的 active、idle、ended 状态识别，并移除过期 wrapper-first 假设。
 - Cron task output contract 现在由 runtime 统一注入 shared chat/IM output surface policy，per-job `output_template` 只需描述报告结构、机器块和 job-specific 例外，避免在每个 cron YAML 中重复通用 Markdown/最终报告约束。

@@ -3,7 +3,7 @@ doc_id: runtime-index
 lang: zh
 translation_of: docs/runtime/README.md
 translation_status: current
-source_sha256: 4ebef947e006d541573f2803587788b8e51314b147c5014f8053d1ed960bd96a
+source_sha256: b464e828abe96c34b06f6e8eb667d5ffb9e28f298f2ef5a87fe26794913d9d34
 ---
 # MiniClaw Runtime 文档
 
@@ -129,16 +129,16 @@ Runtime contract:
 - Hook entries 调用构建后的 `dist/hookd/hook-client.js` bridge，并带有 `MINICLAW_HOOKD_MANAGED=1` marker。installer 只移除并替换带这个 marker 的 entries，然后在 `~/.miniclaw/hooks/manifest.json` 写 manifest。
 - Claude hooks 覆盖 session、prompt、tool、notification、compaction、stop 和 blocking `PermissionRequest` events。Codex hooks 只在 `[features] codex_hooks = true` 已启用时安装，除非 operator 传入 `--enable-codex-feature`。
 - Provider hooks 把 newline-delimited JSON 发送到 `hookd.sock`；MiniClaw 会 normalize provider、session id、cwd、pid、tty、terminal hints、transcript path、event name 和 phase。
-- CLI session state 存在 `cli_sessions` 和 `cli_session_events`，不会进入 `tasks`；只有 operator 显式启动 same-provider continuation 后才会创建 MiniClaw task。
+- CLI session state 存在 `cli_sessions` 和 `cli_session_events`，不会进入 `tasks`。Dashboard `Continue` 会把 follow-up text 发送到原始 iTerm2 live process，不会创建 MiniClaw task row。
 - Blocking Claude `PermissionRequest` events 会创建 redacted `cli_session_approvals` rows，并保持 hook response open，直到 Discord approve、Discord deny、timeout 或 daemon startup expiry。timeout 和 startup expiry 默认 deny。
 - 自动控制面是一条可编辑的 Discord message，目标来自 `hookd.dashboard_channel_id` 或 `hookd.dashboard_channel_name`（默认 `miniclaw-cli-sessions`）。配置 `hookd.dashboard_message_id` 时 MiniClaw 会编辑该消息；未配置或消息不存在时，会创建并 best-effort pin 新 dashboard message，同时在日志提示把 message id 写回配置。
-- Hook events、approval lifecycle changes、dead-PID zombie scan、Hide、Approve、Deny，以及成功的 same-provider Continue 操作都会按 `hookd.dashboard_update_debounce_ms` debounce 后刷新固定 dashboard。
+- Hook events、approval lifecycle changes、dead-PID zombie scan、Hide、Approve、Deny，以及成功的 live Continue 操作都会按 `hookd.dashboard_update_debounce_ms` debounce 后刷新固定 dashboard。
 - Dashboard 排序按状态优先：approval、active、stale active、idle，然后才是 history/hidden。较早打开但仍 active 的工作会排在较新的 idle sessions 上方。
 - 空 Codex startup sessions 默认不显示，直到出现真实 prompt 或 transcript activity。
 - 自动固定 dashboard 只显示当前需要关注的 approval、active、stale active 和 idle sessions。closed 或 hidden history 仍通过 `/sessions status:closed` 和 `/sessions status:hidden` 查询。
-- Discord buttons 支持 `Details`、`Hide`、`Approve` 和 `Deny`。`Continue` 只对 idle sessions 可用，并打开 Discord modal 填写 follow-up instruction。
-- Same-provider continuation 会强制 runtime 与被观测 session 的 provider 一致。Claude session 通过 Claude 继续，Codex session 通过 Codex 继续。
-- Active external CLI sessions 不做盲目 iTerm2 keystroke injection。在 provider-native interrupt/input API 可用前，MiniClaw 会拒绝仍 active session 的 same-provider continuation。
+- Discord buttons 支持 `Details`、`Hide`、`Approve` 和 `Deny`。`Continue` 只对 idle 且由 iTerm2 承载的 sessions 可用，并打开 Discord modal 填写 follow-up instruction。
+- Live terminal Continue 优先使用 `terminal_surface_json.iterm_session_id` 中记录的 iTerm2 session id；如果缺失，则 fallback 到唯一匹配的 recorded tty。目标缺失、歧义、进程死亡或 tty 不匹配时 fail closed，不会 fallback 到 provider-native resume。
+- Active external CLI sessions 不接收 input injection。只有被观测 session 处于 idle 且 iTerm2 target 能精确解析时，MiniClaw 才会写入原始 iTerm2 live process。
 - Running MiniClaw-owned task threads 现在会把 operator replies 持久化为 queued `task_control_events`，而不是启动第二个 resume task。当前 runners 还不会消费这个 queue；它是下一个 interactive runtime slice 的 durable control-plane contract。
 
 ## Weixin 协议兼容

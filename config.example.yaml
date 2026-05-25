@@ -75,6 +75,7 @@ hookd:
   dashboard_message_id: ""
   dashboard_update_debounce_ms: 1500
   dashboard_limit: 8
+  live_terminal_continue_enabled: true
 
 agent_run_manager:
   # Managed multi-agent path. Disabled by default; enabling it routes /task

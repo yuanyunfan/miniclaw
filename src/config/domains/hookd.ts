@@ -52,6 +52,11 @@ export function buildHookdRuntimeConfig(reader: ConfigReader) {
         "MINICLAW_HOOKD_DASHBOARD_LIMIT",
         8
       ),
+      liveTerminalContinueEnabled: reader.boolValue(
+        ["hookd", "live_terminal_continue_enabled"],
+        "MINICLAW_HOOKD_LIVE_TERMINAL_CONTINUE_ENABLED",
+        true
+      ),
     },
   } as const;
 }

@@ -169,6 +169,7 @@ export async function handleSessions(interaction: ChatInputCommandInteraction): 
       staleActiveMs: config.hookd.staleActiveMs,
       limit,
       pendingApprovals,
+      liveTerminalContinueEnabled: config.hookd.liveTerminalContinueEnabled,
     }),
     ephemeral: true,
   });

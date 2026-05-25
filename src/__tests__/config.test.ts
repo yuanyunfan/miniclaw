@@ -360,6 +360,7 @@ hookd:
   dashboard_message_id: "1508369535659675669"
   dashboard_update_debounce_ms: 2500
   dashboard_limit: 12
+  live_terminal_continue_enabled: false
 notifications:
   email:
     enabled: true
@@ -524,6 +525,7 @@ notifications:
       dashboardMessageId: "1508369535659675669",
       dashboardUpdateDebounceMs: 2500,
       dashboardLimit: 12,
+      liveTerminalContinueEnabled: false,
     });
     expect(config.notifications.email).toMatchObject({
       enabled: true,

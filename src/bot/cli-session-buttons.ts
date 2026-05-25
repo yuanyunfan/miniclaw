@@ -11,6 +11,7 @@ import {
   buildCliSessionDetailEmbed,
   parseCliSessionCustomId,
 } from "../discord/cli-session-dashboard.js";
+import { getCliSessionLiveTerminalEligibility } from "../hookd/live-terminal-input.js";
 import { getCliSession, getCliSessionApproval, hideCliSession } from "../store/db.js";
 import { hookdApprovalRegistry } from "../hookd/approvals.js";
 
@@ -90,9 +91,12 @@ export async function handleCliSessionButton(interaction: ButtonInteraction): Pr
   }
 
   if (parsed.action === "continue") {
-    if (session.phase !== "waiting_for_input") {
+    const eligibility = getCliSessionLiveTerminalEligibility(session, {
+      enabled: config.hookd.liveTerminalContinueEnabled,
+    });
+    if (!eligibility.ok) {
       await interaction.reply({
-        content: "This session is not idle. MiniClaw will not start a same-provider continuation while the observed CLI session is still active.",
+        content: `Cannot continue this CLI session in its live iTerm2 process: ${eligibility.message}`,
         ephemeral: true,
       });
       return true;
