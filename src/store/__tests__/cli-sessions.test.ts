@@ -3,12 +3,16 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ensureBaseSchema, runMigrations } from "../schema.js";
 import { setDb } from "../connection.js";
 import {
+  createCliSessionApproval,
+  getCliSessionApproval,
   getCliSessionByProviderSession,
   hideCliSession,
   listCliSessionEvents,
+  listPendingCliSessionApprovals,
   listCliSessions,
   markDeadCliSessions,
   recordCliSessionHookEvent,
+  resolveCliSessionApproval,
 } from "../db.js";
 
 let db: Database.Database;
@@ -96,5 +100,44 @@ describe("cli session repository", () => {
     expect(hideCliSession(session.id)).toBe(true);
     expect(listCliSessions()).toEqual([]);
     expect(listCliSessions({ status: "hidden", includeHidden: true })).toHaveLength(1);
+  });
+
+  it("records and resolves pending CLI session approval requests", () => {
+    const event = {
+      provider: "claude" as const,
+      providerSessionId: "claude-approval-1",
+      eventName: "PermissionRequest",
+      cwd: "/repo",
+      toolName: "Bash",
+      toolInput: { command: "git status", token: "secret" },
+      toolUseId: "toolu-1",
+      receivedAt: new Date("2026-05-25T00:00:00.000Z"),
+    };
+    const session = recordCliSessionHookEvent(event);
+    const approval = createCliSessionApproval({
+      session,
+      event,
+      timeoutMs: 60_000,
+    });
+
+    expect(approval).toMatchObject({
+      cli_session_id: session.id,
+      provider: "claude",
+      status: "pending",
+      tool_name: "Bash",
+      tool_use_id: "toolu-1",
+    });
+    expect(approval.request_json).not.toContain("secret");
+    expect(listPendingCliSessionApprovals()).toHaveLength(1);
+
+    const resolved = resolveCliSessionApproval({
+      id: approval.id,
+      decision: "allow",
+      actorId: "discord-user",
+    });
+
+    expect(resolved?.status).toBe("approved");
+    expect(getCliSessionApproval(approval.id)?.actor_id).toBe("discord-user");
+    expect(listPendingCliSessionApprovals()).toEqual([]);
   });
 });

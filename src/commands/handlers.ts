@@ -7,7 +7,7 @@ import {
 } from "discord.js";
 import { v4 as uuid } from "uuid";
 import { config } from "../config.js";
-import { createTask, getActiveTasks, getInterruptedTasks, getRecentTasks, getTask, listCliSessions, updateTask } from "../store/db.js";
+import { createTask, getActiveTasks, getInterruptedTasks, getRecentTasks, getTask, listCliSessions, listPendingCliSessionApprovals, updateTask } from "../store/db.js";
 import { executeTask, getActiveTaskCount, cancelTask, listActiveTaskIds } from "../agent/task.js";
 import { TaskReporter } from "../agent/task-reporter.js";
 import { taskStartEmbed, statusOverviewEmbed, taskErrorEmbed, healthEmbed } from "../discord/formatter.js";
@@ -154,6 +154,9 @@ export async function handleSessions(interaction: ChatInputCommandInteraction): 
     includeHidden: status === "hidden",
     limit: 200,
   });
+  const pendingApprovals = Object.fromEntries(
+    listPendingCliSessionApprovals(200).map((approval) => [approval.cli_session_id, approval])
+  );
 
   await interaction.reply({
     ...buildCliSessionDashboardMessage({
@@ -165,6 +168,7 @@ export async function handleSessions(interaction: ChatInputCommandInteraction): 
       },
       staleActiveMs: config.hookd.staleActiveMs,
       limit,
+      pendingApprovals,
     }),
     ephemeral: true,
   });

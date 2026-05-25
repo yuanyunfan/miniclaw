@@ -58,6 +58,29 @@ describe("hookd socket server", () => {
     });
   });
 
+  it("accepts CodeIsland-style event/status fields and tool approval metadata", () => {
+    const event = __testables.parseHookEvent({
+      provider: "claude",
+      session_id: "session-approval",
+      event: "PermissionRequest",
+      status: "waiting_for_approval",
+      cwd: "/repo",
+      tool: "Bash",
+      tool_input: { command: "git status" },
+      tool_use_id: "toolu-1",
+    });
+
+    expect(event).toMatchObject({
+      provider: "claude",
+      providerSessionId: "session-approval",
+      eventName: "PermissionRequest",
+      phase: "waiting_for_approval",
+      toolName: "Bash",
+      toolUseId: "toolu-1",
+    });
+    expect(event.toolInput).toEqual({ command: "git status" });
+  });
+
   it("rejects unsupported provider payloads", () => {
     expect(() => __testables.parseHookEvent({
       provider: "unknown",

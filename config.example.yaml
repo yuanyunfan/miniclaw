@@ -68,6 +68,7 @@ hookd:
   socket_path: "~/.miniclaw/runtime/hookd.sock"
   max_payload_bytes: 262144
   zombie_scan_interval_ms: 30000
+  approval_timeout_ms: 600000
   stale_active_ms: 900000
   dashboard_limit: 8
 

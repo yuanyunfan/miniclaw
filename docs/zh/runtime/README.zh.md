@@ -3,7 +3,7 @@ doc_id: runtime-index
 lang: zh
 translation_of: docs/runtime/README.md
 translation_status: current
-source_sha256: bcdfffa987930206516086f6181d838109fb61c4a81e8334d6a35cc03e433650
+source_sha256: 1c2f95e2a411447b2ae3695811025bd0c9be7829dcad7ac441434a2348fb1815
 ---
 # MiniClaw Runtime 文档
 
@@ -114,21 +114,28 @@ Owner code paths:
 ```text
 src/hookd/**
 src/store/cli-sessions.ts
+src/store/task-control-events.ts
 src/discord/cli-session-dashboard.ts
 src/bot/cli-session-buttons.ts
 src/bot/cli-session-modals.ts
+scripts/hookd-install.ts
 ```
 
 Runtime contract:
 
-- `hookd` 通过 `hookd.enabled` opt-in；首个 shipped slice 不会自动编辑 `~/.claude/settings.json` 或 `~/.codex/hooks.json`。
+- `hookd` 通过 `hookd.enabled` opt-in；MiniClaw 正常启动时不会自动编辑 `~/.claude/settings.json` 或 `~/.codex/hooks.json`。
+- Managed hook installation 是显式操作，默认 dry-run：`pnpm hookd:install` 预览变更，`pnpm hookd:install -- --execute` 写入 MiniClaw-managed entries，`pnpm hookd:doctor` 报告 managed hook count、socket path 状态和 Codex hook feature flag。
+- Hook entries 调用构建后的 `dist/hookd/hook-client.js` bridge，并带有 `MINICLAW_HOOKD_MANAGED=1` marker。installer 只移除并替换带这个 marker 的 entries，然后在 `~/.miniclaw/hooks/manifest.json` 写 manifest。
+- Claude hooks 覆盖 session、prompt、tool、notification、compaction、stop 和 blocking `PermissionRequest` events。Codex hooks 只在 `[features] codex_hooks = true` 已启用时安装，除非 operator 传入 `--enable-codex-feature`。
 - Provider hooks 把 newline-delimited JSON 发送到 `hookd.sock`；MiniClaw 会 normalize provider、session id、cwd、pid、tty、terminal hints、transcript path、event name 和 phase。
 - CLI session state 存在 `cli_sessions` 和 `cli_session_events`，不会进入 `tasks`；只有 operator 显式启动 same-provider continuation 后才会创建 MiniClaw task。
+- Blocking Claude `PermissionRequest` events 会创建 redacted `cli_session_approvals` rows，并保持 hook response open，直到 Discord approve、Discord deny、timeout 或 daemon startup expiry。timeout 和 startup expiry 默认 deny。
 - Dashboard 排序按状态优先：approval、active、stale active、idle，然后才是 history/hidden。较早打开但仍 active 的工作会排在较新的 idle sessions 上方。
 - 空 Codex startup sessions 默认不显示，直到出现真实 prompt 或 transcript activity。
-- Discord buttons 支持 `Details` 和 `Hide`。`Continue` 只对 idle sessions 可用，并打开 Discord modal 填写 follow-up instruction。
+- Discord buttons 支持 `Details`、`Hide`、`Approve` 和 `Deny`。`Continue` 只对 idle sessions 可用，并打开 Discord modal 填写 follow-up instruction。
 - Same-provider continuation 会强制 runtime 与被观测 session 的 provider 一致。Claude session 通过 Claude 继续，Codex session 通过 Codex 继续。
 - Active external CLI sessions 不做盲目 iTerm2 keystroke injection。在 provider-native interrupt/input API 可用前，MiniClaw 会拒绝仍 active session 的 same-provider continuation。
+- Running MiniClaw-owned task threads 现在会把 operator replies 持久化为 queued `task_control_events`，而不是启动第二个 resume task。当前 runners 还不会消费这个 queue；它是下一个 interactive runtime slice 的 durable control-plane contract。
 
 ## Weixin 协议兼容
 

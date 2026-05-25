@@ -8,6 +8,7 @@
 
 ### Added
 - 新增 `hookd` CLI session control MVP：通过本地 Unix socket 接收 Claude Code / Codex hook events，持久化 `cli_sessions` / `cli_session_events`，提供 Discord `/sessions` dashboard、Details/Hide buttons，以及 idle session 的 same-provider Continue modal。
+- 扩展 `hookd` Discord control plane：新增显式 dry-run hook installer/doctor、Claude `PermissionRequest` blocking approval relay、Discord Approve/Deny buttons、`cli_session_approvals` 持久化，以及 running task thread 的 `task_control_events` operator message queue。
 - 新增 Discord Agent Control Plane 设计文档，记录 MiniClaw 通过 Discord 手机端观察、审批、取消、排队 follow-up，并接力 Claude Code 或 Codex 任务的实现路线。
 - 新增 Discord startup login retry：`bot.login` 失败时会通过 Weixin direct 发送启动失败通知，并按 10m / 20m / 40m backoff 重试，重试预算耗尽后才降级到非 Discord IM gateway。
 - 新增 cron task output contract：`type=task` 可在 cron YAML 中通过 inline `output_template` 或 `output_contract.template` 注入 prompt-level 输出格式契约，支持不传 vars，并预留 `validator: none` 运行时 hook。
@@ -57,6 +58,7 @@
 - App Trending 默认频道从 `daily-app-trending` 改为 `weekly-app-trending`，频道初始化脚本会把旧频道原地重命名并清理旧 channel-map key。
 
 ### Fixed
+- 放宽 Vitest 全局 timeout 到 10s，降低全量并行测试在本机负载较高时出现非断言失败的 flaky timeout。
 - 升级 `tsx` 到 `4.22.3` 并更新 `better-sqlite3` 到 Node 26 兼容版本，避免 cron script 通过 `tsx` 启动时向 Discord 输出 `DEP0205 module.register()` deprecation warning，并保持 SQLite 测试可运行。
 - 修复 Weixin 官方 CDN 媒体协议兼容：入站图片/语音会读取 `media.full_url`、`media.encrypt_query_param` 和 `aes_key`，下载后按 AES-ECB 解密，语音尽量从 SILK 转 WAV 后再送入附件处理链路。
 - Weixin outbound `sendFile` 改为官方 `getuploadurl -> CDN AES upload -> sendmessage` 链路，并把 caption 与媒体按官方行为拆成独立 `sendmessage` item。

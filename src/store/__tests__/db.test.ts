@@ -16,6 +16,9 @@ import {
   recordSmartRouterUserChoice,
   updateSmartRouterDecision,
   getRecentSmartRouterDecisions,
+  appendTaskControlEvent,
+  listQueuedTaskControlEvents,
+  markTaskControlEventsConsumed,
   __testables,
 } from "../db.js";
 import {
@@ -193,6 +196,9 @@ describe("schema migrations", () => {
     expect(__testables.columnExists("cli_sessions", "phase")).toBe(true);
     expect(__testables.columnExists("cli_sessions", "observed_prompt_count")).toBe(true);
     expect(__testables.columnExists("cli_session_events", "payload_json")).toBe(true);
+    expect(__testables.columnExists("cli_session_approvals", "decision_json")).toBe(true);
+    expect(__testables.columnExists("task_control_events", "payload_json")).toBe(true);
+    expect(__testables.columnExists("task_control_events", "consumed_at")).toBe(true);
   });
 
   it("ensures Agent Run Manager tables exist", () => {
@@ -249,6 +255,33 @@ describe("markTaskInterrupted + getInterruptedTasks", () => {
     expect(getTask(id)?.result_summary).toBe("shutdown drain timeout");
     const interrupted = getInterruptedTasks(20);
     expect(interrupted.some((t) => t.id === id)).toBe(true);
+  });
+});
+
+describe("task control events", () => {
+  it("queues and consumes task control events", () => {
+    const { id } = makeTask();
+    const event = appendTaskControlEvent({
+      taskId: id,
+      eventType: "operator_message",
+      payload: { text: "please adjust" },
+      discordMessageId: "message-1",
+      actorId: "user-1",
+      now: new Date("2026-05-25T00:00:00.000Z"),
+    });
+
+    expect(event).toMatchObject({
+      task_id: id,
+      event_type: "operator_message",
+      status: "queued",
+      discord_message_id: "message-1",
+      actor_id: "user-1",
+    });
+    expect(JSON.parse(event.payload_json)).toEqual({ text: "please adjust" });
+    expect(listQueuedTaskControlEvents(id).map((row) => row.id)).toEqual([event.id]);
+
+    expect(markTaskControlEventsConsumed([event.id], new Date("2026-05-25T00:01:00.000Z"))).toBe(1);
+    expect(listQueuedTaskControlEvents(id)).toEqual([]);
   });
 });
 

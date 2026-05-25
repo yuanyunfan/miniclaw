@@ -15,6 +15,8 @@ import { migration014AgentSchedulerState } from "./014-agent-scheduler-state.js"
 import { migration015MarketContext } from "./015-market-context.js";
 import { migration016CronDeliveryMessages } from "./016-cron-delivery-messages.js";
 import { migration017CliSessions } from "./017-cli-sessions.js";
+import { migration018CliSessionApprovals } from "./018-cli-session-approvals.js";
+import { migration019TaskControlEvents } from "./019-task-control-events.js";
 import type { SchemaMigration } from "./types.js";
 
 export const migrations: SchemaMigration[] = [
@@ -35,4 +37,6 @@ export const migrations: SchemaMigration[] = [
   migration015MarketContext,
   migration016CronDeliveryMessages,
   migration017CliSessions,
+  migration018CliSessionApprovals,
+  migration019TaskControlEvents,
 ];

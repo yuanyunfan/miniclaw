@@ -19,6 +19,7 @@ export * from "./agent-run-manager.js";
 export * from "./cron-runs.js";
 export * from "./cron-delivery-messages.js";
 export * from "./cli-sessions.js";
+export * from "./task-control-events.js";
 export * from "./market-context.js";
 export * from "./recovery-outbox.js";
 export * from "./repositories/chat-history.js";

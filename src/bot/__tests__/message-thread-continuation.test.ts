@@ -1,5 +1,6 @@
 import { Collection, type Message } from "discord.js";
 import { describe, expect, it, vi } from "vitest";
+import { appendTaskControlEvent } from "../../store/db.js";
 import type { TaskRow } from "../../store/db.js";
 import { handleThreadContinuationMessage } from "../message-thread-continuation.js";
 
@@ -9,11 +10,20 @@ vi.mock("../../agent/session.js", () => ({
   }),
 }));
 
+vi.mock("../../store/db.js", () => ({
+  appendTaskControlEvent: vi.fn(() => ({
+    id: "control-event-1",
+  })),
+  createTask: vi.fn(),
+}));
+
 function fakeMessage(): {
   message: Message;
   reply: ReturnType<typeof vi.fn>;
+  react: ReturnType<typeof vi.fn>;
 } {
   const reply = vi.fn(async (_payload: unknown) => undefined);
+  const react = vi.fn(async (_emoji: string) => undefined);
   const message = {
     id: "msg-1",
     content: "continue this",
@@ -27,9 +37,9 @@ function fakeMessage(): {
     attachments: new Collection(),
     mentions: { has: vi.fn(() => false) },
     reply,
-    react: vi.fn(async (_emoji: string) => undefined),
+    react,
   } as unknown as Message;
-  return { message, reply };
+  return { message, reply, react };
 }
 
 function taskRow(overrides: Partial<TaskRow> = {}): TaskRow {
@@ -69,5 +79,29 @@ describe("thread continuation message handler", () => {
 
     expect(reply).toHaveBeenCalledWith("❌ session provider mismatch");
     expect(markProcessed).not.toHaveBeenCalled();
+  });
+
+  it("queues operator messages for running tasks instead of starting a resume task", async () => {
+    const { message, reply, react } = fakeMessage();
+    const markProcessed = vi.fn(() => true);
+
+    await handleThreadContinuationMessage(message, taskRow({ status: "running" }), {
+      botUserId: "bot-1",
+      markProcessed,
+    });
+
+    expect(markProcessed).toHaveBeenCalledWith("msg-1");
+    expect(appendTaskControlEvent).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: "task-1",
+      eventType: "operator_message",
+      payload: {
+        text: "continue this",
+        attachments: [],
+      },
+      discordMessageId: "msg-1",
+      actorId: "user-1",
+    }));
+    expect(react).toHaveBeenCalledWith("📌");
+    expect(reply).toHaveBeenCalledWith(expect.stringContaining("Queued operator instruction"));
   });
 });

@@ -20,6 +20,11 @@ export function buildHookdRuntimeConfig(reader: ConfigReader) {
         "MINICLAW_HOOKD_ZOMBIE_SCAN_INTERVAL_MS",
         30_000
       ),
+      approvalTimeoutMs: reader.positiveInt(
+        ["hookd", "approval_timeout_ms"],
+        "MINICLAW_HOOKD_APPROVAL_TIMEOUT_MS",
+        10 * 60_000
+      ),
       staleActiveMs: reader.positiveInt(
         ["hookd", "stale_active_ms"],
         "MINICLAW_HOOKD_STALE_ACTIVE_MS",

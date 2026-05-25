@@ -6,7 +6,7 @@ import {
   parseCliSessionContinueModalId,
   parseCliSessionCustomId,
 } from "../cli-session-dashboard.js";
-import type { CliSessionRow } from "../../hookd/types.js";
+import type { CliSessionApprovalRow, CliSessionRow } from "../../hookd/types.js";
 
 function session(overrides: Partial<CliSessionRow>): CliSessionRow {
   return {
@@ -34,6 +34,25 @@ function session(overrides: Partial<CliSessionRow>): CliSessionRow {
   };
 }
 
+function approval(overrides: Partial<CliSessionApprovalRow> = {}): CliSessionApprovalRow {
+  return {
+    id: "approval-12345678",
+    cli_session_id: "session-12345678",
+    provider: "claude",
+    provider_session_id: "provider-session-1",
+    tool_name: "Bash",
+    tool_use_id: "toolu-1",
+    request_json: "{}",
+    status: "pending",
+    decision_json: null,
+    actor_id: null,
+    requested_at: "2026-05-25T00:00:00.000Z",
+    resolved_at: null,
+    expires_at: "2026-05-25T00:10:00.000Z",
+    ...overrides,
+  };
+}
+
 describe("CLI session dashboard", () => {
   it("builds Discord-native dashboard components for idle continuation", () => {
     const message = buildCliSessionDashboardMessage({
@@ -51,6 +70,27 @@ describe("CLI session dashboard", () => {
     )).toBe(true);
   });
 
+  it("adds approve and deny buttons for pending approval sessions", () => {
+    const message = buildCliSessionDashboardMessage({
+      sessions: [session({
+        phase: "waiting_for_approval",
+        attention_kind: "approval",
+      })],
+      pendingApprovals: {
+        "session-12345678": approval(),
+      },
+      now: new Date("2026-05-25T00:01:00.000Z"),
+    });
+
+    const customIds = message.components.flatMap((row) =>
+      row.components.map((component) => (component.data as { custom_id?: string }).custom_id)
+    );
+    expect(customIds).toEqual(expect.arrayContaining([
+      "miniclaw:cli-session:approve:approval-12345678",
+      "miniclaw:cli-session:deny:approval-12345678",
+    ]));
+  });
+
   it("parses button and modal custom ids", () => {
     expect(parseCliSessionCustomId(buildCliSessionCustomId("continue", "session-1"))).toEqual({
       action: "continue",
@@ -58,6 +98,10 @@ describe("CLI session dashboard", () => {
     });
     expect(parseCliSessionContinueModalId(buildCliSessionContinueModalId("session-1"))).toEqual({
       sessionId: "session-1",
+    });
+    expect(parseCliSessionCustomId("miniclaw:cli-session:approve:approval-1")).toEqual({
+      action: "approve",
+      approvalId: "approval-1",
     });
   });
 });

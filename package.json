@@ -32,6 +32,8 @@
     "safe-restart": "tsx scripts/safe-restart.ts",
     "restart": "pnpm safe-restart",
     "doctor": "tsx scripts/doctor.ts",
+    "hookd:install": "tsx scripts/hookd-install.ts",
+    "hookd:doctor": "tsx scripts/hookd-install.ts --doctor",
     "doctor:setup": "tsx scripts/setup-doctor.ts",
     "task:trace": "tsx scripts/task-trace.ts",
     "state:cleanup": "tsx scripts/state-cleanup.ts",

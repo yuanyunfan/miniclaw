@@ -11,7 +11,8 @@ import {
   buildCliSessionDetailEmbed,
   parseCliSessionCustomId,
 } from "../discord/cli-session-dashboard.js";
-import { getCliSession, hideCliSession } from "../store/db.js";
+import { getCliSession, getCliSessionApproval, hideCliSession } from "../store/db.js";
+import { hookdApprovalRegistry } from "../hookd/approvals.js";
 
 function buildContinueModal(sessionId: string): ModalBuilder {
   const input = new TextInputBuilder()
@@ -32,6 +33,34 @@ export async function handleCliSessionButton(interaction: ButtonInteraction): Pr
 
   if (interaction.user.id !== config.allowedUserId) {
     await interaction.reply({ content: "No permission.", ephemeral: true });
+    return true;
+  }
+
+  if ("approvalId" in parsed) {
+    const approval = getCliSessionApproval(parsed.approvalId);
+    if (!approval) {
+      await interaction.reply({ content: "Approval request not found.", ephemeral: true });
+      return true;
+    }
+    if (approval.status !== "pending") {
+      await interaction.reply({
+        content: `Approval request ${approval.id.slice(0, 8)} is already ${approval.status}.`,
+        ephemeral: true,
+      });
+      return true;
+    }
+    const result = hookdApprovalRegistry.resolve(
+      approval.id,
+      parsed.action === "approve" ? "allow" : "deny",
+      interaction.user.id,
+      parsed.action === "approve" ? undefined : "Denied from Discord",
+    );
+    await interaction.reply({
+      content: result
+        ? `${parsed.action === "approve" ? "Approved" : "Denied"} CLI permission request ${approval.id.slice(0, 8)}.`
+        : `Approval request ${approval.id.slice(0, 8)} could not be resolved.`,
+      ephemeral: true,
+    });
     return true;
   }
 

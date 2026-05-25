@@ -3,7 +3,7 @@ doc_id: discord-agent-control-plane
 lang: zh
 translation_of: docs/plans/2026-05-25-discord-agent-control-plane.md
 translation_status: current
-source_sha256: 042348ed5965b04deca7b2fbcac5c56b307eb3e46ee37a3b5c46c0c835202fb9
+source_sha256: 7291c7f52c759939b96f27958141a2a3c3b43da025bb4c5e503be2cb7270d2e0
 ---
 # Discord Agent Control Plane
 
@@ -118,7 +118,7 @@ Remodex 仍适合作为未来 Codex deep control 的参考。关键设计点是�
 flowchart TD
   CC[Claude Code CLI] --> HC[Claude hooks]
   CX[Codex CLI] --> HX[Codex hooks]
-  HC --> HS[hookd hook script]
+  HC --> HS[hookd hook bridge]
   HX --> HS
   HS --> S[hookd Unix socket]
   S --> H[hookd daemon]
@@ -153,8 +153,8 @@ flowchart TD
 - install、verify、repair、uninstall MiniClaw-managed Claude Code hooks；
 - 当 Codex hook support enabled 时，install、verify、repair、uninstall MiniClaw-managed Codex hooks；
 - 监听本地 Unix socket，例如 `~/.miniclaw/runtime/hookd.sock`；
-- 接收 providers 调用的小 hook script 发来的 JSON hook event；
-- 使用 hook script 收集的 process metadata enrich event；
+- 接收 providers 调用的小 hook bridge 发来的 JSON hook event；
+- 使用 hook bridge 收集的 process metadata enrich event；
 - 把 provider event 映射成 MiniClaw canonical CLI session phases；
 - 持久化 session state，并追加保存脱敏后的 raw events；
 - 对 blocking permission request 保持等待，直到 Discord 或 local policy 返回 allow、deny 或 ask；
@@ -169,7 +169,7 @@ flowchart TD
 Claude hook target：
 
 - 文件：`~/.claude/settings.json`；
-- 脚本：`~/.miniclaw/hooks/miniclaw-hookd.py`；
+- 脚本：构建后的 MiniClaw hook bridge `dist/hookd/hook-client.js`；
 - 事件：`UserPromptSubmit`、`PreToolUse`、`PostToolUse`、`PermissionRequest`、`Notification`、`Stop`、`SubagentStop`、`SessionStart`、`SessionEnd` 和 `PreCompact`；
 - timeout：`PermissionRequest` 需要足够长以支持 interactive approval，但 MiniClaw 侧必须有 timeout 和 deny-by-default policy。
 
@@ -177,11 +177,11 @@ Codex hook target：
 
 - 文件：`~/.codex/hooks.json`；
 - 配置：只有当 MiniClaw 管理该 feature flag 时，才启用 `[features] codex_hooks = true`；
-- 脚本：`~/.miniclaw/hooks/miniclaw-hookd.py`；
+- 脚本：构建后的 MiniClaw hook bridge `dist/hookd/hook-client.js`；
 - 第一阶段必需事件：带 startup 或 resume matcher 的 `SessionStart`、`UserPromptSubmit` 和 `Stop`；
 - 后续可选事件：如果已安装 Codex 版本暴露 tool 和 approval event，再接入。
 
-hook script 应保持 provider-neutral。它从 stdin 读取 hook JSON，并向 `hookd` 发送紧凑 event。应包含：
+hook bridge 应保持 provider-neutral。它从 stdin 读取 hook JSON，并向 `hookd` 发送紧凑 event。Managed hook commands 带有 `MINICLAW_HOOKD_MANAGED=1` marker，因此 uninstall 和 repair 只会移除 MiniClaw-owned entries。bridge 应包含：
 
 - `source`：`claude` 或 `codex`；
 - `session_id`；
@@ -411,8 +411,8 @@ Provider switching 明确不在范围内。如果 operator 想用另一个 provi
    - 增加 repository helpers：upsert session、append event、list active or idle sessions、mark ended、hide session、expire stale approvals。
    - 增加 hook payload 和 tool input 的 redaction helpers。
 
-2. 增加 `hookd` socket 和 hook script。
-   - 在 MiniClaw-managed user config 下增加小型 provider-neutral script。
+2. 增加 `hookd` socket 和 hook bridge。
+   - 在 MiniClaw build output 中增加一个 provider-neutral hook bridge，并从 managed hook entries 引用它。
    - 从 stdin 读取 JSON，并 enrich pid、tty、terminal hints、cmux 或 tmux identifiers、transcript path。
    - 通过 Unix socket 向 `hookd` 发送一个 JSON object。
    - 对 blocking approval hooks，用 bounded timeout 等待 decision response。
@@ -457,7 +457,7 @@ Provider switching 明确不在范围内。如果 operator 想用另一个 provi
 - Type check：`pnpm run typecheck`。
 - Unit tests：
   - Claude settings 和 Codex hooks 的 hook installer pure mutations；
-  - 使用 fixture payloads 验证 hook script event normalization；
+  - 使用 fixture payloads 验证 hook bridge event normalization；
   - `hookd` socket request 和 response behavior；
   - CLI session repository 的 upsert、phase transition、hide、end 和 expiry；
   - zombie scan dead-pid detection；
@@ -521,4 +521,8 @@ Provider switching 明确不在范围内。如果 operator 想用另一个 provi
 
 - 2026-05-25：初始分析整理为 Discord control-plane design plan。
 - 2026-05-25：检查 MioIsland 的 hook-based Claude 和 Codex session discovery 后，把计划更新为 `hookd` first implementation layer，并移除过期 wrapper-first assumption。
-- 2026-05-25：已发布首个 implementation slice：SQLite `cli_sessions` / `cli_session_events`、hookd Unix-socket event ingestion、canonical phase mapping、dead-pid cleanup、Discord `/sessions` dashboard、`Details` / `Hide` buttons，以及 idle-session `Continue` modal，可启动 same-provider MiniClaw continuation。Hook installation 和 blocking approval relay 仍是后续 slice。
+- 2026-05-25：已发布首个 implementation slice：SQLite `cli_sessions` / `cli_session_events`、hookd Unix-socket event ingestion、canonical phase mapping、dead-pid cleanup、Discord `/sessions` dashboard、`Details` / `Hide` buttons，以及 idle-session `Continue` modal，可启动 same-provider MiniClaw continuation。
+- 2026-05-25：已发布第二个 implementation slice：schema v19 增加 `cli_session_approvals` 和 `task_control_events`；hookd 可以保持 Claude `PermissionRequest` hook open，在 Discord session dashboard 中显示 pending approvals，并通过 Discord buttons resolve allow 或 deny，同时 timeout 和 startup expiry 默认 deny。
+- 2026-05-25：增加显式 hook installer tooling。`pnpm hookd:install` 默认 dry-run，`--execute` 只写入 MiniClaw-managed Claude 或 Codex hook entries，`--uninstall` 移除这些 entries，`pnpm hookd:doctor` 报告 managed hook count、socket-path status 和 Codex hook feature state。Codex hook feature enablement 仍需通过 `--enable-codex-feature` opt-in。
+- 2026-05-25：增加首个 MiniClaw-owned task control queue。running task thread 中的 replies 现在会持久化一条 `task_control_events` 的 `operator_message` row，并 ack queue，而不是启动并发 resume task。当前 runners 还不会消费这个 queue；这仍是下一个 interactive-runner slice。
+- 2026-05-25：已 review `codex app-server` 作为实验性后续 runtime path。它不在本 slice 内，也不会替换稳定的 `@openai/codex-sdk` MiniClaw task runner。

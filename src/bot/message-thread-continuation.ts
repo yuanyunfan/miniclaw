@@ -12,7 +12,7 @@ import {
 } from "../discord/task-context.js";
 import { taskCapacityError } from "../discord/task-intake.js";
 import { buildTaskPromptWithContext } from "../routing/task-context.js";
-import { createTask, type TaskRow } from "../store/db.js";
+import { appendTaskControlEvent, createTask, type TaskRow } from "../store/db.js";
 
 export interface ThreadContinuationMessageOptions {
   botUserId: string;
@@ -33,6 +33,34 @@ export async function handleThreadContinuationMessage(
   const resumeSessionId = continuableTask.session_id;
   if (!resumeSessionId) return;
 
+  const followupContent = message.content.trim();
+  const followupAtts = Array.from(message.attachments.values());
+  if (!followupContent && !followupAtts.length) return;
+
+  if (continuableTask.status === "running") {
+    if (!options.markProcessed(message.id)) return;
+    const queued = appendTaskControlEvent({
+      taskId: continuableTask.id,
+      eventType: "operator_message",
+      payload: {
+        text: followupContent,
+        attachments: followupAtts.map((attachment) => ({
+          id: attachment.id,
+          name: attachment.name,
+          size: attachment.size,
+          content_type: attachment.contentType ?? null,
+        })),
+      },
+      discordMessageId: message.id,
+      actorId: message.author.id,
+    });
+    await message.react("📌").catch(() => {});
+    await message.reply(
+      `Queued operator instruction ${queued.id.slice(0, 8)} for the running task. It will be consumed at a supported safe point.`
+    );
+    return;
+  }
+
   try {
     assertProviderSession(resumeSessionId, config.runtime.defaultAgent);
   } catch (err) {
@@ -41,10 +69,6 @@ export async function handleThreadContinuationMessage(
   }
 
   if (!options.markProcessed(message.id)) return;
-
-  const followupContent = message.content.trim();
-  const followupAtts = Array.from(message.attachments.values());
-  if (!followupContent && !followupAtts.length) return;
 
   const capacity = taskCapacityError();
   if (capacity) {

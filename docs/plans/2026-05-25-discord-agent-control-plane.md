@@ -111,7 +111,7 @@ Avoid for the first slice:
 flowchart TD
   CC[Claude Code CLI] --> HC[Claude hooks]
   CX[Codex CLI] --> HX[Codex hooks]
-  HC --> HS[hookd hook script]
+  HC --> HS[hookd hook bridge]
   HX --> HS
   HS --> S[hookd Unix socket]
   S --> H[hookd daemon]
@@ -146,8 +146,8 @@ Minimum responsibilities:
 - install, verify, repair, and uninstall managed Claude Code hooks;
 - install, verify, repair, and uninstall managed Codex hooks when Codex hook support is enabled;
 - listen on a local Unix socket such as `~/.miniclaw/runtime/hookd.sock`;
-- accept JSON hook events from a small hook script invoked by the providers;
-- enrich events with process metadata collected by the hook script;
+- accept JSON hook events from a small hook bridge invoked by the providers;
+- enrich events with process metadata collected by the hook bridge;
 - map provider events into MiniClaw's canonical CLI session phases;
 - persist session state and append raw redacted events;
 - hold blocking permission requests open until Discord or local policy returns allow, deny, or ask;
@@ -162,7 +162,7 @@ Minimum responsibilities:
 Claude hook target:
 
 - file: `~/.claude/settings.json`;
-- script: `~/.miniclaw/hooks/miniclaw-hookd.py`;
+- script: built MiniClaw hook bridge `dist/hookd/hook-client.js`;
 - events: `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PermissionRequest`, `Notification`, `Stop`, `SubagentStop`, `SessionStart`, `SessionEnd`, and `PreCompact`;
 - timeout: long enough for interactive approval on `PermissionRequest`, with MiniClaw-side timeout and deny-by-default policy.
 
@@ -170,11 +170,11 @@ Codex hook target:
 
 - file: `~/.codex/hooks.json`;
 - config: enable `[features] codex_hooks = true` only when MiniClaw manages that feature flag;
-- script: `~/.miniclaw/hooks/miniclaw-hookd.py`;
+- script: built MiniClaw hook bridge `dist/hookd/hook-client.js`;
 - first required events: `SessionStart` with startup or resume matcher, `UserPromptSubmit`, and `Stop`;
 - optional later events: tool and approval events if exposed by the installed Codex version.
 
-The hook script should be provider-neutral. It should read hook JSON from stdin and send a compact event to `hookd`. It should include:
+The hook bridge should be provider-neutral. It reads hook JSON from stdin and sends a compact event to `hookd`. Managed hook commands carry the `MINICLAW_HOOKD_MANAGED=1` marker so uninstall and repair can remove only MiniClaw-owned entries. The bridge should include:
 
 - `source`: `claude` or `codex`;
 - `session_id`;
@@ -404,8 +404,8 @@ Provider switching is intentionally out of scope. If the operator wants to start
    - Add repository helpers for upsert session, append event, list active or idle sessions, mark ended, hide session, and expire stale approvals.
    - Add redaction helpers for hook payloads and tool input.
 
-2. Add `hookd` socket and hook script.
-   - Add a small provider-neutral script under MiniClaw-managed user config.
+2. Add `hookd` socket and hook bridge.
+   - Add a small provider-neutral hook bridge in the MiniClaw build output and reference it from managed hook entries.
    - Read JSON from stdin and enrich it with pid, tty, terminal hints, cmux or tmux identifiers, and transcript path.
    - Send one JSON object to `hookd` over a Unix socket.
    - For blocking approval hooks, wait for a decision response with a bounded timeout.
@@ -450,7 +450,7 @@ Provider switching is intentionally out of scope. If the operator wants to start
 - Type check: `pnpm run typecheck`.
 - Unit tests:
   - hook installer pure mutations for Claude settings and Codex hooks;
-  - hook script event normalization with fixture payloads;
+  - hook bridge event normalization with fixture payloads;
   - `hookd` socket request and response behavior;
   - CLI session repository upsert, phase transition, hide, end, and expiry;
   - zombie scan dead-pid detection;
@@ -514,4 +514,8 @@ Provider switching is intentionally out of scope. If the operator wants to start
 
 - 2026-05-25: Initial analysis captured as a Discord control-plane design plan.
 - 2026-05-25: Updated the plan to make `hookd` the first implementation layer after inspecting MioIsland's hook-based Claude and Codex session discovery. The outdated wrapper-first assumption was removed.
-- 2026-05-25: Shipped the first implementation slice: SQLite `cli_sessions` / `cli_session_events`, hookd Unix-socket event ingestion, canonical phase mapping, dead-pid cleanup, Discord `/sessions` dashboard, `Details` / `Hide` buttons, and idle-session `Continue` modal that starts same-provider MiniClaw continuation. Hook installation and blocking approval relay remain future slices.
+- 2026-05-25: Shipped the first implementation slice: SQLite `cli_sessions` / `cli_session_events`, hookd Unix-socket event ingestion, canonical phase mapping, dead-pid cleanup, Discord `/sessions` dashboard, `Details` / `Hide` buttons, and idle-session `Continue` modal that starts same-provider MiniClaw continuation.
+- 2026-05-25: Shipped the second implementation slice: schema v19 adds `cli_session_approvals` and `task_control_events`; hookd can hold Claude `PermissionRequest` hooks open, surface pending approvals in the Discord session dashboard, and resolve allow or deny from Discord buttons with timeout and startup-expiry deny-by-default behavior.
+- 2026-05-25: Added explicit hook installer tooling. `pnpm hookd:install` is dry-run by default, `--execute` writes only MiniClaw-managed Claude or Codex hook entries, `--uninstall` removes those entries, and `pnpm hookd:doctor` reports managed hook count, socket-path status, and Codex hook feature state. Codex hook feature enablement remains opt-in through `--enable-codex-feature`.
+- 2026-05-25: Added the first MiniClaw-owned task control queue. Replies in a running task thread now persist an `operator_message` row in `task_control_events` and acknowledge the queue instead of launching a concurrent resume task. Current runners do not consume the queue yet; that remains the next interactive-runner slice.
+- 2026-05-25: `codex app-server` was reviewed as an experimental later runtime path. It remains out of this slice and does not replace the stable `@openai/codex-sdk` MiniClaw task runner.

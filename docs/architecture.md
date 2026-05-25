@@ -225,7 +225,7 @@ Stock provider names remain cron-facing compatibility contracts in `src/provider
 
 ## Storage Model
 
-MiniClaw uses `~/.miniclaw/data.db` in SQLite WAL mode. Schema migrations are managed through `PRAGMA user_version`; the current schema is defined by `src/store/schema.ts` as `SCHEMA_VERSION = 17`.
+MiniClaw uses `~/.miniclaw/data.db` in SQLite WAL mode. Schema migrations are managed through `PRAGMA user_version`; the current schema is defined by `src/store/schema.ts` as `SCHEMA_VERSION = 19`.
 
 ```mermaid
 erDiagram
@@ -237,9 +237,11 @@ erDiagram
   tasks ||--o{ agent_scheduler_state : schedules
   tasks ||--o{ recovery_outbox : delivers
   tasks ||--o{ market_context_daily : writes
+  tasks ||--o{ task_control_events : controls
   cron_runs ||--o{ recovery_outbox : alerts
   tasks ||--o{ cron_delivery_messages : updates
   cli_sessions ||--o{ cli_session_events : records
+  cli_sessions ||--o{ cli_session_approvals : blocks
   incidents ||--o{ repair_runs : repairs
   chat_history ||--o{ smart_router_decisions : informs
   market_context_daily ||--o{ market_context_items : updates
@@ -322,6 +324,34 @@ erDiagram
     TEXT payload_json
     TEXT created_at
   }
+
+  cli_session_approvals {
+    TEXT id
+    TEXT cli_session_id
+    TEXT provider
+    TEXT provider_session_id
+    TEXT tool_name
+    TEXT tool_use_id
+    TEXT request_json
+    TEXT status
+    TEXT decision_json
+    TEXT actor_id
+    TEXT requested_at
+    TEXT resolved_at
+    TEXT expires_at
+  }
+
+  task_control_events {
+    TEXT id
+    TEXT task_id
+    TEXT event_type
+    TEXT status
+    TEXT payload_json
+    TEXT discord_message_id
+    TEXT actor_id
+    TEXT created_at
+    TEXT consumed_at
+  }
 ```
 
 State retention is configured through `state.retention.*`. Cleanup is dry-run first through `pnpm run state:cleanup -- --dry-run`; destructive cleanup requires `--execute`.
@@ -338,6 +368,8 @@ Cron task results normally send a new chunked Markdown result per run. Jobs that
 
 - `task_events` records lifecycle, protocol/tool events, and Discord status transitions.
 - `cli_sessions` and `cli_session_events` record hookd-observed external Claude/Codex CLI session state separately from MiniClaw-owned task rows.
+- `cli_session_approvals` records redacted external Claude permission requests and the Discord-side allow or deny decision returned to the blocking hook.
+- `task_control_events` records queued operator instructions for running MiniClaw-owned task threads; current single-shot runners do not consume this queue yet.
 - `src/store/task-trace-export.ts` and `src/store/agent-run-trace-export.ts` produce redacted Markdown traces for `/task-log`, incident views, and local CLI review.
 - `/doctor` and scheduled scans aggregate DB, cron state, config, PM2, logs, and Git evidence.
 - Guarded repair and ship flows require explicit operator approval and work through a repair branch before touching `main`.

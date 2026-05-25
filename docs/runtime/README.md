@@ -107,21 +107,28 @@ Owner code paths:
 ```text
 src/hookd/**
 src/store/cli-sessions.ts
+src/store/task-control-events.ts
 src/discord/cli-session-dashboard.ts
 src/bot/cli-session-buttons.ts
 src/bot/cli-session-modals.ts
+scripts/hookd-install.ts
 ```
 
 Runtime contract:
 
-- `hookd` is opt-in through `hookd.enabled`; the first shipped slice does not auto-edit `~/.claude/settings.json` or `~/.codex/hooks.json`.
+- `hookd` is opt-in through `hookd.enabled`; MiniClaw does not auto-edit `~/.claude/settings.json` or `~/.codex/hooks.json` during normal startup.
+- Managed hook installation is explicit and dry-run by default: `pnpm hookd:install` previews changes, `pnpm hookd:install -- --execute` writes MiniClaw-managed entries, and `pnpm hookd:doctor` reports managed hook count, socket path status, and the Codex hook feature flag.
+- Hook entries call the built `dist/hookd/hook-client.js` bridge with a `MINICLAW_HOOKD_MANAGED=1` marker. The installer removes and replaces only entries with that marker, then writes a manifest under `~/.miniclaw/hooks/manifest.json`.
+- Claude hooks cover session, prompt, tool, notification, compaction, stop, and blocking `PermissionRequest` events. Codex hooks are installed only when `[features] codex_hooks = true` is already enabled, unless the operator passes `--enable-codex-feature`.
 - Provider hooks send newline-delimited JSON to `hookd.sock`; MiniClaw normalizes provider, session id, cwd, pid, tty, terminal hints, transcript path, event name, and phase.
 - CLI session state lives in `cli_sessions` and `cli_session_events`, not in `tasks`, until the operator explicitly starts a same-provider continuation.
+- Blocking Claude `PermissionRequest` events create redacted `cli_session_approvals` rows and hold the hook response open until Discord approval, Discord denial, timeout, or daemon startup expiry. Timeout and startup expiry deny by default.
 - Dashboard ordering is state-prioritized: approval, active, stale active, idle, then history/hidden. Older active work stays above newer idle sessions.
 - Empty Codex startup sessions are hidden from the default dashboard until a real prompt or transcript activity appears.
-- `Details` and `Hide` are available from Discord buttons. `Continue` is available only for idle sessions and opens a Discord modal for the follow-up instruction.
+- `Details`, `Hide`, `Approve`, and `Deny` are available from Discord buttons. `Continue` is available only for idle sessions and opens a Discord modal for the follow-up instruction.
 - Same-provider continuation forces the runtime to match the observed session provider. A Claude session resumes through Claude; a Codex session resumes through Codex.
 - Active external CLI sessions do not receive blind iTerm2 keystroke injection. Until provider-native interrupt/input APIs are available, MiniClaw refuses same-provider continuation while the observed session is still active.
+- Running MiniClaw-owned task threads now persist operator replies as queued `task_control_events` instead of launching a second resume task. Current runners do not consume the queue yet; it is the durable control-plane contract for the next interactive runtime slice.
 
 ## Weixin Protocol Compatibility
 

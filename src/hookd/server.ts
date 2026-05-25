@@ -5,6 +5,7 @@ import { recordCliSessionHookEvent, markDeadCliSessions } from "../store/db.js";
 import { createLogger } from "../lib/log.js";
 import { isCliSessionProvider, mapHookEventToPhase } from "./state.js";
 import type { CliSessionHookEvent, CliSessionProvider } from "./types.js";
+import { hookdApprovalRegistry } from "./approvals.js";
 
 const log = createLogger("hookd");
 
@@ -13,6 +14,7 @@ export interface HookdRuntimeConfig {
   socketPath: string;
   maxPayloadBytes: number;
   zombieScanIntervalMs: number;
+  approvalTimeoutMs: number;
 }
 
 export interface HookdHandle {
@@ -63,7 +65,7 @@ function parseHookEvent(raw: unknown): CliSessionHookEvent {
   if (!providerSessionId) {
     throw new Error("hook event missing session id");
   }
-  const eventName = String(data.eventName ?? data.event_name ?? data.hook_event_name ?? data.type ?? data.name ?? "").trim();
+  const eventName = String(data.eventName ?? data.event_name ?? data.hook_event_name ?? data.event ?? data.type ?? data.name ?? "").trim();
   if (!eventName) {
     throw new Error("hook event missing event name");
   }
@@ -73,8 +75,13 @@ function parseHookEvent(raw: unknown): CliSessionHookEvent {
     : typeof data.parent_pid === "number"
       ? data.parent_pid
       : undefined;
-  const phaseRaw = typeof data.phase === "string" ? data.phase : undefined;
+  const phaseRaw = typeof data.phase === "string"
+    ? data.phase
+    : typeof data.status === "string"
+      ? data.status
+      : undefined;
   const terminalSurface = data.terminalSurface ?? data.terminal_surface;
+  const toolInput = data.toolInput ?? data.tool_input;
   return {
     provider,
     providerSessionId,
@@ -96,8 +103,30 @@ function parseHookEvent(raw: unknown): CliSessionHookEvent {
     ...(typeof data.summary === "string" ? { summary: data.summary } : {}),
     ...(typeof data.attentionKind === "string" ? { attentionKind: data.attentionKind } : {}),
     ...(typeof data.attention_kind === "string" ? { attentionKind: data.attention_kind } : {}),
+    ...(typeof data.toolName === "string" ? { toolName: data.toolName } : {}),
+    ...(typeof data.tool_name === "string" ? { toolName: data.tool_name } : {}),
+    ...(typeof data.tool === "string" ? { toolName: data.tool } : {}),
+    ...(toolInput !== undefined ? { toolInput } : {}),
+    ...(typeof data.toolUseId === "string" ? { toolUseId: data.toolUseId } : {}),
+    ...(typeof data.tool_use_id === "string" ? { toolUseId: data.tool_use_id } : {}),
+    ...(typeof data.approvalRequestId === "string" ? { approvalRequestId: data.approvalRequestId } : {}),
+    ...(typeof data.approval_request_id === "string" ? { approvalRequestId: data.approval_request_id } : {}),
     payload: data.payload ?? data,
     receivedAt: new Date(),
+  };
+}
+
+function createHookdEventHandler(options: { approvalTimeoutMs: number }) {
+  return async (event: CliSessionHookEvent) => {
+    const row = recordCliSessionHookEvent(event);
+    if (event.provider === "claude" && event.phase === "waiting_for_approval") {
+      return await hookdApprovalRegistry.requestApproval({
+        session: row,
+        event,
+        timeoutMs: options.approvalTimeoutMs,
+      });
+    }
+    return { sessionId: row.id };
   };
 }
 
@@ -155,9 +184,12 @@ export function startHookdSocketServer(options: HookdSocketServerOptions): Hookd
 
 export function startHookd(config: HookdRuntimeConfig): HookdHandle | null {
   if (!config.enabled) return null;
+  const expired = hookdApprovalRegistry.expireStartupPending();
+  if (expired > 0) log.info(`hookd expired ${expired} pending approval request(s) on startup`);
   const socket = startHookdSocketServer({
     socketPath: config.socketPath,
     maxPayloadBytes: config.maxPayloadBytes,
+    onEvent: createHookdEventHandler({ approvalTimeoutMs: config.approvalTimeoutMs }),
   });
   const interval = setInterval(() => {
     const ended = markDeadCliSessions();

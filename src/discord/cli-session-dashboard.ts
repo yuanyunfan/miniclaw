@@ -6,6 +6,7 @@ import {
 } from "discord.js";
 import { sortCliSessionsForDashboard } from "../hookd/state.js";
 import type {
+  CliSessionApprovalRow,
   CliSessionDashboardBucket,
   CliSessionDashboardItem,
   CliSessionProvider,
@@ -15,6 +16,7 @@ import type {
 export const CLI_SESSION_CUSTOM_ID_PREFIX = "miniclaw:cli-session:";
 
 export type CliSessionButtonAction = "details" | "hide";
+export type CliSessionApprovalButtonAction = "approve" | "deny";
 
 export interface CliSessionDashboardFilters {
   provider?: CliSessionProvider;
@@ -100,12 +102,33 @@ function groupByBucket(items: CliSessionDashboardItem[]): Map<CliSessionDashboar
   return grouped;
 }
 
-function buildActionRows(items: CliSessionDashboardItem[]): ActionRowBuilder<ButtonBuilder>[] {
+function buildActionRows(
+  items: CliSessionDashboardItem[],
+  pendingApprovals: Record<string, CliSessionApprovalRow | undefined> = {},
+): ActionRowBuilder<ButtonBuilder>[] {
   const rows: ActionRowBuilder<ButtonBuilder>[] = [];
   const visible = items
     .filter((item) => item.bucket !== "closed" && item.bucket !== "hidden")
     .slice(0, 5);
   if (!visible.length) return rows;
+
+  const approvals = visible
+    .filter((item) => item.bucket === "approval")
+    .map((item) => pendingApprovals[item.session.id])
+    .filter((approval): approval is CliSessionApprovalRow => Boolean(approval))
+    .slice(0, 2);
+  for (const approval of approvals) {
+    rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(buildCliSessionApprovalCustomId("approve", approval.id))
+        .setLabel(`Approve ${approval.id.slice(0, 4)}`)
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(buildCliSessionApprovalCustomId("deny", approval.id))
+        .setLabel(`Deny ${approval.id.slice(0, 4)}`)
+        .setStyle(ButtonStyle.Danger),
+    ));
+  }
 
   const detailRow = new ActionRowBuilder<ButtonBuilder>();
   for (const item of visible) {
@@ -149,12 +172,17 @@ export function buildCliSessionCustomId(action: CliSessionButtonAction | "contin
   return `${CLI_SESSION_CUSTOM_ID_PREFIX}${action}:${sessionId}`;
 }
 
-export function parseCliSessionCustomId(customId: string): { action: CliSessionButtonAction | "continue"; sessionId: string } | null {
+export function buildCliSessionApprovalCustomId(action: CliSessionApprovalButtonAction, approvalId: string): string {
+  return `${CLI_SESSION_CUSTOM_ID_PREFIX}${action}:${approvalId}`;
+}
+
+export function parseCliSessionCustomId(customId: string): { action: CliSessionButtonAction | "continue"; sessionId: string } | { action: CliSessionApprovalButtonAction; approvalId: string } | null {
   if (!customId.startsWith(CLI_SESSION_CUSTOM_ID_PREFIX)) return null;
   const rest = customId.slice(CLI_SESSION_CUSTOM_ID_PREFIX.length);
   const [action, ...idParts] = rest.split(":");
   const sessionId = idParts.join(":");
   if ((action === "details" || action === "hide" || action === "continue") && sessionId) return { action, sessionId };
+  if ((action === "approve" || action === "deny") && sessionId) return { action, approvalId: sessionId };
   return null;
 }
 
@@ -174,6 +202,7 @@ export function buildCliSessionDashboardMessage(input: {
   now?: Date;
   staleActiveMs?: number;
   limit?: number;
+  pendingApprovals?: Record<string, CliSessionApprovalRow | undefined>;
 }): CliSessionDashboardMessage {
   const limit = Math.min(Math.max(input.limit ?? 8, 1), 20);
   const includeClosed = input.filters?.status === "closed";
@@ -233,7 +262,7 @@ export function buildCliSessionDashboardMessage(input: {
 
   return {
     embeds: [embed],
-    components: buildActionRows(items),
+    components: buildActionRows(items, input.pendingApprovals),
   };
 }
 

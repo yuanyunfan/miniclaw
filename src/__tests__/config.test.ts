@@ -139,6 +139,13 @@ const ENV_KEYS = [
   "MINICLAW_DOCTOR_REQUIRE_APPROVAL_FOR_MAIN",
   "MINICLAW_DOCTOR_ALLOWED_PATHS",
   "MINICLAW_DOCTOR_BLOCKED_PATHS",
+  "MINICLAW_HOOKD_ENABLED",
+  "MINICLAW_HOOKD_SOCKET",
+  "MINICLAW_HOOKD_MAX_PAYLOAD_BYTES",
+  "MINICLAW_HOOKD_ZOMBIE_SCAN_INTERVAL_MS",
+  "MINICLAW_HOOKD_APPROVAL_TIMEOUT_MS",
+  "MINICLAW_HOOKD_STALE_ACTIVE_MS",
+  "MINICLAW_HOOKD_DASHBOARD_LIMIT",
   "MINICLAW_NOTIFY_EMAIL_ENABLED",
   "MINICLAW_NOTIFY_EMAIL_SMTP_HOST",
   "MINICLAW_NOTIFY_EMAIL_SMTP_PORT",
@@ -341,6 +348,14 @@ doctor:
   require_approval_for_main: true
   allowed_paths: ["src/**/*.ts", "docs/**/*.md"]
   blocked_paths: [".env", "~/.miniclaw/**"]
+hookd:
+  enabled: true
+  socket_path: "${join(tmpDir, "hookd.sock")}"
+  max_payload_bytes: 131072
+  zombie_scan_interval_ms: 15000
+  approval_timeout_ms: 120000
+  stale_active_ms: 300000
+  dashboard_limit: 12
 notifications:
   email:
     enabled: true
@@ -492,6 +507,15 @@ notifications:
       requireApprovalForMain: true,
       allowedPaths: ["src/**/*.ts", "docs/**/*.md"],
       blockedPaths: [".env", "~/.miniclaw/**"],
+    });
+    expect(config.hookd).toEqual({
+      enabled: true,
+      socketPath: join(tmpDir, "hookd.sock"),
+      maxPayloadBytes: 131072,
+      zombieScanIntervalMs: 15000,
+      approvalTimeoutMs: 120000,
+      staleActiveMs: 300000,
+      dashboardLimit: 12,
     });
     expect(config.notifications.email).toMatchObject({
       enabled: true,

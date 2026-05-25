@@ -8,7 +8,7 @@ import type { SchemaMigration } from "./migrations/types.js";
 
 export { columnExists } from "./migrations/helpers.js";
 
-export const SCHEMA_VERSION = 17;
+export const SCHEMA_VERSION = 19;
 
 export interface SchemaVersionHistoryRow {
   id: number;
@@ -304,6 +304,44 @@ export function ensureBaseSchema(db: Database.Database): void {
       ON cli_session_events(cli_session_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_cli_session_events_provider_created
       ON cli_session_events(provider, created_at);
+    CREATE TABLE IF NOT EXISTS cli_session_approvals (
+      id TEXT PRIMARY KEY,
+      cli_session_id TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      provider_session_id TEXT NOT NULL,
+      tool_name TEXT,
+      tool_use_id TEXT,
+      request_json TEXT NOT NULL,
+      status TEXT NOT NULL,
+      decision_json TEXT,
+      actor_id TEXT,
+      requested_at TEXT NOT NULL,
+      resolved_at TEXT,
+      expires_at TEXT NOT NULL,
+      FOREIGN KEY (cli_session_id) REFERENCES cli_sessions(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_cli_session_approvals_session_status
+      ON cli_session_approvals(cli_session_id, status, requested_at);
+    CREATE INDEX IF NOT EXISTS idx_cli_session_approvals_status_expires
+      ON cli_session_approvals(status, expires_at);
+    CREATE INDEX IF NOT EXISTS idx_cli_session_approvals_provider_session
+      ON cli_session_approvals(provider, provider_session_id, requested_at);
+    CREATE TABLE IF NOT EXISTS task_control_events (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'queued',
+      payload_json TEXT NOT NULL,
+      discord_message_id TEXT,
+      actor_id TEXT,
+      created_at TEXT NOT NULL,
+      consumed_at TEXT,
+      FOREIGN KEY (task_id) REFERENCES tasks(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_task_control_events_task_status
+      ON task_control_events(task_id, status, created_at);
+    CREATE INDEX IF NOT EXISTS idx_task_control_events_created
+      ON task_control_events(created_at);
     CREATE TABLE IF NOT EXISTS agent_runs (
       id TEXT PRIMARY KEY,
       task_id TEXT NOT NULL,

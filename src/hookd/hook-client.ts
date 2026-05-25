@@ -34,6 +34,12 @@ function parseStdinJson(raw: string): Record<string, unknown> {
   return parsed as Record<string, unknown>;
 }
 
+function normalizedEventName(raw: Record<string, unknown>): string {
+  return String(raw.eventName ?? raw.event_name ?? raw.hook_event_name ?? raw.event ?? raw.type ?? raw.name ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+}
+
 function psValue(pid: number, field: string): string | undefined {
   try {
     const value = execFileSync("ps", ["-p", String(pid), "-o", `${field}=`], {
@@ -70,6 +76,7 @@ export function normalizeProviderHookPayload(input: {
   const eventName = input.raw.eventName
     ?? input.raw.event_name
     ?? input.raw.hook_event_name
+    ?? input.raw.event
     ?? input.raw.type
     ?? input.raw.name
     ?? "unknown";
@@ -91,8 +98,42 @@ export function normalizeProviderHookPayload(input: {
     terminalApp: input.raw.terminalApp ?? input.raw.terminal_app ?? env.TERM_PROGRAM,
     terminalSurface,
     transcriptPath: input.raw.transcriptPath ?? input.raw.transcript_path,
+    toolName: input.raw.toolName ?? input.raw.tool_name ?? input.raw.tool,
+    toolInput: input.raw.toolInput ?? input.raw.tool_input,
+    toolUseId: input.raw.toolUseId ?? input.raw.tool_use_id,
+    approvalRequestId: input.raw.approvalRequestId ?? input.raw.approval_request_id,
     payload: input.raw,
   };
+}
+
+export function claudePermissionResponse(result: unknown): Record<string, unknown> | null {
+  if (!result || typeof result !== "object") return null;
+  const approval = (result as { approval?: unknown }).approval ?? result;
+  if (!approval || typeof approval !== "object") return null;
+  const decision = String((approval as { decision?: unknown }).decision ?? "ask");
+  const reason = typeof (approval as { reason?: unknown }).reason === "string"
+    ? String((approval as { reason?: unknown }).reason)
+    : "";
+  if (decision === "allow") {
+    return {
+      hookSpecificOutput: {
+        hookEventName: "PermissionRequest",
+        decision: { behavior: "allow" },
+      },
+    };
+  }
+  if (decision === "deny") {
+    return {
+      hookSpecificOutput: {
+        hookEventName: "PermissionRequest",
+        decision: {
+          behavior: "deny",
+          message: reason || "Denied by MiniClaw",
+        },
+      },
+    };
+  }
+  return null;
 }
 
 async function main(): Promise<void> {
@@ -104,7 +145,11 @@ async function main(): Promise<void> {
   const timeoutMs = Number(argValue("--timeout-ms") ?? process.env.MINICLAW_HOOKD_TIMEOUT_MS ?? "5000");
   const raw = parseStdinJson(await readStdin());
   const event = normalizeProviderHookPayload({ provider, raw });
-  await sendHookdEvent(socketPath, event, timeoutMs);
+  const result = await sendHookdEvent(socketPath, event, timeoutMs);
+  if (provider.toLowerCase() === "claude" && normalizedEventName(raw) === "permissionrequest") {
+    const response = claudePermissionResponse(result);
+    if (response) process.stdout.write(`${JSON.stringify(response)}\n`);
+  }
 }
 
 if (process.argv[1]?.endsWith("hook-client.ts") || process.argv[1]?.endsWith("hook-client.js")) {

@@ -38,6 +38,10 @@ export interface CliSessionHookEvent {
   prompt?: string;
   summary?: string;
   attentionKind?: string;
+  toolName?: string;
+  toolInput?: unknown;
+  toolUseId?: string;
+  approvalRequestId?: string;
   payload?: unknown;
   receivedAt?: Date;
 }
@@ -73,6 +77,33 @@ export interface CliSessionEventRow {
   phase: CliSessionPhase;
   payload_json: string;
   created_at: string;
+}
+
+export const CLI_SESSION_APPROVAL_STATUSES = [
+  "pending",
+  "approved",
+  "denied",
+  "timed_out",
+  "expired",
+  "ask",
+] as const;
+export type CliSessionApprovalStatus = typeof CLI_SESSION_APPROVAL_STATUSES[number];
+export type CliSessionApprovalDecision = "allow" | "deny" | "ask";
+
+export interface CliSessionApprovalRow {
+  id: string;
+  cli_session_id: string;
+  provider: CliSessionProvider;
+  provider_session_id: string;
+  tool_name: string | null;
+  tool_use_id: string | null;
+  request_json: string;
+  status: CliSessionApprovalStatus;
+  decision_json: string | null;
+  actor_id: string | null;
+  requested_at: string;
+  resolved_at: string | null;
+  expires_at: string;
 }
 
 export interface CliSessionDashboardItem {

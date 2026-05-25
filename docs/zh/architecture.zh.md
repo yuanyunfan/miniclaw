@@ -3,7 +3,7 @@ doc_id: architecture
 lang: zh
 translation_of: docs/architecture.md
 translation_status: current
-source_sha256: 5d6dca5a5e9f6a87b4a9d02d0ec415196304485b2e2b48838608ab065ee81d17
+source_sha256: 40bd11ad64fd2471defa479c31fbc3bfcf2dc6831edb2b62207fd85a190c134d
 ---
 # MiniClaw 架构
 
@@ -232,7 +232,7 @@ Stock provider names 仍然是 `src/providers/index.ts` 中的 cron-facing compa
 
 ## 存储模型
 
-MiniClaw 使用 `~/.miniclaw/data.db`，SQLite WAL mode。schema migration 通过 `PRAGMA user_version` 管理；当前 schema 由 `src/store/schema.ts` 定义为 `SCHEMA_VERSION = 17`。
+MiniClaw 使用 `~/.miniclaw/data.db`，SQLite WAL mode。schema migration 通过 `PRAGMA user_version` 管理；当前 schema 由 `src/store/schema.ts` 定义为 `SCHEMA_VERSION = 19`。
 
 ```mermaid
 erDiagram
@@ -244,9 +244,11 @@ erDiagram
   tasks ||--o{ agent_scheduler_state : schedules
   tasks ||--o{ recovery_outbox : delivers
   tasks ||--o{ market_context_daily : writes
+  tasks ||--o{ task_control_events : controls
   cron_runs ||--o{ recovery_outbox : alerts
   tasks ||--o{ cron_delivery_messages : updates
   cli_sessions ||--o{ cli_session_events : records
+  cli_sessions ||--o{ cli_session_approvals : blocks
   incidents ||--o{ repair_runs : repairs
   chat_history ||--o{ smart_router_decisions : informs
   market_context_daily ||--o{ market_context_items : updates
@@ -329,6 +331,34 @@ erDiagram
     TEXT payload_json
     TEXT created_at
   }
+
+  cli_session_approvals {
+    TEXT id
+    TEXT cli_session_id
+    TEXT provider
+    TEXT provider_session_id
+    TEXT tool_name
+    TEXT tool_use_id
+    TEXT request_json
+    TEXT status
+    TEXT decision_json
+    TEXT actor_id
+    TEXT requested_at
+    TEXT resolved_at
+    TEXT expires_at
+  }
+
+  task_control_events {
+    TEXT id
+    TEXT task_id
+    TEXT event_type
+    TEXT status
+    TEXT payload_json
+    TEXT discord_message_id
+    TEXT actor_id
+    TEXT created_at
+    TEXT consumed_at
+  }
 ```
 
 state retention 通过 `state.retention.*` 配置。cleanup 先 dry-run：`pnpm run state:cleanup -- --dry-run`；破坏性清理必须显式传入 `--execute`。
@@ -345,6 +375,8 @@ Cron task 结果默认每次运行发送一组新的 chunked Markdown result。�
 
 - `task_events` 记录 lifecycle、protocol/tool events 和 Discord status transitions。
 - `cli_sessions` 和 `cli_session_events` 独立记录 hookd 观测到的外部 Claude/Codex CLI session state，不与 MiniClaw-owned task rows 混在一起。
+- `cli_session_approvals` 记录 redacted external Claude permission requests，以及从 Discord 返回 blocking hook 的 allow 或 deny decision。
+- `task_control_events` 记录 running MiniClaw-owned task threads 的 queued operator instructions；当前 single-shot runners 还不会消费这个 queue。
 - `src/store/task-trace-export.ts` 与 `src/store/agent-run-trace-export.ts` 生成 redacted Markdown traces，供 `/task-log`、incident view 和本地 CLI review 使用。
 - `/doctor` 和 scheduled scans 汇总 DB、cron state、config、PM2、logs 和 Git evidence。
 - guarded repair/ship flow 必须经过 operator approval，并先通过 repair branch，不能直接碰 `main`。

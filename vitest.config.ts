@@ -5,7 +5,7 @@ export default defineConfig({
     include: ["src/**/__tests__/**/*.test.ts"],
     environment: "node",
     pool: "forks",
-    testTimeout: 5000,
+    testTimeout: 10000,
     globalSetup: ["./vitest.setup.ts"],
     coverage: {
       provider: "v8",

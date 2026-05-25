@@ -6,6 +6,9 @@ import {
   isCliSessionPhase,
 } from "../hookd/state.js";
 import type {
+  CliSessionApprovalDecision,
+  CliSessionApprovalRow,
+  CliSessionApprovalStatus,
   CliSessionEventRow,
   CliSessionHookEvent,
   CliSessionPhase,
@@ -75,6 +78,23 @@ function assertCliSessionRow(row: unknown): CliSessionRow {
 
 function assertCliSessionRows(rows: unknown[]): CliSessionRow[] {
   return rows.map(assertCliSessionRow);
+}
+
+function assertCliSessionApprovalRow(row: unknown): CliSessionApprovalRow {
+  if (!row || typeof row !== "object") {
+    throw new Error("Unexpected cli_session_approvals row shape");
+  }
+  const candidate = row as Record<string, unknown>;
+  if (!isCliSessionProvider(String(candidate.provider))) {
+    throw new Error(`Unexpected CLI session approval provider: ${String(candidate.provider)}`);
+  }
+  return row as CliSessionApprovalRow;
+}
+
+function approvalStatusForDecision(decision: CliSessionApprovalDecision): CliSessionApprovalStatus {
+  if (decision === "allow") return "approved";
+  if (decision === "deny") return "denied";
+  return "ask";
 }
 
 function ensureProviderSessionId(event: CliSessionHookEvent): string {
@@ -234,6 +254,158 @@ export function listCliSessionEvents(sessionId: string, limit = 20): CliSessionE
     )
     .all(sessionId, Math.min(Math.max(limit, 1), 100));
   return rows as CliSessionEventRow[];
+}
+
+export function createCliSessionApproval(params: {
+  session: CliSessionRow;
+  event: CliSessionHookEvent;
+  timeoutMs: number;
+  now?: Date;
+}): CliSessionApprovalRow {
+  const requestedAt = params.now ?? params.event.receivedAt ?? new Date();
+  const requestedAtIso = iso(requestedAt);
+  const expiresAt = new Date(requestedAt.getTime() + Math.max(params.timeoutMs, 1));
+  const id = params.event.approvalRequestId?.trim() || uuid();
+  getDb().prepare(
+    `INSERT INTO cli_session_approvals (
+       id, cli_session_id, provider, provider_session_id, tool_name, tool_use_id,
+       request_json, status, decision_json, actor_id, requested_at, resolved_at, expires_at
+     ) VALUES (
+       @id, @cli_session_id, @provider, @provider_session_id, @tool_name, @tool_use_id,
+       @request_json, 'pending', NULL, NULL, @requested_at, NULL, @expires_at
+     )
+     ON CONFLICT(id) DO UPDATE SET
+       cli_session_id = excluded.cli_session_id,
+       provider = excluded.provider,
+       provider_session_id = excluded.provider_session_id,
+       tool_name = excluded.tool_name,
+       tool_use_id = excluded.tool_use_id,
+       request_json = excluded.request_json,
+       expires_at = excluded.expires_at`
+  ).run({
+    id,
+    cli_session_id: params.session.id,
+    provider: params.session.provider,
+    provider_session_id: params.session.provider_session_id,
+    tool_name: normalizeNullableString(params.event.toolName),
+    tool_use_id: normalizeNullableString(params.event.toolUseId),
+    request_json: safeJson({
+      tool_name: params.event.toolName,
+      tool_use_id: params.event.toolUseId,
+      tool_input: params.event.toolInput,
+      payload: params.event.payload,
+    }),
+    requested_at: requestedAtIso,
+    expires_at: expiresAt.toISOString(),
+  });
+  const row = getCliSessionApproval(id);
+  if (!row) throw new Error("failed to retrieve recorded cli session approval");
+  return row;
+}
+
+export function getCliSessionApproval(id: string): CliSessionApprovalRow | undefined {
+  const row = getDb().prepare("SELECT * FROM cli_session_approvals WHERE id = ?").get(id);
+  return row ? assertCliSessionApprovalRow(row) : undefined;
+}
+
+export function getPendingCliSessionApprovalForSession(sessionId: string): CliSessionApprovalRow | undefined {
+  const row = getDb().prepare(
+    `SELECT * FROM cli_session_approvals
+     WHERE cli_session_id = ? AND status = 'pending'
+     ORDER BY datetime(requested_at) DESC, rowid DESC
+     LIMIT 1`
+  ).get(sessionId);
+  return row ? assertCliSessionApprovalRow(row) : undefined;
+}
+
+export function listPendingCliSessionApprovals(limit = 100): CliSessionApprovalRow[] {
+  const rows = getDb().prepare(
+    `SELECT * FROM cli_session_approvals
+     WHERE status = 'pending'
+     ORDER BY datetime(requested_at) DESC, rowid DESC
+     LIMIT ?`
+  ).all(Math.min(Math.max(limit, 1), 500));
+  return rows.map(assertCliSessionApprovalRow);
+}
+
+export function resolveCliSessionApproval(params: {
+  id: string;
+  decision: CliSessionApprovalDecision;
+  actorId?: string;
+  reason?: string;
+  now?: Date;
+}): CliSessionApprovalRow | undefined {
+  const now = iso(params.now);
+  const decisionJson = safeJson({
+    decision: params.decision,
+    ...(params.reason ? { reason: params.reason } : {}),
+  });
+  getDb().prepare(
+    `UPDATE cli_session_approvals
+     SET status = @status,
+         decision_json = @decision_json,
+         actor_id = @actor_id,
+         resolved_at = @resolved_at
+     WHERE id = @id AND status = 'pending'`
+  ).run({
+    id: params.id,
+    status: approvalStatusForDecision(params.decision),
+    decision_json: decisionJson,
+    actor_id: params.actorId ?? null,
+    resolved_at: now,
+  });
+  return getCliSessionApproval(params.id);
+}
+
+export function timeoutCliSessionApproval(params: {
+  id: string;
+  reason?: string;
+  now?: Date;
+}): CliSessionApprovalRow | undefined {
+  const now = iso(params.now);
+  const decisionJson = safeJson({
+    decision: "deny",
+    reason: params.reason ?? "Permission request timed out in MiniClaw",
+  });
+  getDb().prepare(
+    `UPDATE cli_session_approvals
+     SET status = 'timed_out',
+         decision_json = @decision_json,
+         resolved_at = @resolved_at
+     WHERE id = @id AND status = 'pending'`
+  ).run({
+    id: params.id,
+    decision_json: decisionJson,
+    resolved_at: now,
+  });
+  return getCliSessionApproval(params.id);
+}
+
+export function expirePendingCliSessionApprovals(params: {
+  status: Extract<CliSessionApprovalStatus, "timed_out" | "expired">;
+  now?: Date;
+  reason?: string;
+  includeUnexpired?: boolean;
+}): number {
+  const now = iso(params.now);
+  const decisionJson = safeJson({
+    decision: "deny",
+    reason: params.reason ?? params.status,
+  });
+  const result = getDb().prepare(
+    `UPDATE cli_session_approvals
+     SET status = @status,
+         decision_json = @decision_json,
+         resolved_at = @resolved_at
+     WHERE status = 'pending'
+       AND (@include_unexpired = 1 OR datetime(expires_at) <= datetime(@resolved_at))`
+  ).run({
+    status: params.status,
+    decision_json: decisionJson,
+    resolved_at: now,
+    include_unexpired: params.includeUnexpired ? 1 : 0,
+  });
+  return result.changes;
 }
 
 export function hideCliSession(id: string, hiddenAt = new Date()): boolean {
