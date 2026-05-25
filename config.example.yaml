@@ -217,6 +217,9 @@ cron:
 startup_watchdog:
   # Runs before Discord clientReady. If bot.login hangs or fails, MiniClaw can
   # still raise a local macOS notification instead of silently relying on PM2.
+  # Discord login failures also send Weixin ops alerts when Weixin direct is enabled.
+  # Failed login attempts are retried after 10m, 20m, and 40m before falling back
+  # to non-Discord IM gateways.
   enabled: true
   client_ready_timeout_ms: 60000
   macos_notification_enabled: true

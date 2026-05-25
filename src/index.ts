@@ -23,6 +23,12 @@ import {
   SHUTDOWN_FORCE_SUMMARY,
 } from "./runtime/shutdown.js";
 import {
+  buildDiscordLoginFailureAlert,
+  loginDiscordWithRetry,
+  type DiscordLoginFailureEvent,
+} from "./runtime/discord-login.js";
+import { sendWeixinOpsAlert } from "./monitoring/weixin-alert.js";
+import {
   getActiveTaskCount,
   interruptActiveTasks,
   listActiveTaskIds,
@@ -45,6 +51,29 @@ let doctorScheduler: DoctorSchedulerHandle | null = null;
 let weixinGateway: WeixinGatewayHandle | null = null;
 let shutdownPromise: Promise<void> | null = null;
 let signalCount = 0;
+
+function attachDiscordRuntime(client: ReturnType<typeof createBot>): void {
+  client.once("clientReady", (readyClient) => {
+    startupWatchdog?.markClientReady();
+    connectivityMonitor = startConnectivityMonitor(readyClient);
+    doctorScheduler = startDoctorScheduler(readyClient);
+    if (config.e2e.disableScheduler) {
+      log.info("Cron scheduler disabled by MINICLAW_DISABLE_SCHEDULER");
+      return;
+    }
+    startScheduler(readyClient);
+  });
+}
+
+async function notifyDiscordLoginFailure(event: DiscordLoginFailureEvent): Promise<void> {
+  await startupWatchdog?.notifyFailure("bot.login failed before Discord clientReady", event.error);
+  if (!config.im.transports.weixin.enabled) return;
+  try {
+    await sendWeixinOpsAlert(buildDiscordLoginFailureAlert(event), { kind: "discord_login_failure" });
+  } catch (err) {
+    log.warn("failed to send Weixin Discord login failure alert:", err);
+  }
+}
 
 async function beginGracefulShutdown(reason: string, force = false): Promise<void> {
   signalCount++;
@@ -162,30 +191,26 @@ async function main(): Promise<void> {
     log.info("Slash command registration skipped (run `pnpm register` after command changes)");
   }
 
-  bot = createBot();
   startupWatchdog = startPreClientReadyWatchdog({
     enabled: config.startupWatchdog.enabled,
     timeoutMs: config.startupWatchdog.clientReadyTimeoutMs,
     macosNotificationEnabled: config.startupWatchdog.macosNotificationEnabled,
   });
 
-  bot.once("clientReady", (client) => {
-    startupWatchdog?.markClientReady();
-    connectivityMonitor = startConnectivityMonitor(client);
-    doctorScheduler = startDoctorScheduler(client);
-    if (config.e2e.disableScheduler) {
-      log.info("Cron scheduler disabled by MINICLAW_DISABLE_SCHEDULER");
-      return;
-    }
-    startScheduler(client);
-  });
-  try {
-    await bot.login(config.discord.token);
-  } catch (err) {
-    await startupWatchdog?.notifyFailure("bot.login failed before Discord clientReady", err);
+  const loginResult = await loginDiscordWithRetry(
+    () => {
+      const client = createBot();
+      bot = client;
+      attachDiscordRuntime(client);
+      return client;
+    },
+    config.discord.token,
+    { onFailure: notifyDiscordLoginFailure }
+  );
+  if (!loginResult.ok) {
     startupWatchdog?.stop();
-    if (!weixinGateway) throw err;
-    log.error("Discord bot login failed; continuing with non-Discord IM gateways when available:", err);
+    if (!weixinGateway) throw loginResult.error;
+    log.error("Discord bot login failed after retry budget; continuing with non-Discord IM gateways when available:", loginResult.error);
   }
 }
 

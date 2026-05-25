@@ -200,6 +200,8 @@ src/monitoring/connectivity-core.ts
 src/monitoring/connectivity-monitor.ts
 src/monitoring/recovery-outbox.ts
 src/monitoring/pre-client-ready-watchdog.ts
+src/monitoring/weixin-alert.ts
+src/runtime/discord-login.ts
 src/im/adapters/weixin/transport.ts
 src/notifications/smtp-email.ts
 ```
@@ -208,6 +210,7 @@ Operations contract:
 
 - Connectivity checks classify Discord, network, SMTP fallback, and startup readiness separately.
 - Discord/VPN/proxy outage alerts are delivered through Weixin when general network is still reachable; SMTP remains a diagnostic probe and a separate operations notifier capability.
+- Discord startup login failures send Weixin ops alerts when Weixin direct is enabled, then retry after 10 minutes, 20 minutes, and 40 minutes before falling back to non-Discord IM gateways.
 - Recovery outbox should backfill failed cron/task delivery after Discord connectivity recovers.
 - Pre-clientReady watchdog failures should be locally visible and redacted.
 
