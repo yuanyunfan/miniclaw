@@ -355,6 +355,10 @@ hookd:
   zombie_scan_interval_ms: 15000
   approval_timeout_ms: 120000
   stale_active_ms: 300000
+  dashboard_channel_id: "1508369535659675668"
+  dashboard_channel_name: "miniclaw-cli-sessions"
+  dashboard_message_id: "1508369535659675669"
+  dashboard_update_debounce_ms: 2500
   dashboard_limit: 12
 notifications:
   email:
@@ -515,6 +519,10 @@ notifications:
       zombieScanIntervalMs: 15000,
       approvalTimeoutMs: 120000,
       staleActiveMs: 300000,
+      dashboardChannelId: "1508369535659675668",
+      dashboardChannelName: "miniclaw-cli-sessions",
+      dashboardMessageId: "1508369535659675669",
+      dashboardUpdateDebounceMs: 2500,
       dashboardLimit: 12,
     });
     expect(config.notifications.email).toMatchObject({

@@ -3,7 +3,7 @@ doc_id: runtime-index
 lang: zh
 translation_of: docs/runtime/README.md
 translation_status: current
-source_sha256: 1c2f95e2a411447b2ae3695811025bd0c9be7829dcad7ac441434a2348fb1815
+source_sha256: 4ebef947e006d541573f2803587788b8e51314b147c5014f8053d1ed960bd96a
 ---
 # MiniClaw Runtime 文档
 
@@ -17,7 +17,7 @@ flowchart TD
   Intake --> Router[Routing / Smart Router]
   Router --> Chat[Chat runtime<br/>API fast path]
   Router --> Task[Task runtime]
-  Hookd[hookd Unix socket] --> Sessions[CLI session dashboard]
+  Hookd[hookd Unix socket] --> Sessions[CLI session dashboard<br/>fixed channel message]
   Sessions --> Delivery
   Cron[Cron scheduler] --> ProviderContext[Pre-provider context]
   ProviderContext --> Task
@@ -61,7 +61,7 @@ Routing contract:
 - Weixin chat 复用 `chat()` 边界，但会要求它优先使用 lightweight Anthropic/OpenAI-compatible API client，再 fallback 到配置的 agent runtime。
 - Weixin direct 可以作为唯一启用的 IM gateway；当 `im.transports.discord.enabled=false` 时，Discord credentials 变为可选，MiniClaw 仍会启动非 Discord gateway。
 - Weixin 入站媒体会在路由前标准化：官方 `image_item.media` 和 `voice_item.media` CDN 引用会被下载、按 AES-ECB 解密，语音 SILK 会尽量转成 WAV 后再进入附件处理链路。
-- `/sessions` 渲染 hookd 观测到的 CLI session dashboard。它和 `/status` 分离：`/status` 展示 MiniClaw-owned tasks，`/sessions` 展示通过 provider hooks 观测到的普通 Claude Code 或 Codex CLI sessions。
+- `hookd` 会在配置的 CLI sessions channel 里维护自动刷新的固定 dashboard message。`/sessions` 保留为手动 ephemeral 查询入口，并且和 `/status` 分离：`/status` 展示 MiniClaw-owned tasks，CLI session dashboard 展示通过 provider hooks 观测到的普通 Claude Code 或 Codex CLI sessions。
 
 Smart Router resolution order:
 
@@ -116,6 +116,7 @@ src/hookd/**
 src/store/cli-sessions.ts
 src/store/task-control-events.ts
 src/discord/cli-session-dashboard.ts
+src/discord/cli-session-dashboard-updater.ts
 src/bot/cli-session-buttons.ts
 src/bot/cli-session-modals.ts
 scripts/hookd-install.ts
@@ -130,8 +131,11 @@ Runtime contract:
 - Provider hooks 把 newline-delimited JSON 发送到 `hookd.sock`；MiniClaw 会 normalize provider、session id、cwd、pid、tty、terminal hints、transcript path、event name 和 phase。
 - CLI session state 存在 `cli_sessions` 和 `cli_session_events`，不会进入 `tasks`；只有 operator 显式启动 same-provider continuation 后才会创建 MiniClaw task。
 - Blocking Claude `PermissionRequest` events 会创建 redacted `cli_session_approvals` rows，并保持 hook response open，直到 Discord approve、Discord deny、timeout 或 daemon startup expiry。timeout 和 startup expiry 默认 deny。
+- 自动控制面是一条可编辑的 Discord message，目标来自 `hookd.dashboard_channel_id` 或 `hookd.dashboard_channel_name`（默认 `miniclaw-cli-sessions`）。配置 `hookd.dashboard_message_id` 时 MiniClaw 会编辑该消息；未配置或消息不存在时，会创建并 best-effort pin 新 dashboard message，同时在日志提示把 message id 写回配置。
+- Hook events、approval lifecycle changes、dead-PID zombie scan、Hide、Approve、Deny，以及成功的 same-provider Continue 操作都会按 `hookd.dashboard_update_debounce_ms` debounce 后刷新固定 dashboard。
 - Dashboard 排序按状态优先：approval、active、stale active、idle，然后才是 history/hidden。较早打开但仍 active 的工作会排在较新的 idle sessions 上方。
 - 空 Codex startup sessions 默认不显示，直到出现真实 prompt 或 transcript activity。
+- 自动固定 dashboard 只显示当前需要关注的 approval、active、stale active 和 idle sessions。closed 或 hidden history 仍通过 `/sessions status:closed` 和 `/sessions status:hidden` 查询。
 - Discord buttons 支持 `Details`、`Hide`、`Approve` 和 `Deny`。`Continue` 只对 idle sessions 可用，并打开 Discord modal 填写 follow-up instruction。
 - Same-provider continuation 会强制 runtime 与被观测 session 的 provider 一致。Claude session 通过 Claude 继续，Codex session 通过 Codex 继续。
 - Active external CLI sessions 不做盲目 iTerm2 keystroke injection。在 provider-native interrupt/input API 可用前，MiniClaw 会拒绝仍 active session 的 same-provider continuation。

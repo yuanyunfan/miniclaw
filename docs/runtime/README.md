@@ -10,7 +10,7 @@ flowchart TD
   Intake --> Router[Routing / Smart Router]
   Router --> Chat[Chat runtime<br/>API fast path]
   Router --> Task[Task runtime]
-  Hookd[hookd Unix socket] --> Sessions[CLI session dashboard]
+  Hookd[hookd Unix socket] --> Sessions[CLI session dashboard<br/>fixed channel message]
   Sessions --> Delivery
   Cron[Cron scheduler] --> ProviderContext[Pre-provider context]
   ProviderContext --> Task
@@ -54,7 +54,7 @@ Routing contract:
 - Weixin chat uses the shared `chat()` boundary but asks it to prefer a lightweight Anthropic/OpenAI-compatible API client before falling back to the configured agent runtime.
 - Weixin direct may run as the only enabled IM gateway; when `im.transports.discord.enabled=false`, Discord credentials are optional and MiniClaw still starts non-Discord gateways.
 - Weixin inbound media is normalized before routing: official `image_item.media` and `voice_item.media` CDN references are downloaded, AES-ECB decrypted, and voice SILK is best-effort transcoded to WAV before attachment processing.
-- `/sessions` renders the hookd-observed CLI session dashboard. It is separate from `/status`: `/status` is MiniClaw-owned tasks, while `/sessions` is ordinary Claude Code or Codex CLI sessions observed from provider hooks.
+- `hookd` maintains an automatic fixed dashboard message in the configured CLI sessions channel. `/sessions` remains a manual ephemeral query entrypoint and is separate from `/status`: `/status` is MiniClaw-owned tasks, while the CLI session dashboard is ordinary Claude Code or Codex CLI sessions observed from provider hooks.
 
 Smart Router resolution order:
 
@@ -109,6 +109,7 @@ src/hookd/**
 src/store/cli-sessions.ts
 src/store/task-control-events.ts
 src/discord/cli-session-dashboard.ts
+src/discord/cli-session-dashboard-updater.ts
 src/bot/cli-session-buttons.ts
 src/bot/cli-session-modals.ts
 scripts/hookd-install.ts
@@ -123,8 +124,11 @@ Runtime contract:
 - Provider hooks send newline-delimited JSON to `hookd.sock`; MiniClaw normalizes provider, session id, cwd, pid, tty, terminal hints, transcript path, event name, and phase.
 - CLI session state lives in `cli_sessions` and `cli_session_events`, not in `tasks`, until the operator explicitly starts a same-provider continuation.
 - Blocking Claude `PermissionRequest` events create redacted `cli_session_approvals` rows and hold the hook response open until Discord approval, Discord denial, timeout, or daemon startup expiry. Timeout and startup expiry deny by default.
+- The automatic control surface is one editable Discord message in `hookd.dashboard_channel_id` or `hookd.dashboard_channel_name` (default `miniclaw-cli-sessions`). If `hookd.dashboard_message_id` is configured, MiniClaw edits that message; otherwise it creates and best-effort pins a new dashboard message and logs the message id for config writeback.
+- Hook events, approval lifecycle changes, dead-PID zombie scans, Hide, Approve, Deny, and successful same-provider Continue operations schedule a debounced dashboard refresh through `hookd.dashboard_update_debounce_ms`.
 - Dashboard ordering is state-prioritized: approval, active, stale active, idle, then history/hidden. Older active work stays above newer idle sessions.
 - Empty Codex startup sessions are hidden from the default dashboard until a real prompt or transcript activity appears.
+- The automatic fixed dashboard shows only currently relevant approval, active, stale active, and idle sessions. Closed or hidden history remains available through `/sessions status:closed` and `/sessions status:hidden`.
 - `Details`, `Hide`, `Approve`, and `Deny` are available from Discord buttons. `Continue` is available only for idle sessions and opens a Discord modal for the follow-up instruction.
 - Same-provider continuation forces the runtime to match the observed session provider. A Claude session resumes through Claude; a Codex session resumes through Codex.
 - Active external CLI sessions do not receive blind iTerm2 keystroke injection. Until provider-native interrupt/input APIs are available, MiniClaw refuses same-provider continuation while the observed session is still active.

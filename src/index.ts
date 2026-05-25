@@ -17,6 +17,11 @@ import { startPreClientReadyWatchdog, type PreClientReadyWatchdogHandle } from "
 import { startDoctorScheduler, type DoctorSchedulerHandle } from "./ops/doctor-scheduler.js";
 import { startWeixinGateway, type WeixinGatewayHandle } from "./im/adapters/weixin/gateway.js";
 import { startHookd, type HookdHandle } from "./hookd/server.js";
+import {
+  startCliSessionDashboardUpdater,
+  type CliSessionDashboardUpdater,
+} from "./discord/cli-session-dashboard-updater.js";
+import { setCliSessionDashboardRefreshCallback } from "./bot/cli-session-buttons.js";
 import { createLogger } from "./lib/log.js";
 import {
   beginDraining,
@@ -51,6 +56,7 @@ let startupWatchdog: PreClientReadyWatchdogHandle | null = null;
 let doctorScheduler: DoctorSchedulerHandle | null = null;
 let weixinGateway: WeixinGatewayHandle | null = null;
 let hookd: HookdHandle | null = null;
+let cliSessionDashboardUpdater: CliSessionDashboardUpdater | null = null;
 let shutdownPromise: Promise<void> | null = null;
 let signalCount = 0;
 
@@ -59,6 +65,18 @@ function attachDiscordRuntime(client: ReturnType<typeof createBot>): void {
     startupWatchdog?.markClientReady();
     connectivityMonitor = startConnectivityMonitor(readyClient);
     doctorScheduler = startDoctorScheduler(readyClient);
+    if (config.hookd.enabled) {
+      cliSessionDashboardUpdater = startCliSessionDashboardUpdater(readyClient, {
+        channelId: config.hookd.dashboardChannelId,
+        channelName: config.hookd.dashboardChannelName,
+        messageId: config.hookd.dashboardMessageId,
+        updateDebounceMs: config.hookd.dashboardUpdateDebounceMs,
+        dashboardLimit: config.hookd.dashboardLimit,
+        staleActiveMs: config.hookd.staleActiveMs,
+        guildId: config.discord.guildId,
+      });
+      setCliSessionDashboardRefreshCallback(() => cliSessionDashboardUpdater?.scheduleRefresh());
+    }
     if (config.e2e.disableScheduler) {
       log.info("Cron scheduler disabled by MINICLAW_DISABLE_SCHEDULER");
       return;
@@ -93,6 +111,8 @@ async function beginGracefulShutdown(reason: string, force = false): Promise<voi
     startupWatchdog?.stop();
     doctorScheduler?.stop();
     weixinGateway?.stop();
+    cliSessionDashboardUpdater?.stop();
+    setCliSessionDashboardRefreshCallback(null);
     await hookd?.stop();
     stopScheduler();
     await bot?.destroy();
@@ -113,6 +133,8 @@ async function beginGracefulShutdown(reason: string, force = false): Promise<voi
     startupWatchdog?.stop();
     doctorScheduler?.stop();
     weixinGateway?.stop();
+    cliSessionDashboardUpdater?.stop();
+    setCliSessionDashboardRefreshCallback(null);
     await hookd?.stop();
     stopScheduler();
 
@@ -152,6 +174,8 @@ async function beginGracefulShutdown(reason: string, force = false): Promise<voi
     startupWatchdog?.stop();
     doctorScheduler?.stop();
     weixinGateway?.stop();
+    cliSessionDashboardUpdater?.stop();
+    setCliSessionDashboardRefreshCallback(null);
     await hookd?.stop();
     stopScheduler();
     await bot?.destroy();
@@ -173,7 +197,9 @@ async function main(): Promise<void> {
   initDb();
   log.info("Database initialized");
 
-  hookd = startHookd(config.hookd);
+  hookd = startHookd(config.hookd, {
+    onSessionStateChanged: () => cliSessionDashboardUpdater?.scheduleRefresh(),
+  });
   memoryMaintenanceScheduler = startMemoryMaintenanceScheduler(config.memoryMaintenance);
   agentRunManagerSweeper = startAgentRunManagerSweeper({
     enabled: config.agentRunManager.enabled || config.agentRunManager.autoEnabled,
@@ -229,6 +255,8 @@ main().catch(async (err) => {
   startupWatchdog?.stop();
   doctorScheduler?.stop();
   weixinGateway?.stop();
+  cliSessionDashboardUpdater?.stop();
+  setCliSessionDashboardRefreshCallback(null);
   await hookd?.stop();
   void bot?.destroy();
   process.exit(1);

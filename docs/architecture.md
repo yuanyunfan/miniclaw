@@ -101,7 +101,7 @@ MiniClaw keeps hard boundaries between code, user state, and public docs:
 
 The runtime registry separates agent execution from routing. `src/runtime/agent-runtime.ts` defines the common runtime interface. `src/agent/runtimes/registry.ts` maps the configured runtime to Claude, Codex, or fake task runners. `runtime.default_agent` is the preferred config key; legacy `agent.provider` remains a compatibility fallback.
 
-`hookd` is a separate observation surface for ordinary Claude Code and Codex CLI sessions launched outside MiniClaw. When `hookd.enabled=true`, MiniClaw listens on a local Unix socket, accepts provider hook events, stores normalized CLI session state, scans dead PIDs, and exposes a Discord-native `/sessions` dashboard. This does not turn every external CLI into a MiniClaw task row. Same-provider continuation is only started explicitly from Discord and resumes Claude sessions through Claude or Codex sessions through Codex.
+`hookd` is a separate observation surface for ordinary Claude Code and Codex CLI sessions launched outside MiniClaw. When `hookd.enabled=true`, MiniClaw listens on a local Unix socket, accepts provider hook events, stores normalized CLI session state, scans dead PIDs, and maintains one pinned Discord dashboard message in the configured CLI sessions channel. `/sessions` remains the manual ephemeral query path for filtered views and history. This does not turn every external CLI into a MiniClaw task row. Same-provider continuation is only started explicitly from Discord and resumes Claude sessions through Claude or Codex sessions through Codex.
 
 ## Message And Task Flow
 
@@ -369,6 +369,7 @@ Cron task results normally send a new chunked Markdown result per run. Jobs that
 - `task_events` records lifecycle, protocol/tool events, and Discord status transitions.
 - `cli_sessions` and `cli_session_events` record hookd-observed external Claude/Codex CLI session state separately from MiniClaw-owned task rows.
 - `cli_session_approvals` records redacted external Claude permission requests and the Discord-side allow or deny decision returned to the blocking hook.
+- `cli_session_dashboard_updater` is runtime-only: it edits one configured Discord message from the current `cli_sessions` / `cli_session_approvals` state and does not persist dashboard rows of its own.
 - `task_control_events` records queued operator instructions for running MiniClaw-owned task threads; current single-shot runners do not consume this queue yet.
 - `src/store/task-trace-export.ts` and `src/store/agent-run-trace-export.ts` produce redacted Markdown traces for `/task-log`, incident views, and local CLI review.
 - `/doctor` and scheduled scans aggregate DB, cron state, config, PM2, logs, and Git evidence.

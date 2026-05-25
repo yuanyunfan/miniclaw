@@ -91,6 +91,41 @@ describe("CLI session dashboard", () => {
     ]));
   });
 
+  it("orders active sessions before newer idle sessions and hides closed or hidden sessions by default", () => {
+    const message = buildCliSessionDashboardMessage({
+      sessions: [
+        session({
+          id: "idle-new-session",
+          phase: "waiting_for_input",
+          last_activity_at: "2026-05-25T00:10:00.000Z",
+        }),
+        session({
+          id: "active-old-session",
+          phase: "processing",
+          last_activity_at: "2026-05-25T00:00:00.000Z",
+        }),
+        session({
+          id: "ended-session",
+          phase: "ended",
+          ended_at: "2026-05-25T00:09:00.000Z",
+        }),
+        session({
+          id: "hidden-session",
+          hidden_at: "2026-05-25T00:09:00.000Z",
+        }),
+      ],
+      now: new Date("2026-05-25T00:11:00.000Z"),
+      staleActiveMs: 30 * 60 * 1000,
+    });
+
+    const fields = message.embeds[0]?.data.fields ?? [];
+    expect(fields.map((field) => field.name)).toEqual(["Active (1)", "Idle (1)"]);
+    expect(fields[0]?.value).toContain("active-");
+    expect(fields[1]?.value).toContain("idle-new");
+    expect(JSON.stringify(fields)).not.toContain("ended-session");
+    expect(JSON.stringify(fields)).not.toContain("hidden-session");
+  });
+
   it("parses button and modal custom ids", () => {
     expect(parseCliSessionCustomId(buildCliSessionCustomId("continue", "session-1"))).toEqual({
       action: "continue",

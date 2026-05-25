@@ -3,7 +3,7 @@ doc_id: architecture
 lang: zh
 translation_of: docs/architecture.md
 translation_status: current
-source_sha256: 40bd11ad64fd2471defa479c31fbc3bfcf2dc6831edb2b62207fd85a190c134d
+source_sha256: 6e5bfa2c3a1bd42a5d4b7f9465bdbf0695e170c10f39f7625e0c7b654b8bdf10
 ---
 # MiniClaw 架构
 
@@ -108,7 +108,7 @@ MiniClaw 把 code、user state 和 public docs 做硬边界隔离：
 
 runtime registry 把 agent execution 和 routing 分离。`src/runtime/agent-runtime.ts` 定义统一 runtime interface，`src/agent/runtimes/registry.ts` 把配置映射到 Claude、Codex 或 fake task runner。`runtime.default_agent` 是推荐配置键；legacy `agent.provider` 仍作为兼容 fallback。
 
-`hookd` 是普通 Claude Code 和 Codex CLI sessions 的独立观测面，这些 session 可以是在 MiniClaw 外部启动的。启用 `hookd.enabled=true` 后，MiniClaw 会监听本地 Unix socket，接收 provider hook events，保存 normalized CLI session state，扫描 dead PID，并通过 Discord 原生 `/sessions` dashboard 展示。这不会把每个外部 CLI 都变成 MiniClaw task row。same-provider continuation 只会在 Discord 中显式触发，并且 Claude session 仍通过 Claude resume，Codex session 仍通过 Codex resume。
+`hookd` 是普通 Claude Code 和 Codex CLI sessions 的独立观测面，这些 session 可以是在 MiniClaw 外部启动的。启用 `hookd.enabled=true` 后，MiniClaw 会监听本地 Unix socket，接收 provider hook events，保存 normalized CLI session state，扫描 dead PID，并在配置的 CLI sessions channel 里维护一条 pinned Discord dashboard message。`/sessions` 保留为手动 ephemeral 查询路径，用于 filtered views 和 history。这不会把每个外部 CLI 都变成 MiniClaw task row。same-provider continuation 只会在 Discord 中显式触发，并且 Claude session 仍通过 Claude resume，Codex session 仍通过 Codex resume。
 
 ## 消息与任务流程
 
@@ -376,6 +376,7 @@ Cron task 结果默认每次运行发送一组新的 chunked Markdown result。�
 - `task_events` 记录 lifecycle、protocol/tool events 和 Discord status transitions。
 - `cli_sessions` 和 `cli_session_events` 独立记录 hookd 观测到的外部 Claude/Codex CLI session state，不与 MiniClaw-owned task rows 混在一起。
 - `cli_session_approvals` 记录 redacted external Claude permission requests，以及从 Discord 返回 blocking hook 的 allow 或 deny decision。
+- `cli_session_dashboard_updater` 只是 runtime-only 控制面：它从当前 `cli_sessions` / `cli_session_approvals` state 编辑一条配置的 Discord message，不会额外持久化 dashboard rows。
 - `task_control_events` 记录 running MiniClaw-owned task threads 的 queued operator instructions；当前 single-shot runners 还不会消费这个 queue。
 - `src/store/task-trace-export.ts` 与 `src/store/agent-run-trace-export.ts` 生成 redacted Markdown traces，供 `/task-log`、incident view 和本地 CLI review 使用。
 - `/doctor` 和 scheduled scans 汇总 DB、cron state、config、PM2、logs 和 Git evidence。

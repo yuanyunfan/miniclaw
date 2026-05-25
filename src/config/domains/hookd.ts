@@ -30,6 +30,23 @@ export function buildHookdRuntimeConfig(reader: ConfigReader) {
         "MINICLAW_HOOKD_STALE_ACTIVE_MS",
         15 * 60_000
       ),
+      dashboardChannelId: reader.optionalString(
+        ["hookd", "dashboard_channel_id"],
+        "MINICLAW_HOOKD_DASHBOARD_CHANNEL_ID"
+      ),
+      dashboardChannelName: reader.optionalString(
+        ["hookd", "dashboard_channel_name"],
+        "MINICLAW_HOOKD_DASHBOARD_CHANNEL_NAME"
+      ) ?? "miniclaw-cli-sessions",
+      dashboardMessageId: reader.optionalString(
+        ["hookd", "dashboard_message_id"],
+        "MINICLAW_HOOKD_DASHBOARD_MESSAGE_ID"
+      ),
+      dashboardUpdateDebounceMs: reader.positiveInt(
+        ["hookd", "dashboard_update_debounce_ms"],
+        "MINICLAW_HOOKD_DASHBOARD_UPDATE_DEBOUNCE_MS",
+        1500
+      ),
       dashboardLimit: reader.positiveInt(
         ["hookd", "dashboard_limit"],
         "MINICLAW_HOOKD_DASHBOARD_LIMIT",

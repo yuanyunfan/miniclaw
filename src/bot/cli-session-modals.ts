@@ -13,6 +13,7 @@ import { parseCliSessionContinueModalId } from "../discord/cli-session-dashboard
 import { buildTaskPromptWithContext, type TaskSourceMetadata } from "../routing/task-context.js";
 import { createTask, getCliSession } from "../store/db.js";
 import { createLogger } from "../lib/log.js";
+import { requestCliSessionDashboardRefresh } from "./cli-session-buttons.js";
 
 const log = createLogger("cli-session-modal");
 
@@ -117,6 +118,7 @@ export async function handleCliSessionModal(interaction: ModalSubmitInteraction)
     content: `Created same-provider continuation <#${thread.id}> for ${session.provider} session ${session.id.slice(0, 8)}.`,
     ephemeral: true,
   });
+  requestCliSessionDashboardRefresh();
   const statusMessage = await thread.send({
     embeds: [taskStartEmbed(taskId, `[${session.provider} resume] ${followup}`, session.cwd, {
       provider: session.provider,

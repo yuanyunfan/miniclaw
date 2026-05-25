@@ -7,6 +7,7 @@
 ## [Unreleased]
 
 ### Added
+- 新增 `hookd` 固定 CLI sessions dashboard：MiniClaw 可在配置的 Discord channel 维护一条自动刷新的 pinned dashboard message，并在 hook events、zombie scan、approval/buttons/Continue 操作后 debounce 刷新；`/sessions` 保留为手动 ephemeral 查询入口。
 - 新增 `hookd` CLI session control MVP：通过本地 Unix socket 接收 Claude Code / Codex hook events，持久化 `cli_sessions` / `cli_session_events`，提供 Discord `/sessions` dashboard、Details/Hide buttons，以及 idle session 的 same-provider Continue modal。
 - 扩展 `hookd` Discord control plane：新增显式 dry-run hook installer/doctor、Claude `PermissionRequest` blocking approval relay、Discord Approve/Deny buttons、`cli_session_approvals` 持久化，以及 running task thread 的 `task_control_events` operator message queue。
 - 新增 Discord Agent Control Plane 设计文档，记录 MiniClaw 通过 Discord 手机端观察、审批、取消、排队 follow-up，并接力 Claude Code 或 Codex 任务的实现路线。

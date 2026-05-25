@@ -14,6 +14,16 @@ import {
 import { getCliSession, getCliSessionApproval, hideCliSession } from "../store/db.js";
 import { hookdApprovalRegistry } from "../hookd/approvals.js";
 
+let dashboardRefreshCallback: (() => void) | null = null;
+
+export function setCliSessionDashboardRefreshCallback(callback: (() => void) | null): void {
+  dashboardRefreshCallback = callback;
+}
+
+export function requestCliSessionDashboardRefresh(): void {
+  dashboardRefreshCallback?.();
+}
+
 function buildContinueModal(sessionId: string): ModalBuilder {
   const input = new TextInputBuilder()
     .setCustomId("followup")
@@ -61,6 +71,7 @@ export async function handleCliSessionButton(interaction: ButtonInteraction): Pr
         : `Approval request ${approval.id.slice(0, 8)} could not be resolved.`,
       ephemeral: true,
     });
+    if (result) requestCliSessionDashboardRefresh();
     return true;
   }
 
@@ -98,6 +109,7 @@ export async function handleCliSessionButton(interaction: ButtonInteraction): Pr
         : `CLI session ${session.id.slice(0, 8)} was already hidden.`,
       ephemeral: true,
     });
+    if (changed) requestCliSessionDashboardRefresh();
     return true;
   }
 

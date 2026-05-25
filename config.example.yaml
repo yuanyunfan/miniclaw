@@ -70,6 +70,10 @@ hookd:
   zombie_scan_interval_ms: 30000
   approval_timeout_ms: 600000
   stale_active_ms: 900000
+  dashboard_channel_name: "miniclaw-cli-sessions"
+  dashboard_channel_id: ""
+  dashboard_message_id: ""
+  dashboard_update_debounce_ms: 1500
   dashboard_limit: 8
 
 agent_run_manager:

@@ -17,6 +17,10 @@ export interface HookdRuntimeConfig {
   approvalTimeoutMs: number;
 }
 
+export interface HookdRuntimeOptions {
+  onSessionStateChanged?: () => Promise<unknown> | unknown;
+}
+
 export interface HookdHandle {
   socketPath: string;
   stop: () => Promise<void>;
@@ -116,16 +120,32 @@ function parseHookEvent(raw: unknown): CliSessionHookEvent {
   };
 }
 
-function createHookdEventHandler(options: { approvalTimeoutMs: number }) {
+function notifySessionStateChanged(callback: HookdRuntimeOptions["onSessionStateChanged"]): void {
+  if (!callback) return;
+  void Promise.resolve()
+    .then(callback)
+    .catch((err: unknown) => {
+      log.warn("hookd session-state callback failed:", err);
+    });
+}
+
+function createHookdEventHandler(options: { approvalTimeoutMs: number; onSessionStateChanged?: HookdRuntimeOptions["onSessionStateChanged"] }) {
   return async (event: CliSessionHookEvent) => {
     const row = recordCliSessionHookEvent(event);
     if (event.provider === "claude" && event.phase === "waiting_for_approval") {
-      return await hookdApprovalRegistry.requestApproval({
+      const result = hookdApprovalRegistry.requestApproval({
         session: row,
         event,
         timeoutMs: options.approvalTimeoutMs,
       });
+      notifySessionStateChanged(options.onSessionStateChanged);
+      try {
+        return await result;
+      } finally {
+        notifySessionStateChanged(options.onSessionStateChanged);
+      }
     }
+    notifySessionStateChanged(options.onSessionStateChanged);
     return { sessionId: row.id };
   };
 }
@@ -182,25 +202,35 @@ export function startHookdSocketServer(options: HookdSocketServerOptions): Hookd
   };
 }
 
-export function startHookd(config: HookdRuntimeConfig): HookdHandle | null {
+export function startHookd(config: HookdRuntimeConfig, options: HookdRuntimeOptions = {}): HookdHandle | null {
   if (!config.enabled) return null;
   const expired = hookdApprovalRegistry.expireStartupPending();
   if (expired > 0) log.info(`hookd expired ${expired} pending approval request(s) on startup`);
   const socket = startHookdSocketServer({
     socketPath: config.socketPath,
     maxPayloadBytes: config.maxPayloadBytes,
-    onEvent: createHookdEventHandler({ approvalTimeoutMs: config.approvalTimeoutMs }),
+    onEvent: createHookdEventHandler({
+      approvalTimeoutMs: config.approvalTimeoutMs,
+      onSessionStateChanged: options.onSessionStateChanged,
+    }),
   });
   const interval = setInterval(() => {
     const ended = markDeadCliSessions();
-    if (ended > 0) log.info(`hookd marked ${ended} dead CLI session(s) ended`);
+    if (ended > 0) {
+      log.info(`hookd marked ${ended} dead CLI session(s) ended`);
+      notifySessionStateChanged(options.onSessionStateChanged);
+    }
   }, config.zombieScanIntervalMs);
   interval.unref();
   log.info(`hookd listening on ${config.socketPath}`);
 
   return {
     socketPath: config.socketPath,
-    scanNow: () => markDeadCliSessions(),
+    scanNow: () => {
+      const ended = markDeadCliSessions();
+      if (ended > 0) notifySessionStateChanged(options.onSessionStateChanged);
+      return ended;
+    },
     stop: async () => {
       clearInterval(interval);
       await socket.stop();
