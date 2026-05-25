@@ -3,7 +3,7 @@ doc_id: discord-agent-control-plane
 lang: zh
 translation_of: docs/plans/2026-05-25-discord-agent-control-plane.md
 translation_status: current
-source_sha256: abd382b73ae1eb2b38403074617da53f72313171eb4bbb87e6d947b223aa31bc
+source_sha256: e6566567a832abf4d1f41bffda12c8476c1d0003a4692cca6d543420a9f82733
 ---
 # Discord Agent Control Plane
 
@@ -268,6 +268,27 @@ CLI session dashboard：
 - ended sessions 在短 retention window 后从 active surface 隐藏；
 - 为不想继续看的 idle session 保留手动 `Archive` 或 `Hide` action。
 
+Discord-native rendering constraints：
+
+- 不要尝试在 Discord message 内渲染自定义 HTML、CSS 或 JavaScript。静态 HTML prototype 只作为 product mock。
+- 手机端 surface 应使用 Discord 原生消息能力实现：embeds、action rows、buttons、select menus 和 modals。
+- 使用一条 pinned 或其他容易发现的 “current sessions” dashboard message 作为稳定入口。hook event 应编辑这个当前 snapshot，而不是只追加普通时间线消息。
+- 提供 `/sessions` command 和 `Refresh` button，在 pinned message 被埋掉或变 stale 时重新生成当前 snapshot。
+- project、provider、status filter 使用 select menus。`Approve`、`Deny`、`Continue`、`Queue Instruction`、`Hide` 和 `Details` 使用 buttons。
+- operator text input 使用 modals，尤其用于 same-provider continuation 和 queued instructions。
+- session detail 通过更新 embed、ephemeral follow-up 或 modal-friendly summary 渲染。不要依赖 web-style sidebar 或固定三栏 layout。
+- 尊重 Discord message 和 component limits，对长 session list 做 pagination 或 collapse。dashboard 先做 summary，再按需展开 detail。
+
+Dashboard ordering and anti-burial rules：
+
+- dashboard 是按状态优先级排序的 control surface，不是按 session 创建时间排列的 chronological feed。
+- 主排序：`waiting_for_approval` 第一，active sessions 第二，stale-active sessions 第三，idle sessions 第四，ended 或 hidden sessions 最后且默认折叠。
+- active sessions 必须始终排在 idle sessions 上方，即使这个 active session 很久之前就已经打开。
+- active bucket 内部先按 attention 排序，再按 `last_activity_at` 倒序。长时间没有 hook event 的 active session 应标记为 `active, quiet <duration>` 或 `possibly stuck`，不能静默混进 idle。
+- idle bucket 内部按 `last_activity_at` 倒序，并在少量可见项之后 collapse 或 paginate。
+- ended sessions 不应把 active 或 idle sessions 往下挤。它们进入 history，并通过显式 `History` 或 `Show hidden` action 查看。
+- new approval request 或 stale-active warning 这类高优先级 transition 可以单独发 notification message，但 pinned/current dashboard 仍是 operator 的 canonical view。
+
 建议 CLI session buttons：
 
 - `miniclaw:cli-session:open:<sessionId>`：显示 detail 和 transcript summary；
@@ -410,8 +431,9 @@ Provider switching 明确不在范围内。如果 operator 想用另一个 provi
 
 5. 增加 Discord CLI session dashboard。
    - 按 cwd 或 project 分组。
-   - 分开展示 active 和 idle sessions。
-   - 增加 details、hide、same-provider continue 和 approval buttons。
+   - 使用 embeds、select menus、buttons 和 modals 渲染 Discord-native pinned/current dashboard。
+   - 按 attention state 而不是 message chronology 排序：approval、active、stale active、idle，然后是 hidden history。
+   - 增加 details、hide、same-provider continue、queued-instruction 和 approval buttons。
    - 不把 raw hook payloads 暴露到 Discord。
 
 6. 增加 Claude external approval relay。
@@ -445,7 +467,10 @@ Provider switching 明确不在范围内。如果 operator 想用另一个 provi
   - fake Claude hook stream 能把 session 从 processing 转到 waiting for input；
   - fake Codex startup 会被隐藏，直到 `UserPromptSubmit`；
   - fake iTerm2 session close 会通过 zombie scan 把 CLI session 标记 ended；
+  - Discord dashboard 即使 active session 更早创建，也会让 active sessions 排在 idle sessions 上方；
+  - Discord dashboard 会把长时间安静的 active session 标记为 stale 或 possibly stuck；
   - Discord dashboard 显示 active sessions，并隐藏 ended sessions；
+  - Discord-native `Continue` 或 `Queue Instruction` actions 会打开 modal-shaped input flow；
   - same-provider continuation 会用存储的 provider session id 创建 MiniClaw task。
 - Manual live checks：
   - 在 iTerm2 直接启动 `claude`，确认它先显示 active，`Stop` 后显示 waiting for input；

@@ -261,6 +261,27 @@ CLI session dashboard:
 - hide ended sessions from the active surface after a short retention window;
 - keep a manual `Archive` or `Hide` action for idle sessions the operator no longer wants to see.
 
+Discord-native rendering constraints:
+
+- Do not try to render custom HTML, CSS, or JavaScript inside Discord messages. The static HTML prototype is only a product mock.
+- Implement the mobile surface with native Discord messages: embeds, action rows, buttons, select menus, and modals.
+- Use one pinned or otherwise discoverable "current sessions" dashboard message as the stable entry point. Hook events should edit this current snapshot rather than only appending ordinary chronological messages.
+- Support a `/sessions` command and a `Refresh` button that can regenerate the current snapshot when the pinned message is buried or stale.
+- Use select menus for project, provider, and status filters. Use buttons for `Approve`, `Deny`, `Continue`, `Queue Instruction`, `Hide`, and `Details`.
+- Use modals for operator text input, especially same-provider continuation and queued instructions.
+- Render session detail through an updated embed, an ephemeral follow-up, or a modal-friendly summary. Do not depend on a web-style sidebar or fixed three-column layout.
+- Respect Discord message and component limits by paginating or collapsing long session lists. The dashboard should summarize first and expose detail on demand.
+
+Dashboard ordering and anti-burial rules:
+
+- The dashboard is a state-prioritized control surface, not a chronological feed of session creation times.
+- Primary ordering: `waiting_for_approval` first, active sessions second, stale-active sessions third, idle sessions fourth, ended or hidden sessions last and normally collapsed.
+- Active sessions must stay above idle sessions even if the active session was opened much earlier than the idle sessions.
+- Within the active bucket, sort by attention first, then by `last_activity_at` descending. A long-running active session with no recent hook event should be labelled `active, quiet <duration>` or `possibly stuck`, not silently mixed into idle.
+- Within the idle bucket, sort by `last_activity_at` descending and collapse or paginate after a small visible limit.
+- Ended sessions should not push active or idle sessions down the dashboard. Keep them in history, with an explicit `History` or `Show hidden` action.
+- High-priority transitions such as new approval requests or stale-active warnings may send a separate notification message, but the pinned/current dashboard remains the operator's canonical view.
+
 Suggested CLI session buttons:
 
 - `miniclaw:cli-session:open:<sessionId>`: show detail and transcript summary;
@@ -403,8 +424,9 @@ Provider switching is intentionally out of scope. If the operator wants to start
 
 5. Add Discord CLI session dashboard.
    - Group by cwd or project.
-   - Show active and idle sessions separately.
-   - Add details, hide, same-provider continue, and approval buttons.
+   - Render a Discord-native pinned or current dashboard with embeds, select menus, buttons, and modals.
+   - Sort by attention state instead of message chronology: approval, active, stale active, idle, then hidden history.
+   - Add details, hide, same-provider continue, queued-instruction, and approval buttons.
    - Keep raw hook payloads out of Discord.
 
 6. Add Claude external approval relay.
@@ -438,7 +460,10 @@ Provider switching is intentionally out of scope. If the operator wants to start
   - fake Claude hook stream moves a session from processing to waiting for input;
   - fake Codex startup is hidden until `UserPromptSubmit`;
   - fake iTerm2 session close marks the CLI session ended through zombie scan;
+  - Discord dashboard keeps active sessions above idle sessions even when the active session is older;
+  - Discord dashboard labels quiet active sessions as stale or possibly stuck;
   - Discord dashboard shows active sessions and hides ended sessions;
+  - Discord native `Continue` or `Queue Instruction` actions open a modal-shaped input flow;
   - same-provider continuation creates a MiniClaw task with the stored provider session id.
 - Manual live checks:
   - start `claude` directly in iTerm2 and confirm it appears as active, then waiting for input after `Stop`;
