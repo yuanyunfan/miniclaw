@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   addManagedHookEntries,
@@ -5,6 +8,7 @@ import {
   enableCodexHooksFeature,
   managedHookCommand,
   removeManagedHookEntries,
+  runHookdHookInstall,
   type HookInstallPaths,
 } from "../installer.js";
 
@@ -57,5 +61,50 @@ describe("hookd installer pure mutations", () => {
     const enabled = enableCodexHooksFeature(config);
     expect(codexHooksFeatureEnabled(enabled)).toBe(true);
     expect(enabled).toContain("codex_hooks = true");
+  });
+
+  it("keeps manifest providers when Claude and Codex are installed separately", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "miniclaw-hookd-install-"));
+    const tempPaths: HookInstallPaths = {
+      claudeSettingsPath: join(tmp, ".claude", "settings.json"),
+      codexHooksPath: join(tmp, ".codex", "hooks.json"),
+      codexConfigPath: join(tmp, ".codex", "config.toml"),
+      manifestPath: join(tmp, ".miniclaw", "hooks", "manifest.json"),
+      hookClientPath: "/repo/dist/hookd/hook-client.js",
+      socketPath: join(tmp, ".miniclaw", "runtime", "hookd.sock"),
+    };
+    mkdirSync(join(tmp, ".codex"), { recursive: true });
+    writeFileSync(tempPaths.codexConfigPath, "[features]\ncodex_hooks = true\n");
+
+    runHookdHookInstall({
+      providers: ["codex"],
+      action: "install",
+      execute: true,
+      approvalTimeoutMs: 600_000,
+      hookTimeoutMs: 10_000,
+      paths: tempPaths,
+    });
+    runHookdHookInstall({
+      providers: ["claude"],
+      action: "install",
+      execute: true,
+      approvalTimeoutMs: 600_000,
+      hookTimeoutMs: 10_000,
+      paths: tempPaths,
+    });
+
+    const manifest = JSON.parse(readFileSync(tempPaths.manifestPath, "utf8")) as { providers: string[] };
+    expect(manifest.providers).toEqual(["claude", "codex"]);
+
+    runHookdHookInstall({
+      providers: ["claude"],
+      action: "uninstall",
+      execute: true,
+      approvalTimeoutMs: 600_000,
+      hookTimeoutMs: 10_000,
+      paths: tempPaths,
+    });
+    const updated = JSON.parse(readFileSync(tempPaths.manifestPath, "utf8")) as { providers: string[] };
+    expect(updated.providers).toEqual(["codex"]);
   });
 });

@@ -99,6 +99,11 @@ describe("live terminal input", () => {
 
   it("reports dashboard eligibility only for idle iTerm2-backed live sessions", () => {
     expect(getCliSessionLiveTerminalEligibility(session()).ok).toBe(true);
+    expect(getCliSessionLiveTerminalEligibility(session({
+      provider: "claude",
+      provider_session_id: "claude-session-1",
+      latest_prompt: "claude follow-up",
+    })).ok).toBe(true);
     expect(getCliSessionLiveTerminalEligibility(session({ phase: "processing" }))).toMatchObject({
       ok: false,
       code: "not_idle",

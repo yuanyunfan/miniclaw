@@ -79,6 +79,32 @@ function writeJsonObject(path: string, value: JsonObject): void {
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
+function manifestProviders(value: JsonObject): HookInstallProvider[] {
+  if (!Array.isArray(value.providers)) return [];
+  return value.providers.filter((provider): provider is HookInstallProvider =>
+    provider === "claude" || provider === "codex"
+  );
+}
+
+function orderedProviders(providers: Iterable<HookInstallProvider>): HookInstallProvider[] {
+  const set = new Set(providers);
+  return (["claude", "codex"] as const).filter((provider) => set.has(provider));
+}
+
+function writeManifest(paths: HookInstallPaths, providers: HookInstallProvider[]): void {
+  const existing = readJsonObject(paths.manifestPath);
+  writeJsonObject(paths.manifestPath, {
+    ...existing,
+    version: 1,
+    managed_by: "miniclaw-hookd",
+    installed_at: typeof existing.installed_at === "string" ? existing.installed_at : new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    hook_client_path: paths.hookClientPath,
+    socket_path: paths.socketPath,
+    providers,
+  });
+}
+
 export function defaultHookInstallPaths(cwd = process.cwd()): HookInstallPaths {
   return {
     claudeSettingsPath: homePath("~/.claude/settings.json"),
@@ -303,18 +329,23 @@ export function runHookdHookInstall(options: HookInstallOptions): HookInstallRes
     else results.push(doctorProvider(provider, paths));
   }
   if (options.action === "install" && options.execute) {
-    mkdirSync(dirname(paths.manifestPath), { recursive: true });
-    writeJsonObject(paths.manifestPath, {
-      version: 1,
-      managed_by: "miniclaw-hookd",
-      installed_at: new Date().toISOString(),
-      hook_client_path: paths.hookClientPath,
-      socket_path: paths.socketPath,
-      providers: options.providers,
-    });
+    const existing = readJsonObject(paths.manifestPath);
+    const installedProviders = results
+      .filter((result) => result.status !== "skipped")
+      .map((result) => result.provider);
+    const providers = orderedProviders([
+      ...manifestProviders(existing),
+      ...installedProviders,
+    ]);
+    if (providers.length) writeManifest(paths, providers);
   }
   if (options.action === "uninstall" && options.execute && existsSync(paths.manifestPath)) {
-    rmSync(paths.manifestPath, { force: true });
+    const remaining = orderedProviders(
+      manifestProviders(readJsonObject(paths.manifestPath))
+        .filter((provider) => !options.providers.includes(provider))
+    );
+    if (remaining.length) writeManifest(paths, remaining);
+    else rmSync(paths.manifestPath, { force: true });
   }
   return results;
 }

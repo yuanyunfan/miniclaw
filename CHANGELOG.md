@@ -61,6 +61,7 @@
 - App Trending 默认频道从 `daily-app-trending` 改为 `weekly-app-trending`，频道初始化脚本会把旧频道原地重命名并清理旧 channel-map key。
 
 ### Fixed
+- 修复 `hookd:install -- --provider claude --execute` 覆盖 manifest provider 列表的问题，支持 Claude Code 和 Codex hooks 分开安装时保留双 provider 状态。
 - 放宽 Vitest 全局 timeout 到 10s，降低全量并行测试在本机负载较高时出现非断言失败的 flaky timeout。
 - 升级 `tsx` 到 `4.22.3` 并更新 `better-sqlite3` 到 Node 26 兼容版本，避免 cron script 通过 `tsx` 启动时向 Discord 输出 `DEP0205 module.register()` deprecation warning，并保持 SQLite 测试可运行。
 - 修复 Weixin 官方 CDN 媒体协议兼容：入站图片/语音会读取 `media.full_url`、`media.encrypt_query_param` 和 `aes_key`，下载后按 AES-ECB 解密，语音尽量从 SILK 转 WAV 后再送入附件处理链路。

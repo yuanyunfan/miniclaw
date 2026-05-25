@@ -89,7 +89,10 @@ beforeEach(() => {
 
 describe("handleCliSessionModal", () => {
   it("sends follow-up text to the live iTerm2 session without creating a Discord task thread", async () => {
-    const row = session();
+    const row = session({
+      provider: "claude",
+      provider_session_id: "claude-session-1",
+    });
     vi.mocked(getCliSession).mockReturnValue(row);
     vi.mocked(sendCliSessionLiveTerminalInput).mockResolvedValue({
       ok: true,
@@ -103,6 +106,9 @@ describe("handleCliSessionModal", () => {
     expect(reply).toHaveBeenCalledWith(expect.objectContaining({
       content: expect.stringContaining("Sent follow-up to iTerm2 session"),
       ephemeral: true,
+    }));
+    expect(reply).toHaveBeenCalledWith(expect.objectContaining({
+      content: expect.stringContaining("for claude CLI session"),
     }));
     expect(requestCliSessionDashboardRefresh).toHaveBeenCalledOnce();
   });

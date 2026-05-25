@@ -30,6 +30,10 @@ describe("hook-client normalization", () => {
       cwd: "/repo",
       pid: 123,
       terminalApp: "iTerm.app",
+      terminalSurface: {
+        iterm_session_id: "iterm-session",
+        term_program: "iTerm.app",
+      },
       toolName: "Bash",
       toolInput: { command: "git status" },
       toolUseId: "toolu-1",
