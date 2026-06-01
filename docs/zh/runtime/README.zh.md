@@ -3,7 +3,7 @@ doc_id: runtime-index
 lang: zh
 translation_of: docs/runtime/README.md
 translation_status: current
-source_sha256: b464e828abe96c34b06f6e8eb667d5ffb9e28f298f2ef5a87fe26794913d9d34
+source_sha256: 0da3ca59d6dedda8787d32157b65580f43e04dd207a9c2577b681d18975ba4fb
 ---
 # MiniClaw Runtime 文档
 
@@ -195,6 +195,7 @@ Runtime contract:
 
 - Provider commit callback 只能在 downstream task 成功后运行。
 - Provider failure 默认 fail closed，除非 provider config 明确允许 partial data。
+- Cron loader 会忽略 `_profiles/` 和 `_fragments/`，不把它们当作可运行 job；随后把 `workflow.profile`、`workflow.main_provider`、`workflow.context_providers`、`workflow.preflight` 和 `rules.use` 展开成普通 job shape，再进入校验。
 - `type=task` job 可以在 cron YAML 内配置 inline `output_template` 或 `output_contract.template` 文本，在 provider/script context 之后、job prompt 之前注入 prompt-level output contract。
 - 配置 output contract 时，MiniClaw 会先注入共享 chat/IM output surface policy；cron YAML 只应描述报告结构、机器块、privacy/link/length 例外和其他 job-specific 格式。
 - Output contract 是给 LLM 的格式指令，不是 deterministic renderer；v1 不会在 task 执行后重写最终消息。

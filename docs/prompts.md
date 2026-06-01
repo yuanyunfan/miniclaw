@@ -55,6 +55,33 @@ MiniClaw prepends a shared output surface policy before the job-specific templat
 
 `output_contract.validator` is reserved for runtime validation. v1 supports only `none`; the validator hook still runs after a successful task result and before extra delivery, attachment delivery, and provider commit callbacks so future validators can block delivery and retries at a single point.
 
+## Cron Composition
+
+Local cron jobs can stay compact by referencing reusable profiles and prompt fragments from the same cron directory:
+
+```yaml
+name: cn-stock-pre-market
+schedule: "45 8 * * 1-5"
+timezone: Asia/Shanghai
+channel: "REPLACE_WITH_DISCORD_CHANNEL_ID"
+workflow:
+  profile: stock.pre_market_forecast
+  main_provider: market-intel/cn-pre-market
+  context_providers:
+    - market-context/cn-hk-inject
+rules:
+  use:
+    - stock.etf_premium_cn
+output_template: |
+  # A股/港股盘前报告 - YYYY-MM-DD
+prompt: |
+  Job-specific objective.
+```
+
+Profiles live under `~/.miniclaw/cron/_profiles/*.yaml`; fragments live under `~/.miniclaw/cron/_fragments/*.yaml`. The loader ignores those subdirectories as jobs, then expands `workflow.profile`, `workflow.main_provider`, `workflow.context_providers`, `workflow.preflight`, and `rules.use` before validating the final `CronJobTask`.
+
+Composition is intentionally prompt-level only. Profiles and fragments can provide shared task instructions, privacy boundaries, evidence rules, and workflow defaults such as `type: task`, `timeout_ms`, or `pre_provider_preflight`. Per-job YAML should still own schedule, channel, workflow wiring, job-specific `output_template`, and any genuinely unique task objective.
+
 ## Code-Owned Prompt Fragments
 
 Some prompt fragments are intentionally still code-owned because they are short, dynamic, or tightly coupled to runtime contracts. They must be changed together with tests and docs.

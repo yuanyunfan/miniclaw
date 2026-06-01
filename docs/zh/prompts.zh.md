@@ -3,7 +3,7 @@ doc_id: prompts
 lang: zh
 translation_of: docs/prompts.md
 translation_status: current
-source_sha256: 8c44f79d4f90d28ffc4b6d95dd5bf069d2a952ad669533203536248756a517c1
+source_sha256: a2df775cd9ead5855b4ff972f811fa280d2ec7b56827f720eda3a343ba4a2111
 ---
 # Prompt 资产管理
 
@@ -61,6 +61,33 @@ Cron output template 属于 cron job 配置，不是 repo prompt asset：MiniCla
 配置 output contract 时，MiniClaw 会先注入一段共享 output surface policy：面向 chat/IM delivery 的紧凑 Markdown、不要 Markdown pipe table、先结论后证据、只输出最终报告。每个 job 的 cron YAML 不要重复这些通用规则；`output_template` 应只写报告结构、必需机器块，以及 privacy、link style、长度限制等 job-specific 例外。
 
 `output_contract.validator` 预留 runtime validation。v1 只支持 `none`；validator hook 仍会在 successful task result 之后、extra delivery、attachment delivery 和 provider commit callback 之前运行，方便后续 validator 在单一位置阻止投递并交给 scheduler retry。
+
+## Cron Composition
+
+本地 cron job 可以引用同一 cron 目录下的 reusable profiles 和 prompt fragments，让 job YAML 保持紧凑：
+
+```yaml
+name: cn-stock-pre-market
+schedule: "45 8 * * 1-5"
+timezone: Asia/Shanghai
+channel: "REPLACE_WITH_DISCORD_CHANNEL_ID"
+workflow:
+  profile: stock.pre_market_forecast
+  main_provider: market-intel/cn-pre-market
+  context_providers:
+    - market-context/cn-hk-inject
+rules:
+  use:
+    - stock.etf_premium_cn
+output_template: |
+  # A股/港股盘前报告 - YYYY-MM-DD
+prompt: |
+  Job-specific objective.
+```
+
+Profiles 位于 `~/.miniclaw/cron/_profiles/*.yaml`；fragments 位于 `~/.miniclaw/cron/_fragments/*.yaml`。loader 会忽略这些子目录，不把它们作为 job，然后在校验最终 `CronJobTask` 前展开 `workflow.profile`、`workflow.main_provider`、`workflow.context_providers`、`workflow.preflight` 和 `rules.use`。
+
+Composition 只作用在 prompt 层。Profiles 和 fragments 可以提供共享 task instructions、privacy boundaries、evidence rules，以及 `type: task`、`timeout_ms`、`pre_provider_preflight` 等 workflow defaults。每个 job YAML 仍应自己拥有 schedule、channel、workflow wiring、job-specific `output_template` 和真正独有的 task objective。
 
 ## 代码内置 Prompt 片段
 

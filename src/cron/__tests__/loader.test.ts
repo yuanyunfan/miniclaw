@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { loadCronJobs } from "../loader.js";
@@ -18,6 +18,12 @@ afterEach(() => {
 
 function write(file: string, body: string): void {
   writeFileSync(join(tmp, file), body);
+}
+
+function writeNested(file: string, body: string): void {
+  const path = join(tmp, file);
+  mkdirSync(path.split("/").slice(0, -1).join("/"), { recursive: true });
+  writeFileSync(path, body);
 }
 
 // 测试用 channel ID 占位符（19 位数字符合 Discord snowflake 校验，但不指向任何真实频道）
@@ -279,6 +285,94 @@ prompt: "整理日报"
         validator: "none",
       });
     }
+  });
+
+  it("解析 workflow profile + rules fragments 并展开成普通 task", () => {
+    writeNested("_profiles/stock-pre-market.yaml", `
+id: stock.pre_market_forecast
+type: task
+rules:
+  use:
+    - stock.shared
+prompt: |
+  profile prompt for {{market_label}}
+`);
+    writeNested("_fragments/stock-shared.yaml", `
+id: stock.shared
+prompt: |
+  shared rule for {{market_label}}
+`);
+    write("cn-stock-pre-market.yaml", `
+name: cn-stock-pre-market
+schedule: "45 8 * * 1-5"
+timezone: Asia/Shanghai
+enabled: true
+channel: "${VALID_CHANNEL}"
+workflow:
+  profile: stock.pre_market_forecast
+  market_label: A 股/港股
+  main_provider: market-intel/cn-pre-market
+  context_providers:
+    - market-context/cn-hk-inject
+  preflight: health
+rules:
+  use:
+    - stock.shared
+output_template: |
+  ## Unique Report
+prompt: |
+  job-specific objective
+`);
+    const r = loadCronJobs();
+    expect(r.errors).toEqual([]);
+    expect(r.jobs.length).toBe(1);
+    const j = r.jobs[0];
+    expect(j.type).toBe("task");
+    if (j.type === "task") {
+      expect(j.pre_provider).toBe("market-intel");
+      expect(j.pre_provider_config).toBe("cn-pre-market");
+      expect(j.pre_provider_preflight).toBe("health");
+      expect(j.pre_context_providers).toEqual([
+        { provider: "market-context", config: "cn-hk-inject" },
+      ]);
+      expect(j.prompt).toContain("profile prompt for A 股/港股");
+      expect(j.prompt).toContain("shared rule for A 股/港股");
+      expect(j.prompt).toContain("job-specific objective");
+      expect(j.output_contract?.template).toBe("## Unique Report");
+    }
+  });
+
+  it("未知 workflow profile → 拒绝", () => {
+    write("unknown-profile.yaml", `
+name: x
+schedule: "0 9 * * *"
+channel: "${VALID_CHANNEL}"
+workflow:
+  profile: stock.missing
+prompt: hi
+`);
+    const r = loadCronJobs();
+    expect(r.errors[0].error).toMatch(/unknown workflow\.profile/);
+  });
+
+  it("未知 rules fragment → 拒绝", () => {
+    writeNested("_profiles/stock.yaml", `
+id: stock.profile
+type: task
+`);
+    write("unknown-fragment.yaml", `
+name: x
+schedule: "0 9 * * *"
+channel: "${VALID_CHANNEL}"
+workflow:
+  profile: stock.profile
+rules:
+  use:
+    - stock.missing
+prompt: hi
+`);
+    const r = loadCronJobs();
+    expect(r.errors[0].error).toMatch(/unknown rules\.use fragment/);
   });
 
   it("未配置 output contract 时 type=task 保持不带 output_contract", () => {

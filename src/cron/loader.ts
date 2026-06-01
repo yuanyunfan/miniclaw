@@ -18,8 +18,11 @@ import type {
   PreProviderPreflightMode,
 } from "./types.js";
 import { isPreProviderName } from "../providers/index.js";
+import { renderTemplate } from "./template.js";
 
 const CRON_DIR_DEFAULT = join(homedir(), ".miniclaw/cron");
+const CRON_PROFILE_DIR = "_profiles";
+const CRON_FRAGMENT_DIR = "_fragments";
 const VALID_TYPES: CronJobType[] = ["task", "script", "skill", "message"];
 const VALID_PRE_PROVIDER_PREFLIGHT_MODES: PreProviderPreflightMode[] = ["off", "health", "dry_run"];
 const VALID_TASK_RESULT_DELIVERY_MODES: CronTaskResultDeliveryMode[] = ["daily_message_group"];
@@ -89,6 +92,110 @@ function ensureCronDir(): string {
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+function stringRecord(value: unknown, file: string, field: string): Record<string, string> {
+  if (value === undefined) return {};
+  if (!isPlainObject(value)) throw new Error(`${file}: '${field}' 必须是对象`);
+  return Object.fromEntries(Object.entries(value).map(([key, raw]) => {
+    if (raw === null || typeof raw === "object") {
+      throw new Error(`${file}: '${field}.${key}' 必须是字符串、数字或 boolean`);
+    }
+    return [key, String(raw)];
+  }));
+}
+
+function parseCompositionId(value: unknown, fallback: string, file: string, field: string): string {
+  const id = typeof value === "string" && value.trim() ? value.trim() : fallback.replace(/\.ya?ml$/i, "");
+  if (!/^[A-Za-z0-9_.:-]+$/.test(id) || id.includes("..")) {
+    throw new Error(`${file}: '${field}' 必须是简单 id（允许字母、数字、点、下划线、冒号和短横线）`);
+  }
+  return id;
+}
+
+function parseRulesUse(value: unknown, file: string, field: string): string[] {
+  if (value === undefined) return [];
+  const use = Array.isArray(value)
+    ? value
+    : isPlainObject(value)
+      ? value.use
+      : undefined;
+  if (!Array.isArray(use)) throw new Error(`${file}: '${field}' 必须是数组或包含 use 数组的对象`);
+  return use.map((item, index) => {
+    if (typeof item !== "string" || !item.trim()) {
+      throw new Error(`${file}: '${field}.use[${index}]' 必须是 fragment id`);
+    }
+    return parseCompositionId(item, item, file, `${field}.use[${index}]`);
+  });
+}
+
+interface CronCompositionProfile {
+  id: string;
+  defaults: Record<string, unknown>;
+  prompt?: string;
+  rulesUse: string[];
+  vars: Record<string, string>;
+}
+
+interface CronCompositionFragment {
+  id: string;
+  prompt: string;
+}
+
+interface CronCompositionAssets {
+  profiles: Map<string, CronCompositionProfile>;
+  fragments: Map<string, CronCompositionFragment>;
+}
+
+function yamlAssetFiles(dir: string): string[] {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir).filter((f) => /\.ya?ml$/i.test(f) && !f.startsWith(".")).sort();
+}
+
+function compositionDefaults(raw: Record<string, unknown>): Record<string, unknown> {
+  const defaults: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (["id", "description", "rules", "vars", "prompt"].includes(key)) continue;
+    defaults[key] = value;
+  }
+  return defaults;
+}
+
+function loadCronCompositionAssets(dir: string): CronCompositionAssets {
+  const profiles = new Map<string, CronCompositionProfile>();
+  const fragments = new Map<string, CronCompositionFragment>();
+
+  for (const file of yamlAssetFiles(join(dir, CRON_PROFILE_DIR))) {
+    const path = join(dir, CRON_PROFILE_DIR, file);
+    const raw = yamlLoad(readFileSync(path, "utf8"));
+    if (!isPlainObject(raw)) throw new Error(`${CRON_PROFILE_DIR}/${file}: top-level must be a YAML object`);
+    const id = parseCompositionId(raw.id, file, `${CRON_PROFILE_DIR}/${file}`, "id");
+    if (profiles.has(id)) throw new Error(`${CRON_PROFILE_DIR}/${file}: duplicate profile id '${id}'`);
+    if (raw.prompt !== undefined && typeof raw.prompt !== "string") {
+      throw new Error(`${CRON_PROFILE_DIR}/${file}: 'prompt' 必须是字符串`);
+    }
+    profiles.set(id, {
+      id,
+      defaults: compositionDefaults(raw),
+      ...(typeof raw.prompt === "string" && raw.prompt.trim() ? { prompt: raw.prompt.trim() } : {}),
+      rulesUse: parseRulesUse(raw.rules, `${CRON_PROFILE_DIR}/${file}`, "rules"),
+      vars: stringRecord(raw.vars, `${CRON_PROFILE_DIR}/${file}`, "vars"),
+    });
+  }
+
+  for (const file of yamlAssetFiles(join(dir, CRON_FRAGMENT_DIR))) {
+    const path = join(dir, CRON_FRAGMENT_DIR, file);
+    const raw = yamlLoad(readFileSync(path, "utf8"));
+    if (!isPlainObject(raw)) throw new Error(`${CRON_FRAGMENT_DIR}/${file}: top-level must be a YAML object`);
+    const id = parseCompositionId(raw.id, file, `${CRON_FRAGMENT_DIR}/${file}`, "id");
+    if (fragments.has(id)) throw new Error(`${CRON_FRAGMENT_DIR}/${file}: duplicate fragment id '${id}'`);
+    if (typeof raw.prompt !== "string" || !raw.prompt.trim()) {
+      throw new Error(`${CRON_FRAGMENT_DIR}/${file}: 'prompt' 必须是非空字符串`);
+    }
+    fragments.set(id, { id, prompt: raw.prompt.trim() });
+  }
+
+  return { profiles, fragments };
 }
 
 function parseSchedule(value: unknown, file: string): string | string[] {
@@ -334,7 +441,154 @@ function parsePreContextProviders(value: unknown, file: string): CronJobPreConte
   return providers;
 }
 
-function validateJob(raw: unknown, file: string): CronJob {
+function parseWorkflowProviderRef(
+  value: unknown,
+  file: string,
+  field: string,
+): { provider: string; config?: string; required?: boolean } {
+  if (typeof value === "string") {
+    const parts = value.split("/");
+    if (parts.length > 2 || !parts[0]?.trim()) {
+      throw new Error(`${file}: '${field}' 必须是 provider 或 provider/config`);
+    }
+    return {
+      provider: parts[0].trim(),
+      ...(parts[1]?.trim() ? { config: parts[1].trim() } : {}),
+    };
+  }
+  if (!isPlainObject(value)) {
+    throw new Error(`${file}: '${field}' 必须是 provider/config 字符串或对象`);
+  }
+  const provider = typeof value.provider === "string" && value.provider.trim() ? value.provider.trim() : undefined;
+  if (!provider) throw new Error(`${file}: '${field}.provider' 是必填字符串`);
+  const config = typeof value.config === "string" && value.config.trim() ? value.config.trim() : undefined;
+  if (value.required !== undefined && typeof value.required !== "boolean") {
+    throw new Error(`${file}: '${field}.required' 必须是 boolean`);
+  }
+  return {
+    provider,
+    ...(config ? { config } : {}),
+    ...(value.required !== undefined ? { required: value.required } : {}),
+  };
+}
+
+function workflowVars(workflow: Record<string, unknown>, file: string, profile?: CronCompositionProfile): Record<string, string> {
+  const vars: Record<string, string> = { ...(profile?.vars ?? {}) };
+  for (const [key, value] of Object.entries(workflow)) {
+    if (["profile", "main_provider", "provider", "context_providers", "context_provider", "preflight", "vars"].includes(key)) {
+      continue;
+    }
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+      vars[key] = String(value);
+    }
+  }
+  Object.assign(vars, stringRecord(workflow.vars, file, "workflow.vars"));
+  return vars;
+}
+
+function omitCompositionFields(raw: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (["workflow", "rules", "prompt_vars"].includes(key)) continue;
+    result[key] = value;
+  }
+  return result;
+}
+
+function assignWorkflowField(
+  target: Record<string, unknown>,
+  raw: Record<string, unknown>,
+  file: string,
+  field: string,
+  value: unknown,
+): void {
+  if (raw[field] !== undefined) {
+    throw new Error(`${file}: 不能同时配置 workflow 和顶层 '${field}'`);
+  }
+  target[field] = value;
+}
+
+function composePrompt(
+  assets: CronCompositionAssets,
+  file: string,
+  profile: CronCompositionProfile | undefined,
+  raw: Record<string, unknown>,
+  vars: Record<string, string>,
+): string | undefined {
+  const parts: string[] = [];
+  if (profile?.prompt) parts.push(profile.prompt);
+
+  const ruleIds = [
+    ...(profile?.rulesUse ?? []),
+    ...parseRulesUse(raw.rules, file, "rules"),
+  ].filter((id, index, all) => all.indexOf(id) === index);
+  for (const id of ruleIds) {
+    const fragment = assets.fragments.get(id);
+    if (!fragment) throw new Error(`${file}: unknown rules.use fragment '${id}'`);
+    parts.push(fragment.prompt);
+  }
+  if (typeof raw.prompt === "string" && raw.prompt.trim()) parts.push(raw.prompt.trim());
+  if (!parts.length) return undefined;
+  return parts.map((part) => renderTemplate(part, vars).trim()).filter(Boolean).join("\n\n");
+}
+
+function resolveCronJobComposition(raw: unknown, file: string, assets: CronCompositionAssets): unknown {
+  if (!isPlainObject(raw)) return raw;
+  const workflowRaw = raw.workflow;
+  const rulesRaw = raw.rules;
+  if (workflowRaw === undefined && rulesRaw === undefined) return raw;
+  if (workflowRaw !== undefined && !isPlainObject(workflowRaw)) {
+    throw new Error(`${file}: 'workflow' 必须是对象`);
+  }
+  const workflow = (workflowRaw ?? {}) as Record<string, unknown>;
+  const profileId = typeof workflow.profile === "string" && workflow.profile.trim()
+    ? parseCompositionId(workflow.profile, workflow.profile, file, "workflow.profile")
+    : undefined;
+  const profile = profileId ? assets.profiles.get(profileId) : undefined;
+  if (profileId && !profile) throw new Error(`${file}: unknown workflow.profile '${profileId}'`);
+
+  const vars = workflowVars(workflow, file, profile);
+  const merged = {
+    ...(profile?.defaults ?? {}),
+    ...omitCompositionFields(raw),
+  };
+  const prompt = composePrompt(assets, file, profile, raw, vars);
+  if (prompt) merged.prompt = prompt;
+
+  const mainProvider = workflow.main_provider ?? workflow.provider;
+  if (mainProvider !== undefined) {
+    const ref = parseWorkflowProviderRef(mainProvider, file, "workflow.main_provider");
+    assignWorkflowField(merged, raw, file, "pre_provider", ref.provider);
+    if (ref.config !== undefined) assignWorkflowField(merged, raw, file, "pre_provider_config", ref.config);
+  }
+
+  const preflight = workflow.preflight;
+  if (preflight !== undefined) {
+    assignWorkflowField(merged, raw, file, "pre_provider_preflight", preflight);
+  }
+
+  const contextProviders = workflow.context_providers ?? workflow.context_provider;
+  if (contextProviders !== undefined) {
+    const refs = (Array.isArray(contextProviders) ? contextProviders : [contextProviders])
+      .map((value, index) => parseWorkflowProviderRef(value, file, `workflow.context_providers[${index}]`));
+    assignWorkflowField(
+      merged,
+      raw,
+      file,
+      "pre_context_providers",
+      refs.map((ref) => ({
+        provider: ref.provider,
+        ...(ref.config ? { config: ref.config } : {}),
+        ...(ref.required !== undefined ? { required: ref.required } : {}),
+      }))
+    );
+  }
+
+  return merged;
+}
+
+function validateJob(raw: unknown, file: string, assets: CronCompositionAssets): CronJob {
+  raw = resolveCronJobComposition(raw, file, assets);
   if (!isPlainObject(raw)) throw new Error(`${file}: top-level must be a YAML object`);
   const r = raw as Record<string, unknown>;
 
@@ -466,13 +720,22 @@ function validateJob(raw: unknown, file: string): CronJob {
 export function loadCronJobs(): CronJobLoadResult {
   const dir = ensureCronDir();
   const result: CronJobLoadResult = { jobs: [], errors: [] };
+  let assets: CronCompositionAssets;
+  try {
+    assets = loadCronCompositionAssets(dir);
+  } catch (err) {
+    return {
+      jobs: [],
+      errors: [{ file: `${CRON_PROFILE_DIR}/${CRON_FRAGMENT_DIR}`, error: err instanceof Error ? err.message : String(err) }],
+    };
+  }
   const files = readdirSync(dir).filter((f) => /\.ya?ml$/i.test(f) && !f.startsWith("."));
 
   for (const file of files) {
     const path = join(dir, file);
     try {
       const raw = yamlLoad(readFileSync(path, "utf8"));
-      const job = validateJob(raw, file);
+      const job = validateJob(raw, file, assets);
       // 去重 by name
       if (result.jobs.some((j) => j.name === job.name)) {
         throw new Error(`${file}: duplicate job name '${job.name}' (already loaded from another file)`);
