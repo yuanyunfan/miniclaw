@@ -1,8 +1,9 @@
 import type { PreProviderResult, PreProviderRunArgs } from "../types.js";
 import { loadWechatMpSession } from "./auth.js";
 import { HttpWechatMpClient } from "./client.js";
-import { collectWechatMpArticles, type CollectedWechatMpProviderData } from "./collector.js";
+import { collectWechatMpArticles, type CollectedWechatMpProviderData, type CollectWechatMpOptions } from "./collector.js";
 import { loadWechatMpProviderConfig } from "./config.js";
+import { createWechatMpArticleContentFetcher } from "./content.js";
 import { sanitizeWechatMpError, WechatMpInvalidSessionError } from "./errors.js";
 import { formatWechatMpCollectResult } from "./format.js";
 import type { WechatMpClient, WechatMpProviderConfig, WechatMpSession } from "./types.js";
@@ -14,7 +15,7 @@ export interface WechatMpProviderDeps {
   collect?: (
     config: WechatMpProviderConfig,
     client: WechatMpClient,
-    options: { now: Date },
+    options: CollectWechatMpOptions & { now: Date },
   ) => Promise<CollectedWechatMpProviderData>;
 }
 
@@ -67,7 +68,10 @@ export async function runWechatMpProvider(
     const config = loadConfig(args.configName);
     const session = loadSession(config.auth_path);
     const client = createClient(session);
-    const collected = await collect(config, client, { now: args.runAt });
+    const collected = await collect(config, client, {
+      now: args.runAt,
+      ...(deps.collect ? {} : { contentFetcher: createWechatMpArticleContentFetcher(session) }),
+    });
     return {
       text: formatWechatMpCollectResult(collected.result),
       commit: collected.commit,

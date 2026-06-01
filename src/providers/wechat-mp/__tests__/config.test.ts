@@ -39,6 +39,7 @@ accounts:
 
     expect(config.window).toEqual({ mode: "relative", hours: 24 });
     expect(config.browser_profile_dir).toBe("~/.miniclaw/browser-profiles/wechat-mp");
+    expect(config.read_filter).toMatchObject({ enabled: false, min_title_score: 55 });
   });
 
   it("parses fixed slot windows", () => {
@@ -60,6 +61,12 @@ window:
 max_pages_per_account: 5
 page_size: 10
 dedupe: true
+read_filter:
+  enabled: true
+  min_title_score: 60
+  max_articles_to_fetch: 4
+  excerpt_chars: 1800
+  fetch_timeout_ms: 12000
 browser_profile_dir: ~/.miniclaw/browser-profiles/wechat-mp-daily
 accounts:
   - name: 机器之心
@@ -77,6 +84,13 @@ accounts:
         { at_hour: 10, start_day_offset: -1, start_hour: 17, end_day_offset: 0, end_hour: 10 },
         { at_hour: 17, start_day_offset: 0, start_hour: 10, end_day_offset: 0, end_hour: 17 },
       ],
+    });
+    expect(config.read_filter).toEqual({
+      enabled: true,
+      min_title_score: 60,
+      max_articles_to_fetch: 4,
+      excerpt_chars: 1800,
+      fetch_timeout_ms: 12_000,
     });
   });
 

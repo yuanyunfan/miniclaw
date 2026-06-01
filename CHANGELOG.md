@@ -7,6 +7,7 @@
 ## [Unreleased]
 
 ### Added
+- 新增 WeChat MP 文章两层过滤：provider 会先基于标题/摘要做阅读价值评分和标题党降权，再只对高分候选抓取有界公开正文 excerpt，供 `daily-wechat-mp` 在报告开头输出精读推荐。
 - 新增 cron composition：本地 cron job 可通过 `_profiles` 和 `_fragments` 复用 workflow defaults、prompt fragments 和 rules，再展开成普通 task job。
 - 新增 CLI session dashboard 的 live iTerm2 Continue：idle 且由 iTerm2 承载的 session 会把 Discord modal follow-up 直接写回原始 terminal process，按 recorded iTerm2 session id 或唯一 tty 精确匹配，失败时 fail closed。
 - 新增 `hookd` 固定 CLI sessions dashboard：MiniClaw 可在配置的 Discord channel 维护一条自动刷新的 pinned dashboard message，并在 hook events、zombie scan、approval/buttons/Continue 操作后 debounce 刷新；`/sessions` 保留为手动 ephemeral 查询入口。

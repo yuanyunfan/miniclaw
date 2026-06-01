@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { load as yamlLoad } from "js-yaml";
 import { resolveHome } from "./auth.js";
-import type { WechatMpFixedWindowSlot, WechatMpProviderConfig, WechatMpWindowConfig } from "./types.js";
+import type { WechatMpFixedWindowSlot, WechatMpProviderConfig, WechatMpReadFilterConfig, WechatMpWindowConfig } from "./types.js";
 
 const CONFIG_DIR_DEFAULT = join(homedir(), ".miniclaw/providers/wechat-mp");
 const DEFAULT_AUTH_PATH = "~/.miniclaw/secrets/wechat-mp-session.json";
@@ -20,6 +20,11 @@ function positiveInt(value: unknown, fallback: number): number {
 
 function bool(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
+}
+
+function boundedPositiveInt(value: unknown, fallback: number, max: number): number {
+  const n = positiveInt(value, fallback);
+  return Math.min(n, max);
 }
 
 function hour(value: unknown, field: string): number {
@@ -72,6 +77,26 @@ function parseWindow(raw: Record<string, unknown>, fallbackHours: number): Wecha
   return { mode: "fixed_slots", timezone_offset_hours: timezoneOffset, slots };
 }
 
+function parseReadFilter(raw: Record<string, unknown>): WechatMpReadFilterConfig {
+  const filterRaw = raw.read_filter;
+  if (!isPlainObject(filterRaw)) {
+    return {
+      enabled: false,
+      min_title_score: 55,
+      max_articles_to_fetch: 5,
+      excerpt_chars: 2600,
+      fetch_timeout_ms: 15_000,
+    };
+  }
+  return {
+    enabled: bool(filterRaw.enabled, false),
+    min_title_score: boundedPositiveInt(filterRaw.min_title_score, 55, 100),
+    max_articles_to_fetch: boundedPositiveInt(filterRaw.max_articles_to_fetch, 5, 10),
+    excerpt_chars: boundedPositiveInt(filterRaw.excerpt_chars, 2600, 8000),
+    fetch_timeout_ms: boundedPositiveInt(filterRaw.fetch_timeout_ms, 15_000, 60_000),
+  };
+}
+
 function getConfigDir(): string {
   return process.env.MINICLAW_WECHAT_MP_CONFIG_DIR ?? CONFIG_DIR_DEFAULT;
 }
@@ -112,6 +137,7 @@ export function loadWechatMpProviderConfig(name?: string): WechatMpProviderConfi
     max_pages_per_account: positiveInt(raw.max_pages_per_account, 1),
     page_size: positiveInt(raw.page_size, 10),
     dedupe: bool(raw.dedupe, true),
+    read_filter: parseReadFilter(raw),
     accounts,
   };
 }

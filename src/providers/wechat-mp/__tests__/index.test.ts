@@ -22,6 +22,13 @@ function config(): WechatMpProviderConfig {
     max_pages_per_account: 1,
     page_size: 10,
     dedupe: true,
+    read_filter: {
+      enabled: false,
+      min_title_score: 55,
+      max_articles_to_fetch: 5,
+      excerpt_chars: 2600,
+      fetch_timeout_ms: 15_000,
+    },
     accounts: [{ name: "机器之心", query: "机器之心" }],
   };
 }

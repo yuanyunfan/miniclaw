@@ -3,11 +3,11 @@ doc_id: content-provider-family
 lang: zh
 translation_of: docs/providers/content.md
 translation_status: current
-source_sha256: 2df6200a7d5811d03cc7427be1f80fee4d492bd581808e4fadd6091f26ca2dc9
+source_sha256: 723b8662d88b0ba001008a0ee3dfccdc0af474a198be701f53394bac6cbae9cb
 ---
 # 内容 Provider 系列
 
-> 结论：content providers 采集外部文章/内容 metadata、做 dedupe，并把可进入 prompt 的 context 格式化给 cron tasks。当前 content provider 是 `wechat-mp`；它通过用户控制的 web session 读取微信公众号后台文章 metadata，并且必须把 session file 当作敏感凭据。
+> 结论：content providers 采集外部文章/内容 metadata、做 dedupe，并把可进入 prompt 的 context 格式化给 cron tasks。当前 content provider 是 `wechat-mp`；它通过用户控制的 web session 读取微信公众号后台文章 metadata，可以先做标题筛选，并且只对高信号候选抓取有界的公开正文摘录。session file 仍然必须当作敏感凭据。
 
 ## 数据流
 
@@ -18,7 +18,9 @@ flowchart LR
   Accounts --> Normalize[Normalize article metadata]
   Normalize --> Window[Fixed time window filter]
   Window --> Dedupe[Dedupe state]
-  Dedupe --> Payload[Provider payload]
+  Dedupe --> Screen[Title screening]
+  Screen --> Excerpt[Bounded public excerpt fetch]
+  Excerpt --> Payload[Provider payload]
   Payload --> Cron[Cron task prompt]
   Cron --> Discord[Discord delivery]
 ```
@@ -36,8 +38,10 @@ src/providers/wechat-mp/
   client.ts     # mp.weixin.qq.com backend calls
   collector.ts  # account query, window, dedupe orchestration
   config.ts     # ~/.miniclaw/providers/wechat-mp/<name>.yaml
+  content.ts    # bounded public article excerpt fetch/extraction
   format.ts     # prompt/Discord-safe provider text
   parser.ts     # article metadata normalization
+  screening.ts  # title-only reading-priority heuristic
   state.ts      # fakeid cache and sent-article dedupe
 
 scripts/wechat-mp-login.ts
@@ -52,12 +56,14 @@ Purpose:
 - 从配置的微信公众号采集文章列表 metadata。
 - 按固定北京时间 slots 过滤文章。
 - 在早/晚运行之间 dedupe 已发送文章。
+- 在抓正文前，先基于标题和摘要判断文章阅读价值。
+- 只对高分候选抓取有界的公开文章摘录。
 - 把 metadata 注入 LLM task，生成适合 Discord 阅读的总结。
 
 Non-goals:
 
 - 不读取个人微信聊天记录。
-- 不抓取或总结完整私有文章正文，除非未来 provider 显式增加安全的 body contract。
+- 不归档完整文章正文，也不把完整正文暴露给下游 prompt；正文级筛选只使用有界 excerpt。
 - 不把 WeChat session token/cookies 暴露到 Discord、logs、repo docs 或 LLM prompts。
 
 ## 配置形态
@@ -85,6 +91,12 @@ window:
 max_pages_per_account: 5
 page_size: 10
 dedupe: true
+read_filter:
+  enabled: true
+  min_title_score: 55
+  max_articles_to_fetch: 6
+  excerpt_chars: 2600
+  fetch_timeout_ms: 15000
 accounts:
   - name: 机器之心
     query: 机器之心
@@ -96,6 +108,13 @@ Fixed window semantics:
 - 北京时间 09:00 run：前一天 17:00 到当天 09:00。
 - 北京时间 17:00 run：当天 09:00 到当天 17:00。
 - Window 左闭右开：`start <= publish_time < end`。
+
+Read filter semantics:
+
+- `title_screen` 是确定性规则，只使用 title/digest/account。AI Engineering、Data Engineering、Agent、RAG、MCP、LLM infra、工程实践、数据平台和工具链信号会加分。
+- 标题党、招聘、活动推广、消费级硬件轻资讯、以及明显偏离用户 AI/Data Engineering 关注方向的内容会在抓正文前降权。
+- 只有 `title_screen.score >= read_filter.min_title_score` 的文章才会成为公开 excerpt 抓取候选，`max_articles_to_fetch` 限制 WeChat 页面请求数量。
+- `content_fetch.excerpt` 是用于总结/排序的有界摘录，不是完整文章归档。抓取失败只影响单篇文章，并应降级为 title/digest-only 判断。
 
 ## Session 刷新
 
@@ -136,7 +155,9 @@ pre_provider: wechat-mp
 pre_provider_config: daily-ai-wechat
 prompt: |
   You are a Chinese AI/data technology editor. The provider JSON above contains article metadata for the current fixed window.
-  Summaries must be based only on title, digest, and metadata. Do not invent article body details.
+  First summarize articles in read_filter.full_read_articles whose content_fetch.status is ok.
+  Use content_fetch.excerpt for deep-read summaries; use title/digest only for skim or skipped articles.
+  Do not invent article body details when body fetch failed or was not attempted.
 ```
 
 Provider commit semantics:
@@ -145,6 +166,8 @@ Provider commit semantics:
 cron task
   -> runPreProvider("wechat-mp")
   -> collect metadata and filter/dedupe
+  -> title-screen articles
+  -> fetch bounded public excerpts for selected candidates
   -> inject JSON into task prompt
   -> execute LLM task
   -> commit dedupe state only after downstream task success
@@ -153,8 +176,9 @@ cron task
 ## 安全契约
 
 - `auth_path` 等价于 Official Account backend web session credential。
-- Provider output 只能包含 article metadata、account names、titles、digests、publish times 和 links。
+- Provider output 可以包含 article metadata、account names、titles、digests、publish times、links、title-screen decisions，以及高分候选的有界公开文章摘录。
 - Provider failure 不能把 articles 标记为 sent。
+- 单篇 article excerpt 抓取失败不应让整个 provider run 失败，除非 metadata collection 本身失败。
 - Frequency control 或 invalid-session errors 应作为带 redacted diagnostics 的 provider failures 暴露。
 - Website pages 可以总结 WeChat ingestion，但实现事实应把本页作为 `source_docs`。
 

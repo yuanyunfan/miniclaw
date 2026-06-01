@@ -3,6 +3,7 @@ import { loadWechatMpSession } from "../src/providers/wechat-mp/auth.js";
 import { HttpWechatMpClient } from "../src/providers/wechat-mp/client.js";
 import { collectWechatMpArticles } from "../src/providers/wechat-mp/collector.js";
 import { loadWechatMpProviderConfig } from "../src/providers/wechat-mp/config.js";
+import { createWechatMpArticleContentFetcher } from "../src/providers/wechat-mp/content.js";
 import { sanitizeWechatMpError } from "../src/providers/wechat-mp/errors.js";
 import { formatWechatMpCollectResult } from "../src/providers/wechat-mp/format.js";
 
@@ -20,7 +21,9 @@ try {
   const cfg = loadWechatMpProviderConfig(configName);
   const session = loadWechatMpSession(cfg.auth_path);
   const client = new HttpWechatMpClient(session);
-  const collected = await collectWechatMpArticles(cfg, client);
+  const collected = await collectWechatMpArticles(cfg, client, {
+    contentFetcher: createWechatMpArticleContentFetcher(session),
+  });
   console.log(formatWechatMpCollectResult(collected.result));
   if (!dryRun) await collected.commit();
 } catch (err) {

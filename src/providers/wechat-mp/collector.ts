@@ -1,8 +1,11 @@
 import { articleId, preferBizMatch } from "./parser.js";
 import { cacheFakeid, loadWechatMpState, markArticlesSent, saveWechatMpState } from "./state.js";
+import { fetchWechatMpArticleContent } from "./content.js";
+import { screenWechatMpArticleTitle } from "./screening.js";
 import type {
   WechatMpAccountConfig,
   WechatMpArticle,
+  WechatMpContentFetchResult,
   WechatMpClient,
   WechatMpCollectResult,
   WechatMpProviderConfig,
@@ -13,6 +16,10 @@ import { sanitizeWechatMpError, WechatMpInvalidSessionError } from "./errors.js"
 export interface CollectWechatMpOptions {
   now?: Date;
   state?: WechatMpState;
+  contentFetcher?: (
+    article: WechatMpArticle,
+    options: { now: Date; config: WechatMpProviderConfig["read_filter"] },
+  ) => Promise<WechatMpContentFetchResult>;
 }
 
 export interface CollectedWechatMpProviderData {
@@ -143,6 +150,43 @@ async function fetchAccountArticles(
   return mergeArticles(account, alias, raw);
 }
 
+async function applyReadFilter(
+  config: WechatMpProviderConfig,
+  accounts: WechatMpCollectResult["accounts"],
+  now: Date,
+  contentFetcher: NonNullable<CollectWechatMpOptions["contentFetcher"]>,
+): Promise<WechatMpCollectResult["read_filter"]> {
+  if (!config.read_filter.enabled) return { enabled: false, min_title_score: config.read_filter.min_title_score, fetched_articles: 0, failed_fetches: 0 };
+
+  const articles = accounts.flatMap((account) => account.articles);
+  for (const article of articles) {
+    article.title_screen = screenWechatMpArticleTitle(article);
+    article.content_fetch = { status: "not_attempted" };
+  }
+
+  const candidates = articles
+    .filter((article) => (article.title_screen?.score ?? 0) >= config.read_filter.min_title_score)
+    .sort((a, b) => {
+      const scoreDiff = (b.title_screen?.score ?? 0) - (a.title_screen?.score ?? 0);
+      return scoreDiff !== 0 ? scoreDiff : b.publish_time - a.publish_time;
+    })
+    .slice(0, config.read_filter.max_articles_to_fetch);
+
+  let failedFetches = 0;
+  for (const article of candidates) {
+    const content = await contentFetcher(article, { now, config: config.read_filter });
+    article.content_fetch = content;
+    if (content.status !== "ok") failedFetches++;
+  }
+
+  return {
+    enabled: true,
+    min_title_score: config.read_filter.min_title_score,
+    fetched_articles: candidates.length,
+    failed_fetches: failedFetches,
+  };
+}
+
 export async function collectWechatMpArticles(
   config: WechatMpProviderConfig,
   client: WechatMpClient,
@@ -150,6 +194,7 @@ export async function collectWechatMpArticles(
 ): Promise<CollectedWechatMpProviderData> {
   const now = options.now ?? new Date();
   const state = options.state ?? loadWechatMpState(config.state_path);
+  const contentFetcher = options.contentFetcher ?? fetchWechatMpArticleContent;
   const window = resolveCollectionWindow(config, now);
   const collectedForCommit: WechatMpArticle[] = [];
   let skippedDuplicates = 0;
@@ -192,6 +237,8 @@ export async function collectWechatMpArticles(
     }
   }
 
+  const readFilter = await applyReadFilter(config, accounts, now, contentFetcher);
+
   const result: WechatMpCollectResult = {
     generated_at: now.toISOString(),
     window_start: new Date(window.start * 1000).toISOString(),
@@ -200,6 +247,7 @@ export async function collectWechatMpArticles(
     accounts,
     total_articles: accounts.reduce((sum, account) => sum + account.article_count, 0),
     skipped_duplicates: skippedDuplicates,
+    read_filter: readFilter,
   };
 
   return {

@@ -29,7 +29,16 @@ export interface WechatMpProviderConfig {
   max_pages_per_account: number;
   page_size: number;
   dedupe: boolean;
+  read_filter: WechatMpReadFilterConfig;
   accounts: WechatMpAccountConfig[];
+}
+
+export interface WechatMpReadFilterConfig {
+  enabled: boolean;
+  min_title_score: number;
+  max_articles_to_fetch: number;
+  excerpt_chars: number;
+  fetch_timeout_ms: number;
 }
 
 export type WechatMpWindowConfig =
@@ -86,6 +95,27 @@ export interface WechatMpArticle {
   publish_time: number;
   publish_time_iso: string;
   source: "appmsgpublish" | "appmsg";
+  title_screen?: WechatMpTitleScreen;
+  content_fetch?: WechatMpContentFetchResult;
+}
+
+export type WechatMpTitleDecision = "full_read" | "skim" | "skip";
+
+export interface WechatMpTitleScreen {
+  decision: WechatMpTitleDecision;
+  score: number;
+  reasons: string[];
+  penalties: string[];
+}
+
+export type WechatMpContentFetchStatus = "not_attempted" | "ok" | "failed";
+
+export interface WechatMpContentFetchResult {
+  status: WechatMpContentFetchStatus;
+  fetched_at?: string;
+  text_chars?: number;
+  excerpt?: string;
+  error?: string;
 }
 
 export interface WechatMpCollectResult {
@@ -103,6 +133,12 @@ export interface WechatMpCollectResult {
   }>;
   total_articles: number;
   skipped_duplicates: number;
+  read_filter?: {
+    enabled: boolean;
+    min_title_score: number;
+    fetched_articles: number;
+    failed_fetches: number;
+  };
 }
 
 export interface WechatMpClient {

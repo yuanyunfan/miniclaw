@@ -1,6 +1,6 @@
 # Content Provider Family
 
-> Conclusion: content providers collect external article/content metadata, dedupe it, and format prompt-ready context for cron tasks. The current content provider is `wechat-mp`; it reads WeChat Official Account backend article metadata through a user-controlled web session and must treat the session file as a sensitive credential.
+> Conclusion: content providers collect external article/content metadata, dedupe it, and format prompt-ready context for cron tasks. The current content provider is `wechat-mp`; it reads WeChat Official Account backend article metadata through a user-controlled web session, can title-screen articles, and can fetch bounded public article excerpts for selected high-signal candidates. The session file remains a sensitive credential.
 
 ## Data Flow
 
@@ -11,7 +11,9 @@ flowchart LR
   Accounts --> Normalize[Normalize article metadata]
   Normalize --> Window[Fixed time window filter]
   Window --> Dedupe[Dedupe state]
-  Dedupe --> Payload[Provider payload]
+  Dedupe --> Screen[Title screening]
+  Screen --> Excerpt[Bounded public excerpt fetch]
+  Excerpt --> Payload[Provider payload]
   Payload --> Cron[Cron task prompt]
   Cron --> Discord[Discord delivery]
 ```
@@ -29,8 +31,10 @@ src/providers/wechat-mp/
   client.ts     # mp.weixin.qq.com backend calls
   collector.ts  # account query, window, dedupe orchestration
   config.ts     # ~/.miniclaw/providers/wechat-mp/<name>.yaml
+  content.ts    # bounded public article excerpt fetch/extraction
   format.ts     # prompt/Discord-safe provider text
   parser.ts     # article metadata normalization
+  screening.ts  # title-only reading-priority heuristic
   state.ts      # fakeid cache and sent-article dedupe
 
 scripts/wechat-mp-login.ts
@@ -45,12 +49,14 @@ Purpose:
 - Collect article list metadata from configured WeChat Official Accounts.
 - Filter articles by fixed Beijing-time slots.
 - Dedupe already-sent articles across morning/evening runs.
+- Title-screen articles for likely reader value before fetching bodies.
+- Fetch bounded public article excerpts only for selected high-score candidates.
 - Inject metadata into an LLM task for a Discord-friendly summary.
 
 Non-goals:
 
 - Does not read personal WeChat chat history.
-- Does not fetch or summarize full private article bodies unless a future provider explicitly adds a safe body contract.
+- Does not archive full article bodies or expose complete article text to downstream prompts; body-aware filtering uses bounded excerpts.
 - Does not expose WeChat session token/cookies to Discord, logs, repo docs, or LLM prompts.
 
 ## Config Shape
@@ -78,6 +84,12 @@ window:
 max_pages_per_account: 5
 page_size: 10
 dedupe: true
+read_filter:
+  enabled: true
+  min_title_score: 55
+  max_articles_to_fetch: 6
+  excerpt_chars: 2600
+  fetch_timeout_ms: 15000
 accounts:
   - name: 机器之心
     query: 机器之心
@@ -89,6 +101,13 @@ Fixed window semantics:
 - Beijing 09:00 run: previous day 17:00 through current day 09:00.
 - Beijing 17:00 run: current day 09:00 through current day 17:00.
 - Windows are left-closed, right-open: `start <= publish_time < end`.
+
+Read filter semantics:
+
+- `title_screen` is deterministic and uses title/digest/account only. It boosts AI Engineering, Data Engineering, Agent, RAG, MCP, LLM infra, engineering-practice, data-platform, and tooling signals.
+- Title-bait, recruitment, event promotion, consumer gadget posts, and topics outside the user's AI/Data Engineering focus are penalized before any body fetch.
+- Only articles with `title_screen.score >= read_filter.min_title_score` are candidates for public excerpt fetch, and `max_articles_to_fetch` caps WeChat page requests.
+- `content_fetch.excerpt` is a bounded excerpt for summary/ranking, not an archival copy of the full article. Fetch failures are article-local and should degrade to title/digest-only judgment.
 
 ## Session Refresh
 
@@ -129,7 +148,9 @@ pre_provider: wechat-mp
 pre_provider_config: daily-ai-wechat
 prompt: |
   You are a Chinese AI/data technology editor. The provider JSON above contains article metadata for the current fixed window.
-  Summaries must be based only on title, digest, and metadata. Do not invent article body details.
+  First summarize articles in read_filter.full_read_articles whose content_fetch.status is ok.
+  Use content_fetch.excerpt for deep-read summaries; use title/digest only for skim or skipped articles.
+  Do not invent article body details when body fetch failed or was not attempted.
 ```
 
 Provider commit semantics:
@@ -138,6 +159,8 @@ Provider commit semantics:
 cron task
   -> runPreProvider("wechat-mp")
   -> collect metadata and filter/dedupe
+  -> title-screen articles
+  -> fetch bounded public excerpts for selected candidates
   -> inject JSON into task prompt
   -> execute LLM task
   -> commit dedupe state only after downstream task success
@@ -146,8 +169,9 @@ cron task
 ## Safety Contract
 
 - `auth_path` is equivalent to an Official Account backend web session credential.
-- Provider output should contain article metadata, account names, titles, digests, publish times, and links only.
+- Provider output may contain article metadata, account names, titles, digests, publish times, links, title-screen decisions, and bounded public article excerpts for selected candidates.
 - Provider failures must not mark articles as sent.
+- Article excerpt fetch failures should not fail the whole provider run unless metadata collection itself fails.
 - Frequency control or invalid-session errors should surface as provider failures with redacted diagnostics.
 - Website pages may summarize WeChat ingestion, but implementation facts should use this page as `source_docs`.
 

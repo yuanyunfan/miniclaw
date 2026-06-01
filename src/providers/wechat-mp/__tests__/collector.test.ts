@@ -28,6 +28,13 @@ function config(overrides: Partial<WechatMpProviderConfig> = {}): WechatMpProvid
     max_pages_per_account: 1,
     page_size: 10,
     dedupe: true,
+    read_filter: {
+      enabled: false,
+      min_title_score: 55,
+      max_articles_to_fetch: 5,
+      excerpt_chars: 2600,
+      fetch_timeout_ms: 15_000,
+    },
     accounts: [{ name: "机器之心", query: "机器之心", alias: "almosthuman2014" }],
     ...overrides,
   };
@@ -228,5 +235,58 @@ describe("collectWechatMpArticles", () => {
     expect(collected.result.skipped_duplicates).toBe(1);
     expect(collected.result.accounts[0].articles.map((article) => article.title)).toEqual(["早间边界"]);
     expect(collected.result.window_label).toBe("2026-05-06 10:00 - 2026-05-06 17:00 UTC+8");
+  });
+
+  it("screens titles and fetches body excerpts only for high-score candidates", async () => {
+    const st = state();
+    st.fakeids["机器之心"] = { fakeid: "fake-1", updated_at: "2026-05-06T00:00:00.000Z" };
+
+    const client: WechatMpClient = {
+      searchBiz: async () => { throw new Error("should use cache"); },
+      listPublishedArticles: async () => [
+        {
+          title: "大规模工程支撑场景下的多智能体系统设计：Grab 实践案例",
+          digest: "Grab中央数据团队搭建多智能体AI系统，自动化数据仓库平台重复工程运维工作。",
+          publish_time: RECENT_TS,
+          publish_time_iso: "2026-05-06T13:36:40.000Z",
+          link: "https://mp.weixin.qq.com/s/grab",
+          source: "appmsgpublish",
+        },
+        {
+          title: "AI招聘直播｜创始人亲自带岗，简历直推",
+          publish_time: RECENT_TS,
+          publish_time_iso: "2026-05-06T13:36:40.000Z",
+          link: "https://mp.weixin.qq.com/s/jobs",
+          source: "appmsgpublish",
+        },
+      ],
+      listAppMessages: async () => [],
+    };
+
+    const fetched: string[] = [];
+    const collected = await collectWechatMpArticles(config({
+      read_filter: {
+        enabled: true,
+        min_title_score: 55,
+        max_articles_to_fetch: 5,
+        excerpt_chars: 1200,
+        fetch_timeout_ms: 15_000,
+      },
+    }), client, {
+      now: NOW,
+      state: st,
+      contentFetcher: async (article) => {
+        fetched.push(article.title);
+        return { status: "ok", text_chars: 120, fetched_at: NOW.toISOString(), excerpt: "正文摘录" };
+      },
+    });
+
+    const articles = collected.result.accounts[0].articles;
+    expect(fetched).toEqual(["大规模工程支撑场景下的多智能体系统设计：Grab 实践案例"]);
+    expect(articles[0].title_screen?.decision).toBe("full_read");
+    expect(articles[0].content_fetch?.status).toBe("ok");
+    expect(articles[1].title_screen?.decision).toBe("skip");
+    expect(articles[1].content_fetch?.status).toBe("not_attempted");
+    expect(collected.result.read_filter).toMatchObject({ enabled: true, fetched_articles: 1, failed_fetches: 0 });
   });
 });
