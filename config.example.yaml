@@ -233,7 +233,7 @@ cron:
 startup_watchdog:
   # Runs before Discord clientReady. If bot.login hangs or fails, MiniClaw can
   # still raise a local macOS notification instead of silently relying on PM2.
-  # Discord login failures also send Weixin ops alerts when Weixin direct is enabled.
+  # Discord login failures also send email ops alerts when notifications.email is enabled.
   # Failed login attempts are retried after 10m, 20m, and 40m before falling back
   # to non-Discord IM gateways.
   enabled: true
@@ -266,6 +266,20 @@ connectivity:
   request_timeout_ms: 10000
   general_test_url: "https://www.qq.com"
   state_path: "~/.miniclaw/runtime/connectivity.json"
+
+notifications:
+  email:
+    # Discord connectivity and startup login alerts use SMTP so they do not
+    # depend on Discord or Weixin session freshness.
+    enabled: false
+    smtp_host: "smtp.example.com"
+    smtp_port: 465
+    use_ssl: true
+    username: "alerts@example.com"
+    # Prefer MINICLAW_NOTIFY_EMAIL_PASSWORD or a local-only config for secrets.
+    password: ""
+    from: "alerts@example.com"
+    to: "you@example.com"
 
 anthropic:
   # Keep ANTHROPIC_API_KEY in .env.

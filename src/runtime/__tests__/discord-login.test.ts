@@ -130,7 +130,7 @@ describe("discord login retry", () => {
     expect(result).toMatchObject({ ok: true, attempts: 2 });
   });
 
-  it("builds a redacted Weixin alert with the next retry window", () => {
+  it("builds a redacted ops alert with the next retry window", () => {
     const alert = buildDiscordLoginFailureAlert({
       attempt: 1,
       maxAttempts: 4,

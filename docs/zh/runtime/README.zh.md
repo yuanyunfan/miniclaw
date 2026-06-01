@@ -3,7 +3,7 @@ doc_id: runtime-index
 lang: zh
 translation_of: docs/runtime/README.md
 translation_status: current
-source_sha256: 0da3ca59d6dedda8787d32157b65580f43e04dd207a9c2577b681d18975ba4fb
+source_sha256: c9bb32342ed81d07c708bc3af0e08b3b654bf59e41a41314b5173d0ac845db57
 ---
 # MiniClaw Runtime 文档
 
@@ -245,17 +245,15 @@ src/monitoring/connectivity-core.ts
 src/monitoring/connectivity-monitor.ts
 src/monitoring/recovery-outbox.ts
 src/monitoring/pre-client-ready-watchdog.ts
-src/monitoring/weixin-alert.ts
 src/runtime/discord-login.ts
-src/im/adapters/weixin/transport.ts
 src/notifications/smtp-email.ts
 ```
 
 Operations contract:
 
 - Connectivity check 会分别分类 Discord、network、SMTP fallback 和 startup readiness。
-- Discord/VPN/proxy outage alert 在 general network 仍可达时通过 Weixin 发送；SMTP 保留为诊断 probe 和独立 operations notifier 能力。
-- Discord startup login failure 会在 Weixin direct 启用时发送 Weixin ops alert，然后按 10 分钟、20 分钟、40 分钟 backoff 重试；重试预算耗尽后才 fallback 到非 Discord IM gateway。
+- Discord/VPN/proxy outage alert 在 general network 和已配置邮件服务仍可达时通过 SMTP email 发送。
+- Discord startup login failure 会在 `notifications.email` 启用时发送 email ops alert，然后按 10 分钟、20 分钟、40 分钟 backoff 重试；重试预算耗尽后才 fallback 到非 Discord IM gateway。
 - Recovery outbox 应在 Discord connectivity 恢复后回填失败的 cron/task delivery。
 - Pre-clientReady watchdog failure 应在本机可见，并且输出经过 redaction。
 

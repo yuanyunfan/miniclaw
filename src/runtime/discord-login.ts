@@ -1,5 +1,4 @@
 import { createLogger } from "../lib/log.js";
-import type { OpsAlertMessage } from "../monitoring/weixin-alert.js";
 
 const log = createLogger("discord-login");
 
@@ -33,6 +32,11 @@ export interface DiscordLoginRetryOptions {
   onFailure?: (event: DiscordLoginFailureEvent) => Promise<void> | void;
 }
 
+export interface DiscordLoginFailureAlertMessage {
+  subject: string;
+  text: string;
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -62,7 +66,7 @@ async function destroyAfterFailedLogin(client: DiscordLoginClient): Promise<void
   }
 }
 
-export function buildDiscordLoginFailureAlert(event: DiscordLoginFailureEvent): OpsAlertMessage {
+export function buildDiscordLoginFailureAlert(event: DiscordLoginFailureEvent): DiscordLoginFailureAlertMessage {
   const retryLine = event.final
     ? "重试: 已用尽启动重试预算，进程将只保留非 Discord IM gateway。"
     : `重试: ${formatDelay(event.nextRetryDelayMs ?? 0)} 后进行第 ${event.attempt + 1}/${event.maxAttempts} 次登录。`;

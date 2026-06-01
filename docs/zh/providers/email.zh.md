@@ -3,7 +3,7 @@ doc_id: email-provider-family
 lang: zh
 translation_of: docs/providers/email.md
 translation_status: current
-source_sha256: 2a83d998afdfe29bd78235c474c0dfe4b6b04b4030cc62ae42361102a2edb33e
+source_sha256: 5860937487776e48dd2c1b2715d0ea278ec86d87fc681f4d3805ebb8e398cd85
 ---
 # Email Provider 系列
 
@@ -54,7 +54,7 @@ CMB credit-card email provider:
 SMTP fallback notifier:
 
 - Runtime path: `src/notifications/smtp-email.ts`.
-- Business meaning: 可复用 SMTP system alert sender；connectivity outage alert 当前在 general network 仍可达时通过 Weixin 发送。
+- Business meaning: 可复用 SMTP system alert sender；Discord connectivity 和 startup login alert 会在 general network 与已配置邮件服务仍可达时通过它发送。
 - Boundary: 该 notifier 发送 system alerts，不属于 read-only Email capability。
 
 ## 共享只读 Email 能力

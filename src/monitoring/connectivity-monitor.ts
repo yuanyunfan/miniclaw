@@ -1,10 +1,9 @@
 import type { Client } from "discord.js";
 import { config } from "../config.js";
 import { createLogger } from "../lib/log.js";
-import { verifySmtpReachability } from "../notifications/smtp-email.js";
+import { sendSmtpEmail, verifySmtpReachability } from "../notifications/smtp-email.js";
 import { runConnectivityTick, type ConnectivityAlertMessage, type ProbeResult } from "./connectivity-core.js";
 import { flushRecoveryOutbox } from "./recovery-outbox.js";
-import { sendWeixinOpsAlert } from "./weixin-alert.js";
 
 const log = createLogger("connectivity");
 
@@ -43,8 +42,8 @@ function smtpConfigured(): boolean {
   return Boolean(email.enabled && email.smtpHost);
 }
 
-async function sendWeixinConnectivityAlert(message: ConnectivityAlertMessage): Promise<void> {
-  await sendWeixinOpsAlert(message, { kind: "connectivity_alert" });
+async function sendEmailConnectivityAlert(message: ConnectivityAlertMessage): Promise<void> {
+  await sendSmtpEmail(config.notifications.email, message, config.connectivity.requestTimeoutMs);
 }
 
 export function startConnectivityMonitor(client: Client): ConnectivityMonitorHandle {
@@ -87,7 +86,7 @@ export function startConnectivityMonitor(client: Client): ConnectivityMonitorHan
             });
           },
         },
-        sendAlert: config.im.transports.weixin.enabled ? sendWeixinConnectivityAlert : undefined,
+        sendAlert: config.notifications.email.enabled ? sendEmailConnectivityAlert : undefined,
       });
       if (snapshot.status !== lastStatus) {
         log.info(`connectivity status=${snapshot.status} consecutive=${snapshot.consecutive_failures}`);

@@ -33,7 +33,7 @@ import {
   loginDiscordWithRetry,
   type DiscordLoginFailureEvent,
 } from "./runtime/discord-login.js";
-import { sendWeixinOpsAlert } from "./monitoring/weixin-alert.js";
+import { sendSmtpEmail } from "./notifications/smtp-email.js";
 import {
   getActiveTaskCount,
   interruptActiveTasks,
@@ -88,11 +88,18 @@ function attachDiscordRuntime(client: ReturnType<typeof createBot>): void {
 
 async function notifyDiscordLoginFailure(event: DiscordLoginFailureEvent): Promise<void> {
   await startupWatchdog?.notifyFailure("bot.login failed before Discord clientReady", event.error);
-  if (!config.im.transports.weixin.enabled) return;
+  if (!config.notifications.email.enabled) {
+    log.warn("email Discord login failure alert skipped: notifications.email is disabled");
+    return;
+  }
   try {
-    await sendWeixinOpsAlert(buildDiscordLoginFailureAlert(event), { kind: "discord_login_failure" });
+    await sendSmtpEmail(
+      config.notifications.email,
+      buildDiscordLoginFailureAlert(event),
+      config.connectivity.requestTimeoutMs
+    );
   } catch (err) {
-    log.warn("failed to send Weixin Discord login failure alert:", err);
+    log.warn("failed to send email Discord login failure alert:", err);
   }
 }
 
