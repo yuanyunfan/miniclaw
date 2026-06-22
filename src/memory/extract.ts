@@ -14,6 +14,32 @@ function buildExtractUserPrompt(userMsg: string, assistantReply: string, existin
 
 const EXTRACT_SYSTEM = loadPrompt("memory-extractor");
 
+function codexExtractSchema() {
+  // Codex structured output requires every object property to be listed in
+  // required, even when downstream curation treats a field as optional.
+  return {
+    type: "object",
+    properties: {
+      items: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            type: { type: "string" },
+            name: { type: "string" },
+            content: { type: "string" },
+            confidence: { type: "number" },
+          },
+          required: ["type", "name", "content", "confidence"],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ["items"],
+    additionalProperties: false,
+  } as const;
+}
+
 function applyExtractedItems(items: unknown): void {
   if (!Array.isArray(items)) return;
   const results = curateAndApplyMemoryCandidates(items as RawMemoryCandidate[], {
@@ -49,27 +75,7 @@ export async function extractMemories(
 
     if (config.agentProvider === "codex") {
       // codex outputSchema 顶层必须是 type: "object"，所以包一层 { items: [...] }
-      const schema = {
-        type: "object",
-        properties: {
-          items: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                type: { type: "string" },
-                name: { type: "string" },
-                content: { type: "string" },
-                confidence: { type: "number" },
-              },
-              required: ["type", "name", "content"],
-              additionalProperties: false,
-            },
-          },
-        },
-        required: ["items"],
-        additionalProperties: false,
-      } as const;
+      const schema = codexExtractSchema();
       const codex = getCodexClient();
       const thread = codex.startThread(codexThreadOptions("chat", config.defaultCwd));
       const turn = await thread.run(
@@ -110,4 +116,4 @@ export async function extractMemories(
   }
 }
 
-export const __testables = { EXTRACT_SYSTEM, applyExtractedItems, buildExtractUserPrompt };
+export const __testables = { EXTRACT_SYSTEM, applyExtractedItems, buildExtractUserPrompt, codexExtractSchema };
