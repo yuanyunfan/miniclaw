@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseLastJsonPayload } from "../futu-client.js";
+import { __testables, parseLastJsonPayload } from "../futu-client.js";
 
 describe("parseLastJsonPayload", () => {
   it("ignores Futu SDK stdout logs after the JSON payload", () => {
@@ -14,5 +14,17 @@ describe("parseLastJsonPayload", () => {
 
   it("reports when no JSON payload is present", () => {
     expect(() => parseLastJsonPayload("plain futu log only")).toThrow("did not emit JSON payload");
+  });
+});
+
+describe("looksRateLimited", () => {
+  it("recognizes Futu English high-frequency errors", () => {
+    expect(__testables.looksRateLimited(
+      "Get Watchlist Groups request failed due to high frequency. Maximum 10 times per 30 seconds.",
+    )).toBe(true);
+  });
+
+  it("does not classify generic failures as rate limits", () => {
+    expect(__testables.looksRateLimited("OpenD connection timed out")).toBe(false);
   });
 });

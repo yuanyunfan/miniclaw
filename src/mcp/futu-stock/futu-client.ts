@@ -12,6 +12,7 @@ import type {
 } from "./types.js";
 
 const PYTHON_TIMEOUT_MS = 45_000;
+const FUTU_WATCHLIST_TIMEOUT_MS = 120_000;
 
 const FUTU_QUERY_BRIDGE = String.raw`
 import json
@@ -116,6 +117,7 @@ const FUTU_IMPORT_CHECK = "import importlib.util, json; print(json.dumps({'ok': 
 const FUTU_WATCHLIST_BRIDGE = String.raw`
 import json
 import sys
+import time
 from datetime import datetime, timezone
 
 def emit(payload):
@@ -143,10 +145,19 @@ host = profile.get("opend_host", "127.0.0.1")
 port = int(profile.get("opend_port", 11111))
 selected_groups = [str(g).strip() for g in req.get("groups", []) if str(g).strip()]
 limit = int(req.get("limit", 200))
+group_interval_seconds = float(req.get("group_interval_seconds", 0) or 0)
 
 def is_rate_limited(message):
     text = str(message).lower()
-    return "频率太高" in text or "rate limit" in text or "too many" in text or "too frequent" in text
+    return (
+        "频率太高" in text
+        or "rate limit" in text
+        or "rate-limited" in text
+        or "too many" in text
+        or "too frequent" in text
+        or "high frequency" in text
+        or ("maximum" in text and " per " in text and "second" in text)
+    )
 
 def df_to_records(data):
     if data is None:
@@ -176,18 +187,29 @@ try:
     groups = [g for g in groups if g]
     if selected_groups:
         groups = [g for g in groups if g in selected_groups]
+    if group_interval_seconds <= 0 and len(groups) > 10:
+        group_interval_seconds = 3.2
 
     securities = []
     group_errors = []
+    last_group_request_at = None
     for group in groups:
+        if last_group_request_at is not None and group_interval_seconds > 0:
+            elapsed = time.monotonic() - last_group_request_at
+            if elapsed < group_interval_seconds:
+                time.sleep(group_interval_seconds - elapsed)
+        last_group_request_at = time.monotonic()
         ret, security_data = ctx.get_user_security(group)
         if ret != RET_OK:
             error = str(security_data)
+            rate_limited = is_rate_limited(error)
             group_errors.append({
                 "group_name": group,
                 "error": error,
-                "rate_limited": is_rate_limited(error),
+                "rate_limited": rate_limited,
             })
+            if rate_limited:
+                break
             continue
         for row in df_to_records(security_data):
             code = str(row.get("code") or "").strip()
@@ -319,7 +341,13 @@ function parseWatchlistSecurity(item: Record<string, unknown>): FutuWatchlistSec
 
 function looksRateLimited(message: string): boolean {
   const lower = message.toLowerCase();
-  return lower.includes("频率太高") || lower.includes("rate limit") || lower.includes("too many") || lower.includes("too frequent");
+  return lower.includes("频率太高") ||
+    lower.includes("rate limit") ||
+    lower.includes("rate-limited") ||
+    lower.includes("too many") ||
+    lower.includes("too frequent") ||
+    lower.includes("high frequency") ||
+    (lower.includes("maximum") && lower.includes(" per ") && lower.includes("second"));
 }
 
 function parseWatchlistGroupError(item: Record<string, unknown>): FutuWatchlistGroupError {
@@ -388,8 +416,8 @@ export async function getFutuWatchlistSecuritiesResult(
     groups: options.groups ?? [],
     limit: options.limit ?? 200,
   });
-  const result = await runPython(profile.python_bin, ["-c", FUTU_WATCHLIST_BRIDGE], payload);
-  if (result.timedOut) throw new Error(`futu watchlist bridge timed out after ${PYTHON_TIMEOUT_MS}ms: ${sanitizeError(result.stderr || result.stdout)}`);
+  const result = await runPython(profile.python_bin, ["-c", FUTU_WATCHLIST_BRIDGE], payload, FUTU_WATCHLIST_TIMEOUT_MS);
+  if (result.timedOut) throw new Error(`futu watchlist bridge timed out after ${FUTU_WATCHLIST_TIMEOUT_MS}ms: ${sanitizeError(result.stderr || result.stdout)}`);
   if (result.code !== 0) throw new Error(`futu watchlist bridge exited with ${result.code ?? result.signal}: ${sanitizeError(result.stderr || result.stdout)}`);
   const parsed = parseLastJsonPayload<{
     ok?: boolean;
@@ -416,3 +444,7 @@ export async function getFutuWatchlistSecuritiesResult(
     rate_limited: Boolean(parsed.rate_limited) || groupErrors.some((item) => item.rate_limited),
   };
 }
+
+export const __testables = {
+  looksRateLimited,
+};

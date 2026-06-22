@@ -24,7 +24,7 @@ describe("HttpEastmoneyMyfavorClient", () => {
       const url = String(input);
       seen.push(url);
       if (url.includes("/v4/webouter/ggdefstkindexinfos")) {
-        return new Response(`jQuery1({"state":true,"data":{"ginfolist":[{"gid":"1","gname":"美股"},{"gid":"2","gname":"港股"}]}})`);
+        return new Response(`jQuery1({"state":0,"data":{"ginfolist":[{"gid":"1","gname":"美股"},{"gid":"2","gname":"港股"}]}})`);
       }
       if (url.includes("/v4/webouter/gstkinfos") && url.includes("g=1")) {
         return new Response(`jQuery2({"state":true,"data":{"stkinfolist":[{"security":"105$AAPL","sname":"Apple"}]}})`);

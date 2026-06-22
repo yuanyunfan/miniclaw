@@ -47,7 +47,7 @@ function parseJsonp(text: string): unknown {
 function assertState(payload: unknown, context: string): Record<string, unknown> {
   if (!isRecord(payload)) throw new Error(`${context}: eastmoney-myfavor returned invalid payload`);
   const state = payload.state;
-  if (state !== true && state !== 1 && state !== "true" && state !== "1") {
+  if (state !== true && state !== 1 && state !== 0 && state !== "true" && state !== "1" && state !== "0") {
     throw new Error(`${context}: eastmoney-myfavor returned state=${String(state)}${payload.message ? ` message=${String(payload.message)}` : ""}`);
   }
   return payload;

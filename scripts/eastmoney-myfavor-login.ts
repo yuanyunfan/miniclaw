@@ -48,6 +48,17 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function envFlag(name: string): boolean {
+  const value = process.env[name]?.trim().toLowerCase();
+  return value === "1" || value === "true" || value === "yes" || value === "on";
+}
+
+function shouldForceDirectBrowserProxy(): boolean {
+  return envFlag("MINICLAW_BROWSER_FORCE_DIRECT") ||
+    envFlag("MINICLAW_EASTMONEY_BROWSER_FORCE_DIRECT") ||
+    envFlag("MINICLAW_EASTMONEY_MYFAVOR_BROWSER_FORCE_DIRECT");
+}
+
 function buildSession(profileName: string, cookies: EastmoneyMyfavorCookie[]): EastmoneyMyfavorSession {
   const now = new Date().toISOString();
   return {
@@ -79,6 +90,9 @@ const launchOptions: Record<string, unknown> = {
 };
 if (process.env.MINICLAW_EASTMONEY_MYFAVOR_BROWSER_CHANNEL) {
   launchOptions.channel = process.env.MINICLAW_EASTMONEY_MYFAVOR_BROWSER_CHANNEL;
+}
+if (shouldForceDirectBrowserProxy()) {
+  launchOptions.args = ["--proxy-server=direct://", "--proxy-bypass-list=*"];
 }
 
 const context = await chromium.launchPersistentContext(profile.browser_profile_dir, launchOptions);

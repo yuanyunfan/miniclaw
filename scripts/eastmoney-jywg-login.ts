@@ -55,6 +55,17 @@ function ensurePrivateDir(path: string): void {
   if (process.platform !== "win32") chmodSync(path, 0o700);
 }
 
+function envFlag(name: string): boolean {
+  const value = process.env[name]?.trim().toLowerCase();
+  return value === "1" || value === "true" || value === "yes" || value === "on";
+}
+
+function shouldForceDirectBrowserProxy(): boolean {
+  return envFlag("MINICLAW_BROWSER_FORCE_DIRECT") ||
+    envFlag("MINICLAW_EASTMONEY_BROWSER_FORCE_DIRECT") ||
+    envFlag("MINICLAW_EASTMONEY_JYWG_BROWSER_FORCE_DIRECT");
+}
+
 function buildSession(profileName: string, cookies: EastmoneyJywgCookie[]): EastmoneyJywgSession {
   const now = new Date().toISOString();
   return {
@@ -88,6 +99,9 @@ const launchOptions: Record<string, unknown> = {
 };
 if (process.env.MINICLAW_EASTMONEY_JYWG_BROWSER_CHANNEL) {
   launchOptions.channel = process.env.MINICLAW_EASTMONEY_JYWG_BROWSER_CHANNEL;
+}
+if (shouldForceDirectBrowserProxy()) {
+  launchOptions.args = ["--proxy-server=direct://", "--proxy-bypass-list=*"];
 }
 
 const context = await chromium.launchPersistentContext(browserProfileDir, launchOptions);
