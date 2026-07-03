@@ -4,6 +4,7 @@ import { getDb } from "./connection.js";
 export const RECOVERY_OUTBOX_KINDS = [
   "cron_failure_alert",
   "task_result_delivery",
+  "pre_provider_attachment_delivery",
 ] as const;
 
 export const RECOVERY_OUTBOX_STATUSES = [

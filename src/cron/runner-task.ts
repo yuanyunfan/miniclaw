@@ -21,6 +21,7 @@ import type { MarketContextProviderPayload } from "../stock/data/market-context-
 import type { MarketIntelPayload } from "../stock/data/market-intel-types.js";
 import { DRAINING_MESSAGE, isDraining } from "../runtime/shutdown.js";
 import { DailyMessageGroupReporter } from "./daily-message-group-reporter.js";
+import { enqueuePreProviderAttachmentDelivery } from "../monitoring/recovery-outbox.js";
 import {
   buildCronOutputContractBlock,
   resolveCronOutputContract,
@@ -303,6 +304,8 @@ async function fetchSendableChannel(client: Client, channelId: string): Promise<
 async function sendPreProviderAttachments(
   channel: SendableChannels,
   jobName: string,
+  channelId: string,
+  taskId: string,
   attachments: PreProviderAttachment[],
 ): Promise<void> {
   if (!attachments.length) return;
@@ -321,6 +324,17 @@ async function sendPreProviderAttachments(
     });
   } catch (err) {
     log.warn(`${jobName} failed to send pre_provider attachment(s):`, err);
+    try {
+      enqueuePreProviderAttachmentDelivery({
+        channelId,
+        taskId,
+        jobName,
+        attachments: existing,
+        deliveryError: err,
+      });
+    } catch (outboxErr) {
+      log.warn(`${jobName} failed to enqueue pre_provider attachment recovery:`, outboxErr);
+    }
   }
 }
 
@@ -674,7 +688,7 @@ export async function runTask(job: CronJobTask, client: Client, context: CronJob
       ? stripMachineJsonForDisplay(result.result)
       : result.result,
   );
-  await sendPreProviderAttachments(channel, job.name, preProviderAttachments);
+  await sendPreProviderAttachments(channel, job.name, job.channel, taskId, preProviderAttachments);
   for (const commit of preContextProviderCommits) {
     await commit();
   }

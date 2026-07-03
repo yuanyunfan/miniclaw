@@ -8,6 +8,7 @@ import { __clearPromptCache } from "../../agent/prompts.js";
 
 const mocks = vi.hoisted(() => ({
   createTask: vi.fn(),
+  enqueuePreProviderAttachmentDelivery: vi.fn(),
   executeTask: vi.fn(),
   getActiveTaskCount: vi.fn(() => 0),
   runPreProvider: vi.fn(),
@@ -22,6 +23,10 @@ let promptTmp: string | undefined;
 
 vi.mock("../../store/db.js", () => ({
   createTask: mocks.createTask,
+}));
+
+vi.mock("../../monitoring/recovery-outbox.js", () => ({
+  enqueuePreProviderAttachmentDelivery: mocks.enqueuePreProviderAttachmentDelivery,
 }));
 
 vi.mock("../../store/market-forecasts.js", () => ({
@@ -81,6 +86,7 @@ beforeEach(() => {
   process.env.MINICLAW_PROMPTS_DIR = promptTmp;
   __clearPromptCache();
   mocks.createTask.mockReset();
+  mocks.enqueuePreProviderAttachmentDelivery.mockReset();
   mocks.executeTask.mockReset();
   mocks.getActiveTaskCount.mockReset();
   mocks.getActiveTaskCount.mockReturnValue(0);
@@ -685,6 +691,59 @@ describe("cron task runner", () => {
     expect(send).toHaveBeenCalledWith(expect.objectContaining({
       content: expect.stringContaining("附图"),
       files: expect.arrayContaining([expect.anything()]),
+    }));
+    expect(mocks.enqueuePreProviderAttachmentDelivery).not.toHaveBeenCalled();
+  });
+
+  it("queues pre_provider attachments for recovery when upload fails", async () => {
+    const { runTask } = await import("../runner-task.js");
+    const tmp = mkdtempSync(join(tmpdir(), "miniclaw-cron-task-attachment-failure-"));
+    const chartPath = join(tmp, "chart.png");
+    writeFileSync(chartPath, "png");
+    const uploadError = new DOMException("This operation was aborted", "AbortError");
+    const send = vi.fn(async () => {
+      throw uploadError;
+    });
+    mocks.runPreProvider.mockResolvedValue({
+      text: "{\"asset_summary\":{}}",
+      attachments: [{
+        path: chartPath,
+        name: "asset-pie.png",
+        description: "asset pie",
+      }],
+    });
+    mocks.executeTask.mockResolvedValue({
+      success: true,
+      sessionId: "codex:thread-1",
+      costUsd: 0,
+      durationMs: 1000,
+      turns: 1,
+      result: "ok",
+    });
+
+    try {
+      await expect(runTask({
+        ...taskJob(),
+        pre_provider: "stock-portfolio",
+        pre_provider_config: "daily-stock-summary",
+      }, client(send))).resolves.toMatchObject({
+        status: "success",
+        providerName: "stock-portfolio",
+      });
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+
+    expect(mocks.enqueuePreProviderAttachmentDelivery).toHaveBeenCalledWith(expect.objectContaining({
+      channelId: "1000000000000000000",
+      taskId: expect.any(String),
+      jobName: "daily-ai-news",
+      attachments: [{
+        path: chartPath,
+        name: "asset-pie.png",
+        description: "asset pie",
+      }],
+      deliveryError: uploadError,
     }));
   });
 });

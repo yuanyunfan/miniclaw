@@ -1,4 +1,5 @@
-import type { Client } from "discord.js";
+import { existsSync } from "node:fs";
+import { AttachmentBuilder, type Client, type SendableChannels } from "discord.js";
 import type { RuntimeConfig } from "../config.js";
 import { buildCronRetryActionRows, type CronRetryButtonDetails } from "../cron/failure-notifier.js";
 import { loadCronJobs } from "../cron/loader.js";
@@ -51,6 +52,20 @@ interface TaskResultDeliveryPayload {
   delivery_error?: string | null;
 }
 
+interface PreProviderAttachmentDeliveryAttachment {
+  path: string;
+  name?: string | null;
+  description?: string | null;
+}
+
+interface PreProviderAttachmentDeliveryPayload {
+  task_id: string;
+  job_name: string;
+  attachments: PreProviderAttachmentDeliveryAttachment[];
+  created_at: string;
+  delivery_error?: string | null;
+}
+
 export interface EnqueueCronFailureRecoveryInput {
   channelId: string;
   cronRunId: string;
@@ -82,9 +97,18 @@ export interface EnqueueTaskResultDeliveryInput {
   deliveryError?: string | null;
 }
 
+export interface EnqueuePreProviderAttachmentDeliveryInput {
+  channelId: string;
+  taskId: string;
+  jobName: string;
+  attachments: PreProviderAttachmentDeliveryAttachment[];
+  deliveryError?: unknown;
+}
+
 export interface FlushRecoveryOutboxResult {
   cronAlertsDelivered: number;
   taskDeliveriesDelivered: number;
+  attachmentDeliveriesDelivered: number;
   failedAttempts: number;
   backfilledCronAlerts: number;
 }
@@ -209,6 +233,38 @@ export function enqueueTaskResultDelivery(input: EnqueueTaskResultDeliveryInput)
     jobName: input.jobName,
     payload,
     lastError: input.deliveryError,
+  });
+}
+
+export function enqueuePreProviderAttachmentDelivery(input: EnqueuePreProviderAttachmentDeliveryInput): RecoveryOutboxRow | undefined {
+  const attachments = input.attachments
+    .flatMap((attachment) => {
+      const path = cleanString(attachment.path);
+      if (!path) return [];
+      const item: PreProviderAttachmentDeliveryAttachment = { path };
+      const name = cleanString(attachment.name);
+      const description = cleanString(attachment.description);
+      if (name) item.name = name;
+      if (description) item.description = description;
+      return [item];
+    })
+    .slice(0, 10);
+  if (!input.channelId || !input.taskId || !attachments.length) return undefined;
+  const deliveryError = input.deliveryError === undefined ? undefined : sanitizeError(input.deliveryError);
+  const payload: PreProviderAttachmentDeliveryPayload = {
+    task_id: input.taskId,
+    job_name: input.jobName,
+    attachments,
+    created_at: new Date().toISOString(),
+    delivery_error: deliveryError,
+  };
+  return enqueueRecoveryOutbox({
+    kind: "pre_provider_attachment_delivery",
+    channelId: input.channelId,
+    taskId: input.taskId,
+    jobName: input.jobName,
+    payload,
+    lastError: deliveryError,
   });
 }
 
@@ -427,6 +483,57 @@ async function flushTaskDeliveries(registry: IMTransportRegistry, rows: Recovery
   return { delivered, failed };
 }
 
+async function fetchSendableChannel(client: Client, channelId: string): Promise<SendableChannels> {
+  const channel = await client.channels.fetch(channelId);
+  if (!channel || !("isSendable" in channel) || !channel.isSendable()) {
+    throw new Error(`Discord channel ${channelId} not sendable or not found`);
+  }
+  return channel as SendableChannels;
+}
+
+async function flushPreProviderAttachmentDeliveries(client: Client, rows: RecoveryOutboxRow[]): Promise<{ delivered: number; failed: number }> {
+  let delivered = 0;
+  let failed = 0;
+  for (const row of rows) {
+    const payload = parseJsonObject<PreProviderAttachmentDeliveryPayload>(row);
+    if (!payload?.task_id || !payload.job_name || !payload.attachments?.length) {
+      markRecoveryOutboxAttemptFailed(row.id, "invalid pre_provider attachment delivery payload");
+      failed++;
+      continue;
+    }
+    const existing = payload.attachments.filter((attachment) => existsSync(attachment.path)).slice(0, 10);
+    if (!existing.length) {
+      markRecoveryOutboxAttemptFailed(row.id, "pre_provider attachment files no longer exist");
+      failed++;
+      continue;
+    }
+    try {
+      const channel = await fetchSendableChannel(client, row.channel_id);
+      const missing = payload.attachments.length - existing.length;
+      const content = [
+        `📬 MiniClaw 补发 cron \`${payload.job_name}\` 附图`,
+        `Task: ${shortId(payload.task_id)}`,
+        `首次投递失败时间: ${payload.created_at}`,
+        ...(missing > 0 ? [`跳过缺失文件: ${missing}`] : []),
+      ].join("\n").slice(0, 2000);
+      const message = await channel.send({
+        content,
+        files: existing.map((attachment) => new AttachmentBuilder(attachment.path, {
+          name: attachment.name ?? undefined,
+          description: attachment.description ?? undefined,
+        })),
+      });
+      const messageId = "id" in message ? String(message.id) : undefined;
+      markRecoveryOutboxDelivered(row.id, messageId);
+      delivered++;
+    } catch (err) {
+      markRecoveryOutboxAttemptFailed(row.id, sanitizeError(err));
+      failed++;
+    }
+  }
+  return { delivered, failed };
+}
+
 export async function flushTaskResultDeliveriesForTarget(input: {
   target: IMDeliveryTarget;
   registry: IMTransportRegistry;
@@ -460,21 +567,24 @@ export async function flushRecoveryOutbox(
   const backfilled = backfillCronMissedAlertsFromOutage(options.snapshot, limit);
   const taskRows = listRecoveryOutbox({ kind: "task_result_delivery", status: "pending", limit })
     .filter(shouldFlushTaskDeliveryGlobally);
+  const attachmentRows = listRecoveryOutbox({ kind: "pre_provider_attachment_delivery", status: "pending", limit });
   const cronRows = listRecoveryOutbox({ kind: "cron_failure_alert", status: "pending", limit });
   const registry = options.registry ?? createIMTransportRegistry(client, options.imConfig);
   const transport = registry.get("discord") ?? createDiscordTransport(client);
 
   const task = await flushTaskDeliveries(registry, taskRows);
+  const attachment = await flushPreProviderAttachmentDeliveries(client, attachmentRows);
   const cron = await flushCronFailureAlerts(transport, cronRows);
   const result = {
     cronAlertsDelivered: cron.delivered,
     taskDeliveriesDelivered: task.delivered,
-    failedAttempts: cron.failed + task.failed,
+    attachmentDeliveriesDelivered: attachment.delivered,
+    failedAttempts: cron.failed + task.failed + attachment.failed,
     backfilledCronAlerts: backfilled,
   };
-  if (result.cronAlertsDelivered || result.taskDeliveriesDelivered || result.failedAttempts || result.backfilledCronAlerts) {
+  if (result.cronAlertsDelivered || result.taskDeliveriesDelivered || result.attachmentDeliveriesDelivered || result.failedAttempts || result.backfilledCronAlerts) {
     log.info(
-      `recovery outbox flush: cron=${result.cronAlertsDelivered} task=${result.taskDeliveriesDelivered} ` +
+      `recovery outbox flush: cron=${result.cronAlertsDelivered} task=${result.taskDeliveriesDelivered} attachment=${result.attachmentDeliveriesDelivered} ` +
       `failed=${result.failedAttempts} backfilled=${result.backfilledCronAlerts}`
     );
   }
