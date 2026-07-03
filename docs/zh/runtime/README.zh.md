@@ -3,7 +3,7 @@ doc_id: runtime-index
 lang: zh
 translation_of: docs/runtime/README.md
 translation_status: current
-source_sha256: c9bb32342ed81d07c708bc3af0e08b3b654bf59e41a41314b5173d0ac845db57
+source_sha256: efd46ac4a208115aac7f8870464e93cd862d21a825522380f9c85a0d6486f619
 ---
 # MiniClaw Runtime 文档
 
@@ -196,6 +196,7 @@ Runtime contract:
 - Provider commit callback 只能在 downstream task 成功后运行。
 - Provider failure 默认 fail closed，除非 provider config 明确允许 partial data。
 - Cron loader 会忽略 `_profiles/` 和 `_fragments/`，不把它们当作可运行 job；随后把 `workflow.profile`、`workflow.main_provider`、`workflow.context_providers`、`workflow.preflight` 和 `rules.use` 展开成普通 job shape，再进入校验。
+- Cron `script` 和 task `pre_script` 子进程会继承 MiniClaw runtime metadata 以及规范化后的 PATH。`MINICLAW_CRON_PATH_PREPEND` 和 `MINICLAW_CRON_PYTHON_BIN` 优先级最高；存在 active `CONDA_PREFIX` 时，会把 `CONDA_PREFIX/bin` 放到继承 PATH 前面，让 `#!/usr/bin/env python3` helper 使用预期的本地 Python 环境。
 - `type=task` job 可以在 cron YAML 内配置 inline `output_template` 或 `output_contract.template` 文本，在 provider/script context 之后、job prompt 之前注入 prompt-level output contract。
 - 配置 output contract 时，MiniClaw 会先注入共享 chat/IM output surface policy；cron YAML 只应描述报告结构、机器块、privacy/link/length 例外和其他 job-specific 格式。
 - Output contract 是给 LLM 的格式指令，不是 deterministic renderer；v1 不会在 task 执行后重写最终消息。
@@ -205,6 +206,22 @@ Runtime contract:
 - 手动 `pnpm cron:test` 会绕过 `cron.active_window`，因为它是显式 operator action。
 - Cron run record 是 Auto Doctor 和 recovery workflow 的运维证据。
 - Script job 和 task job 共享 delivery semantics，但不共享 prompt/provider handling。
+
+## Agent Runtime 执行时
+
+Owner code paths:
+
+```text
+src/agent/**
+src/runtime/agent-runtime.ts
+src/config/domains/agent.ts
+```
+
+Runtime contract:
+
+- Claude 和 Codex 是 shared task runner boundary 后面的 runtime implementation；routing 负责决定什么时候把任务交给 agent runtime。
+- Codex task 使用 Codex TypeScript SDK，但 MiniClaw 可以通过 `codex.path` 或 `MINICLAW_CODEX_PATH` 提供 CLI binary override。未设置时，runtime 会先偏向 `/opt/homebrew/bin/codex` 这类系统 Codex CLI，再 fallback 到 SDK package auto-discovery。
+- Codex model、reasoning、sandbox、approval、web search、network access 和 CLI path 都是 MiniClaw runtime setting。model 或 policy 字段设为 `inherit` 时，对应字段交给 Codex CLI 从本地 `~/.codex/config.toml` 读取。
 
 ## Memory 与 Prompt 上下文
 

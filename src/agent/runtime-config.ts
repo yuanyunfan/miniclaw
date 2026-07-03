@@ -36,6 +36,7 @@ export interface AgentRuntimeSummary {
   };
   defaultCwd: string;
   codex: {
+    cliPath: string;
     model: string;
     reasoningEffort: string;
     taskSandbox: string;
@@ -174,6 +175,7 @@ export function getAgentRuntimeSummary(): AgentRuntimeSummary {
     },
     defaultCwd: config.defaultCwd,
     codex: {
+      cliPath: inherited(config.codex.path),
       model: inherited(config.codex.model),
       reasoningEffort: inherited(config.codex.reasoningEffort),
       taskSandbox: inherited(config.codex.taskSandbox),
@@ -212,6 +214,7 @@ export function formatAgentRuntimeSummary(summary = getAgentRuntimeSummary()): s
     `Default CWD: ${code(summary.defaultCwd)}`,
     "",
     "**Codex**",
+    `cli=${code(summary.codex.cliPath)}`,
     `model=${code(summary.codex.model)} sandbox(task/chat)=${code(`${summary.codex.taskSandbox}/${summary.codex.chatSandbox}`)}`,
     `approval=${code(summary.codex.approvalPolicy)} reasoning=${code(summary.codex.reasoningEffort)} web=${code(summary.codex.webSearchMode)} network=${code(summary.codex.networkAccess)}`,
     `MCP: ${joinNames(summary.codex.mcpServers)}`,

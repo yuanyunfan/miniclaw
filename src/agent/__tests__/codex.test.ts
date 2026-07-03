@@ -34,6 +34,7 @@ describe("codexThreadOptions", () => {
     delete process.env.MINICLAW_CODEX_APPROVAL_POLICY;
     delete process.env.MINICLAW_CODEX_WEB_SEARCH;
     delete process.env.MINICLAW_CODEX_NETWORK_ACCESS;
+    delete process.env.MINICLAW_CODEX_PATH;
     vi.resetModules();
   });
 
@@ -80,6 +81,16 @@ describe("codexThreadOptions", () => {
       networkAccessEnabled: true,
       workingDirectory: "/tmp/project",
     });
+  });
+
+  it("constructs the Codex client with an explicit CLI path override", async () => {
+    const fakeCodex = join(tmpDir, "codex");
+    writeFileSync(fakeCodex, "#!/usr/bin/env bash\nexit 0\n");
+    process.env.MINICLAW_CODEX_PATH = fakeCodex;
+
+    const { getCodexClient } = await import("../codex.js");
+
+    expect(() => getCodexClient()).not.toThrow();
   });
 
   it("applies managed read-only role policy over default task sandbox", async () => {

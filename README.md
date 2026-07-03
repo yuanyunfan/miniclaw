@@ -164,6 +164,7 @@ MINICLAW_AGENT_PROVIDER=codex
 
 ```bash
 MINICLAW_AGENT_PROVIDER=codex
+MINICLAW_CODEX_PATH=/opt/homebrew/bin/codex
 MINICLAW_CODEX_MODEL=inherit
 MINICLAW_CODEX_REASONING_EFFORT=inherit
 MINICLAW_CODEX_TASK_SANDBOX=inherit
@@ -178,6 +179,7 @@ MINICLAW_CODEX_NETWORK_ACCESS=inherit
 agent:
   provider: codex
 codex:
+  path: /opt/homebrew/bin/codex
   model: inherit
   reasoning_effort: inherit
   sandbox:

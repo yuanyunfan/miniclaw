@@ -64,6 +64,7 @@ describe("formatAgentRuntimeSummary", () => {
       },
       defaultCwd: "/home/miniclaw/ProjectRepo",
       codex: {
+        cliPath: "/opt/homebrew/bin/codex",
         model: "inherit",
         reasoningEffort: "inherit",
         taskSandbox: "inherit",

@@ -28,6 +28,7 @@ export function buildAgentRuntimeConfig(reader: ConfigReader) {
     "claude-opus-4-7"
   );
   const codexModel = reader.stringOrInherit(["codex", "model"], "MINICLAW_CODEX_MODEL", "gpt-5.5");
+  const codexPath = reader.optionalString(["codex", "path"], "MINICLAW_CODEX_PATH");
   const defaultAgentRuntime = reader.oneOf<AgentProvider>(
     [["runtime", "default_agent"], ["runtime", "defaultAgent"]],
     "MINICLAW_RUNTIME_DEFAULT_AGENT",
@@ -74,6 +75,7 @@ export function buildAgentRuntimeConfig(reader: ConfigReader) {
       disableHooks: reader.boolValue(["claude", "disable_hooks"], "MINICLAW_CLAUDE_DISABLE_HOOKS", true),
     },
     codex: {
+      path: codexPath ? resolveHome(codexPath) : undefined,
       model: codexModel,
       reasoningEffort: reader.oneOfOrInherit<CodexReasoningEffort>(
         ["codex", "reasoning_effort"],

@@ -26,6 +26,7 @@ import {
   resolveCronOutputContract,
   validateCronTaskOutput,
 } from "./output-contract.js";
+import { buildCronScriptEnv } from "./script-env.js";
 
 const log = createLogger("cron");
 import { homedir } from "node:os";
@@ -243,12 +244,11 @@ async function runPreScript(
     throw new Error(`pre_script not executable: ${scriptPath} (chmod +x)`);
   }
 
-  const env = {
-    ...process.env,
+  const env = buildCronScriptEnv({
     MINICLAW_CRON_NAME: jobName,
     MINICLAW_CRON_RUN_AT: runAt.toISOString(),
     MINICLAW_CHANNEL_ID: channelId,
-  };
+  });
 
   return await new Promise<string>((resolveOk, rejectErr) => {
     const child = spawn(scriptPath, args, { cwd: SCRIPTS_DIR, env, stdio: ["ignore", "pipe", "pipe"] });

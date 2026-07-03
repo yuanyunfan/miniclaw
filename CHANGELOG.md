@@ -63,6 +63,8 @@
 - App Trending 默认频道从 `daily-app-trending` 改为 `weekly-app-trending`，频道初始化脚本会把旧频道原地重命名并清理旧 channel-map key。
 
 ### Fixed
+- 修复 Codex SDK native binary 被 macOS 移除后 cron task runtime 直接 `ENOENT` 的问题：MiniClaw 现在支持 `codex.path` / `MINICLAW_CODEX_PATH`，并默认优先复用系统 Codex CLI。
+- 修复 cron `script` / `pre_script` 子进程继承 PM2 PATH 时可能优先命中 Homebrew Python 的问题；现在会把 `CONDA_PREFIX/bin` 或显式 `MINICLAW_CRON_*` path 放到前面，避免 Python helper 缺少 PyYAML 等 conda 依赖。
 - 修复 `hookd:install -- --provider claude --execute` 覆盖 manifest provider 列表的问题，支持 Claude Code 和 Codex hooks 分开安装时保留双 provider 状态。
 - 放宽 Vitest 全局 timeout 到 10s，降低全量并行测试在本机负载较高时出现非断言失败的 flaky timeout。
 - 升级 `tsx` 到 `4.22.3` 并更新 `better-sqlite3` 到 Node 26 兼容版本，避免 cron script 通过 `tsx` 启动时向 Discord 输出 `DEP0205 module.register()` deprecation warning，并保持 SQLite 测试可运行。

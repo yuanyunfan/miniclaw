@@ -5,6 +5,8 @@ import {
   type ThreadItem,
   type UserInput,
 } from "@openai/codex-sdk";
+import { existsSync, statSync } from "node:fs";
+import { delimiter, join } from "node:path";
 import { config } from "../config.js";
 import type { AgentTaskManagedContext, AgentTaskRuntimeOverride } from "../runtime/agent-runtime.js";
 
@@ -19,8 +21,39 @@ export function resetCodexClient(): void {
   client = null;
 }
 
+function isExecutableFile(path: string): boolean {
+  try {
+    const stat = statSync(path);
+    return stat.isFile() && (process.platform === "win32" || (stat.mode & 0o111) !== 0);
+  } catch {
+    return false;
+  }
+}
+
+function findCodexOnPath(): string | undefined {
+  const binaryName = process.platform === "win32" ? "codex.exe" : "codex";
+  for (const dir of (process.env.PATH ?? "").split(delimiter).filter(Boolean)) {
+    if (dir.includes("node_modules")) continue;
+    const candidate = join(dir, binaryName);
+    if (isExecutableFile(candidate)) return candidate;
+  }
+  return undefined;
+}
+
+function resolveCodexPathOverride(): string | undefined {
+  if (config.codex.path) return config.codex.path;
+  const candidates = [
+    "/opt/homebrew/bin/codex",
+    "/usr/local/bin/codex",
+    findCodexOnPath(),
+  ].filter((path): path is string => Boolean(path));
+  return candidates.find((path) => existsSync(path) && isExecutableFile(path));
+}
+
 function baseCodexOptions(): CodexOptions {
   const opts: CodexOptions = {};
+  const codexPathOverride = resolveCodexPathOverride();
+  if (codexPathOverride) opts.codexPathOverride = codexPathOverride;
   if (config.openaiApiKey) opts.apiKey = config.openaiApiKey;
   if (config.openaiBaseUrl) opts.baseUrl = config.openaiBaseUrl;
   return opts;

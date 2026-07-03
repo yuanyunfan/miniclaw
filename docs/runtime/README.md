@@ -189,6 +189,7 @@ Runtime contract:
 - Provider commit callbacks must run only after the downstream task succeeds.
 - Provider failures should fail closed unless the provider config explicitly allows partial data.
 - Cron loader ignores `_profiles/` and `_fragments/` as runnable jobs, then expands `workflow.profile`, `workflow.main_provider`, `workflow.context_providers`, `workflow.preflight`, and `rules.use` into the ordinary job shape before validation.
+- Cron `script` and task `pre_script` subprocesses inherit MiniClaw runtime metadata plus a normalized PATH. `MINICLAW_CRON_PATH_PREPEND` and `MINICLAW_CRON_PYTHON_BIN` take precedence, and an active `CONDA_PREFIX/bin` is prepended before the inherited process PATH so `#!/usr/bin/env python3` helpers use the intended local Python environment.
 - `type=task` jobs may set inline `output_template` or `output_contract.template` text in the cron YAML to inject a prompt-level output contract after provider/script context and before the job prompt.
 - When an output contract is configured, MiniClaw prepends a shared chat/IM output surface policy before the job-specific template; cron YAML should only describe report structure, machine blocks, privacy/link/length exceptions, and other job-specific formatting.
 - Output contracts are formatting instructions for the LLM, not deterministic renderers; v1 does not rewrite the final message after task execution.
@@ -198,6 +199,22 @@ Runtime contract:
 - Manual `pnpm cron:test` bypasses `cron.active_window` because it is an explicit operator action.
 - Cron run records are operational evidence for Auto Doctor and recovery workflows.
 - Script jobs and task jobs share delivery semantics but not prompt/provider handling.
+
+## Agent Runtime
+
+Owner code paths:
+
+```text
+src/agent/**
+src/runtime/agent-runtime.ts
+src/config/domains/agent.ts
+```
+
+Runtime contract:
+
+- Claude and Codex are runtime implementations behind the shared task runner boundary; routing decides when a task enters an agent runtime.
+- Codex tasks use the Codex TypeScript SDK, but MiniClaw may provide a CLI binary override through `codex.path` or `MINICLAW_CODEX_PATH`. When unset, the runtime prefers a system Codex CLI such as `/opt/homebrew/bin/codex` before falling back to SDK package auto-discovery.
+- Codex model, reasoning, sandbox, approval, web search, network access, and CLI path are MiniClaw runtime settings. Setting model or policy fields to `inherit` lets the Codex CLI load local `~/.codex/config.toml` values for those fields.
 
 ## Memory And Prompt Context
 

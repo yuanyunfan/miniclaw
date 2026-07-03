@@ -428,6 +428,7 @@ notifications:
     expect(config.defaultBudgetUsd).toBeUndefined();
     expect(config.defaultMaxTurns).toBeUndefined();
     expect(config.codex.model).toBeUndefined();
+    expect(config.codex.path).toBeUndefined();
     expect(config.codex.reasoningEffort).toBeUndefined();
     expect(config.codex.taskSandbox).toBeUndefined();
     expect(config.codex.chatSandbox).toBe("read-only");
@@ -925,6 +926,7 @@ storage:
     process.env.MINICLAW_MODEL_DEFAULT_CLIENT = "raven";
     process.env.MINICLAW_ALLOWED_USER_ID = "user-env";
     process.env.MINICLAW_CODEX_MODEL = "env-model";
+    process.env.MINICLAW_CODEX_PATH = join(tmpDir, "codex-bin");
     process.env.MINICLAW_MCP_ALLOWLIST = "*";
     process.env.MINICLAW_TASK_CHANNELS = "";
     process.env.MINICLAW_SHUTDOWN_DRAIN_TIMEOUT_MS = "600000";
@@ -937,6 +939,7 @@ storage:
     expect(config.smartRouter.llmClassifier.provider).toBe("raven");
     expect(config.allowedUserId).toBe("user-env");
     expect(config.codex.model).toBe("env-model");
+    expect(config.codex.path).toBe(join(tmpDir, "codex-bin"));
     expect(config.mcp.allowlist).toEqual(["*"]);
     expect(config.taskChannelIds).toEqual(["task-yaml"]);
     expect(config.codex.timeoutMs).toBe(1800000);

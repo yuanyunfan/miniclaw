@@ -295,6 +295,8 @@ claude:
   disable_hooks: true
 
 codex:
+  # Optional: point the SDK at an already installed Codex CLI binary.
+  # path: "/opt/homebrew/bin/codex"
   # Set any field to inherit to let Codex CLI use ~/.codex/config.toml.
   model: inherit
   reasoning_effort: inherit

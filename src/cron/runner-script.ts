@@ -8,6 +8,7 @@ import { AttachmentBuilder } from "discord.js";
 import type { CronJobRunContext, CronJobRunOutcome, CronJobScript } from "./types.js";
 import { sendChunkedTextWithDeferredLinkPreviews } from "../discord/text.js";
 import { createLogger } from "../lib/log.js";
+import { buildCronScriptEnv } from "./script-env.js";
 
 const log = createLogger("cron");
 
@@ -167,12 +168,11 @@ export async function runScript(job: CronJobScript, client: Client, context: Cro
     throw new CronScriptRunError(`script not executable: ${job.script}`);
   }
 
-  const env = {
-    ...process.env,
+  const env = buildCronScriptEnv({
     MINICLAW_CRON_NAME: job.name,
     MINICLAW_CRON_RUN_AT: new Date().toISOString(),
     MINICLAW_CHANNEL_ID: job.channel,
-  };
+  });
   const args = job.args ?? [];
   const timeoutSec = job.timeout_sec ?? DEFAULT_TIMEOUT_SEC;
   const timeoutMs = timeoutSec * 1000;

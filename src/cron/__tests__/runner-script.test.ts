@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { MessageFlags, type Client } from "discord.js";
@@ -8,16 +8,20 @@ import type { CronJobScript } from "../types.js";
 
 let tmp: string;
 let previousScriptsDir: string | undefined;
+let previousCondaPrefix: string | undefined;
 
 beforeEach(() => {
   tmp = mkdtempSync(join(tmpdir(), "miniclaw-runner-script-"));
   previousScriptsDir = process.env.MINICLAW_SCRIPTS_DIR;
+  previousCondaPrefix = process.env.CONDA_PREFIX;
   process.env.MINICLAW_SCRIPTS_DIR = tmp;
 });
 
 afterEach(() => {
   if (previousScriptsDir === undefined) delete process.env.MINICLAW_SCRIPTS_DIR;
   else process.env.MINICLAW_SCRIPTS_DIR = previousScriptsDir;
+  if (previousCondaPrefix === undefined) delete process.env.CONDA_PREFIX;
+  else process.env.CONDA_PREFIX = previousCondaPrefix;
   rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -125,6 +129,27 @@ exit 0
     await runScript(scriptJob({ silent_success: true }), fakeClient(sent));
 
     expect(sent).toEqual([]);
+  });
+
+  it("preprends CONDA_PREFIX/bin for env python scripts", async () => {
+    const fakeCondaBin = join(tmp, "conda", process.platform === "win32" ? "Scripts" : "bin");
+    mkdirSync(fakeCondaBin, { recursive: true });
+    const fakePython = join(fakeCondaBin, "python3");
+    writeFileSync(fakePython, `#!/usr/bin/env bash
+echo "fake-conda-python"
+`);
+    chmodSync(fakePython, 0o755);
+    process.env.CONDA_PREFIX = join(tmp, "conda");
+    writeScript("script.py", `#!/usr/bin/env python3
+print("real-python")
+`);
+    const sent: unknown[] = [];
+
+    await runScript(scriptJob({ script: "script.py" }), fakeClient(sent));
+
+    expect(sent).toHaveLength(1);
+    expect((sent[0] as { content: string }).content).toContain("fake-conda-python");
+    expect((sent[0] as { content: string }).content).not.toContain("real-python");
   });
 
   it.each([
