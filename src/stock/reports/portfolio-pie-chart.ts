@@ -107,7 +107,12 @@ function labelRank(label: string): number {
 
 function sumCash(summary: StockPortfolioAssetSummary): number {
   const cashByCategory = summary.by_category.find((row) => row.category === "cash")?.market_value_cny;
-  return roundMoney(summary.cash_cny ?? cashByCategory ?? 0);
+  const rawCash = summary.cash_cny ?? cashByCategory ?? 0;
+  const cashLike = summary.total_assets_cny !== undefined && summary.market_value_cny !== undefined
+    ? roundMoney(summary.total_assets_cny - summary.market_value_cny)
+    : undefined;
+  if (cashLike !== undefined && Number.isFinite(cashLike) && cashLike > rawCash) return cashLike;
+  return roundMoney(rawCash);
 }
 
 export function buildAssetPieChartModel(

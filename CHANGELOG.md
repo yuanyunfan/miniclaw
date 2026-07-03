@@ -63,6 +63,7 @@
 - App Trending 默认频道从 `daily-app-trending` 改为 `weekly-app-trending`，频道初始化脚本会把旧频道原地重命名并清理旧 channel-map key。
 
 ### Fixed
+- 修复 stock-portfolio asset pie chart 现金占比只使用原始 `cash_cny` 的问题；当 `total_assets_cny - market_value_cny` 更大时，图表会把差额并入现金及类现金，和报告展示口径一致。
 - 修复 cron `pre_provider` 生成的附件在 Discord 上传遇到 transient AbortError/网络中断时只记录 warning、不会补发的问题；失败附件现在会进入 recovery outbox，并在网络恢复 flush 时补发。
 - 修复 task channel / smart-router 重复处理同一条 Discord message 时已有 thread 会导致 `MessageExistingThread`、任务创建失败的问题；现在会复用已有 thread。
 - 修复 Codex SDK native binary 被 macOS 移除后 cron task runtime 直接 `ENOENT` 的问题：MiniClaw 现在支持 `codex.path` / `MINICLAW_CODEX_PATH`，并默认优先复用系统 Codex CLI。

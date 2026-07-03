@@ -68,4 +68,29 @@ describe("stock portfolio pie chart", () => {
     expect(svg).toContain("海外股票");
     expect(svg).toContain("35%");
   });
+
+  it("uses total assets minus market value when cash-like assets exceed raw cash", () => {
+    const summary: StockPortfolioAssetSummary = {
+      base_currency: "CNY",
+      fx_rates: { CNY: 1 },
+      total_assets_cny: 580000,
+      market_value_cny: 492000,
+      cash_cny: 28000,
+      by_account: [],
+      by_category: [],
+      holdings_for_classification: [
+        holding({ code: "511090", name: "30年国债ETF", market_value_cny: 220000 }),
+        holding({ code: "US.QQQ", name: "NASDAQ 100 ETF", market_value_cny: 200000 }),
+        holding({ code: "518880", name: "黄金ETF", market_value_cny: 72000 }),
+      ],
+      classification_guidance: { mode: "llm", categories: [], cash_handling: "", instructions: [] },
+      warnings: [],
+    };
+
+    const model = buildAssetPieChartModel(summary);
+    const cash = model?.slices.find((slice) => slice.label === "现金");
+
+    expect(model?.total_cny).toBe(580000);
+    expect(cash).toMatchObject({ value: 88000, percentage: 15 });
+  });
 });
