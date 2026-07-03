@@ -6,6 +6,7 @@ import {
   buildTaskSourceFromMessage,
   resolveReplyParentContext,
 } from "../discord/task-context.js";
+import { getOrCreateMessageThread } from "../discord/message-thread.js";
 import {
   createAndRunDiscordTask,
   formatTaskCompletionNotice,
@@ -115,7 +116,7 @@ export async function handleChatMessage(
                 }),
                 ...(parentContext ? { parent: parentContext } : {}),
               },
-              createThread: (name) => message.startThread({
+              createThread: (name) => getOrCreateMessageThread(message, {
                 name,
                 autoArchiveDuration: 1440,
               }),

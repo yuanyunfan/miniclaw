@@ -76,7 +76,9 @@ The handler adds a reaction, creates a new task row, and calls `executeTask({ re
 
 ### Path 2: Task Intake Channel
 
-If the channel is in `config.taskChannelIds`, a normal message is treated as `/task` input without requiring a mention. The handler deduplicates by `message.id`, parses the prompt and attachments, checks concurrency, creates a thread, writes the task row, sends the start embed, and calls `executeTask()`.
+If the channel is in `config.taskChannelIds`, a normal message is treated as `/task` input without requiring a mention. The handler deduplicates by `message.id`, parses the prompt and attachments, checks concurrency, gets or creates the message thread, writes the task row, sends the start embed, and calls `executeTask()`.
+
+Task thread creation is idempotent at the Discord message boundary: task-channel intake, Smart Router auto-task, and Smart Router confirmation reuse an existing message thread when Discord already reports `message.hasThread`, and create a new thread only when none exists. This prevents duplicate routing, repeated button clicks, or partial prior handling from failing with `MessageExistingThread`.
 
 If a channel is both a task channel and an auto-reply channel, the task-channel path wins to avoid double processing.
 

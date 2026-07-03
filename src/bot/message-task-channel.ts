@@ -8,6 +8,7 @@ import {
   buildTaskSourceFromMessage,
   resolveReplyParentContext,
 } from "../discord/task-context.js";
+import { getOrCreateMessageThread } from "../discord/message-thread.js";
 import { createLogger } from "../lib/log.js";
 import { resolveTaskCwd } from "../routing/cwd.js";
 
@@ -59,7 +60,7 @@ export async function handleTaskChannelMessage(
         }),
         ...(parentContext ? { parent: parentContext } : {}),
       },
-      createThread: (name) => message.startThread({
+      createThread: (name) => getOrCreateMessageThread(message, {
         name,
         autoArchiveDuration: 1440,
       }),

@@ -4,6 +4,7 @@ import { config } from "../config.js";
 import { handleCronRetryButton } from "../cron/retry-interactions.js";
 import { handleCliSessionButton } from "./cli-session-buttons.js";
 import { cleanupAttachmentScope, processAttachments } from "../discord/attachments.js";
+import { getOrCreateMessageThread } from "../discord/message-thread.js";
 import {
   createAndRunDiscordTask,
   formatTaskCompletionNotice,
@@ -153,7 +154,7 @@ export async function handleSmartRouterButton(interaction: ButtonInteraction): P
       userId: confirmation.userId,
       attachments: confirmation.attachments,
       taskContext: confirmation.taskContext,
-      createThread: (name) => interaction.message.startThread({
+      createThread: (name) => getOrCreateMessageThread(interaction.message, {
         name,
         autoArchiveDuration: 1440,
       }),

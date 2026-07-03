@@ -11,9 +11,10 @@ vi.mock("../../discord/task-intake.js", () => ({
     createThread: (name: string) => Promise<unknown>;
     onCreated?: (result: { taskId: string; threadId: string; thread: unknown }) => Promise<void>;
   }) => {
-    const thread = await params.createThread("task title");
-    await params.onCreated?.({ taskId: "task-1", threadId: "thread-1", thread });
-    return { taskId: "task-1", threadId: "thread-1", thread };
+    const thread = await params.createThread("task title") as { id?: string };
+    const threadId = thread.id ?? "thread-1";
+    await params.onCreated?.({ taskId: "task-1", threadId, thread });
+    return { taskId: "task-1", threadId, thread };
   }),
   formatTaskCompletionNotice: vi.fn(() => "done"),
   taskCapacityError: vi.fn(() => undefined),
@@ -55,6 +56,8 @@ function fakeMessage(content: string, overrides: Partial<Message> = {}): {
     author: { id: "user-1" },
     attachments: new Collection(),
     mentions: { has: vi.fn((id: string) => id === "bot-1") },
+    hasThread: false,
+    thread: null,
     reply,
     react,
     startThread,
@@ -128,5 +131,22 @@ describe("task channel message handler", () => {
       autoArchiveDuration: 1440,
     });
     expect(reply).toHaveBeenCalledWith("✅ 任务已创建，请查看线程 <#thread-1>");
+  });
+
+  it("reuses an existing message thread when Discord already created one", async () => {
+    vi.mocked(taskCapacityError).mockReturnValueOnce(undefined);
+    const existingThread = { id: "thread-existing", name: "existing task thread" };
+    const { message, reply, startThread } = fakeMessage("run tests", {
+      hasThread: true,
+      thread: existingThread,
+    } as Partial<Message>);
+
+    await handleTaskChannelMessage(message, {
+      botUserId: "bot-1",
+      markProcessed: vi.fn(() => true),
+    });
+
+    expect(startThread).not.toHaveBeenCalled();
+    expect(reply).toHaveBeenCalledWith("✅ 任务已创建，请查看线程 <#thread-existing>");
   });
 });

@@ -3,7 +3,7 @@ doc_id: bot-routing
 lang: zh
 translation_of: docs/bot-routing.md
 translation_status: current
-source_sha256: ef3c791b6a3b898d052fc2b90863828c4f39c328258dc0bdec80bf64a7e2946a
+source_sha256: c0f6ff87147987fcb9c16019215253ca0014a020bbecd4504f4112de6ca12803
 ---
 # Discord Bot 路由
 
@@ -83,7 +83,9 @@ handler 会加 reaction、创建新 task row，并在同一个 Discord thread �
 
 ### 路径 2：任务入口 Channel
 
-如果 channel 在 `config.taskChannelIds` 中，普通消息就按 `/task` input 处理，不需要 mention。handler 会按 `message.id` 去重、解析 prompt 和 attachments、检查 concurrency、创建 thread、写入 task row、发送 start embed，并调用 `executeTask()`。
+如果 channel 在 `config.taskChannelIds` 中，普通消息就按 `/task` input 处理，不需要 mention。handler 会按 `message.id` 去重、解析 prompt 和 attachments、检查 concurrency、获取或创建 message thread、写入 task row、发送 start embed，并调用 `executeTask()`。
+
+Task thread creation 在 Discord message 边界是 idempotent：task-channel intake、Smart Router auto-task 和 Smart Router confirmation 会在 Discord 已报告 `message.hasThread` 时复用已有 message thread，只在没有 thread 时创建新 thread。这样 duplicate routing、重复点击按钮或先前处理到一半的消息不会因为 `MessageExistingThread` 导致任务创建失败。
 
 如果一个 channel 同时是 task channel 和 auto-reply channel，task-channel path 优先，避免 double processing。
 
