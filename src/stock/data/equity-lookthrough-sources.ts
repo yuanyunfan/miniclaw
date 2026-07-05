@@ -10,6 +10,9 @@ import type {
 } from "./portfolio-types.js";
 
 const DEFAULT_USER_AGENT = "MiniClaw/1.0 stock-portfolio";
+const LOOKTHROUGH_FETCH_MAX_ATTEMPTS = 3;
+const LOOKTHROUGH_FETCH_RETRY_DELAY_MS = 250;
+const LOOKTHROUGH_SOURCE_CONCURRENCY = 4;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -31,10 +34,34 @@ function num(value: unknown): number | undefined {
 }
 
 function safeMessage(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err);
+  const cause = err instanceof Error && err.cause instanceof Error ? `: ${err.cause.message}` : "";
+  const raw = err instanceof Error ? `${err.message}${cause}` : String(err);
   return raw
     .replace(/([A-Za-z0-9+/=_-]{48,})/g, "[redacted]")
     .slice(0, 500);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function mapWithConcurrency<T, U>(
+  items: T[],
+  limit: number,
+  mapper: (item: T, index: number) => Promise<U>,
+): Promise<U[]> {
+  const results = new Array<U>(items.length);
+  let nextIndex = 0;
+  async function worker(): Promise<void> {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await mapper(items[index], index);
+    }
+  }
+  const workerCount = Math.min(Math.max(1, limit), items.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return results;
 }
 
 function normalizeCodeToken(code: string): string {
@@ -99,6 +126,104 @@ function parseCsv(text: string): string[][] {
     row.push(cell.replace(/\r$/, ""));
     rows.push(row);
   }
+  return rows;
+}
+
+function decodeHtmlEntities(text: string): string {
+  return text.replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (match, entity: string) => {
+    const lower = entity.toLowerCase();
+    if (lower === "nbsp") return " ";
+    if (lower === "amp") return "&";
+    if (lower === "lt") return "<";
+    if (lower === "gt") return ">";
+    if (lower === "quot") return "\"";
+    if (lower === "apos") return "'";
+    if (lower.startsWith("#x")) {
+      const value = Number.parseInt(lower.slice(2), 16);
+      return Number.isFinite(value) ? String.fromCodePoint(value) : match;
+    }
+    if (lower.startsWith("#")) {
+      const value = Number.parseInt(lower.slice(1), 10);
+      return Number.isFinite(value) ? String.fromCodePoint(value) : match;
+    }
+    return match;
+  });
+}
+
+function stripHtml(text: string): string {
+  return decodeHtmlEntities(text)
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function decodeJsString(raw: string): string {
+  try {
+    return JSON.parse(`"${raw.replace(/\r?\n/g, "\\n")}"`) as string;
+  } catch {
+    return raw
+      .replace(/\\"/g, "\"")
+      .replace(/\\\//g, "/")
+      .replace(/\\n/g, "\n")
+      .replace(/\\r/g, "\r")
+      .replace(/\\t/g, "\t");
+  }
+}
+
+function extractEastmoneyFundContent(text: string): string {
+  const matched = /content:"((?:\\.|[^"\\])*)"/.exec(text);
+  return matched ? decodeJsString(matched[1] ?? "") : "";
+}
+
+function htmlCells(rowHtml: string, tagName: "td" | "th"): string[] {
+  const cells: string[] = [];
+  const cellRegex = new RegExp(`<${tagName}\\b[^>]*>([\\s\\S]*?)<\\/${tagName}>`, "gi");
+  for (const match of rowHtml.matchAll(cellRegex)) {
+    cells.push(stripHtml(match[1] ?? ""));
+  }
+  return cells;
+}
+
+function normalizedHeader(value: string): string {
+  return value.replace(/\s+/g, "");
+}
+
+function findColumnIndex(headers: string[], pattern: RegExp, fallback: number): number {
+  const index = headers.findIndex((header) => pattern.test(normalizedHeader(header)));
+  return index >= 0 ? index : fallback;
+}
+
+function parseEastmoneyFundHoldings(text: string): Record<string, unknown>[] {
+  const content = extractEastmoneyFundContent(text);
+  if (!content.trim()) return [];
+
+  const rows: Record<string, unknown>[] = [];
+  let headers: string[] = [];
+  for (const rowMatch of content.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
+    const rowHtml = rowMatch[1] ?? "";
+    const headerCells = htmlCells(rowHtml, "th");
+    if (headerCells.length) {
+      headers = headerCells;
+      continue;
+    }
+
+    const dataCells = htmlCells(rowHtml, "td");
+    if (dataCells.length < 3) continue;
+    const codeIndex = findColumnIndex(headers, /股票代码/, 1);
+    const companyIndex = findColumnIndex(headers, /股票名称/, 2);
+    const weightIndex = findColumnIndex(headers, /占净值/, 6);
+    const code = dataCells[codeIndex];
+    const company = dataCells[companyIndex];
+    const weight = dataCells[weightIndex];
+    if (!code || !company || !weight) continue;
+    rows.push({
+      "股票代码": code,
+      "股票名称": company,
+      "占净值比例": weight,
+    });
+  }
+
   return rows;
 }
 
@@ -187,7 +312,7 @@ function rowToConstituent(
   };
 }
 
-async function fetchBytes(source: StockPortfolioEquityLookthroughDataSourceConfig): Promise<Uint8Array> {
+async function fetchBytesOnce(source: StockPortfolioEquityLookthroughDataSourceConfig): Promise<Uint8Array> {
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), source.timeout_ms);
   try {
@@ -202,10 +327,28 @@ async function fetchBytes(source: StockPortfolioEquityLookthroughDataSourceConfi
   }
 }
 
+async function fetchBytes(source: StockPortfolioEquityLookthroughDataSourceConfig): Promise<Uint8Array> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= LOOKTHROUGH_FETCH_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      return await fetchBytesOnce(source);
+    } catch (err) {
+      lastError = err;
+      if (attempt < LOOKTHROUGH_FETCH_MAX_ATTEMPTS) {
+        await sleep(LOOKTHROUGH_FETCH_RETRY_DELAY_MS * attempt);
+      }
+    }
+  }
+  throw new Error(`${safeMessage(lastError)} after ${LOOKTHROUGH_FETCH_MAX_ATTEMPTS} attempts`);
+}
+
 async function fetchRows(source: StockPortfolioEquityLookthroughSourceConfig): Promise<Record<string, unknown>[]> {
   const dataSource = source.data_source;
   if (!dataSource) return [];
   const bytes = await fetchBytes(dataSource);
+  if (dataSource.type === "eastmoney_fund_holdings") {
+    return parseEastmoneyFundHoldings(Buffer.from(bytes).toString("utf8"));
+  }
   if (dataSource.type === "http_json") {
     const json = JSON.parse(Buffer.from(bytes).toString("utf8")) as unknown;
     return itemsAtPath(json, dataSource.items_path).filter(isRecord);
@@ -229,7 +372,7 @@ export async function resolveEquityLookthroughSources(config: StockPortfolioProv
   }
 
   const warnings: string[] = [];
-  const sources = await Promise.all(config.equity_lookthrough_sources.map(async (source) => {
+  const sources = await mapWithConcurrency(config.equity_lookthrough_sources, LOOKTHROUGH_SOURCE_CONCURRENCY, async (source) => {
     if (!source.data_source) return source;
     try {
       const rows = await fetchRows(source);
@@ -245,7 +388,7 @@ export async function resolveEquityLookthroughSources(config: StockPortfolioProv
       warnings.push(`${source.label} look-through source failed: ${safeMessage(err)}`);
       return { ...source, constituents: [] };
     }
-  }));
+  });
 
   return {
     config: { ...config, equity_lookthrough_sources: sources },
@@ -254,6 +397,8 @@ export async function resolveEquityLookthroughSources(config: StockPortfolioProv
 }
 
 export const __testables = {
+  mapWithConcurrency,
+  parseEastmoneyFundHoldings,
   parseCsv,
   parseXlsx,
   rowsToObjects,

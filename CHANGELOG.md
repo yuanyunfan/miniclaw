@@ -7,6 +7,7 @@
 ## [Unreleased]
 
 ### Added
+- 新增 `stock-portfolio` Eastmoney fund holdings 动态穿透数据源，可从天天基金持仓披露表解析 ETF/基金的股票代码、名称和占净值比例，用于每日个股穿透汇总。
 - 新增 `stock-portfolio` 个股穿透汇总：可按配置的 ETF/指数成分权重合并直接个股和指数成分股 exposure，并在 daily asset summary 后追加 PNG 表格附件。
 - 新增 WeChat MP 文章两层过滤：provider 会先基于标题/摘要做阅读价值评分和标题党降权，再只对高分候选抓取有界公开正文 excerpt，供 `daily-wechat-mp` 在报告开头输出精读推荐。
 - 新增 cron composition：本地 cron job 可通过 `_profiles` 和 `_fragments` 复用 workflow defaults、prompt fragments 和 rules，再展开成普通 task job。
@@ -64,6 +65,11 @@
 - App Trending 默认频道从 `daily-app-trending` 改为 `weekly-app-trending`，频道初始化脚本会把旧频道原地重命名并清理旧 channel-map key。
 
 ### Fixed
+- 修复 `stock-portfolio` cron prompt 在大型资产 payload 下截断个股穿透 summary 的问题；cron 现在会给 LLM 注入 compact context，保留完整 `equity_lookthrough_summary.rows`。
+- 修复动态个股穿透源一次性并发抓取过多、单次 `fetch failed` 就降级的问题；现在按有限并发抓取并对瞬时失败自动重试。
+- 修复个股穿透 PNG 右侧“主要来源”列在长来源组合下被裁切的问题。
+- 修复 recovery outbox 已 delivered 的附件补发记录被后续重复 enqueue 或 stale failure 重新置为 pending 的问题。
+- 修复 `stock-portfolio` 个股穿透表把未配置的 Eastmoney ETF/基金代码误当作直接个股的问题；这类持仓现在保留在股票仓位分母和 warning 中，但不会伪装成公司行。
 - 修复 stock-portfolio asset pie chart 现金占比只使用原始 `cash_cny` 的问题；当 `total_assets_cny - market_value_cny` 更大时，图表会把差额并入现金及类现金，和报告展示口径一致。
 - 修复 cron `pre_provider` 生成的附件在 Discord 上传遇到 transient AbortError/网络中断时只记录 warning、不会补发的问题；失败附件现在会进入 recovery outbox，并在网络恢复 flush 时补发。
 - 修复 task channel / smart-router 重复处理同一条 Discord message 时已有 thread 会导致 `MessageExistingThread`、任务创建失败的问题；现在会复用已有 thread。

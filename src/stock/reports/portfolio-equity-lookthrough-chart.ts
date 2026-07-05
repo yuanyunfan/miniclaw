@@ -68,7 +68,7 @@ function rowLineCount(row: StockPortfolioEquityLookthroughRow): number {
   return Math.max(
     wrapText(row.company, 22).length,
     wrapText(row.code, 16).length,
-    wrapText(row.source_labels.join(" + "), 28).length,
+    wrapText(row.source_labels.join(" + "), 34).length,
   );
 }
 
@@ -96,7 +96,7 @@ function textBlock(params: {
 
 export function renderEquityLookthroughChartSvg(summary: StockPortfolioEquityLookthroughSummary): string {
   const rows = summary.rows;
-  const width = 1800;
+  const width = 2200;
   const left = 70;
   const top = 170;
   const headerHeight = 58;
@@ -107,11 +107,11 @@ export function renderEquityLookthroughChartSvg(summary: StockPortfolioEquityLoo
   const columns = {
     rank: left + 35,
     company: left + 135,
-    code: left + 520,
-    amount: left + 790,
-    totalPct: left + 1035,
-    stockPct: left + 1230,
-    sources: left + 1420,
+    code: left + 610,
+    amount: left + 900,
+    totalPct: left + 1180,
+    stockPct: left + 1430,
+    sources: left + 1620,
   };
   const coverage = summary.expanded_stock_position_percentage === undefined
     ? "覆盖率: -"
@@ -135,7 +135,7 @@ export function renderEquityLookthroughChartSvg(summary: StockPortfolioEquityLoo
     body.push(textBlock({ x: columns.amount, y: midY, lines: [formatMoney(row.lookthrough_amount_cny)], anchor: "end" }));
     body.push(textBlock({ x: columns.totalPct, y: midY, lines: [formatPct(row.percentage_of_total_assets_cny)], anchor: "end" }));
     body.push(textBlock({ x: columns.stockPct, y: midY, lines: [formatPct(row.percentage_of_stock_position_cny)], anchor: "end" }));
-    body.push(textBlock({ x: columns.sources, y: midY, lines: wrapText(row.source_labels.join(" + "), 28), maxLines: 3 }));
+    body.push(textBlock({ x: columns.sources, y: midY, lines: wrapText(row.source_labels.join(" + "), 34), maxLines: 3 }));
     y += rowHeight;
   }
 
@@ -180,7 +180,7 @@ export async function renderEquityLookthroughChartPng(
   const { chromium } = await import("playwright");
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage({ viewport: { width: 1800, height: Math.min(4200, Math.max(900, summary.rows.length * 120 + 260)) }, deviceScaleFactor: 1 });
+    const page = await browser.newPage({ viewport: { width: 2200, height: Math.min(4200, Math.max(900, summary.rows.length * 120 + 260)) }, deviceScaleFactor: 1 });
     await page.setContent(html, { waitUntil: "load" });
     await page.locator("#chart").screenshot({ path });
     return path;

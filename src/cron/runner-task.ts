@@ -28,6 +28,7 @@ import {
   validateCronTaskOutput,
 } from "./output-contract.js";
 import { buildCronScriptEnv } from "./script-env.js";
+import { formatStockPortfolioCronContext } from "../stock/data/portfolio.js";
 
 const log = createLogger("cron");
 import { homedir } from "node:os";
@@ -117,8 +118,9 @@ function buildCronPreScriptBlock(scriptName: string, stdout: string): string {
 }
 
 function buildCronPreProviderBlock(providerName: string, output: string): string {
-  const truncated = output.slice(0, PRE_PROVIDER_CONTEXT_MAX_CHARS)
-    + (output.length > PRE_PROVIDER_CONTEXT_MAX_CHARS ? "\n... (truncated)" : "");
+  const providerOutput = providerName === "stock-portfolio" ? formatStockPortfolioCronContext(output) : output;
+  const truncated = providerOutput.slice(0, PRE_PROVIDER_CONTEXT_MAX_CHARS)
+    + (providerOutput.length > PRE_PROVIDER_CONTEXT_MAX_CHARS ? "\n... (truncated)" : "");
   return loadPrompt("templates/cron-pre-provider-block", { provider_name: providerName, output: truncated }) + "\n\n";
 }
 

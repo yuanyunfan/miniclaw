@@ -772,3 +772,99 @@ export function buildStockPortfolioPayload(params: {
 export function formatStockPortfolioPayload(payload: StockPortfolioPayload): string {
   return JSON.stringify(redactJsonStringValues(payload), null, 2);
 }
+
+function compactAssetSummaryForCron(assetSummary: unknown): unknown {
+  if (!isRecord(assetSummary)) return assetSummary;
+  const byCategory = Array.isArray(assetSummary.by_category)
+    ? assetSummary.by_category.filter(isRecord).map((category) => {
+      const { holdings: _holdings, ...rest } = category;
+      const holdings = Array.isArray(category.holdings) ? category.holdings.filter(isRecord) : [];
+      return { ...rest, holdings_count: holdings.length };
+    })
+    : assetSummary.by_category;
+
+  return {
+    base_currency: assetSummary.base_currency,
+    fx_rates: assetSummary.fx_rates,
+    fx_rates_as_of: assetSummary.fx_rates_as_of,
+    fx_rates_source: assetSummary.fx_rates_source,
+    total_assets_cny: assetSummary.total_assets_cny,
+    market_value_cny: assetSummary.market_value_cny,
+    cash_cny: assetSummary.cash_cny,
+    by_account: assetSummary.by_account,
+    by_category: byCategory,
+    holdings_for_classification: assetSummary.holdings_for_classification,
+    classification_guidance: assetSummary.classification_guidance,
+    warnings: assetSummary.warnings,
+  };
+}
+
+function compactCronSource(source: unknown): unknown {
+  if (!isRecord(source)) return source;
+  if (source.status === "error") {
+    return {
+      provider: source.provider,
+      config: source.config,
+      label: source.label,
+      asset_account_label: source.asset_account_label,
+      status: source.status,
+      error: source.error,
+    };
+  }
+
+  const payload = isRecord(source.payload) ? source.payload : undefined;
+  return {
+    provider: source.provider,
+    config: source.config,
+    label: source.label,
+    asset_account_label: source.asset_account_label,
+    include_asset_totals: source.include_asset_totals,
+    status: source.status,
+    payload: payload
+      ? {
+        source: payload.source,
+        profile: payload.profile,
+        account_alias: payload.account_alias,
+        market_session: payload.market_session,
+        redaction: payload.redaction,
+        source_currency: payload.source_currency,
+        positions_count: payload.positions_count,
+        pnl_summary_cny: payload.pnl_summary_cny,
+        warnings: payload.warnings,
+        usage_notes: payload.usage_notes,
+      }
+      : undefined,
+  };
+}
+
+export function formatStockPortfolioCronContext(output: string): string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(output) as unknown;
+  } catch {
+    return output;
+  }
+  if (!isRecord(parsed) || parsed.source !== "stock-portfolio") return output;
+  if (typeof parsed.ok_count !== "number" && !isRecord(parsed.asset_summary) && !isRecord(parsed.equity_lookthrough_summary)) {
+    return output;
+  }
+
+  const compacted = {
+    source: parsed.source,
+    context_variant: "cron_compact",
+    generated_at: parsed.generated_at,
+    profile: parsed.profile,
+    market_scope: parsed.market_scope,
+    ok_count: parsed.ok_count,
+    failed_count: parsed.failed_count,
+    cny_summary: parsed.cny_summary,
+    asset_summary: compactAssetSummaryForCron(parsed.asset_summary),
+    equity_lookthrough_summary: parsed.equity_lookthrough_summary,
+    position_premium_summary: parsed.position_premium_summary,
+    warnings: parsed.warnings,
+    usage_notes: parsed.usage_notes,
+    sources: Array.isArray(parsed.sources) ? parsed.sources.map(compactCronSource) : parsed.sources,
+  };
+
+  return JSON.stringify(redactJsonStringValues(compacted), null, 2);
+}

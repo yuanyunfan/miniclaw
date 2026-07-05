@@ -201,7 +201,11 @@ export interface StockPortfolioEquityLookthroughConstituentConfig {
   weight_pct: number;
 }
 
-export type StockPortfolioEquityLookthroughSourceType = "http_json" | "http_csv" | "http_xlsx";
+export type StockPortfolioEquityLookthroughSourceType =
+  | "http_json"
+  | "http_csv"
+  | "http_xlsx"
+  | "eastmoney_fund_holdings";
 
 export interface StockPortfolioEquityLookthroughColumnConfig {
   company: string[];

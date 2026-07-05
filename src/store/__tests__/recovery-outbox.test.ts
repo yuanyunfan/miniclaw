@@ -85,6 +85,44 @@ describe("recovery outbox persistence", () => {
     expect(current.delivered_at).toBeTruthy();
   });
 
+  it("does not reopen delivered rows when duplicate enqueue or stale failure arrives", () => {
+    createTask({
+      id: "task-delivered",
+      discord_thread_id: "",
+      discord_user_id: "cron",
+      prompt: "hello",
+      cwd: "/tmp",
+    });
+    const row = enqueueRecoveryOutbox({
+      kind: "pre_provider_attachment_delivery",
+      channelId: "channel-1",
+      taskId: "task-delivered",
+      payload: { attachments: ["first"] },
+      lastError: "first failure",
+    });
+    markRecoveryOutboxDelivered(row.id, "msg-1");
+
+    const duplicate = enqueueRecoveryOutbox({
+      kind: "pre_provider_attachment_delivery",
+      channelId: "channel-1",
+      taskId: "task-delivered",
+      payload: { attachments: ["second"] },
+      lastError: "stale failure",
+    });
+    markRecoveryOutboxAttemptFailed(row.id, "late abort");
+
+    const current = listRecoveryOutbox({ kind: "pre_provider_attachment_delivery" })[0];
+    expect(duplicate.id).toBe(row.id);
+    expect(current).toMatchObject({
+      status: "delivered",
+      message_id: "msg-1",
+      attempts: 0,
+      last_error: "first failure",
+    });
+    expect(current?.payload_json).toContain("first");
+    expect(listRecoveryOutbox({ kind: "pre_provider_attachment_delivery", status: "pending" })).toEqual([]);
+  });
+
   it("finds failed cron runs that still have no alert message id", () => {
     createCronRun({
       id: "run-missing-alert",

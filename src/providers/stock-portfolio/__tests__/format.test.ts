@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildStockPortfolioPayload, formatStockPortfolioPayload, sanitizeStockPortfolioError } from "../../../stock/data/portfolio.js";
+import {
+  buildStockPortfolioPayload,
+  formatStockPortfolioCronContext,
+  formatStockPortfolioPayload,
+  sanitizeStockPortfolioError,
+} from "../../../stock/data/portfolio.js";
 import type { StockPortfolioProviderConfig } from "../../../stock/data/portfolio-types.js";
 
 const config: StockPortfolioProviderConfig = {
@@ -322,6 +327,96 @@ describe("stock-portfolio formatter", () => {
     expect(formatted.slice(0, 8000)).toContain('"top_gainers"');
   });
 
+  it("formats a compact cron context without dropping equity look-through rows", () => {
+    const raw = JSON.stringify({
+      source: "stock-portfolio",
+      generated_at: "2026-07-03T09:00:00.000Z",
+      profile: "daily-stock-summary",
+      market_scope: "all",
+      ok_count: 4,
+      failed_count: 0,
+      asset_summary: {
+        base_currency: "CNY",
+        total_assets_cny: 100000,
+        market_value_cny: 80000,
+        cash_cny: 20000,
+        by_account: [{ label: "Eastmoney A", total_assets_cny: 60000, market_value_cny: 50000 }],
+        by_category: [
+          {
+            category: "stock",
+            label: "股票",
+            market_value_cny: 50000,
+            positions_count: 1000,
+            holdings: Array.from({ length: 1000 }, (_, index) => ({
+              code: `ETF${index}`,
+              name: `Verbose Fund ${index}`,
+              market_value_cny: index,
+              verbose_payload: "x".repeat(200),
+            })),
+          },
+        ],
+        holdings_for_classification: [
+          { code: "513330", name: "恒生互联网", market_value_cny: 10000, instrument_type: "etf" },
+        ],
+        classification_guidance: { mode: "llm", instructions: ["classify holdings"] },
+        warnings: [],
+      },
+      equity_lookthrough_summary: {
+        base_currency: "CNY",
+        stock_position_cny: 80000,
+        expanded_amount_cny: 70000,
+        rows: [
+          {
+            rank: 1,
+            company_key: "TENCENT",
+            company: "腾讯控股",
+            code: "00700",
+            lookthrough_amount_cny: 6149.98,
+            source_labels: ["恒生互联网", "恒生科技"],
+            sources: [{ label: "恒生互联网", amount_cny: 3000 }],
+          },
+        ],
+        warnings: [],
+        usage_notes: [],
+      },
+      sources: [
+        {
+          provider: "eastmoney-jywg-readonly",
+          config: "daily-stock-summary",
+          label: "Eastmoney A",
+          status: "ok",
+          payload: {
+            source: "eastmoney-jywg-readonly",
+            account_alias: "Eastmoney A",
+            positions_count: 30,
+            raw_positions: "x".repeat(100000),
+          },
+        },
+      ],
+      warnings: [],
+      usage_notes: [],
+    });
+
+    const compact = formatStockPortfolioCronContext(raw);
+    const parsed = JSON.parse(compact);
+
+    expect(compact.length).toBeLessThan(raw.length / 10);
+    expect(parsed.context_variant).toBe("cron_compact");
+    expect(parsed.asset_summary.holdings_for_classification).toEqual([
+      { code: "513330", name: "恒生互联网", market_value_cny: 10000, instrument_type: "etf" },
+    ]);
+    expect(parsed.asset_summary.by_category[0]).toMatchObject({
+      category: "stock",
+      holdings_count: 1000,
+    });
+    expect(parsed.asset_summary.by_category[0].holdings).toBeUndefined();
+    expect(parsed.equity_lookthrough_summary.rows[0]).toMatchObject({
+      company: "腾讯控股",
+      lookthrough_amount_cny: 6149.98,
+    });
+    expect(JSON.stringify(parsed.sources)).not.toContain("raw_positions");
+  });
+
   it("builds CNY asset allocation rollups from exact source summaries", () => {
     const payload = buildStockPortfolioPayload({
       generatedAt: new Date("2026-05-08T09:00:00.000Z"),
@@ -546,6 +641,51 @@ describe("stock-portfolio formatter", () => {
     expect(payload.usage_notes).toEqual(expect.arrayContaining([
       "Use equity_lookthrough_summary for the single-stock look-through table; do not recompute constituent weights in the LLM.",
     ]));
+  });
+
+  it("does not report unconfigured equity fund codes as direct single-stock rows", () => {
+    const payload = buildStockPortfolioPayload({
+      generatedAt: new Date("2026-05-08T09:00:00.000Z"),
+      profile: "daily-stock-summary",
+      config: {
+        ...config,
+        include_asset_summary: true,
+        include_equity_lookthrough_summary: true,
+        equity_lookthrough_top_limit: 10,
+        equity_lookthrough_sources: [],
+      },
+      sources: [
+        {
+          provider: "eastmoney-jywg-readonly",
+          config: "daily-stock-summary",
+          label: "Eastmoney A",
+          status: "ok",
+          payload: {
+            snapshot: { account_alias: "Eastmoney A" },
+            asset_summary: {
+              currency: "CNY",
+              total_assets: 10000,
+              market_value: 10000,
+              cash: 0,
+              buckets: [
+                { category: "stock", label: "股票", currency: "CNY", market_value: 10000, positions_count: 1, holdings: [
+                  { code: "164824", name: "印度基金", currency: "CNY", category: "stock", label: "股票", market_value: 10000, instrument_type: "stock" },
+                ] },
+              ],
+            },
+          },
+        },
+      ],
+    });
+
+    expect(payload.equity_lookthrough_summary).toMatchObject({
+      stock_position_cny: 10000,
+      expanded_amount_cny: 0,
+    });
+    expect(payload.equity_lookthrough_summary?.rows).toEqual([]);
+    expect(payload.equity_lookthrough_summary?.warnings).toEqual([
+      "164824 印度基金 is an equity index/ETF holding but has no equity_lookthrough_sources match; it is included in stock_position_cny but not expanded into single-stock rows.",
+    ]);
   });
 
   it("keeps positions but skips account totals for positions-only market sources", () => {

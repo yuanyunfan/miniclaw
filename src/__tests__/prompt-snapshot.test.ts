@@ -64,6 +64,46 @@ describe("prompt snapshot baseline", () => {
     expect(out).toContain(`${longJson}\n\`\`\``);
   });
 
+  it("cron.preProviderBlock compacts stock portfolio context before truncation", () => {
+    const longJson = JSON.stringify({
+      source: "stock-portfolio",
+      generated_at: "2026-07-03T09:00:00.000Z",
+      profile: "daily-stock-summary",
+      market_scope: "all",
+      ok_count: 4,
+      failed_count: 0,
+      asset_summary: {
+        base_currency: "CNY",
+        total_assets_cny: 100000,
+        market_value_cny: 80000,
+        cash_cny: 20000,
+        by_account: [{ label: "Futu", total_assets_cny: 100000, market_value_cny: 80000 }],
+        by_category: [{ category: "stock", label: "股票", market_value_cny: 80000, positions_count: 1, holdings: [{ code: "US.SPY", details: "x".repeat(80000) }] }],
+        holdings_for_classification: [{ code: "US.SPY", name: "S&P 500 ETF", market_value_cny: 80000 }],
+        classification_guidance: { mode: "llm", instructions: ["classify holdings"] },
+        warnings: [],
+      },
+      equity_lookthrough_summary: {
+        base_currency: "CNY",
+        stock_position_cny: 80000,
+        expanded_amount_cny: 70000,
+        rows: [{ rank: 1, company: "NVIDIA", code: "NVDA", lookthrough_amount_cny: 19671.14, source_labels: ["直接", "S&P 500"] }],
+        warnings: [],
+      },
+      sources: [{ provider: "futu-stock", config: "daily-stock-summary", status: "ok", payload: { raw: "x".repeat(80000) } }],
+      warnings: [],
+      usage_notes: [],
+    });
+
+    const out = cronT.buildCronPreProviderBlock("stock-portfolio", longJson);
+
+    expect(out).toContain("\"context_variant\": \"cron_compact\"");
+    expect(out).toContain("\"company\": \"NVIDIA\"");
+    expect(out).toContain("\"holdings_count\": 1");
+    expect(out).not.toContain("\n... (truncated)\n```");
+    expect(out).not.toContain("\"raw\"");
+  });
+
   it("cron.taskPrompt.fixture", () => {
     const out = cronT.buildCronTaskPrompt("morning-brief", "PRE_CTX\n\n", "do the thing");
     expect(hash(out)).toMatchInlineSnapshot(`"a822eed2bd677d6f"`);

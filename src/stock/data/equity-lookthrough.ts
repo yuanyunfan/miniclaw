@@ -121,11 +121,16 @@ function isLikelyEquityIndex(holding: StockPortfolioClassifiableHolding): boolea
   ]);
 }
 
+function isLikelyFundOrEtfCode(code: string): boolean {
+  return codeTokens(code).some((token) => /^(15[89]\d{3}|16\d{4}|51\d{4}|56\d{4}|58[89]\d{3})$/.test(token));
+}
+
 function isDirectEquityHolding(
   holding: StockPortfolioClassifiableHolding,
   matchedLookthroughSources: StockPortfolioEquityLookthroughSourceConfig[],
 ): boolean {
   if (matchedLookthroughSources.length) return false;
+  if (isLikelyFundOrEtfCode(holding.code) && isLikelyEquityIndex(holding)) return false;
   if (holding.category === "stock" || holding.instrument_type === "stock") return !isLikelyBondOrGold(holding);
   if (holding.instrument_type === "etf") return false;
   if (isLikelyEquityIndex(holding)) return false;

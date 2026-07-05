@@ -100,7 +100,8 @@ export function enqueueRecoveryOutbox(input: EnqueueRecoveryOutboxInput): Recove
            (@cron_run_id IS NOT NULL AND cron_run_id = @cron_run_id)
            OR (@task_id IS NOT NULL AND task_id = @task_id)
            OR id = @id
-         )`
+         )
+         AND status != 'delivered'`
     ).run(params);
   }
 
@@ -167,10 +168,11 @@ export function markRecoveryOutboxAttemptFailed(id: string, error: string): Reco
   getDb().prepare(
     `UPDATE recovery_outbox SET
       status = 'pending',
-      attempts = attempts + 1,
-      last_error = @last_error,
-      updated_at = datetime('now')
-     WHERE id = @id`
+     attempts = attempts + 1,
+     last_error = @last_error,
+     updated_at = datetime('now')
+     WHERE id = @id
+       AND status != 'delivered'`
   ).run({
     id,
     last_error: error.slice(0, 1500),

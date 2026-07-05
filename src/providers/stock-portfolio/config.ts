@@ -19,7 +19,12 @@ const CONFIG_DIR_DEFAULT = join(homedir(), ".miniclaw/providers/stock-portfolio"
 const RESERVED_PROVIDER_CONFIG_NAMES = new Set(["config"]);
 const SOURCE_NAMES = new Set<StockPortfolioSourceName>(["futu-stock", "eastmoney-jywg-readonly", "eastmoney-etf-premium"]);
 const MARKET_SCOPES = new Set<StockPortfolioMarketScope>(["all", "us", "cn"]);
-const LOOKTHROUGH_SOURCE_TYPES = new Set<StockPortfolioEquityLookthroughSourceType>(["http_json", "http_csv", "http_xlsx"]);
+const LOOKTHROUGH_SOURCE_TYPES = new Set<StockPortfolioEquityLookthroughSourceType>([
+  "http_json",
+  "http_csv",
+  "http_xlsx",
+  "eastmoney_fund_holdings",
+]);
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
