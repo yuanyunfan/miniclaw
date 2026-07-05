@@ -69,6 +69,15 @@ Eastmoney ETF selector:
 - Portfolio rule: it may enrich an existing JYWG-held ETF by exact code, but it never proves that the ETF is held.
 - Field contract: raw `PREMIUM_DISCOUNT_RATIO` is preserved as `eastmoney_discount_ratio`; MiniClaw emits `premium_rate = 0 - PREMIUM_DISCOUNT_RATIO`.
 
+ETF/index look-through sources:
+
+- Runtime use: optional `stock-portfolio.equity_lookthrough_sources` config for private portfolio reports.
+- Trusted source: configured public issuer or index holdings endpoints fetched at provider runtime.
+- Supported shapes: HTTP JSON, CSV, and XLSX tables with configured company, ticker, and weight columns.
+- Business meaning: single-stock exposure expansion for already-held ETF/index positions; it never proves account ownership.
+- Failure policy: source failures, HTML/consent pages, empty tables, or parse drift become warnings; MiniClaw must not fall back to stale hardcoded index weights.
+- Identity rule: static aliases may merge share classes or A/H lines for the same company, but aliases must not contain weight data.
+
 Yahoo chart endpoints:
 
 - Code paths: `src/stock/sources/yahoo/**`, `src/stock/data/market-quotes.ts`, `src/stock/data/quotes.ts`.

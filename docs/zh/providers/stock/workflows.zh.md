@@ -3,7 +3,7 @@ doc_id: stock-workflows
 lang: zh
 translation_of: docs/providers/stock/workflows.md
 translation_status: current
-source_sha256: 45fc30806ccfd7b7f7a9292b0a16fb9152d80a6e7a5b1a9d4b924931ac4f4480
+source_sha256: 17008f6194b54c2ff9c47dbadb7ee8e947f8c080576394d5c479c318863a3fe6
 ---
 # Stock Workflows
 
@@ -31,10 +31,10 @@ flowchart LR
 `stock-portfolio`:
 
 - Inputs: Futu account snapshots、Eastmoney JYWG account evidence、可选 Eastmoney ETF premium enrichment。
-- Output: redacted portfolio JSON，包含 source status、CNY summary、可选 asset summary、premium summary、warnings 和可选 pie chart attachment。
+- Output: redacted portfolio JSON，包含 source status、CNY summary、可选 asset summary、可选 single-stock look-through summary、premium summary、warnings 和可选 pie chart/table attachments。
 - State: 只有 downstream task 成功后才 commit source provider state。
-- Failure policy: optional source failures 可以保留为 warnings；required source failures 或 all-source failure 可以阻止 LLM task。
-- Code paths: `src/stock/reports/stock-portfolio.ts`、`src/stock/data/portfolio*.ts`、`src/stock/reports/portfolio-pie-chart.ts`。
+- Failure policy: optional source failures 可以保留为 warnings；required source failures 或 all-source failure 可以阻止 LLM task。ETF/index look-through sources 会 fail closed 为 warnings，绝不复用过期的配置权重。
+- Code paths: `src/stock/reports/stock-portfolio.ts`、`src/stock/data/portfolio*.ts`、`src/stock/data/equity-lookthrough*.ts`、`src/stock/reports/portfolio-pie-chart.ts`、`src/stock/reports/portfolio-equity-lookthrough-chart.ts`。
 
 `stock-pulse`:
 

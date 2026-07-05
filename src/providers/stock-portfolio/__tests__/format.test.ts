@@ -14,6 +14,10 @@ const config: StockPortfolioProviderConfig = {
   include_cny_summary: true,
   include_asset_summary: false,
   include_asset_pie_chart: false,
+  include_equity_lookthrough_summary: false,
+  include_equity_lookthrough_chart: false,
+  equity_lookthrough_top_limit: 30,
+  equity_lookthrough_sources: [],
   sources: [
     { provider: "futu-stock", config: "daily-stock-market", enabled: true, required: false, include_asset_totals: true },
     { provider: "eastmoney-jywg-readonly", config: "daily-stock-market", enabled: true, required: false, include_asset_totals: true },
@@ -452,6 +456,96 @@ describe("stock-portfolio formatter", () => {
       },
     });
     expect(formatted).not.toMatch(/"(total_assets|market_value|cash|pnl|gross_profit|gross_loss|net_pnl)"\s*:/);
+  });
+
+  it("builds single-stock look-through exposure rows from direct and configured index sources", () => {
+    const payload = buildStockPortfolioPayload({
+      generatedAt: new Date("2026-05-08T09:00:00.000Z"),
+      profile: "daily-stock-summary",
+      config: {
+        ...config,
+        include_asset_summary: true,
+        include_equity_lookthrough_summary: true,
+        equity_lookthrough_top_limit: 10,
+        equity_lookthrough_sources: [
+          {
+            label: "S&P 500",
+            match_codes: ["US.SPY"],
+            match_names: ["标普500"],
+            company_aliases: [],
+            constituents: [
+              { company_key: "NVDA", company: "NVIDIA", code: "NVDA", aliases: ["US.NVDA"], weight_pct: 7 },
+              { company_key: "GOOGL", company: "Alphabet", code: "GOOGL/GOOG", aliases: ["US.GOOGL", "US.GOOG"], weight_pct: 4 },
+            ],
+          },
+          {
+            label: "Nasdaq 100",
+            match_codes: ["US.QQQ"],
+            match_names: ["NASDAQ 100"],
+            company_aliases: [],
+            constituents: [
+              { company_key: "NVDA", company: "NVIDIA", code: "NVDA", aliases: ["US.NVDA"], weight_pct: 8 },
+              { company_key: "GOOGL", company: "Alphabet", code: "GOOGL/GOOG", aliases: ["US.GOOGL", "US.GOOG"], weight_pct: 5 },
+            ],
+          },
+        ],
+      },
+      sources: [
+        {
+          provider: "futu-stock",
+          config: "daily-stock-summary-us",
+          label: "Futu US",
+          status: "ok",
+          payload: {
+            snapshot: { account_alias: "Futu US" },
+            asset_summary: {
+              currency: "CNY",
+              total_assets: 100000,
+              market_value: 70000,
+              cash: 30000,
+              buckets: [
+                { category: "cash", label: "现金", currency: "CNY", market_value: 30000, positions_count: 0, holdings: [] },
+                { category: "stock", label: "个股", currency: "CNY", market_value: 20000, positions_count: 2, holdings: [
+                  { code: "US.NVDA", name: "NVIDIA", currency: "CNY", category: "stock", label: "个股", market_value: 12000, instrument_type: "stock" },
+                  { code: "US.GOOGL", name: "Alphabet", currency: "CNY", category: "stock", label: "个股", market_value: 8000, instrument_type: "stock" },
+                ] },
+                { category: "foreign_index", label: "国外指数", currency: "CNY", market_value: 50000, positions_count: 2, holdings: [
+                  { code: "US.SPY", name: "S&P 500 ETF", currency: "CNY", category: "foreign_index", label: "国外指数", market_value: 30000, instrument_type: "etf" },
+                  { code: "US.QQQ", name: "NASDAQ 100 ETF", currency: "CNY", category: "foreign_index", label: "国外指数", market_value: 20000, instrument_type: "etf" },
+                ] },
+              ],
+            },
+          },
+        },
+      ],
+    });
+
+    expect(payload.equity_lookthrough_summary).toMatchObject({
+      stock_position_cny: 70000,
+      expanded_amount_cny: 25900,
+      expanded_stock_position_percentage: 37,
+    });
+    expect(payload.equity_lookthrough_summary?.rows).toEqual([
+      expect.objectContaining({
+        rank: 1,
+        company: "NVIDIA",
+        code: "NVDA",
+        lookthrough_amount_cny: 15700,
+        percentage_of_total_assets_cny: 15.7,
+        percentage_of_stock_position_cny: 22.43,
+        source_labels: ["直接", "S&P 500", "Nasdaq 100"],
+      }),
+      expect.objectContaining({
+        rank: 2,
+        company: "Alphabet",
+        code: "GOOGL/GOOG",
+        lookthrough_amount_cny: 10200,
+        source_labels: ["直接", "S&P 500", "Nasdaq 100"],
+      }),
+    ]);
+    expect(payload.usage_notes).toEqual(expect.arrayContaining([
+      "Use equity_lookthrough_summary for the single-stock look-through table; do not recompute constituent weights in the LLM.",
+    ]));
   });
 
   it("keeps positions but skips account totals for positions-only market sources", () => {

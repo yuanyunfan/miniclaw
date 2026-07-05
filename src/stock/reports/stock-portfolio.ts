@@ -3,7 +3,9 @@ import { runEastmoneyEtfPremiumProvider } from "./eastmoney-etf-premium.js";
 import { runEastmoneyJywgProvider } from "./eastmoney-jywg-readonly.js";
 import { runFutuStockProvider } from "./futu-stock.js";
 import { loadStockPortfolioProviderConfig } from "../../providers/stock-portfolio/config.js";
+import { resolveEquityLookthroughSources } from "../data/equity-lookthrough-sources.js";
 import { buildStockPortfolioPayload, formatStockPortfolioPayload, sanitizeStockPortfolioError } from "../data/portfolio.js";
+import { renderEquityLookthroughChartPng } from "./portfolio-equity-lookthrough-chart.js";
 import { buildAssetPieChartModel, renderAssetPieChartPng } from "./portfolio-pie-chart.js";
 import type {
   StockPortfolioProviderConfig,
@@ -87,12 +89,17 @@ export async function runStockPortfolioProvider(
     throw new Error(`stock-portfolio provider failed: all sources failed${errors ? `: ${errors}` : ""}`);
   }
 
+  const resolvedLookthrough = await resolveEquityLookthroughSources(config);
   const payload = buildStockPortfolioPayload({
     generatedAt: args.runAt,
     profile: configName,
-    config,
+    config: resolvedLookthrough.config,
     sources: results,
   });
+  payload.warnings.push(...resolvedLookthrough.warnings);
+  if (payload.equity_lookthrough_summary) {
+    payload.equity_lookthrough_summary.warnings.push(...resolvedLookthrough.warnings);
+  }
   const attachments: PreProviderResult["attachments"] = [];
   if (config.include_asset_pie_chart && payload.asset_summary) {
     try {
@@ -113,6 +120,24 @@ export async function runStockPortfolioProvider(
       }
     } catch (err) {
       payload.warnings.push(`asset pie chart generation failed: ${sanitizeStockPortfolioError(err)}`);
+    }
+  }
+  if (config.include_equity_lookthrough_chart && payload.equity_lookthrough_summary?.rows.length) {
+    try {
+      const path = await renderEquityLookthroughChartPng(payload.equity_lookthrough_summary, {
+        profile: configName,
+        generatedAt: args.runAt,
+      });
+      attachments.push({
+        path,
+        name: `stock-portfolio-${configName}-equity-lookthrough.png`,
+        description: "Daily Stock Summary single-stock look-through exposure table",
+      });
+      payload.usage_notes.push(
+        "MiniClaw will upload a PNG single-stock look-through exposure table after the asset allocation pie chart. Use equity_lookthrough_summary for the Markdown table if you include one in the report.",
+      );
+    } catch (err) {
+      payload.warnings.push(`equity look-through chart generation failed: ${sanitizeStockPortfolioError(err)}`);
     }
   }
   return {

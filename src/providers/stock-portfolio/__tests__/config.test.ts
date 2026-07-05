@@ -40,6 +40,24 @@ fx_rates_as_of: "2026-05-08"
 fx_rates_source: manual-test
 top_movers_limit: 5
 include_asset_pie_chart: true
+include_equity_lookthrough_summary: true
+include_equity_lookthrough_chart: true
+equity_lookthrough_top_limit: 30
+equity_lookthrough_sources:
+  - label: S&P 500
+    match_codes: [US.SPY, US.VOO]
+    match_names: ["标普500", "S&P 500"]
+    constituents:
+      - company_key: AAPL
+        company: Apple
+        code: AAPL
+        aliases: [US.AAPL]
+        weight_pct: 6.1
+      - company_key: GOOGL
+        company: Alphabet
+        code: GOOGL/GOOG
+        aliases: [US.GOOGL, US.GOOG]
+        weight_pct: 3.7
 sources:
   - provider: futu-stock
     config: daily-stock-market
@@ -69,6 +87,22 @@ sources:
     expect(config.include_cny_summary).toBe(true);
     expect(config.include_asset_summary).toBe(false);
     expect(config.include_asset_pie_chart).toBe(true);
+    expect(config.include_equity_lookthrough_summary).toBe(true);
+    expect(config.include_equity_lookthrough_chart).toBe(true);
+    expect(config.equity_lookthrough_top_limit).toBe(30);
+    expect(config.equity_lookthrough_sources).toEqual([
+      {
+        label: "S&P 500",
+        match_codes: ["US.SPY", "US.VOO"],
+        match_names: ["标普500", "S&P 500"],
+        data_source: undefined,
+        company_aliases: [],
+        constituents: [
+          { company_key: "AAPL", company: "Apple", code: "AAPL", aliases: ["US.AAPL"], weight_pct: 6.1 },
+          { company_key: "GOOGL", company: "Alphabet", code: "GOOGL/GOOG", aliases: ["US.GOOGL", "US.GOOG"], weight_pct: 3.7 },
+        ],
+      },
+    ]);
     expect(config.sources).toEqual([
       {
         provider: "futu-stock",

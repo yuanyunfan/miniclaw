@@ -24,10 +24,10 @@ flowchart LR
 `stock-portfolio`:
 
 - Inputs: Futu account snapshots, Eastmoney JYWG account evidence, optional Eastmoney ETF premium enrichment.
-- Output: redacted portfolio JSON with source status, CNY summary, optional asset summary, premium summary, warnings, and optional pie chart attachment.
+- Output: redacted portfolio JSON with source status, CNY summary, optional asset summary, optional single-stock look-through summary, premium summary, warnings, and optional pie chart/table attachments.
 - State: commits source provider state only after downstream task success.
-- Failure policy: optional source failures can be preserved as warnings; required source failures or all-source failure can block the LLM task.
-- Code paths: `src/stock/reports/stock-portfolio.ts`, `src/stock/data/portfolio*.ts`, `src/stock/reports/portfolio-pie-chart.ts`.
+- Failure policy: optional source failures can be preserved as warnings; required source failures or all-source failure can block the LLM task. ETF/index look-through sources fail closed as warnings and never reuse stale configured weights.
+- Code paths: `src/stock/reports/stock-portfolio.ts`, `src/stock/data/portfolio*.ts`, `src/stock/data/equity-lookthrough*.ts`, `src/stock/reports/portfolio-pie-chart.ts`, `src/stock/reports/portfolio-equity-lookthrough-chart.ts`.
 
 `stock-pulse`:
 

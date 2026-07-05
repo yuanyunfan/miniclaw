@@ -15,6 +15,7 @@ import type {
   StockPortfolioSourceResult,
 } from "./portfolio-types.js";
 import { assetCategoryLabel, type AssetAllocationCategory } from "./asset-allocation.js";
+import { buildEquityLookthroughSummary } from "./equity-lookthrough.js";
 
 export function sanitizeStockPortfolioError(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err);
@@ -441,6 +442,7 @@ function buildAssetSummary(
         code: holding.code,
         name: holding.name,
         source_currency: holding.source_currency,
+        category: holding.category,
         market_value_cny: holding.market_value_cny,
         fx_rate_to_cny: holding.fx_rate_to_cny,
         instrument_type: holding.instrument_type,
@@ -729,6 +731,7 @@ export function buildStockPortfolioPayload(params: {
   const failed = params.sources.filter((source) => source.status === "error");
   const cnySummary = buildCnySummary(params.sources, params.config);
   const assetSummary = buildAssetSummary(params.sources, params.config);
+  const equityLookthroughSummary = buildEquityLookthroughSummary(assetSummary, params.config);
   const positionPremiumSummary = buildPositionPremiumSummary(params.sources);
   return {
     generated_at: params.generatedAt.toISOString(),
@@ -739,11 +742,13 @@ export function buildStockPortfolioPayload(params: {
     failed_count: failed.length,
     cny_summary: cnySummary,
     asset_summary: assetSummary,
+    equity_lookthrough_summary: equityLookthroughSummary,
     position_premium_summary: positionPremiumSummary,
     warnings: [
       ...failed.map((source) => `${source.provider}/${source.config}: ${source.error}`),
       ...(cnySummary?.warnings ?? []),
       ...(assetSummary?.warnings ?? []),
+      ...(equityLookthroughSummary?.warnings ?? []),
       ...(positionPremiumSummary?.warnings ?? []),
     ],
     usage_notes: [
@@ -753,6 +758,9 @@ export function buildStockPortfolioPayload(params: {
         : "Each nested provider payload is already redacted; do not output account ids, exact total assets, cookies, validate keys, passwords, or trade passwords.",
       "CNY P&L summary is calculated from configured FX rates before the LLM runs; mention fx_rates_as_of/source when reporting converted numbers.",
       "Asset allocation by_category buckets are deterministic pre-buckets only. For final investment classification, group asset_summary.holdings_for_classification with asset_summary.classification_guidance and keep cash separate.",
+      ...(equityLookthroughSummary
+        ? ["Use equity_lookthrough_summary for the single-stock look-through table; do not recompute constituent weights in the LLM."]
+        : []),
       "Use asset_summary.by_account for account totals. Some market-specific sources can be positions-only for asset totals to avoid double counting one broker account queried through multiple market profiles.",
       "Use position_premium_summary only when it is present; it is derived from Eastmoney held-position data for all held positions, and missing premium rates must not be filled by ad hoc web search.",
       "If one broker source failed, use the remaining source data and explicitly mention the missing source without inventing holdings or P&L.",

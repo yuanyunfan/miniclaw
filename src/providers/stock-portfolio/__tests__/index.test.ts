@@ -4,7 +4,16 @@ import type { StockPortfolioProviderConfig, StockPortfolioSourceRunner } from ".
 
 const mocks = vi.hoisted(() => ({
   renderAssetPieChartPng: vi.fn(),
+  renderEquityLookthroughChartPng: vi.fn(),
 }));
+
+vi.mock("../../../stock/reports/portfolio-equity-lookthrough-chart.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../stock/reports/portfolio-equity-lookthrough-chart.js")>();
+  return {
+    ...actual,
+    renderEquityLookthroughChartPng: mocks.renderEquityLookthroughChartPng,
+  };
+});
 
 vi.mock("../../../stock/reports/portfolio-pie-chart.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../../stock/reports/portfolio-pie-chart.js")>();
@@ -24,6 +33,10 @@ const config: StockPortfolioProviderConfig = {
   include_cny_summary: true,
   include_asset_summary: false,
   include_asset_pie_chart: false,
+  include_equity_lookthrough_summary: false,
+  include_equity_lookthrough_chart: false,
+  equity_lookthrough_top_limit: 30,
+  equity_lookthrough_sources: [],
   sources: [
     { provider: "futu-stock", config: "daily-stock-market", label: "Futu", enabled: true, required: false, include_asset_totals: true },
     { provider: "eastmoney-jywg-readonly", config: "daily-stock-market", label: "Eastmoney", enabled: true, required: false, include_asset_totals: true },
@@ -34,6 +47,8 @@ describe("runStockPortfolioProvider", () => {
   beforeEach(() => {
     mocks.renderAssetPieChartPng.mockReset();
     mocks.renderAssetPieChartPng.mockResolvedValue("/tmp/asset-pie.png");
+    mocks.renderEquityLookthroughChartPng.mockReset();
+    mocks.renderEquityLookthroughChartPng.mockResolvedValue("/tmp/equity-lookthrough.png");
   });
 
   it("aggregates successful source payloads and commits nested providers", async () => {
@@ -262,6 +277,91 @@ describe("runStockPortfolioProvider", () => {
     }]);
     expect(JSON.parse(result.text).usage_notes).toEqual(expect.arrayContaining([
       expect.stringContaining("PNG asset allocation pie chart"),
+    ]));
+  });
+
+  it("attaches the equity look-through chart after the asset allocation pie chart", async () => {
+    const runners: Record<string, StockPortfolioSourceRunner> = {
+      "futu-stock": async () => ({
+        text: JSON.stringify({
+          source: "futu-opend-readonly",
+          account_alias: "Futu",
+          asset_summary: {
+            currency: "CNY",
+            total_assets: 1000,
+            market_value: 900,
+            cash: 100,
+            buckets: [
+              { category: "cash", label: "现金", currency: "CNY", market_value: 100, positions_count: 0, holdings: [] },
+              { category: "stock", label: "个股", currency: "CNY", market_value: 400, positions_count: 1, holdings: [
+                { code: "US.NVDA", name: "NVIDIA", currency: "CNY", category: "stock", label: "个股", market_value: 400, instrument_type: "stock" },
+              ] },
+              { category: "foreign_index", label: "国外指数", currency: "CNY", market_value: 500, positions_count: 1, holdings: [
+                { code: "US.SPY", name: "S&P 500 ETF", currency: "CNY", category: "foreign_index", label: "国外指数", market_value: 500, instrument_type: "etf" },
+              ] },
+            ],
+          },
+        }),
+      }),
+    };
+
+    const result = await runStockPortfolioProvider({
+      configName: "daily-stock-summary",
+      jobName: "daily-stock-summary",
+      channelId: "channel",
+      runAt: new Date("2026-05-08T09:00:00.000Z"),
+    }, {
+      loadProviderConfig: () => ({
+        ...config,
+        include_asset_summary: true,
+        include_asset_pie_chart: true,
+        include_equity_lookthrough_summary: true,
+        include_equity_lookthrough_chart: true,
+        equity_lookthrough_top_limit: 30,
+        equity_lookthrough_sources: [
+          {
+            label: "S&P 500",
+            match_codes: ["US.SPY"],
+            match_names: [],
+            company_aliases: [],
+            constituents: [
+              { company_key: "NVDA", company: "NVIDIA", code: "NVDA", aliases: ["US.NVDA"], weight_pct: 7 },
+            ],
+          },
+        ],
+        sources: [
+          { provider: "futu-stock", config: "daily-stock-summary", label: "Futu", enabled: true, required: true, include_asset_totals: true },
+        ],
+      }),
+      runners,
+    });
+
+    expect(mocks.renderEquityLookthroughChartPng).toHaveBeenCalledWith(expect.objectContaining({
+      rows: [
+        expect.objectContaining({
+          company: "NVIDIA",
+          lookthrough_amount_cny: 435,
+          source_labels: ["直接", "S&P 500"],
+        }),
+      ],
+    }), {
+      profile: "daily-stock-summary",
+      generatedAt: new Date("2026-05-08T09:00:00.000Z"),
+    });
+    expect(result.attachments).toEqual([
+      {
+        path: "/tmp/asset-pie.png",
+        name: "stock-portfolio-daily-stock-summary-asset-pie.png",
+        description: "Daily Stock Summary asset allocation pie chart",
+      },
+      {
+        path: "/tmp/equity-lookthrough.png",
+        name: "stock-portfolio-daily-stock-summary-equity-lookthrough.png",
+        description: "Daily Stock Summary single-stock look-through exposure table",
+      },
+    ]);
+    expect(JSON.parse(result.text).usage_notes).toEqual(expect.arrayContaining([
+      expect.stringContaining("single-stock look-through exposure table after the asset allocation pie chart"),
     ]));
   });
 

@@ -27,6 +27,10 @@ export interface StockPortfolioProviderConfig {
   include_cny_summary: boolean;
   include_asset_summary: boolean;
   include_asset_pie_chart: boolean;
+  include_equity_lookthrough_summary: boolean;
+  include_equity_lookthrough_chart: boolean;
+  equity_lookthrough_top_limit: number;
+  equity_lookthrough_sources: StockPortfolioEquityLookthroughSourceConfig[];
 }
 
 export interface StockPortfolioSourceOk {
@@ -60,6 +64,7 @@ export interface StockPortfolioPayload {
   failed_count: number;
   cny_summary?: StockPortfolioCnySummary;
   asset_summary?: StockPortfolioAssetSummary;
+  equity_lookthrough_summary?: StockPortfolioEquityLookthroughSummary;
   position_premium_summary?: StockPortfolioPositionPremiumSummary;
   warnings: string[];
   usage_notes: string[];
@@ -133,6 +138,7 @@ export interface StockPortfolioClassifiableHolding {
   code: string;
   name: string;
   source_currency: string;
+  category?: AssetAllocationCategory;
   market_value_cny: number;
   fx_rate_to_cny: number;
   instrument_type?: string;
@@ -185,6 +191,76 @@ export interface StockPortfolioAssetSummary {
   holdings_for_classification: StockPortfolioClassifiableHolding[];
   classification_guidance: StockPortfolioClassificationGuidance;
   warnings: string[];
+}
+
+export interface StockPortfolioEquityLookthroughConstituentConfig {
+  company_key?: string;
+  company: string;
+  code: string;
+  aliases: string[];
+  weight_pct: number;
+}
+
+export type StockPortfolioEquityLookthroughSourceType = "http_json" | "http_csv" | "http_xlsx";
+
+export interface StockPortfolioEquityLookthroughColumnConfig {
+  company: string[];
+  code: string[];
+  weight_pct: string[];
+}
+
+export interface StockPortfolioEquityLookthroughDataSourceConfig {
+  type: StockPortfolioEquityLookthroughSourceType;
+  url: string;
+  items_path?: string;
+  columns: StockPortfolioEquityLookthroughColumnConfig;
+  timeout_ms: number;
+  user_agent?: string;
+}
+
+export interface StockPortfolioEquityLookthroughAliasConfig {
+  company_key: string;
+  company: string;
+  code: string;
+  aliases: string[];
+}
+
+export interface StockPortfolioEquityLookthroughSourceConfig {
+  label: string;
+  match_codes: string[];
+  match_names: string[];
+  data_source?: StockPortfolioEquityLookthroughDataSourceConfig;
+  company_aliases: StockPortfolioEquityLookthroughAliasConfig[];
+  constituents: StockPortfolioEquityLookthroughConstituentConfig[];
+}
+
+export interface StockPortfolioEquityLookthroughSourceContribution {
+  label: string;
+  amount_cny: number;
+}
+
+export interface StockPortfolioEquityLookthroughRow {
+  rank: number;
+  company_key: string;
+  company: string;
+  code: string;
+  lookthrough_amount_cny: number;
+  percentage_of_total_assets_cny?: number;
+  percentage_of_stock_position_cny?: number;
+  source_labels: string[];
+  sources: StockPortfolioEquityLookthroughSourceContribution[];
+}
+
+export interface StockPortfolioEquityLookthroughSummary {
+  base_currency: string;
+  total_assets_cny?: number;
+  stock_position_cny: number;
+  expanded_amount_cny: number;
+  expanded_stock_position_percentage?: number;
+  top_limit: number;
+  rows: StockPortfolioEquityLookthroughRow[];
+  warnings: string[];
+  usage_notes: string[];
 }
 
 export interface StockPortfolioPositionPremium {

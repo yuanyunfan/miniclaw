@@ -7,6 +7,7 @@
 ## [Unreleased]
 
 ### Added
+- 新增 `stock-portfolio` 个股穿透汇总：可按配置的 ETF/指数成分权重合并直接个股和指数成分股 exposure，并在 daily asset summary 后追加 PNG 表格附件。
 - 新增 WeChat MP 文章两层过滤：provider 会先基于标题/摘要做阅读价值评分和标题党降权，再只对高分候选抓取有界公开正文 excerpt，供 `daily-wechat-mp` 在报告开头输出精读推荐。
 - 新增 cron composition：本地 cron job 可通过 `_profiles` 和 `_fragments` 复用 workflow defaults、prompt fragments 和 rules，再展开成普通 task job。
 - 新增 CLI session dashboard 的 live iTerm2 Continue：idle 且由 iTerm2 承载的 session 会把 Discord modal follow-up 直接写回原始 terminal process，按 recorded iTerm2 session id 或唯一 tty 精确匹配，失败时 fail closed。

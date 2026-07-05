@@ -3,7 +3,7 @@ doc_id: stock-data-and-sources
 lang: zh
 translation_of: docs/providers/stock/data-and-sources.md
 translation_status: current
-source_sha256: 4431dfeb43f954f144db0e43c62075e32c8399ad2fba9e3d597fa6480e662704
+source_sha256: 4b9ad9c8b1dbe93dd9a53ed73c056d8150884a87db18670cd80a398a940b7670
 ---
 # Stock Data And Sources
 
@@ -75,6 +75,15 @@ Eastmoney ETF selector:
 - Business meaning: public ETF discount/premium evidence only。
 - Portfolio rule: 可以按 exact code enrich 已存在的 JYWG-held ETF，但永远不能证明账户持有。
 - Field contract: raw `PREMIUM_DISCOUNT_RATIO` 保留为 `eastmoney_discount_ratio`；MiniClaw 输出 `premium_rate = 0 - PREMIUM_DISCOUNT_RATIO`。
+
+ETF/index look-through sources:
+
+- Runtime use: private portfolio reports 可选配置 `stock-portfolio.equity_lookthrough_sources`。
+- Trusted source: provider runtime 按配置拉取公开 issuer 或 index holdings endpoints。
+- Supported shapes: HTTP JSON、CSV 和 XLSX tables，通过配置指定 company、ticker 和 weight columns。
+- Business meaning: 只用于把 already-held ETF/index positions 展开成 single-stock exposure，永远不能证明账户持有。
+- Failure policy: source failures、HTML/consent pages、empty tables 或 parse drift 都进入 warnings；MiniClaw 不能 fallback 到过期 hardcoded index weights。
+- Identity rule: static aliases 可以归并同一公司的 share classes 或 A/H lines，但 alias 不能包含 weight data。
 
 Yahoo chart endpoints:
 
