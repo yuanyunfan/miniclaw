@@ -1,3 +1,9 @@
+import { execFile } from "node:child_process";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 import { strFromU8, unzipSync } from "fflate";
 import { XMLParser } from "fast-xml-parser";
 import type {
@@ -13,6 +19,18 @@ const DEFAULT_USER_AGENT = "MiniClaw/1.0 stock-portfolio";
 const LOOKTHROUGH_FETCH_MAX_ATTEMPTS = 3;
 const LOOKTHROUGH_FETCH_RETRY_DELAY_MS = 250;
 const LOOKTHROUGH_SOURCE_CONCURRENCY = 4;
+const SOFFICE_TIMEOUT_MS = 30000;
+const execFileAsync = promisify(execFile);
+const SOFFICE_COMMANDS = [
+  process.env.LIBREOFFICE_PATH,
+  process.env.SOFFICE_PATH,
+  "soffice",
+  "/opt/homebrew/bin/soffice",
+  "/usr/local/bin/soffice",
+  "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+].filter((item): item is string => Boolean(item?.trim()));
+
+let sofficeCommandPromise: Promise<string> | undefined;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -43,6 +61,23 @@ function safeMessage(err: unknown): string {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function resolveSofficeCommand(): Promise<string> {
+  if (!sofficeCommandPromise) {
+    sofficeCommandPromise = (async () => {
+      for (const command of SOFFICE_COMMANDS) {
+        try {
+          await execFileAsync(command, ["--version"], { timeout: 5000 });
+          return command;
+        } catch {
+          // Try the next common LibreOffice binary path.
+        }
+      }
+      throw new Error("LibreOffice soffice command not found for http_xls source conversion");
+    })();
+  }
+  return sofficeCommandPromise;
 }
 
 async function mapWithConcurrency<T, U>(
@@ -273,6 +308,28 @@ function parseXlsx(buffer: Uint8Array, columns: StockPortfolioEquityLookthroughC
   return rowsToObjects(rows, columns);
 }
 
+async function parseXls(buffer: Uint8Array, columns: StockPortfolioEquityLookthroughColumnConfig): Promise<Record<string, unknown>[]> {
+  const soffice = await resolveSofficeCommand();
+  const dir = await mkdtemp(join(tmpdir(), "miniclaw-lookthrough-xls-"));
+  try {
+    const inputPath = join(dir, "source.xls");
+    const profilePath = join(dir, "lo-profile");
+    await mkdir(profilePath);
+    await writeFile(inputPath, buffer);
+    await execFileAsync(
+      soffice,
+      [`-env:UserInstallation=${pathToFileURL(profilePath).href}`, "--headless", "--convert-to", "csv", "--outdir", dir, inputPath],
+      { timeout: SOFFICE_TIMEOUT_MS },
+    );
+    const csvName = (await readdir(dir)).find((name) => name.toLowerCase().endsWith(".csv"));
+    if (!csvName) throw new Error("LibreOffice did not create a CSV file from xls workbook");
+    const csv = await readFile(join(dir, csvName), "utf8");
+    return rowsToObjects(parseCsv(csv), columns);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 function itemsAtPath(json: unknown, path: string | undefined): unknown[] {
   if (!path) return Array.isArray(json) ? json : [];
   const value = path.split(".").filter(Boolean).reduce((current: unknown, part) => {
@@ -356,6 +413,9 @@ async function fetchRows(source: StockPortfolioEquityLookthroughSourceConfig): P
   if (dataSource.type === "http_xlsx") {
     return parseXlsx(bytes, dataSource.columns);
   }
+  if (dataSource.type === "http_xls") {
+    return await parseXls(bytes, dataSource.columns);
+  }
   const text = Buffer.from(bytes).toString("utf8");
   if (/^\s*<!doctype html|^\s*<html/i.test(text)) throw new Error("HTTP source returned HTML instead of CSV");
   return rowsToObjects(parseCsv(text), dataSource.columns);
@@ -400,6 +460,7 @@ export const __testables = {
   mapWithConcurrency,
   parseEastmoneyFundHoldings,
   parseCsv,
+  parseXls,
   parseXlsx,
   rowsToObjects,
 };

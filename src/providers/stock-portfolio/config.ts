@@ -22,6 +22,7 @@ const MARKET_SCOPES = new Set<StockPortfolioMarketScope>(["all", "us", "cn"]);
 const LOOKTHROUGH_SOURCE_TYPES = new Set<StockPortfolioEquityLookthroughSourceType>([
   "http_json",
   "http_csv",
+  "http_xls",
   "http_xlsx",
   "eastmoney_fund_holdings",
 ]);

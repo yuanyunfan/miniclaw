@@ -65,6 +65,7 @@
 - App Trending 默认频道从 `daily-app-trending` 改为 `weekly-app-trending`，频道初始化脚本会把旧频道原地重命名并清理旧 channel-map key。
 
 ### Fixed
+- 修复 `stock-portfolio` 个股穿透无法读取中证官网老式 `.xls` 全量权重文件的问题，支持 A 股宽基指数改用官方 full closeweight source，避免 Eastmoney 基金季报重仓披露只返回少量成分导致穿透不足。
 - 修复 `stock-portfolio` cron prompt 在大型资产 payload 下截断个股穿透 summary 的问题；cron 现在会给 LLM 注入 compact context，保留完整 `equity_lookthrough_summary.rows`。
 - 修复动态个股穿透源一次性并发抓取过多、单次 `fetch failed` 就降级的问题；现在按有限并发抓取并对瞬时失败自动重试。
 - 修复个股穿透 PNG 右侧“主要来源”列在长来源组合下被裁切的问题。

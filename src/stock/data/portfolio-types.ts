@@ -204,6 +204,7 @@ export interface StockPortfolioEquityLookthroughConstituentConfig {
 export type StockPortfolioEquityLookthroughSourceType =
   | "http_json"
   | "http_csv"
+  | "http_xls"
   | "http_xlsx"
   | "eastmoney_fund_holdings";
 
